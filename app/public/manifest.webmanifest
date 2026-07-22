@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "MaarifOS — Akış Pusulası",
+  "short_name": "MaarifOS",
+  "description": "Emine Öğretmen için yerel öncelikli okul öncesi öğretmen çalışma ekosistemi.",
+  "lang": "tr-TR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f4fbfc",
+  "theme_color": "#007f91",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/emine-ogretmen-avatar.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

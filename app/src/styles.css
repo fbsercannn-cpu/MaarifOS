@@ -43,6 +43,24 @@ body,
 body {
   min-width: 320px;
   overflow: hidden;
+  background: #e9eef3;
+}
+
+.native-app-runtime {
+  position: relative;
+  width: min(100%, 760px);
+  height: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 0 44px rgba(13, 40, 82, 0.12);
+}
+
+@media (max-width: 760px) {
+  .native-app-runtime {
+    width: 100%;
+    box-shadow: none;
+  }
 }
 
 button,

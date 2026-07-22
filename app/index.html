@@ -2,9 +2,18 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#007f91" />
+    <meta name="application-name" content="MaarifOS" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MaarifOS" />
+    <meta name="color-scheme" content="light" />
     <meta name="description" content="Emine Öğretmen için hazırlanan yerel öncelikli okul öncesi öğretmen çalışma ekosistemi." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="1254x1254" href="/assets/emine-ogretmen-avatar.png" />
+    <link rel="apple-touch-icon" sizes="1254x1254" href="/assets/emine-ogretmen-avatar.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="MaarifOS — Emine Öğretmen için Akış Pusulası" />
     <meta property="og:description" content="Her günü, her gözlemi, sevgiyle hatırla." />
@@ -17,6 +26,7 @@
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/src/pwa.ts"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

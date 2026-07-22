@@ -156,6 +156,18 @@ type PendingRestore = {
   envelope: BackupEnvelope;
 };
 
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+function isStandaloneApp() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
 function downloadJson(fileName: string, contents: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
   const anchor = document.createElement("a");
@@ -184,6 +196,13 @@ export default function Prototype() {
   const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
   const [dataBusy, setDataBusy] = useState(false);
   const [dataStatus, setDataStatus] = useState("Yerel veri kasası hazırlanıyor.");
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [standalone, setStandalone] = useState(() => isStandaloneApp());
+  const [installStatus, setInstallStatus] = useState(() =>
+    isStandaloneApp()
+      ? "MaarifOS bu cihazda uygulama olarak çalışıyor."
+      : "Windows, Android ve iPhone ana ekranına kurulabilir.",
+  );
   const [authState, setAuthState] = useState<AuthState>(() =>
     createInitialAuthState({
       network: navigator.onLine ? "online" : "offline",
@@ -204,8 +223,8 @@ export default function Prototype() {
   );
 
   const shellStyle = {
-    "--app-safe-top": `${device.geometry.safeArea.top}px`,
-    "--app-bottom-inset": `${bottomInset}px`,
+    "--app-safe-top": `max(env(safe-area-inset-top, 0px), ${device.geometry.safeArea.top}px)`,
+    "--app-bottom-inset": `max(env(safe-area-inset-bottom, 0px), ${bottomInset}px)`,
   } as CSSProperties;
 
   useEffect(() => {
@@ -255,6 +274,54 @@ export default function Prototype() {
       window.removeEventListener("offline", updateNetwork);
     };
   }, []);
+
+  useEffect(() => {
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+      setInstallStatus("Hazır · bu cihaza tek dokunuşla kurabilirsiniz.");
+    };
+    const markInstalled = () => {
+      setStandalone(true);
+      setInstallPrompt(null);
+      setInstallStatus("MaarifOS bu cihazda uygulama olarak çalışıyor.");
+      setAnnouncement("MaarifOS bu cihaza kuruldu.");
+    };
+
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    window.addEventListener("appinstalled", markInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+      window.removeEventListener("appinstalled", markInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (standalone) {
+      setAnnouncement("MaarifOS zaten uygulama olarak açık.");
+      return;
+    }
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      if (choice.outcome === "accepted") {
+        setInstallStatus("Kurulum kabul edildi · uygulama listenizde görünecek.");
+        setAnnouncement("MaarifOS kurulumu kabul edildi.");
+      } else {
+        setInstallStatus("Kurulum ertelendi; istediğiniz zaman yeniden deneyebilirsiniz.");
+        setAnnouncement("Kurulum ertelendi.");
+      }
+      return;
+    }
+
+    const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const message = isiOS
+      ? "Safari’de Paylaş düğmesine, ardından Ana Ekrana Ekle’ye dokunun."
+      : "Tarayıcı menüsünden Uygulamayı yükle veya Ana ekrana ekle seçeneğini kullanın.";
+    setInstallStatus(message);
+    setAnnouncement(message);
+  };
 
   const createBackup = async (prefix = "maarifos-backup") => {
     setDataBusy(true);
@@ -572,6 +639,26 @@ export default function Prototype() {
               <span>{authView.googleAction.label}</span>
             </button>
             <small className="provider-status">{authView.googleAction.statusText}</small>
+          </section>
+
+          <section className="security-section" aria-labelledby="install-heading">
+            <div className="security-heading-row">
+              <div>
+                <h3 id="install-heading">Bu cihaza kur</h3>
+                <p>Tarayıcı sekmesi olmadan, masaüstünden veya ana ekrandan doğrudan açın.</p>
+              </div>
+              <span className="optional-badge">Windows + Telefon</span>
+            </div>
+            <button
+              className="install-app-button"
+              type="button"
+              onClick={() => void installApp()}
+              disabled={standalone}
+            >
+              <DownloadIcon aria-hidden="true" />
+              <span>{standalone ? "Bu cihaza kuruldu" : installPrompt ? "MaarifOS’u kur" : "Kurulum adımlarını göster"}</span>
+            </button>
+            <small className="provider-status" role="status">{installStatus}</small>
           </section>
 
           <section className="security-section" aria-labelledby="backup-heading">

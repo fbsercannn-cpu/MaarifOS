@@ -741,6 +741,35 @@
   opacity: 1;
 }
 
+.install-app-button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--maarif-teal);
+  border: 1px solid var(--maarif-teal);
+  border-radius: 12px;
+}
+
+.install-app-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.install-app-button:disabled {
+  color: #0e6848;
+  background: #d7f0e6;
+  border-color: #bce2d4;
+}
+
 .provider-status {
   display: block;
   margin-top: 7px;

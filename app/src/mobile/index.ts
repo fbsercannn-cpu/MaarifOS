@@ -1,6 +1,6 @@
 export { BottomSheet } from "./BottomSheet";
 export { Carousel, type CarouselProps } from "./Carousel";
-export { DevicePicker, mobileDevices, useMobileDevice, type MobileDeviceId } from "./Device";
+export { DevicePicker, MobileDeviceProvider, mobileDevices, useMobileDevice, type MobileDeviceId } from "./Device";
 export { FlowStack, useFlow, type FlowControls, type FlowScreen } from "./FlowStack";
 export {
   KeyboardDock,

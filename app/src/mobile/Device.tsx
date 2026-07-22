@@ -1,4 +1,4 @@
-import { createContext, type PropsWithChildren, useContext, useMemo, useState } from "react";
+import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronDownIcon } from "@radix-ui/react-icons";
 import { mobileAssets } from "./assets";
@@ -50,11 +50,40 @@ type MobileDeviceContextValue = {
 
 const MobileDeviceContext = createContext<MobileDeviceContextValue | null>(null);
 
-export function MobileDeviceProvider({ children }: PropsWithChildren) {
-  const [deviceId, setDeviceId] = useState<MobileDeviceId>("iphone");
+type MobileDeviceProviderProps = PropsWithChildren<{ native?: boolean }>;
+
+function detectNativeDevice(): MobileDeviceId {
+  return /android/i.test(navigator.userAgent) ? "pixel-10" : "iphone";
+}
+
+export function MobileDeviceProvider({ children, native = false }: MobileDeviceProviderProps) {
+  const [deviceId, setDeviceId] = useState<MobileDeviceId>(() => (native ? detectNativeDevice() : "iphone"));
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+
+  useEffect(() => {
+    if (!native) return;
+    const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, [native]);
+
+  const device = useMemo(() => {
+    const preset = mobileDevices[deviceId];
+    if (!native) return preset;
+    return {
+      ...preset,
+      geometry: {
+        device: viewport,
+        screen: { x: 0, y: 0, ...viewport, radius: 0 },
+        safeArea: { top: 0, bottom: 0 },
+        keyboard: { height: 0 },
+      },
+    };
+  }, [deviceId, native, viewport]);
+
   const value = useMemo(
-    () => ({ device: mobileDevices[deviceId], deviceId, setDeviceId }),
-    [deviceId],
+    () => ({ device, deviceId, setDeviceId }),
+    [device, deviceId],
   );
 
   return <MobileDeviceContext.Provider value={value}>{children}</MobileDeviceContext.Provider>;

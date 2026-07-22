@@ -1,0 +1,24 @@
+import { expect, test } from "@playwright/test";
+
+test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerleşir", async ({ page }) => {
+  await page.goto("/?native=1");
+
+  await expect(page.getByTestId("phone-frame")).toHaveCount(0);
+  await expect(page.locator(".native-app-runtime")).toBeVisible();
+  await expect(page.getByRole("main", { name: "MaarifOS Günüm ekranı" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Hesap ve veri güvenliğini aç" }).click();
+  await expect(page.getByRole("heading", { name: "Bu cihaza kur" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kurulum adımlarını göster" })).toBeVisible();
+});
+
+test("native mod masaüstünde merkezlenir, telefonda ekran genişliğini kullanır", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?native=1");
+  const desktopBox = await page.locator(".native-app-runtime").boundingBox();
+  expect(desktopBox?.width).toBe(760);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileBox = await page.locator(".native-app-runtime").boundingBox();
+  expect(mobileBox?.width).toBe(390);
+});

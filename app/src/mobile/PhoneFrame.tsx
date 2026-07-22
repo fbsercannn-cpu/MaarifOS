@@ -37,6 +37,17 @@ export function useScreenPortal() {
   return context;
 }
 
+export function ScreenPortalRoot({ children, className }: PropsWithChildren<{ className?: string }>) {
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  const contextValue = useMemo(() => ({ screenRef }), []);
+
+  return (
+    <ScreenPortalContext.Provider value={contextValue}>
+      <div ref={screenRef} className={className}>{children}</div>
+    </ScreenPortalContext.Provider>
+  );
+}
+
 function getDeviceScale(deviceWidth: number, deviceHeight: number) {
   if (typeof window === "undefined") return 1;
 
