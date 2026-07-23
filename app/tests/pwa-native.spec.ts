@@ -1,20 +1,26 @@
 import { expect, test } from "@playwright/test";
 
 test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerleşir", async ({ page }) => {
-  await page.goto("/?native=1");
+  await page.goto("/");
 
   await expect(page.getByTestId("phone-frame")).toHaveCount(0);
   await expect(page.locator(".native-app-runtime")).toBeVisible();
-  await expect(page.getByRole("main", { name: "MaarifOS Günüm ekranı" })).toBeVisible();
+  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  await setup.getByLabel("Sınıf adı").fill("Kurgu PWA Sınıfı");
+  await setup
+    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .click();
+  await expect(setup).toBeHidden();
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Hesap ve veri güvenliğini aç" }).click();
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
   await expect(page.getByRole("heading", { name: "Bu cihaza kur" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Kurulum adımlarını göster" })).toBeVisible();
 });
 
 test("native mod masaüstünde merkezlenir, telefonda ekran genişliğini kullanır", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/?native=1");
+  await page.goto("/");
   const desktopBox = await page.locator(".native-app-runtime").boundingBox();
   expect(desktopBox?.width).toBe(760);
 

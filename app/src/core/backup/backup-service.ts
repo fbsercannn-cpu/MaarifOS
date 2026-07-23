@@ -1,17 +1,22 @@
 import {
   COLLECTION_NAMES,
+  createEmptySnapshot,
   type CollectionName,
   type DataSnapshot,
   type StoredRecord,
 } from "../domain/model";
 import type { LocalDataStore } from "../repository/contracts";
+import { resolveAttendanceRecords } from "../domain/attendance";
+import { migrateLegacyClassroomScopes } from "../migrations/classroom-scope-migration";
 import { canonicalClone, canonicalJson } from "./canonical-json";
 import { sha256Hex } from "./crypto";
 import {
   assertBackupEnvelope,
+  assertBackupEnvelopeStructure,
   BACKUP_FORMAT,
   BACKUP_VERSION,
   DATA_SCHEMA_VERSION,
+  LEGACY_DATA_SCHEMA_VERSION,
   type BackupEnvelope,
   type RestoreMode,
   type RestoreReport,
@@ -47,6 +52,88 @@ function entityCounts(snapshot: DataSnapshot): Record<CollectionName, number> {
 
 function recordsEqual(left: StoredRecord, right: StoredRecord): boolean {
   return canonicalJson(left) === canonicalJson(right);
+}
+
+class BackupSnapshotStore implements LocalDataStore {
+  private snapshot: DataSnapshot;
+
+  constructor(snapshot: DataSnapshot) {
+    this.snapshot = canonicalClone(snapshot);
+  }
+
+  async transaction<T>(
+    mode: "readonly" | "readwrite",
+    collections: readonly CollectionName[],
+    task: Parameters<LocalDataStore["transaction"]>[2],
+  ): Promise<T> {
+    const working = canonicalClone(this.snapshot);
+    const result = await task({
+      getAll: async (collection) => canonicalClone(working[collection]),
+      putMany: async (collection, records) => {
+        const byId = new Map(
+          working[collection].map((record) => [record.id, record]),
+        );
+        for (const record of records) {
+          byId.set(record.id, canonicalClone(record));
+        }
+        working[collection] = [...byId.values()];
+      },
+      clear: async (collection) => {
+        working[collection] = [];
+      },
+    });
+    if (mode === "readwrite") {
+      for (const collection of collections) {
+        this.snapshot[collection] = working[collection];
+      }
+    }
+    return result as T;
+  }
+
+  async readSnapshot(): Promise<DataSnapshot> {
+    return canonicalClone(this.snapshot);
+  }
+
+  close(): void {}
+}
+
+async function normalizeLegacyBackupScopes(
+  envelope: BackupEnvelope,
+): Promise<BackupEnvelope> {
+  const store = new BackupSnapshotStore(envelope.payload);
+  await migrateLegacyClassroomScopes(store, {
+    now: new Date(envelope.manifest.createdAt),
+  });
+  const payload = await store.readSnapshot();
+  return {
+    manifest: {
+      ...envelope.manifest,
+      payloadChecksum: await sha256Hex(canonicalJson(payload)),
+    },
+    payload,
+  };
+}
+
+async function upgradeLegacyBackupEnvelope(
+  envelope: BackupEnvelope,
+): Promise<BackupEnvelope> {
+  if (envelope.manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION) {
+    return canonicalClone(envelope);
+  }
+  const payload: DataSnapshot = {
+    ...createEmptySnapshot(),
+    ...canonicalClone(envelope.payload),
+    evidenceCurriculumLinks: [],
+  };
+  return {
+    manifest: {
+      ...envelope.manifest,
+      dataSchemaVersion: DATA_SCHEMA_VERSION,
+      entityCounts: entityCounts(payload),
+      payloadChecksum: await sha256Hex(canonicalJson(payload)),
+    },
+    payload,
+  };
 }
 
 export class BackupService {
@@ -101,12 +188,15 @@ export class BackupService {
     } catch {
       throw new Error("Yedek dosyası geçerli JSON değil.");
     }
-    assertBackupEnvelope(candidate);
+    assertBackupEnvelopeStructure(candidate);
     const checksum = await sha256Hex(canonicalJson(candidate.payload));
     if (checksum !== candidate.manifest.payloadChecksum) {
       throw new Error("Yedek bütünlük kontrolünü geçemedi; dosya bozuk veya değiştirilmiş.");
     }
-    return canonicalClone(candidate);
+    const upgraded = await upgradeLegacyBackupEnvelope(candidate);
+    const normalized = await normalizeLegacyBackupScopes(upgraded);
+    assertBackupEnvelope(normalized);
+    return canonicalClone(normalized);
   }
 
   async restoreBackup(
@@ -128,7 +218,10 @@ export class BackupService {
             const existing = await transaction.getAll(collection);
             replaced += existing.length;
             await transaction.clear(collection);
-            await transaction.putMany(collection, backup.payload[collection]);
+            const incoming = collection === "attendanceRecords"
+              ? resolveAttendanceRecords(backup.payload.attendanceRecords).records
+              : backup.payload[collection];
+            await transaction.putMany(collection, incoming);
           }
           return {
             mode: options.mode,
@@ -151,6 +244,8 @@ export class BackupService {
           conflicts: [],
           entityCounts: backup.manifest.entityCounts,
         };
+        const candidateSnapshot = createEmptySnapshot();
+        const toInsertByCollection = new Map<CollectionName, StoredRecord[]>();
         for (const collection of COLLECTION_NAMES) {
           const current = new Map(
             (await transaction.getAll(collection)).map((record) => [record.id, record]),
@@ -171,7 +266,28 @@ export class BackupService {
               });
             }
           }
+          toInsertByCollection.set(collection, toInsert);
+          candidateSnapshot[collection] = [...current.values(), ...toInsert];
+        }
+
+        assertBackupEnvelope({
+          manifest: {
+            ...backup.manifest,
+            payloadChecksum: "0".repeat(64),
+            entityCounts: entityCounts(candidateSnapshot),
+          },
+          payload: candidateSnapshot,
+        });
+
+        for (const collection of COLLECTION_NAMES) {
+          const toInsert = toInsertByCollection.get(collection) ?? [];
           await transaction.putMany(collection, toInsert);
+          if (collection === "attendanceRecords" && toInsert.length > 0) {
+            await transaction.putMany(
+              "attendanceRecords",
+              resolveAttendanceRecords(candidateSnapshot.attendanceRecords).records,
+            );
+          }
         }
         return report;
       },

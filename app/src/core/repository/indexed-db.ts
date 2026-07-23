@@ -11,7 +11,7 @@ import type {
   TransactionMode,
 } from "./contracts";
 
-export const MAARIFOS_DATABASE_VERSION = 1;
+export const MAARIFOS_DATABASE_VERSION = 2;
 export const DEFAULT_DATABASE_NAME = "maarifos-local";
 
 export interface IndexedDbDataStoreOptions {

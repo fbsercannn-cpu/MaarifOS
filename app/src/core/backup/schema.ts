@@ -4,15 +4,31 @@ import {
   type DataSnapshot,
   type StoredRecord,
 } from "../domain/model";
+import {
+  ATTENDANCE_COMPLETION_SETTING_TYPE,
+  isAttendanceCompletionSetting,
+  isAttendanceRecord,
+} from "../domain/attendance";
+import {
+  ACTIVE_CLASSROOM_SETTING_TYPE,
+  isClassroomRecord,
+} from "../domain/classroom";
+import {
+  LEGACY_ASSIGNMENT_NEEDS_REVIEW,
+  type ActiveClassroomScope,
+} from "../domain/classroom-scope";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
-export const DATA_SCHEMA_VERSION = 1;
+export const LEGACY_DATA_SCHEMA_VERSION = 1;
+export const DATA_SCHEMA_VERSION = 2;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   backupVersion: typeof BACKUP_VERSION;
-  dataSchemaVersion: typeof DATA_SCHEMA_VERSION;
+  dataSchemaVersion:
+    | typeof LEGACY_DATA_SCHEMA_VERSION
+    | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
   createdAt: string;
   civilDate: string;
@@ -80,7 +96,111 @@ function assertStoredRecord(value: unknown, collection: CollectionName): asserts
   }
 }
 
-export function assertBackupEnvelope(value: unknown): asserts value is BackupEnvelope {
+function validatedRecordScope(
+  record: StoredRecord,
+  collection: CollectionName,
+  classroomsById: ReadonlyMap<string, StoredRecord>,
+): ActiveClassroomScope | null {
+  const hasClassroom = typeof record.classroomId === "string";
+  const hasAcademicYear = typeof record.academicYearId === "string";
+  const quarantined =
+    record.legacyAssignmentStatus === LEGACY_ASSIGNMENT_NEEDS_REVIEW;
+
+  if (!hasClassroom && !hasAcademicYear) {
+    if (classroomsById.size === 0 || quarantined) return null;
+    throw new Error(
+      `${collection}/${record.id} sınıf kapsamı taşımıyor ve karantinada değil.`,
+    );
+  }
+  if (
+    !hasClassroom ||
+    !hasAcademicYear ||
+    !UUID_PATTERN.test(record.classroomId as string) ||
+    !UUID_PATTERN.test(record.academicYearId as string)
+  ) {
+    if (quarantined) return null;
+    throw new Error(`${collection}/${record.id} sınıf kapsamı eksik veya geçersiz.`);
+  }
+
+  const classroom = classroomsById.get(record.classroomId as string);
+  if (!classroom || classroom.academicYearId !== record.academicYearId) {
+    if (quarantined) return null;
+    throw new Error(
+      `${collection}/${record.id} bilinmeyen veya eğitim yılı uyumsuz sınıfa bağlı.`,
+    );
+  }
+  return {
+    classroomId: record.classroomId as string,
+    academicYearId: record.academicYearId as string,
+  };
+}
+
+function scopesMatch(
+  left: ActiveClassroomScope,
+  right: ActiveClassroomScope,
+): boolean {
+  return (
+    left.classroomId === right.classroomId &&
+    left.academicYearId === right.academicYearId
+  );
+}
+
+function validatedEnrollmentScopes(
+  student: StoredRecord,
+  classroomsById: ReadonlyMap<string, StoredRecord>,
+  archivedAcademicYearIds: ReadonlySet<string>,
+): ActiveClassroomScope[] {
+  if (student.enrollments === undefined) return [];
+  if (!Array.isArray(student.enrollments)) {
+    throw new Error(`students/${student.id} sınıf üyeliği geçmişi geçersiz.`);
+  }
+  return student.enrollments.map((value) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error(`students/${student.id} sınıf üyeliği geçmişi geçersiz.`);
+    }
+    const enrollment = value as Record<string, unknown>;
+    if (
+      typeof enrollment.id !== "string" ||
+      !UUID_PATTERN.test(enrollment.id) ||
+      typeof enrollment.classroomId !== "string" ||
+      !UUID_PATTERN.test(enrollment.classroomId) ||
+      typeof enrollment.academicYearId !== "string" ||
+      !UUID_PATTERN.test(enrollment.academicYearId) ||
+      typeof enrollment.startedOn !== "string" ||
+      !CIVIL_DATE_PATTERN.test(enrollment.startedOn) ||
+      (enrollment.endedOn !== undefined &&
+        (typeof enrollment.endedOn !== "string" ||
+          !CIVIL_DATE_PATTERN.test(enrollment.endedOn))) ||
+      (enrollment.status !== "active" &&
+        enrollment.status !== "left" &&
+        enrollment.status !== "completed" &&
+        enrollment.status !== "transferred") ||
+      enrollment.schemaVersion !== 1
+    ) {
+      throw new Error(`students/${student.id} sınıf üyeliği geçmişi geçersiz.`);
+    }
+    const classroom = classroomsById.get(enrollment.classroomId);
+    if (!classroom || classroom.academicYearId !== enrollment.academicYearId) {
+      throw new Error(
+        `students/${student.id} üyelik geçmişinde bilinmeyen veya uyumsuz sınıf var.`,
+      );
+    }
+    if (
+      archivedAcademicYearIds.has(enrollment.academicYearId) &&
+      enrollment.status === "active"
+    ) {
+      throw new Error(
+        `students/${student.id} arşivlenmiş eğitim yılında etkin üyelik taşıyor.`,
+      );
+    }
+    return {
+      classroomId: enrollment.classroomId,
+      academicYearId: enrollment.academicYearId,
+    };
+  });
+}
+
+export function assertBackupEnvelopeStructure(value: unknown): asserts value is BackupEnvelope {
   if (!isRecord(value) || !isRecord(value.manifest) || !isRecord(value.payload)) {
     throw new Error("Yedek zarfı veya manifest eksik.");
   }
@@ -88,7 +208,10 @@ export function assertBackupEnvelope(value: unknown): asserts value is BackupEnv
   if (manifest.format !== BACKUP_FORMAT || manifest.backupVersion !== BACKUP_VERSION) {
     throw new Error("Yedek biçimi veya sürümü desteklenmiyor.");
   }
-  if (manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION) {
+  if (
+    manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
+  ) {
     throw new Error("Yedek veri şeması bu uygulama sürümüyle uyumlu değil.");
   }
   if (typeof manifest.appVersion !== "string" || manifest.appVersion.length === 0) {
@@ -121,6 +244,13 @@ export function assertBackupEnvelope(value: unknown): asserts value is BackupEnv
 
   for (const collection of COLLECTION_NAMES) {
     const records = value.payload[collection];
+    if (
+      collection === "evidenceCurriculumLinks" &&
+      manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION &&
+      records === undefined
+    ) {
+      continue;
+    }
     if (!Array.isArray(records)) {
       throw new Error(`Yedekte ${collection} koleksiyonu eksik.`);
     }
@@ -136,5 +266,355 @@ export function assertBackupEnvelope(value: unknown): asserts value is BackupEnv
       throw new Error(`${collection} kayıt sayısı manifest ile uyuşmuyor.`);
     }
   }
+
 }
 
+function assertBackupRelationships(payload: DataSnapshot): void {
+  const academicYearIds = new Set(payload.academicYears.map((academicYear) => academicYear.id));
+  for (const classroom of payload.classrooms) {
+    if (!isClassroomRecord(classroom)) {
+      throw new Error(`classrooms/${classroom.id} sınıf sözleşmesine uymuyor.`);
+    }
+    if (!academicYearIds.has(classroom.academicYearId)) {
+      throw new Error(`classrooms/${classroom.id} bilinmeyen eğitim yılına bağlı.`);
+    }
+  }
+  const classroomsById = new Map(
+    payload.classrooms.map((classroom) => [classroom.id, classroom]),
+  );
+  const archivedAcademicYearIds = new Set(
+    payload.academicYears
+      .filter((academicYear) => academicYear.status === "archived")
+      .map((academicYear) => academicYear.id),
+  );
+  const studentScopes = new Map<string, ActiveClassroomScope[]>();
+  for (const student of payload.students) {
+    const currentScope = validatedRecordScope(student, "students", classroomsById);
+    studentScopes.set(student.id, [
+      ...(currentScope ? [currentScope] : []),
+      ...validatedEnrollmentScopes(
+        student,
+        classroomsById,
+        archivedAcademicYearIds,
+      ),
+    ]);
+  }
+
+  const studentIds = new Set(payload.students.map((student) => student.id));
+  for (const attendance of payload.attendanceRecords) {
+    if (!isAttendanceRecord(attendance) || !UUID_PATTERN.test(attendance.studentId)) {
+      throw new Error(`attendanceRecords/${attendance.id} yoklama sözleşmesine uymuyor.`);
+    }
+    if (!studentIds.has(attendance.studentId)) {
+      throw new Error(`attendanceRecords/${attendance.id} bilinmeyen öğrenciye bağlı.`);
+    }
+    const attendanceScope = validatedRecordScope(
+      attendance,
+      "attendanceRecords",
+      classroomsById,
+    );
+    const allowedStudentScopes = studentScopes.get(attendance.studentId) ?? [];
+    if (
+      attendanceScope &&
+      allowedStudentScopes.length > 0 &&
+      !allowedStudentScopes.some((studentScope) =>
+        scopesMatch(attendanceScope, studentScope),
+      ) &&
+      attendance.legacyAssignmentStatus !== LEGACY_ASSIGNMENT_NEEDS_REVIEW
+    ) {
+      throw new Error(
+        `attendanceRecords/${attendance.id} öğrenci sınıf kapsamıyla uyuşmuyor.`,
+      );
+    }
+  }
+
+  const observationScopes = new Map<string, ActiveClassroomScope | null>();
+  for (const observation of payload.observations) {
+    const observationScope = validatedRecordScope(
+      observation,
+      "observations",
+      classroomsById,
+    );
+    observationScopes.set(observation.id, observationScope);
+    const observationStudentIds = Array.isArray(observation.studentIds)
+      ? observation.studentIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const unknownStudent = observationStudentIds.find((id) => !studentIds.has(id));
+    if (
+      unknownStudent &&
+      observation.requiresStudentReview !== true &&
+      observation.legacyAssignmentStatus !== LEGACY_ASSIGNMENT_NEEDS_REVIEW
+    ) {
+      throw new Error(`observations/${observation.id} bilinmeyen öğrenciye bağlı.`);
+    }
+    for (const studentId of observationStudentIds) {
+      const allowedStudentScopes = studentScopes.get(studentId) ?? [];
+      if (
+        observationScope &&
+        allowedStudentScopes.length > 0 &&
+        !allowedStudentScopes.some((studentScope) =>
+          scopesMatch(observationScope, studentScope),
+        ) &&
+        observation.legacyAssignmentStatus !== LEGACY_ASSIGNMENT_NEEDS_REVIEW
+      ) {
+        throw new Error(
+          `observations/${observation.id} öğrenci sınıf kapsamıyla uyuşmuyor.`,
+        );
+      }
+    }
+  }
+
+  const planScopes = new Map<string, ActiveClassroomScope | null>();
+  for (const plan of payload.plans) {
+    const planScope = validatedRecordScope(plan, "plans", classroomsById);
+    planScopes.set(plan.id, planScope);
+    if (plan.planType === "daily") {
+      const profile = isRecord(plan.curriculumProfileSnapshot)
+        ? plan.curriculumProfileSnapshot
+        : null;
+      if (
+        !profile ||
+        (profile.framework !== "tymm" && profile.framework !== "meb_2024") ||
+        typeof profile.catalogId !== "string" ||
+        profile.catalogId.trim().length === 0 ||
+        typeof profile.sourceVersion !== "string" ||
+        profile.sourceVersion.trim().length === 0
+      ) {
+        throw new Error(`plans/${plan.id} doğrulanmış program profilini taşımıyor.`);
+      }
+    }
+  }
+  const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
+  const activityScopes = new Map<string, ActiveClassroomScope | null>();
+  for (const activity of payload.activities) {
+    const activityScope = validatedRecordScope(
+      activity,
+      "activities",
+      classroomsById,
+    );
+    activityScopes.set(activity.id, activityScope);
+    if (activity.planId !== undefined) {
+      const plan =
+        typeof activity.planId === "string"
+          ? plansById.get(activity.planId)
+          : undefined;
+      const planScope = plan ? planScopes.get(plan.id) ?? null : null;
+      if (
+        !plan ||
+        !activityScope ||
+        !planScope ||
+        !scopesMatch(activityScope, planScope) ||
+        activity.civilDate !== plan.civilDate
+      ) {
+        throw new Error(`activities/${activity.id} plan ilişkisi geçersiz.`);
+      }
+    }
+  }
+  const activitiesById = new Map(
+    payload.activities.map((activity) => [activity.id, activity]),
+  );
+
+  for (const observation of payload.observations) {
+    if (observation.rawTextImmutable !== true && observation.schemaVersion < 2) {
+      continue;
+    }
+    const studentIds = Array.isArray(observation.studentIds)
+      ? observation.studentIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const activity =
+      typeof observation.activityId === "string"
+        ? activitiesById.get(observation.activityId)
+        : undefined;
+    const plan =
+      typeof observation.planId === "string"
+        ? plansById.get(observation.planId)
+        : undefined;
+    const observationScope = observationScopes.get(observation.id) ?? null;
+    const activityScope = activity
+      ? activityScopes.get(activity.id) ?? null
+      : null;
+    const planScope = plan ? planScopes.get(plan.id) ?? null : null;
+    if (
+      studentIds.length !== 1 ||
+      typeof observation.rawText !== "string" ||
+      observation.rawText.trim().length === 0 ||
+      typeof observation.observedAt !== "string" ||
+      !UTC_ISO_PATTERN.test(observation.observedAt) ||
+      !activity ||
+      !plan ||
+      activity.planId !== plan.id ||
+      !observationScope ||
+      !activityScope ||
+      !planScope ||
+      !scopesMatch(observationScope, activityScope) ||
+      !scopesMatch(observationScope, planScope)
+    ) {
+      throw new Error(`observations/${observation.id} ham kanıt zinciri geçersiz.`);
+    }
+  }
+
+  const linksByObservation = new Map<string, StoredRecord[]>();
+  for (const link of payload.evidenceCurriculumLinks) {
+    const linkScope = validatedRecordScope(
+      link,
+      "evidenceCurriculumLinks",
+      classroomsById,
+    );
+    const observation =
+      typeof link.observationId === "string"
+        ? payload.observations.find((record) => record.id === link.observationId)
+        : undefined;
+    const observationScope = observation
+      ? observationScopes.get(observation.id) ?? null
+      : null;
+    const expectedLabel =
+      link.framework === "tymm"
+        ? "Türkiye Yüzyılı Maarif Modeli"
+        : link.framework === "meb_2024"
+          ? "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı"
+          : null;
+    const plan =
+      observation && typeof observation.planId === "string"
+        ? plansById.get(observation.planId)
+        : undefined;
+    const profile = plan && isRecord(plan.curriculumProfileSnapshot)
+      ? plan.curriculumProfileSnapshot
+      : null;
+    if (
+      !observation ||
+      !linkScope ||
+      !observationScope ||
+      !scopesMatch(linkScope, observationScope) ||
+      !expectedLabel ||
+      link.programLabel !== expectedLabel ||
+      typeof link.catalogId !== "string" ||
+      link.catalogId.trim().length === 0 ||
+      typeof link.sourceVersion !== "string" ||
+      link.sourceVersion.trim().length === 0 ||
+      typeof link.referenceCode !== "string" ||
+      link.referenceCode.trim().length === 0 ||
+      typeof link.referenceTitle !== "string" ||
+      link.referenceTitle.trim().length === 0 ||
+      link.confirmationMethod !== "teacher-confirmed" ||
+      typeof link.approvedByUserId !== "string" ||
+      link.approvedByUserId.trim().length === 0 ||
+      typeof link.confirmedAt !== "string" ||
+      !UTC_ISO_PATTERN.test(link.confirmedAt) ||
+      !profile ||
+      profile.framework !== link.framework ||
+      profile.catalogId !== link.catalogId ||
+      profile.sourceVersion !== link.sourceVersion
+    ) {
+      throw new Error(
+        `evidenceCurriculumLinks/${link.id} öğretmen onaylı program bağı geçersiz.`,
+      );
+    }
+    const group = linksByObservation.get(observation.id) ?? [];
+    group.push(link);
+    linksByObservation.set(observation.id, group);
+  }
+
+  for (const draft of payload.reportDrafts) {
+    if (draft.reportType !== "evidence-assessment") continue;
+    const draftScope = validatedRecordScope(
+      draft,
+      "reportDrafts",
+      classroomsById,
+    );
+    const draftStudentIds = Array.isArray(draft.studentIds)
+      ? draft.studentIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const draftObservationIds = Array.isArray(draft.observationIds)
+      ? draft.observationIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const distinctObservationIds = new Set(draftObservationIds);
+    const observations = draftObservationIds.map((id) =>
+      payload.observations.find((record) => record.id === id),
+    );
+    const linkProfiles = observations.flatMap((observation) =>
+      observation
+        ? (linksByObservation.get(observation.id) ?? []).map(
+            (link) => `${String(link.framework)}\u0000${String(link.catalogId)}`,
+          )
+        : [],
+    );
+    if (
+      !draftScope ||
+      draftStudentIds.length !== 1 ||
+      draftObservationIds.length === 0 ||
+      distinctObservationIds.size !== draftObservationIds.length ||
+      observations.some(
+        (observation) =>
+          !observation ||
+          !Array.isArray(observation.studentIds) ||
+          !observation.studentIds.includes(draftStudentIds[0]) ||
+          !observationScopes.get(observation.id) ||
+          !scopesMatch(
+            draftScope,
+            observationScopes.get(observation.id) as ActiveClassroomScope,
+          ) ||
+          (linksByObservation.get(observation.id) ?? []).length === 0,
+      ) ||
+      new Set(linkProfiles).size !== 1 ||
+      draft.authoredBy !== "teacher" ||
+      draft.teacherReviewRequired !== true ||
+      draft.reviewStatus !== "pending" ||
+      draft.reviewedByUserId !== null ||
+      draft.reviewedAt !== null
+    ) {
+      throw new Error(`reportDrafts/${draft.id} kanıta bağlı taslak sözleşmesine uymuyor.`);
+    }
+  }
+
+  for (const setting of payload.settings) {
+    if (
+      setting.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE &&
+      !isAttendanceCompletionSetting(setting)
+    ) {
+      throw new Error(`settings/${setting.id} günlük yoklama ayarı geçersiz.`);
+    }
+    if (
+      setting.settingType === ACTIVE_CLASSROOM_SETTING_TYPE &&
+      typeof setting.deletedAt !== "string"
+    ) {
+      if (
+        typeof setting.classroomId !== "string" ||
+        !UUID_PATTERN.test(setting.classroomId) ||
+        typeof setting.academicYearId !== "string" ||
+        !UUID_PATTERN.test(setting.academicYearId)
+      ) {
+        throw new Error(`settings/${setting.id} aktif sınıf seçimi geçersiz.`);
+      }
+      const selectedClassroom = payload.classrooms.find(
+        (classroom) => classroom.id === setting.classroomId,
+      );
+      const selectedAcademicYear = payload.academicYears.find(
+        (academicYear) => academicYear.id === setting.academicYearId,
+      );
+      if (
+        !selectedClassroom ||
+        selectedClassroom.academicYearId !== setting.academicYearId ||
+        selectedClassroom.status === "archived" ||
+        selectedClassroom.archiveStatus === "archived" ||
+        !selectedAcademicYear ||
+        selectedAcademicYear.status === "archived"
+      ) {
+        throw new Error(`settings/${setting.id} bilinmeyen veya uyumsuz sınıfa bağlı.`);
+      }
+    }
+    if (
+      setting.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE ||
+      typeof setting.attendanceCompleted === "boolean"
+    ) {
+      validatedRecordScope(setting, "settings", classroomsById);
+    }
+  }
+}
+
+export function assertBackupEnvelope(value: unknown): asserts value is BackupEnvelope {
+  assertBackupEnvelopeStructure(value);
+  if (value.manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION) {
+    throw new Error("Eski yedek ilişkileri doğrulanmadan önce veri şeması yükseltilmelidir.");
+  }
+  assertBackupRelationships(value.payload);
+}

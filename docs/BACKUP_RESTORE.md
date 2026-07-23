@@ -28,6 +28,28 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
 - Tanınmayan koleksiyon, eksik zorunlu alan, desteklenmeyen sürüm veya kayıt sayısı
   uyuşmazlığı öğretmenin anlayacağı Türkçe hata ile reddedilir.
 - Aynı yedeğin tekrar yüklenmesi mükerrer kayıt üretmemelidir.
+- Yoklama kayıtlarında durum, `studentId`, UTC zamanlar ve İstanbul sivil günü
+  doğrulanır; bilinmeyen öğrenciye bağlı yoklama restore edilmeden reddedilir.
+- Günlük yoklama geçmişi ve tarihe bağlı tamamlanma ayarı diğer koleksiyonlarla
+  birlikte aynı checksum ve atomik restore kapsamındadır.
+- Eğitim yılına bağlı sınıf programı ve kalıcı çalışma düzeni `classrooms`
+  koleksiyonunda yedeklenir. Restore öncesinde `academicYearId` bağı doğrulanır;
+  kopuk sınıf kaydı hiçbir koleksiyona yazılmadan reddedilir.
+- Checksum her zaman dosyadaki özgün payload üzerinde doğrulanır. Bütünlük
+  doğrulamasından sonra eski kapsamsız kayıtlar bellekte dönüştürülür: tek
+  sınıfta atanır, çok sınıfta kesin öğrenci ilişkisi yoksa `needs-review`
+  karantinasına alınır. Bu dönüşüm doğrulanmadan hedef veritabanına yazılmaz.
+- Öğrenci-sınıf, yoklama-öğrenci-sınıf ve gözlem-öğrenci-sınıf ilişkileri ile
+  etkinlik, plan ve günlük yoklama ayarlarının sınıf/eğitim yılı kapsamı birlikte
+  doğrulanır. Çapraz sınıf bağı geri yükleme başlamadan reddedilir.
+- Veri şeması V2; `evidenceCurriculumLinks`, çok yıllı öğrenci üyelikleri ve D1
+  kanıt grafını taşır. V1 yedeğin özgün checksum'u önce doğrulanır, eksik yeni
+  koleksiyon bellekte eklenir ve yalnız ardından V2 ilişkileri doğrulanır.
+- Plan → etkinlik → değiştirilemez ham gözlem → ayrı öğretmen onayı → kaynaklı
+  değerlendirme taslağı zinciri restore başlamadan bütün olarak doğrulanır.
+- Arşivlenmiş yılda etkin öğrenci üyeliği veya canlı aktif-sınıf ayarı bulunamaz.
+- Merge sırasında cihaz + yedek birleşik aday snapshot'ı önce ilişki
+  doğrulamasından geçer; bağımlı D1 grafı kısmi ve kopuk yazılmaz.
 
 Alpha JSON zarfı tam ZIP yedeğinin yerini kalıcı olarak almaz. Medya eklendiğinde
 aynı manifest ve bütünlük ilkeleri ZIP içindeki `manifest.json`, veri dosyaları ve
@@ -84,3 +106,13 @@ maarifos-backup-YYYY-MM-DD.zip
 10. Kayıt sayısı uyuşmazlığı ve mevcut verinin değişmeden kalması
 11. `replace` sırasında yazma hatası ve işlemin tamamının geri alınması
 12. `merge` sırasında aynı UUID/farklı içerik çakışma raporu
+13. İki farklı sivil gündeki yoklamanın JSON round-trip sonrasında ayrı kalması
+14. Bilinmeyen öğrenciye bağlı yoklamanın hiçbir veriyi değiştirmeden reddedilmesi
+15. Sabahçı/öğleci/tam gün/özel saat düzeninin JSON round-trip sonrasında aynen kalması
+16. Bilinmeyen eğitim yılına bağlı sınıf kaydının hiçbir veriyi değiştirmeden reddedilmesi
+17. Tek sınıflı eski yedeğin kapsam ataması sonrasında ham içeriği koruması
+18. Çok sınıflı eski yedekte belirsiz kayıtların silinmeden karantinaya alınması
+19. Öğrencisiyle sınıf kapsamı uyuşmayan yoklama ve gözlemin hedefi değiştirmeden reddedilmesi
+20. V1 JSON yedeğin özgün checksum sonrasında V2'ye güvenli yükseltilmesi
+21. D1 kanıt grafının kimlik, ham metin, öğretmen onayı ve pending taslakla round-trip yapması
+22. Arşivlenmiş yıl + yeni yıl üyeliklerinin tek kalıcı öğrenci kimliğiyle round-trip yapması

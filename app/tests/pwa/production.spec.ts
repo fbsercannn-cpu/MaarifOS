@@ -5,7 +5,14 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
 
   await expect(page.getByTestId("phone-frame")).toHaveCount(0);
   await expect(page.locator(".native-app-runtime")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Günaydın Emine Öğretmen/ })).toBeVisible();
+
+  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  await expect(setup).toBeVisible();
+  await setup.getByLabel("Sınıf adı").fill("Güneş Sınıfı");
+  await setup.getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" }).click();
+  await expect(setup).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Bugün", exact: true })).toBeVisible();
+  await expect(page.getByText("Güneş Sınıfı · Sabah grubu · 08.30–12.30")).toBeVisible();
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
@@ -18,8 +25,10 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
 
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: /Günaydın Emine Öğretmen/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bugün", exact: true })).toBeVisible();
+  await expect(page.getByText("Güneş Sınıfı · Sabah grubu · 08.30–12.30")).toBeVisible();
 
   await page.goto("/gunum/cevrimdisi", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("main", { name: "MaarifOS Günüm ekranı" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
+  await expect(page.getByText("Güneş Sınıfı · Sabah grubu · 08.30–12.30")).toBeVisible();
 });

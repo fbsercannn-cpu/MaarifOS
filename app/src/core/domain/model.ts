@@ -9,6 +9,7 @@ export const COLLECTION_NAMES = [
   "mediaAssets",
   "plans",
   "maarifReferences",
+  "evidenceCurriculumLinks",
   "portfolioSelections",
   "reportDrafts",
   "exportPackages",
