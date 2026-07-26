@@ -4,12 +4,12 @@ import {
   CheckCircledIcon,
   ChevronRightIcon,
   ClockIcon,
+  Cross2Icon,
   DownloadIcon,
   GearIcon,
   HomeIcon,
   Link2Icon,
   LockClosedIcon,
-  PaperPlaneIcon,
   PersonIcon,
   PlusIcon,
   ReaderIcon,
@@ -18,12 +18,15 @@ import {
 } from "@radix-ui/react-icons";
 import {
   BottomSheet,
+  FlowStack,
   KeyboardInput,
   KeyboardTextarea,
   MobileScroll,
   useKeyboard,
   useKeyboardInsets,
   useMobileDevice,
+  type FlowControls,
+  type FlowScreen,
 } from "./mobile";
 import {
   BackupService,
@@ -36,13 +39,26 @@ import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type A
 import {
   loadDashboardState,
   persistAttendanceUpdate,
-  persistDashboardObservation,
   persistStudentRosterChange,
   type AttendanceStatus,
-  type DashboardObservation as Observation,
   type DashboardState,
   type DashboardStudent as Student,
 } from "./features/dashboard/dashboard-data";
+import {
+  captureImmutableRawObservation,
+  confirmObservationCurriculumLink,
+  createCitedAssessmentDraft,
+  createPlanWithActivity,
+  CURRICULUM_PROGRAM_LABELS,
+  type CurriculumProfileSnapshot,
+} from "./features/evidence/evidence-flow";
+import {
+  curriculumFrameworkForProgram,
+  loadEvidenceWorkspace,
+  type EvidenceActivitySummary,
+  type EvidenceObservationSummary,
+  type EvidenceWorkspace,
+} from "./features/evidence/evidence-workspace";
 import {
   loadTodayWorkspace,
   saveClassroomConfiguration,
@@ -84,6 +100,13 @@ const emptyTodayWorkspace: TodayWorkspace = {
   datedEvidenceCount: 0,
 };
 
+const emptyEvidenceWorkspace: EvidenceWorkspace = {
+  civilDate: civilDateInIstanbul(new Date()),
+  activities: [],
+  pendingObservations: [],
+  linkedObservations: [],
+};
+
 type ClassroomFormState = {
   classroomName: string;
   academicYearName: string;
@@ -92,19 +115,29 @@ type ClassroomFormState = {
   ageGroup: string;
   curriculumProgram: string;
   curriculumCatalogLabel: string;
+  curriculumCatalogId: string;
+  curriculumSourceVersion: string;
   scheduleKind: ClassroomScheduleKind;
   startTime: string;
   endTime: string;
 };
 
+const currentCivilDate = civilDateInIstanbul(new Date());
+const currentCivilYear = Number(currentCivilDate.slice(0, 4));
+const currentCivilMonth = Number(currentCivilDate.slice(5, 7));
+const currentAcademicStartYear =
+  currentCivilMonth >= 9 ? currentCivilYear : currentCivilYear - 1;
+
 const initialClassroomForm: ClassroomFormState = {
   classroomName: "",
-  academicYearName: "2026–2027 Eğitim Yılı",
-  academicYearStart: "2026-09-01",
-  academicYearEnd: "2027-06-30",
+  academicYearName: `${currentAcademicStartYear}–${currentAcademicStartYear + 1} Eğitim Yılı`,
+  academicYearStart: `${currentAcademicStartYear}-09-01`,
+  academicYearEnd: `${currentAcademicStartYear + 1}-08-31`,
   ageGroup: "60–72 ay",
   curriculumProgram: "Türkiye Yüzyılı Maarif Modeli",
-  curriculumCatalogLabel: "Katalog 2025",
+  curriculumCatalogLabel: "",
+  curriculumCatalogId: "",
+  curriculumSourceVersion: "",
   scheduleKind: "morning",
   startTime: "08:30",
   endTime: "12:30",
@@ -137,6 +170,11 @@ type PendingRestore = {
   fileName: string;
   source: string;
   envelope: BackupEnvelope;
+};
+
+type EvidenceFlowRequest = {
+  activity: EvidenceActivitySummary;
+  pendingObservation?: EvidenceObservationSummary;
 };
 
 type InstallPromptEvent = Event & {
@@ -175,6 +213,555 @@ function formatTurkishCivilDate(civilDate: string) {
   return `${dateLabel}, ${weekday.slice(0, 1).toLocaleUpperCase("tr-TR")}${weekday.slice(1)}`;
 }
 
+function curriculumDisplayLabel(profile: CurriculumProfileSnapshot): string {
+  return profile.framework === "meb_2024"
+    ? "Okul Öncesi Eğitim Programı — EÇE/2024"
+    : "Türkiye Yüzyılı Maarif Modeli";
+}
+
+function createFlowHeader(title: string, step: string, onClose: () => void) {
+  return (flow: FlowControls) => (
+    <div className="d1-flow-header">
+      <div>
+        <small>{step}</small>
+        <strong>{title}</strong>
+      </div>
+      <button type="button" onClick={onClose} aria-label={`${flow.current.title ?? title} akışını kapat`}>
+        <Cross2Icon aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+type PlanCreationCommand = {
+  planId: string;
+  activityId: string;
+  planTitle: string;
+  activityTitle: string;
+  startTime: string;
+  endTime?: string;
+};
+
+function PlanCreationScreen({
+  civilDate,
+  defaultStartTime,
+  defaultEndTime,
+  curriculumProfile,
+  onCreate,
+}: {
+  civilDate: string;
+  defaultStartTime: string;
+  defaultEndTime: string;
+  curriculumProfile: CurriculumProfileSnapshot;
+  onCreate: (command: PlanCreationCommand) => Promise<void>;
+}) {
+  const [ids] = useState(() => ({
+    planId: crypto.randomUUID(),
+    activityId: crypto.randomUUID(),
+  }));
+  const [planTitle, setPlanTitle] = useState("Günlük öğrenme planı");
+  const [activityTitle, setActivityTitle] = useState("");
+  const [startTime, setStartTime] = useState(defaultStartTime);
+  const [endTime, setEndTime] = useState(defaultEndTime);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!planTitle.trim() || !activityTitle.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onCreate({
+        ...ids,
+        planTitle,
+        activityTitle,
+        startTime,
+        ...(endTime ? { endTime } : {}),
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Plan kaydedilemedi.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <MobileScroll className="d1-flow-scroll">
+      <div className="d1-flow-content">
+        <div className="d1-flow-intro">
+          <span className="d1-kicker">Bugünün uygulama kaydı</span>
+          <h1>Planı sınıfta kullanacağınız kadar açık yazın.</h1>
+          <p>Etkinlik kaydedildiğinde başlayacak; gözlem notları doğrudan bu etkinliğe bağlanacak.</p>
+        </div>
+
+        <section className="d1-context-card" aria-label="Plan bağlamı">
+          <span>{formatTurkishCivilDate(civilDate)}</span>
+          <strong>{curriculumDisplayLabel(curriculumProfile)}</strong>
+          <small>{curriculumProfile.catalogId} · {curriculumProfile.sourceVersion}</small>
+          <em>Öğretmen beyanı · resmî katalogda doğrulanmadı</em>
+        </section>
+
+        <div className="d1-form">
+          <label htmlFor="d1-plan-title">Plan başlığı</label>
+          <KeyboardInput
+            id="d1-plan-title"
+            value={planTitle}
+            onChange={(event) => setPlanTitle(event.target.value)}
+            autoComplete="off"
+          />
+
+          <label htmlFor="d1-activity-title">Etkinlik adı</label>
+          <KeyboardInput
+            id="d1-activity-title"
+            value={activityTitle}
+            onChange={(event) => setActivityTitle(event.target.value)}
+            placeholder="Örn. Bahçede gölge incelemesi"
+            autoComplete="off"
+            autoFocus
+          />
+
+          <div className="d1-form-grid">
+            <label htmlFor="d1-start-time">Başlangıç
+              <input
+                id="d1-start-time"
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+            </label>
+            <label htmlFor="d1-end-time">Bitiş
+              <input
+                id="d1-end-time"
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        {error ? <p className="d1-error" role="alert">{error}</p> : null}
+        <button
+          className="d1-primary"
+          type="button"
+          onClick={() => void save()}
+          disabled={busy || !planTitle.trim() || !activityTitle.trim()}
+        >
+          {busy ? "Kaydediliyor…" : "Planı kaydet ve etkinliği başlat"}
+        </button>
+      </div>
+    </MobileScroll>
+  );
+}
+
+function PlanCreationFlow({
+  civilDate,
+  defaultStartTime,
+  defaultEndTime,
+  curriculumProfile,
+  onCreate,
+  onClose,
+}: {
+  civilDate: string;
+  defaultStartTime: string;
+  defaultEndTime: string;
+  curriculumProfile: CurriculumProfileSnapshot;
+  onCreate: (command: PlanCreationCommand) => Promise<void>;
+  onClose: () => void;
+}) {
+  const initial = useMemo<FlowScreen>(
+    () => ({
+      id: "plan-create",
+      title: "Plan oluştur",
+      headerHeight: 64,
+      header: createFlowHeader("Plan oluştur", "1 / 1", onClose),
+      render: () => (
+        <PlanCreationScreen
+          civilDate={civilDate}
+          defaultStartTime={defaultStartTime}
+          defaultEndTime={defaultEndTime}
+          curriculumProfile={curriculumProfile}
+          onCreate={onCreate}
+        />
+      ),
+    }),
+    [
+      civilDate,
+      curriculumProfile,
+      defaultEndTime,
+      defaultStartTime,
+      onClose,
+      onCreate,
+    ],
+  );
+
+  return <FlowStack initial={initial} />;
+}
+
+type EvidenceFlowActions = {
+  close: () => void;
+  manageChildren: () => void;
+  capture: (
+    activity: EvidenceActivitySummary,
+    input: { observationId: string; studentId: string; rawText: string },
+  ) => Promise<EvidenceObservationSummary>;
+  confirm: (
+    observation: EvidenceObservationSummary,
+    referenceCode: string,
+    referenceTitle: string,
+  ) => Promise<void>;
+  createDraft: (
+    observation: EvidenceObservationSummary,
+    teacherAssessmentText: string,
+    draftId: string,
+  ) => Promise<void>;
+};
+
+function EvidenceCaptureScreen({
+  flow,
+  activity,
+  students,
+  actions,
+}: {
+  flow: FlowControls;
+  activity: EvidenceActivitySummary;
+  students: Student[];
+  actions: EvidenceFlowActions;
+}) {
+  const [observationId] = useState(() => crypto.randomUUID());
+  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const [rawText, setRawText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!studentId || !rawText.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const observation = await actions.capture(activity, {
+        observationId,
+        studentId,
+        rawText,
+      });
+      flow.replace(createEvidenceLinkScreen(observation, actions));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Gözlem notu kaydedilemedi.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <MobileScroll className="d1-flow-scroll">
+      <div className="d1-flow-content">
+        <div className="d1-flow-intro">
+          <span className="d1-kicker">{activity.title}</span>
+          <h1>Gözlem notu</h1>
+          <p>Gördüğünüz ve duyduğunuz olayı yorum eklemeden kaydedin.</p>
+        </div>
+
+        {students.length === 0 ? (
+          <section className="d1-empty-state">
+            <strong>Önce sınıfa bir çocuk ekleyin.</strong>
+            <p>Gözlem notu yalnız etkin sınıftaki bir çocukla ilişkilendirilebilir.</p>
+            <button type="button" onClick={actions.manageChildren}>Sınıfımı aç</button>
+          </section>
+        ) : (
+          <>
+            <div className="d1-form">
+              <label htmlFor="d1-observation-student">Çocuk</label>
+              <select
+                id="d1-observation-student"
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
+              >
+                {students.map((student) => (
+                  <option value={student.id} key={student.id}>{student.name}</option>
+                ))}
+              </select>
+
+              <label htmlFor="d1-observation-text">Ne oldu?</label>
+              <KeyboardTextarea
+                id="d1-observation-text"
+                value={rawText}
+                onChange={(event) => setRawText(event.target.value)}
+                placeholder="Örn. Ece iki farklı yaprağı yan yana koydu ve “Bunun çizgileri daha çok” dedi."
+                rows={7}
+                autoFocus
+              />
+            </div>
+            <p className="d1-integrity-note"><LockClosedIcon aria-hidden="true" /> İlk gözlem notu kaydedildikten sonra değişmeden korunur.</p>
+            {error ? <p className="d1-error" role="alert">{error}</p> : null}
+            <button
+              className="d1-primary"
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || !studentId || !rawText.trim()}
+            >
+              {busy ? "Kaydediliyor…" : "Gözlem notunu kaydet"}
+            </button>
+          </>
+        )}
+      </div>
+    </MobileScroll>
+  );
+}
+
+function EvidenceLinkScreen({
+  flow,
+  observation,
+  actions,
+}: {
+  flow: FlowControls;
+  observation: EvidenceObservationSummary;
+  actions: EvidenceFlowActions;
+}) {
+  const [referenceCode, setReferenceCode] = useState("");
+  const [referenceTitle, setReferenceTitle] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!referenceCode.trim() || !referenceTitle.trim() || !confirmed || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await actions.confirm(observation, referenceCode, referenceTitle);
+      flow.replace(createAssessmentScreen(observation, actions));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Program bağlantısı kaydedilemedi.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <MobileScroll className="d1-flow-scroll">
+      <div className="d1-flow-content">
+        <div className="d1-flow-intro">
+          <span className="d1-kicker">{observation.studentName} · {observation.activityTitle}</span>
+          <h1>Program bağlantısı</h1>
+          <p>Notunuzu hangi program öğesiyle ilişkilendirdiğinizi açıkça kaydedin.</p>
+        </div>
+
+        <blockquote className="d1-observation-quote">{observation.rawText}</blockquote>
+
+        <section className="d1-warning-card">
+          <strong>Öğretmen beyanı</strong>
+          <p>Bu referans resmî katalogda doğrulanmadı. Kod ve başlığı kullandığınız program kaynağından siz giriyorsunuz.</p>
+          <small>{curriculumDisplayLabel(observation.curriculumProfile)} · {observation.curriculumProfile.sourceVersion}</small>
+        </section>
+
+        <div className="d1-form">
+          <label htmlFor="d1-reference-code">Program referans kodu</label>
+          <KeyboardInput
+            id="d1-reference-code"
+            value={referenceCode}
+            onChange={(event) => setReferenceCode(event.target.value)}
+            placeholder="Kullandığınız kaynaktaki kod"
+            autoComplete="off"
+          />
+          <label htmlFor="d1-reference-title">Program öğesi / başlığı</label>
+          <KeyboardTextarea
+            id="d1-reference-title"
+            value={referenceTitle}
+            onChange={(event) => setReferenceTitle(event.target.value)}
+            placeholder="Kazanım, öğrenme çıktısı veya beceri başlığı"
+            rows={3}
+          />
+          <label className="d1-confirmation" htmlFor="d1-reference-confirmed">
+            <input
+              id="d1-reference-confirmed"
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            <span>Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.</span>
+          </label>
+        </div>
+
+        {error ? <p className="d1-error" role="alert">{error}</p> : null}
+        <button
+          className="d1-primary"
+          type="button"
+          onClick={() => void save()}
+          disabled={busy || !referenceCode.trim() || !referenceTitle.trim() || !confirmed}
+        >
+          {busy ? "Kaydediliyor…" : "Bağlantıyı onayla"}
+        </button>
+        <button className="d1-secondary" type="button" onClick={actions.close}>Daha sonra tamamla</button>
+      </div>
+    </MobileScroll>
+  );
+}
+
+function AssessmentScreen({
+  flow,
+  observation,
+  actions,
+}: {
+  flow: FlowControls;
+  observation: EvidenceObservationSummary;
+  actions: EvidenceFlowActions;
+}) {
+  const [draftId] = useState(() => crypto.randomUUID());
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await actions.createDraft(observation, text, draftId);
+      flow.replace(createCompletionScreen(observation, actions));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Değerlendirme taslağı kaydedilemedi.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <MobileScroll className="d1-flow-scroll">
+      <div className="d1-flow-content">
+        <div className="d1-flow-intro">
+          <span className="d1-kicker">{observation.studentName}</span>
+          <h1>Kanıta dayalı değerlendirme</h1>
+          <p>Değerlendirme cümlesini siz yazarsınız; not, kaynak olarak taslağa bağlanır.</p>
+        </div>
+
+        <section className="d1-citation-card">
+          <small>1 tarihli gözlem notu</small>
+          <blockquote>{observation.rawText}</blockquote>
+          <span>{formatTurkishCivilDate(observation.civilDate)} · {observation.activityTitle}</span>
+        </section>
+
+        <section className="d1-safety-card">
+          <strong>Pedagojik sınır</strong>
+          <p>MaarifOS tanı koymaz, çocuğu etiketlemez ve gelişim hükmü üretmez. Bu alan yalnız öğretmenin seçili gözleme dayanan mesleki değerlendirmesidir.</p>
+        </section>
+
+        <div className="d1-form">
+          <label htmlFor="d1-assessment-text">Öğretmen değerlendirmesi</label>
+          <KeyboardTextarea
+            id="d1-assessment-text"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Bu gözlemin öğrenme süreci açısından ne gösterdiğini, kesin hüküm vermeden yazın."
+            rows={7}
+            autoFocus
+          />
+        </div>
+
+        <p className="d1-integrity-note"><ClockIcon aria-hidden="true" /> Tek not sınırlı bir kanıttır; taslak öğretmen incelemesi bekleyecek.</p>
+        {error ? <p className="d1-error" role="alert">{error}</p> : null}
+        <button className="d1-primary" type="button" onClick={() => void save()} disabled={busy || !text.trim()}>
+          {busy ? "Kaydediliyor…" : "İnceleme taslağını oluştur"}
+        </button>
+      </div>
+    </MobileScroll>
+  );
+}
+
+function CompletionScreen({
+  observation,
+  actions,
+}: {
+  observation: EvidenceObservationSummary;
+  actions: EvidenceFlowActions;
+}) {
+  return (
+    <MobileScroll className="d1-flow-scroll">
+      <div className="d1-flow-content d1-completion">
+        <span className="d1-completion-icon"><CheckCircledIcon aria-hidden="true" /></span>
+        <span className="d1-kicker">Kayıt zinciri tamamlandı</span>
+        <h1>{observation.studentName} için taslak hazır.</h1>
+        <p>Gözlem notu, öğretmenin onayladığı program bağlantısı ve değerlendirme taslağı birlikte korundu.</p>
+        <section className="d1-context-card">
+          <strong>Öğretmen incelemesi bekliyor</strong>
+          <span>1 gözlem notuna atıf</span>
+          <em>Program referansı öğretmen beyanı · resmî katalogda doğrulanmadı</em>
+        </section>
+        <button className="d1-primary" type="button" onClick={actions.close}>Bugün ekranına dön</button>
+      </div>
+    </MobileScroll>
+  );
+}
+
+function createEvidenceLinkScreen(
+  observation: EvidenceObservationSummary,
+  actions: EvidenceFlowActions,
+): FlowScreen {
+  return {
+    id: `evidence-link-${observation.id}`,
+    title: "Program bağlantısı",
+    headerHeight: 64,
+    header: createFlowHeader("Program bağlantısı", "2 / 3", actions.close),
+    render: (flow) => <EvidenceLinkScreen flow={flow} observation={observation} actions={actions} />,
+  };
+}
+
+function createAssessmentScreen(
+  observation: EvidenceObservationSummary,
+  actions: EvidenceFlowActions,
+): FlowScreen {
+  return {
+    id: `assessment-${observation.id}`,
+    title: "Değerlendirme",
+    headerHeight: 64,
+    header: createFlowHeader("Değerlendirme", "3 / 3", actions.close),
+    render: (flow) => <AssessmentScreen flow={flow} observation={observation} actions={actions} />,
+  };
+}
+
+function createCompletionScreen(
+  observation: EvidenceObservationSummary,
+  actions: EvidenceFlowActions,
+): FlowScreen {
+  return {
+    id: `complete-${observation.id}`,
+    title: "Tamamlandı",
+    headerHeight: 64,
+    header: createFlowHeader("Kayıt tamamlandı", "Hazır", actions.close),
+    render: () => <CompletionScreen observation={observation} actions={actions} />,
+  };
+}
+
+function EvidenceCaptureFlow({
+  activity,
+  pendingObservation,
+  students,
+  actions,
+}: {
+  activity: EvidenceActivitySummary;
+  pendingObservation?: EvidenceObservationSummary;
+  students: Student[];
+  actions: EvidenceFlowActions;
+}) {
+  const initial = useMemo<FlowScreen>(
+    () =>
+      pendingObservation
+        ? createEvidenceLinkScreen(pendingObservation, actions)
+        : {
+            id: `capture-${activity.id}`,
+            title: "Gözlem notu",
+            headerHeight: 64,
+            header: createFlowHeader("Gözlem notu", "1 / 3", actions.close),
+            render: (flow) => (
+              <EvidenceCaptureScreen
+                flow={flow}
+                activity={activity}
+                students={students}
+                actions={actions}
+              />
+            ),
+          },
+    [actions, activity, pendingObservation, students],
+  );
+
+  return <FlowStack initial={initial} />;
+}
+
 export default function Prototype() {
   const keyboard = useKeyboard();
   const { device } = useMobileDevice();
@@ -186,7 +773,6 @@ export default function Prototype() {
   const dayRefreshInFlightRef = useRef(false);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [archivedStudents, setArchivedStudents] = useState<Student[]>([]);
-  const [observations, setObservations] = useState<Observation[]>([]);
   const [attendanceCompleted, setAttendanceCompleted] = useState(false);
   const [attendanceCivilDate, setAttendanceCivilDate] = useState(
     fallbackDashboardState.attendanceCivilDate,
@@ -195,15 +781,17 @@ export default function Prototype() {
   const [dataHydrated, setDataHydrated] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [childrenOpen, setChildrenOpen] = useState(false);
-  const [observationOpen, setObservationOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [observationText, setObservationText] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [todayWorkspace, setTodayWorkspace] = useState<TodayWorkspace>(emptyTodayWorkspace);
+  const [evidenceWorkspace, setEvidenceWorkspace] =
+    useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
+  const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [evidenceFlowRequest, setEvidenceFlowRequest] =
+    useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
   const [classroomError, setClassroomError] = useState("");
   const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
@@ -254,31 +842,47 @@ export default function Prototype() {
     return queued;
   };
 
+  const refreshD1Workspaces = async () => {
+    const [today, evidence] = await Promise.all([
+      loadTodayWorkspace(store),
+      loadEvidenceWorkspace(store),
+    ]);
+    setTodayWorkspace(today);
+    setEvidenceWorkspace(evidence);
+    return { today, evidence };
+  };
+
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
       loadDashboardState(store, fallbackDashboardState),
       loadTodayWorkspace(store),
+      loadEvidenceWorkspace(store),
     ])
-      .then(([state, workspace]) => {
+      .then(([state, workspace, evidence]) => {
         if (cancelled) return;
         setStudents(state.students);
         setArchivedStudents(state.archivedStudents);
-        setObservations(state.observations);
         setAttendanceCompleted(state.attendanceCompleted);
         setAttendanceCivilDate(state.attendanceCivilDate);
-        setSelectedStudentId(state.students[0]?.id ?? "");
         setTodayWorkspace(workspace);
+        setEvidenceWorkspace(evidence);
         if (workspace.classroom.status === "configured") {
           const classroom = workspace.classroom;
           setClassroomForm((current) => ({
             ...current,
             classroomName: classroom.classroomName,
             academicYearName: classroom.academicYearName,
+            academicYearStart: classroom.academicYearStart,
+            academicYearEnd: classroom.academicYearEnd,
             ageGroup: classroom.ageGroup ?? current.ageGroup,
             curriculumProgram: classroom.curriculumProgram ?? current.curriculumProgram,
             curriculumCatalogLabel:
               classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
+            curriculumCatalogId:
+              classroom.curriculumProfile?.catalogId ?? "",
+            curriculumSourceVersion:
+              classroom.curriculumProfile?.sourceVersion ?? "",
             scheduleKind: classroom.schedule.kind,
             startTime: classroom.schedule.startTime,
             endTime: classroom.schedule.endTime,
@@ -309,20 +913,21 @@ export default function Prototype() {
       dayRefreshInFlightRef.current = true;
       try {
         await persistenceQueueRef.current;
-        const [refreshed, refreshedWorkspace] = await Promise.all([
+        const [refreshed, refreshedWorkspace, refreshedEvidence] = await Promise.all([
           loadDashboardState(store, {
             ...fallbackDashboardState,
             attendanceCivilDate: currentCivilDate,
           }),
           loadTodayWorkspace(store, { now: new Date() }),
+          loadEvidenceWorkspace(store, { now: new Date() }),
         ]);
         if (cancelled) return;
         setStudents(refreshed.students);
         setArchivedStudents(refreshed.archivedStudents);
-        setObservations(refreshed.observations);
         setAttendanceCompleted(refreshed.attendanceCompleted);
         setAttendanceCivilDate(refreshed.attendanceCivilDate);
         setTodayWorkspace(refreshedWorkspace);
+        setEvidenceWorkspace(refreshedEvidence);
         setLastAttendanceChange(null);
         setAnnouncement("Yeni İstanbul takvim günü açıldı; önceki yoklama geçmişte korundu.");
       } catch {
@@ -459,18 +1064,37 @@ export default function Prototype() {
         backupService.serializeBackup(safety),
       );
       const report = await backupService.restoreBackup(pendingRestore.source, { mode });
-      const [restored, restoredWorkspace] = await Promise.all([
+      const [restored, restoredWorkspace, restoredEvidence] = await Promise.all([
         loadDashboardState(store, fallbackDashboardState),
         loadTodayWorkspace(store),
+        loadEvidenceWorkspace(store),
       ]);
       setStudents(restored.students);
       setArchivedStudents(restored.archivedStudents);
-      setObservations(restored.observations);
       setAttendanceCompleted(restored.attendanceCompleted);
       setAttendanceCivilDate(restored.attendanceCivilDate);
       setLastAttendanceChange(null);
-      setSelectedStudentId(restored.students[0]?.id ?? "");
       setTodayWorkspace(restoredWorkspace);
+      setEvidenceWorkspace(restoredEvidence);
+      if (restoredWorkspace.classroom.status === "configured") {
+        const classroom = restoredWorkspace.classroom;
+        setClassroomForm((current) => ({
+          ...current,
+          classroomName: classroom.classroomName,
+          academicYearName: classroom.academicYearName,
+          academicYearStart: classroom.academicYearStart,
+          academicYearEnd: classroom.academicYearEnd,
+          ageGroup: classroom.ageGroup ?? current.ageGroup,
+          curriculumProgram: classroom.curriculumProgram ?? current.curriculumProgram,
+          curriculumCatalogLabel:
+            classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
+          curriculumCatalogId: classroom.curriculumProfile?.catalogId ?? "",
+          curriculumSourceVersion: classroom.curriculumProfile?.sourceVersion ?? "",
+          scheduleKind: classroom.schedule.kind,
+          startTime: classroom.schedule.startTime,
+          endTime: classroom.schedule.endTime,
+        }));
+      }
       setPendingRestore(null);
       setDataStatus(
         `Geri yükleme tamamlandı · ${report.inserted} eklendi, ${report.skipped} aynı kayıt atlandı, ${report.conflicts.length} çakışma`,
@@ -563,34 +1187,6 @@ export default function Prototype() {
     }
   };
 
-  const saveObservation = async () => {
-    const trimmed = observationText.trim();
-    if (!trimmed || !selectedStudentId) return;
-    const student = students.find((item) => item.id === selectedStudentId);
-    const observation: Observation = {
-      id: crypto.randomUUID(),
-      studentId: selectedStudentId,
-      rawText: trimmed,
-      createdAtUtc: new Date().toISOString(),
-    };
-    try {
-      await enqueuePersistence(() => persistDashboardObservation(store, observation));
-    } catch {
-      setDataStatus("Gözlem notu bu cihaza kaydedilemedi; form açık bırakıldı.");
-      setAnnouncement("Gözlem kaydedilemedi. Lütfen yeniden deneyin.");
-      return;
-    }
-    setObservations((current) => [
-      ...current,
-      observation,
-    ]);
-    void loadTodayWorkspace(store).then(setTodayWorkspace).catch(() => undefined);
-    setObservationText("");
-    keyboard.hide();
-    setObservationOpen(false);
-    setAnnouncement(`${student?.name ?? "Çocuk"} için gözlem notu kaydedildi.`);
-  };
-
   const addStudent = async () => {
     const name = newStudentName.trim();
     if (!name) return;
@@ -600,7 +1196,6 @@ export default function Prototype() {
       await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: false }));
       setStudents((current) => [...current, student]);
       setNewStudentName("");
-      setSelectedStudentId((current) => current || student.id);
       setAnnouncement(`${name} sınıfa eklendi.`);
     } catch {
       setAnnouncement("Çocuk eklenemedi; mevcut kayıtlar korundu.");
@@ -622,7 +1217,6 @@ export default function Prototype() {
       const remaining = students.filter((item) => item.id !== studentId);
       setStudents(remaining);
       setArchivedStudents((current) => [...current.filter((item) => item.id !== studentId), student]);
-      if (selectedStudentId === studentId) setSelectedStudentId(remaining[0]?.id ?? "");
       setAnnouncement(`${student.name} sınıftan ayrıldı; geçmiş kayıtları korundu.`);
     } catch {
       setAnnouncement("Çocuk sınıftan ayrılamadı; mevcut kayıt korundu.");
@@ -651,6 +1245,15 @@ export default function Prototype() {
     setDataBusy(true);
     setClassroomError("");
     try {
+      const framework = curriculumFrameworkForProgram(classroomForm.curriculumProgram);
+      const curriculumProfile: CurriculumProfileSnapshot = {
+        framework,
+        programLabel: CURRICULUM_PROGRAM_LABELS[framework],
+        catalogId: classroomForm.curriculumCatalogId,
+        sourceVersion: classroomForm.curriculumSourceVersion,
+        referenceOrigin: "teacher-declared",
+        officialCatalogVerified: false,
+      };
       const context = await saveClassroomConfiguration(store, {
         academicYear: {
           id: configuredClassroom?.academicYearId,
@@ -663,7 +1266,9 @@ export default function Prototype() {
           name: classroomForm.classroomName,
           ageGroup: classroomForm.ageGroup,
           curriculumProgram: classroomForm.curriculumProgram,
-          curriculumCatalogLabel: classroomForm.curriculumCatalogLabel,
+          curriculumCatalogLabel:
+            `${classroomForm.curriculumCatalogId.trim()} · ${classroomForm.curriculumSourceVersion.trim()}`,
+          curriculumProfile,
         },
         schedule: {
           kind: classroomForm.scheduleKind,
@@ -671,11 +1276,13 @@ export default function Prototype() {
           endTime: classroomForm.endTime,
         },
       });
-      setTodayWorkspace(await loadTodayWorkspace(store));
+      const refreshed = await refreshD1Workspaces();
       setClassroomOpen(false);
       setAnnouncement(
-        context.status === "configured"
-          ? `${context.classroomName} çalışma düzeni kaydedildi.`
+        refreshed.today.classroom.status === "configured"
+          ? `${refreshed.today.classroom.classroomName} çalışma düzeni kaydedildi.`
+          : context.status === "configured"
+            ? `${context.classroomName} çalışma düzeni kaydedildi.`
           : "Sınıf çalışma düzeni kaydedildi.",
       );
     } catch (error) {
@@ -701,7 +1308,7 @@ export default function Prototype() {
     setDataBusy(true);
     try {
       await setTodayActivityStatus(store, currentActivity.id, "completed");
-      setTodayWorkspace(await loadTodayWorkspace(store));
+      await refreshD1Workspaces();
       setAnnouncement(`${currentActivity.title} tamamlandı.`);
     } catch {
       setAnnouncement("Etkinlik durumu kaydedilemedi; mevcut kayıt korundu.");
@@ -710,9 +1317,158 @@ export default function Prototype() {
     }
   };
 
+  const closeD1Flow = () => {
+    keyboard.hide();
+    setPlanFlowOpen(false);
+    setEvidenceFlowRequest(null);
+    setActiveNav("today");
+  };
+
+  const openPlanFlow = () => {
+    if (!configuredClassroom) {
+      setClassroomOpen(true);
+      setAnnouncement("Plan oluşturmadan önce sınıfınızı kurun.");
+      return;
+    }
+    if (!configuredClassroom.curriculumProfile) {
+      setClassroomOpen(true);
+      setAnnouncement("Plan için program katalog kimliği ve kaynak sürümünü tamamlayın.");
+      return;
+    }
+    setPlansOpen(false);
+    setPlanFlowOpen(true);
+  };
+
+  const openActivityEvidence = async (activityId: string) => {
+    const selected = evidenceWorkspace.activities.find((item) => item.id === activityId);
+    if (!selected) {
+      setAnnouncement("Etkinliğin kanıt bağlantısı açılamadı; planı yeniden kontrol edin.");
+      return;
+    }
+    setDataBusy(true);
+    try {
+      if (selected.status === "planned") {
+        await setTodayActivityStatus(store, selected.id, "in_progress");
+      }
+      const refreshed = await refreshD1Workspaces();
+      const activity = refreshed.evidence.activities.find((item) => item.id === selected.id);
+      if (!activity) throw new Error("Etkinlik yeniden yüklenemedi.");
+      setPlansOpen(false);
+      setEvidenceFlowRequest({ activity });
+      setAnnouncement(`${activity.title} için gözlem notu açıldı.`);
+    } catch (reason) {
+      setAnnouncement(
+        reason instanceof Error ? reason.message : "Etkinlik başlatılamadı; mevcut kayıt korundu.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const openCaptureEntry = () => {
+    const active =
+      evidenceWorkspace.activities.find((item) => item.status === "in_progress") ??
+      evidenceWorkspace.activities.find((item) => item.status === "planned");
+    if (active) {
+      void openActivityEvidence(active.id);
+      return;
+    }
+    openPlanFlow();
+  };
+
+  const openPendingObservation = () => {
+    const pending = evidenceWorkspace.pendingObservations[0];
+    if (!pending) {
+      setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
+      return;
+    }
+    const activity = evidenceWorkspace.activities.find(
+      (item) => item.id === pending.activityId,
+    ) ?? {
+      id: pending.activityId,
+      planId: pending.planId,
+      title: pending.activityTitle,
+      startTime: "00:00",
+      status: "completed" as const,
+      civilDate: pending.civilDate,
+      curriculumProfile: pending.curriculumProfile,
+    };
+    setEvidenceFlowRequest({ activity, pendingObservation: pending });
+  };
+
+  const createPlanAndStart = async (command: PlanCreationCommand) => {
+    if (!configuredClassroom?.curriculumProfile) {
+      throw new Error("Sınıfın program profili tamamlanmalıdır.");
+    }
+    const result = await createPlanWithActivity(store, {
+      civilDate: todayWorkspace.civilDate,
+      ...command,
+      curriculumProfile: configuredClassroom.curriculumProfile,
+    });
+    await setTodayActivityStatus(store, result.activity.id, "in_progress");
+    const refreshed = await refreshD1Workspaces();
+    const activity = refreshed.evidence.activities.find(
+      (item) => item.id === result.activity.id,
+    );
+    if (!activity) throw new Error("Kaydedilen etkinlik yeniden açılamadı.");
+    setPlanFlowOpen(false);
+    setEvidenceFlowRequest({ activity });
+    setAnnouncement(`${activity.title} başladı. İlk gözlem notunu ekleyebilirsiniz.`);
+  };
+
+  const evidenceFlowActions: EvidenceFlowActions = {
+    close: closeD1Flow,
+    manageChildren: () => {
+      closeD1Flow();
+      setChildrenOpen(true);
+    },
+    capture: async (activity, input) => {
+      const result = await captureImmutableRawObservation(store, {
+        ...input,
+        planId: activity.planId,
+        activityId: activity.id,
+        observedAt: new Date().toISOString(),
+      });
+      const refreshed = await refreshD1Workspaces();
+      const observation = [
+        ...refreshed.evidence.pendingObservations,
+        ...refreshed.evidence.linkedObservations,
+      ].find((item) => item.id === result.observation.id);
+      if (!observation) throw new Error("Kaydedilen gözlem notu yeniden açılamadı.");
+      setAnnouncement(`${observation.studentName} için gözlem notu kaydedildi.`);
+      return observation;
+    },
+    confirm: async (observation, referenceCode, referenceTitle) => {
+      await confirmObservationCurriculumLink(store, {
+        observationId: observation.id,
+        framework: observation.curriculumProfile.framework,
+        catalogId: observation.curriculumProfile.catalogId,
+        sourceVersion: observation.curriculumProfile.sourceVersion,
+        referenceCode,
+        referenceTitle,
+        referenceOrigin: "teacher-declared",
+        officialCatalogVerified: false,
+      });
+      await refreshD1Workspaces();
+      setAnnouncement("Program bağlantısı öğretmen onayıyla kaydedildi.");
+    },
+    createDraft: async (observation, teacherAssessmentText, draftId) => {
+      await createCitedAssessmentDraft(store, {
+        draftId,
+        studentId: observation.studentId,
+        observationIds: [observation.id],
+        teacherAssessmentText,
+        periodStart: observation.civilDate,
+        periodEnd: observation.civilDate,
+      });
+      await refreshD1Workspaces();
+      setAnnouncement("Kanıta dayalı değerlendirme taslağı kaydedildi.");
+    },
+  };
+
   const handleNav = (id: string, label: string) => {
     if (id === "capture") {
-      setObservationOpen(true);
+      openCaptureEntry();
       return;
     }
     if (id === "classroom") {
@@ -738,11 +1494,6 @@ export default function Prototype() {
   const changeAttendanceOpen = (open: boolean) => {
     if (!open) keyboard.hide();
     setAttendanceOpen(open);
-  };
-
-  const changeObservationOpen = (open: boolean) => {
-    if (!open) keyboard.hide();
-    setObservationOpen(open);
   };
 
   return (
@@ -781,11 +1532,11 @@ export default function Prototype() {
               <span>Devam&nbsp; {counts.present + counts.late}/{students.length}</span>
             </button>
             <button className="summary-action summary-action--pending" type="button" onClick={() => {
-              if (todayWorkspace.pendingEvidenceLinks > 0) setObservationOpen(true);
-              else setAnnouncement("Program hedefiyle ilişkilendirilmeyi bekleyen kayıt yok.");
+              if (todayWorkspace.pendingEvidenceLinks > 0) openPendingObservation();
+              else setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
             }}>
               <ClockIcon aria-hidden="true" />
-              <span>{todayWorkspace.pendingEvidenceLinks} kayıt bekliyor</span>
+              <span>{todayWorkspace.pendingEvidenceLinks} bağlantı bekliyor</span>
             </button>
           </section>
 
@@ -800,8 +1551,13 @@ export default function Prototype() {
                   <div className="current-meta-row"><TargetIcon aria-hidden="true" /><span>{focusActivity.curriculumConnection ?? `${focusActivity.subject ?? "Planlı etkinlik"} · Program bağlantısı`}</span></div>
                   <div className="current-evidence-row"><ReaderIcon aria-hidden="true" /><span>{focusActivity.evidenceCount} öğrenme kanıtı</span></div>
                 </div>
-                <button className="primary-evidence-button" type="button" onClick={() => setObservationOpen(true)}>
-                  <PlusIcon aria-hidden="true" /> Kanıt ekle
+                <button
+                  className="primary-evidence-button"
+                  type="button"
+                  onClick={() => void openActivityEvidence(focusActivity.id)}
+                  disabled={dataBusy}
+                >
+                  <PlusIcon aria-hidden="true" /> {focusActivity.status === "planned" ? "Etkinliği başlat" : "Gözlem notu ekle"}
                 </button>
                 {focusActivity.status === "in_progress" ? (
                   <button className="secondary-text-button" type="button" onClick={() => void completeCurrentActivity()} disabled={dataBusy}>
@@ -814,8 +1570,8 @@ export default function Prototype() {
                 <p className="section-eyebrow">Başlangıç</p>
                 <h2 id="current-work-title">{configuredClassroom ? "Bugün için plan eklenmedi" : "Önce sınıfınızı kurun"}</h2>
                 <p>{configuredClassroom ? "Kayıtlı bir plan olduğunda sıradaki etkinlik ve öğrenme kanıtları burada görünür." : "Sınıf adı, yaş grubu, program ve kalıcı çalışma düzenini belirleyerek başlayın."}</p>
-                <button className="empty-primary" type="button" onClick={() => configuredClassroom ? setPlansOpen(true) : setClassroomOpen(true)}>
-                  {configuredClassroom ? "Planları aç" : "Sınıfı kur"}
+                <button className="empty-primary" type="button" onClick={() => configuredClassroom ? openPlanFlow() : setClassroomOpen(true)}>
+                  {configuredClassroom ? "Günlük plan oluştur" : "Sınıfı kur"}
                 </button>
               </>
             )}
@@ -844,9 +1600,9 @@ export default function Prototype() {
               </div>
             ) : null}
             {todayWorkspace.pendingEvidenceLinks > 0 ? (
-              <button className="pending-link" type="button" onClick={() => setObservationOpen(true)}>
+              <button className="pending-link" type="button" onClick={openPendingObservation}>
                 <ClockIcon aria-hidden="true" />
-                <span>{todayWorkspace.pendingEvidenceLinks} kaydı program hedefiyle ilişkilendir</span>
+                <span>Program bağlantısı bekleyen {todayWorkspace.pendingEvidenceLinks} gözlem</span>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
             ) : null}
@@ -910,6 +1666,31 @@ export default function Prototype() {
           />
 
           <div className="settings-grid">
+            <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
+              <input
+                id="academic-year-start"
+                type="date"
+                value={classroomForm.academicYearStart}
+                onChange={(event) => setClassroomForm((current) => ({
+                  ...current,
+                  academicYearStart: event.target.value,
+                }))}
+              />
+            </label>
+            <label htmlFor="academic-year-end">Eğitim yılı bitişi
+              <input
+                id="academic-year-end"
+                type="date"
+                value={classroomForm.academicYearEnd}
+                onChange={(event) => setClassroomForm((current) => ({
+                  ...current,
+                  academicYearEnd: event.target.value,
+                }))}
+              />
+            </label>
+          </div>
+
+          <div className="settings-grid">
             <label htmlFor="age-group">Yaş grubu
               <select id="age-group" value={classroomForm.ageGroup} onChange={(event) => setClassroomForm((current) => ({ ...current, ageGroup: event.target.value }))}>
                 <option>36–48 ay</option>
@@ -928,10 +1709,49 @@ export default function Prototype() {
           </div>
 
           <label htmlFor="curriculum-program">Uygulanan program</label>
-          <select id="curriculum-program" value={classroomForm.curriculumProgram} onChange={(event) => setClassroomForm((current) => ({ ...current, curriculumProgram: event.target.value }))}>
+          <select
+            id="curriculum-program"
+            value={classroomForm.curriculumProgram}
+            onChange={(event) => setClassroomForm((current) => ({
+              ...current,
+              curriculumProgram: event.target.value,
+              curriculumCatalogId: "",
+              curriculumSourceVersion: "",
+            }))}
+          >
             <option>Türkiye Yüzyılı Maarif Modeli</option>
             <option>Okul Öncesi Eğitim Programı — EÇE/2024</option>
           </select>
+
+          <div className="settings-grid settings-grid--program">
+            <label htmlFor="curriculum-catalog-id">Program katalog kimliği
+              <KeyboardInput
+                id="curriculum-catalog-id"
+                value={classroomForm.curriculumCatalogId}
+                onChange={(event) => setClassroomForm((current) => ({
+                  ...current,
+                  curriculumCatalogId: event.target.value,
+                }))}
+                placeholder="Kullandığınız kaynaktaki kimlik"
+                autoComplete="off"
+              />
+            </label>
+            <label htmlFor="curriculum-source-version">Kaynak sürümü
+              <KeyboardInput
+                id="curriculum-source-version"
+                value={classroomForm.curriculumSourceVersion}
+                onChange={(event) => setClassroomForm((current) => ({
+                  ...current,
+                  curriculumSourceVersion: event.target.value,
+                }))}
+                placeholder="Baskı / sürüm tarihi"
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <p className="classroom-provenance-note">
+            Bu iki bilgi öğretmen beyanı olarak saklanır; MaarifOS henüz resmî katalog doğrulaması yapmaz.
+          </p>
 
           <div className="settings-grid">
             <label htmlFor="schedule-start">Başlangıç
@@ -943,7 +1763,16 @@ export default function Prototype() {
           </div>
           <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
           {classroomError ? <p role="alert">{classroomError}</p> : null}
-          <button className="sheet-primary" type="submit" disabled={dataBusy || !classroomForm.classroomName.trim()}>
+          <button
+            className="sheet-primary"
+            type="submit"
+            disabled={
+              dataBusy ||
+              !classroomForm.classroomName.trim() ||
+              !classroomForm.curriculumCatalogId.trim() ||
+              !classroomForm.curriculumSourceVersion.trim()
+            }
+          >
             Sınıfı ve çalışma düzenini kaydet
           </button>
         </form>
@@ -959,13 +1788,21 @@ export default function Prototype() {
         description={`${formatTurkishCivilDate(todayWorkspace.civilDate)} · Kayıtlı etkinlikler`}
         snap={0.78}
       >
+        <button className="sheet-primary plans-create-button" type="button" onClick={openPlanFlow}>
+          <PlusIcon aria-hidden="true" /> Günlük plan oluştur
+        </button>
         {todayWorkspace.planItems.length > 0 ? (
           <div className="activity-list">
             {todayWorkspace.planItems.map((item, index) => (
-              <button className={`activity-row is-${item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`} type="button" key={item.id} onClick={() => setAnnouncement(`${item.title}: ${activityStatusLabels[item.status]}.`)}>
+              <button
+                className={`activity-row is-${item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`}
+                type="button"
+                key={item.id}
+                onClick={() => void openActivityEvidence(item.id)}
+              >
                 <span className="activity-marker" aria-hidden="true">{item.status === "completed" ? <CheckCircledIcon /> : index + 1}</span>
                 <span className="activity-copy"><strong>{item.title}</strong><small>{item.startTime} · <b>{activityStatusLabels[item.status]}</b></small></span>
-                <span className="activity-evidence">{item.evidenceCount} kanıt</span>
+                <span className="activity-evidence">{item.status === "planned" ? "Başlat" : "Gözlem ekle"}</span>
               </button>
             ))}
           </div>
@@ -1085,34 +1922,6 @@ export default function Prototype() {
       </BottomSheet>
 
       <BottomSheet
-        open={observationOpen}
-        onOpenChange={changeObservationOpen}
-        title="Kayıt ekle"
-        description="Çocuğu seçin ve gözlediğiniz olayı nesnel biçimde kaydedin."
-        snap={0.78}
-      >
-        <div className="observation-form">
-          <label htmlFor="observation-student">Çocuk</label>
-          <select id="observation-student" value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
-            {students.map((student) => <option value={student.id} key={student.id}>{student.name}</option>)}
-          </select>
-          {students.length === 0 ? <p>Önce Sınıfım bölümünden bir çocuk ekleyin.</p> : null}
-          <label htmlFor="observation-text">Ne oldu?</label>
-          <KeyboardTextarea
-            id="observation-text"
-            value={observationText}
-            onChange={(event) => setObservationText(event.target.value)}
-            placeholder="Gözlediğiniz davranışı yorum eklemeden yazın..."
-            rows={5}
-          />
-          <p>İlk yazdığınız gözlem notu değişmeden saklanır. Program eşlemesini daha sonra tamamlayabilirsiniz.</p>
-          <button className="sheet-primary" type="button" onClick={() => void saveObservation()} disabled={!selectedStudentId || !observationText.trim()}>
-            <PaperPlaneIcon aria-hidden="true" /> Kaydı sakla
-          </button>
-        </div>
-      </BottomSheet>
-
-      <BottomSheet
         open={profileOpen}
         onOpenChange={(open) => {
           if (!open) keyboard.hide();
@@ -1229,6 +2038,42 @@ export default function Prototype() {
           </section>
         </div>
       </BottomSheet>
+
+      {planFlowOpen && configuredClassroom?.curriculumProfile ? (
+        <section
+          className="d1-flow-layer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Günlük plan oluşturma"
+          key="plan-flow"
+        >
+          <PlanCreationFlow
+            civilDate={todayWorkspace.civilDate}
+            defaultStartTime={configuredClassroom.schedule.startTime}
+            defaultEndTime={configuredClassroom.schedule.endTime}
+            curriculumProfile={configuredClassroom.curriculumProfile}
+            onCreate={createPlanAndStart}
+            onClose={closeD1Flow}
+          />
+        </section>
+      ) : null}
+
+      {evidenceFlowRequest ? (
+        <section
+          className="d1-flow-layer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Gözlem ve değerlendirme akışı"
+          key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}`}
+        >
+          <EvidenceCaptureFlow
+            activity={evidenceFlowRequest.activity}
+            pendingObservation={evidenceFlowRequest.pendingObservation}
+            students={students}
+            actions={evidenceFlowActions}
+          />
+        </section>
+      ) : null}
 
       <div className="sr-live" aria-live="polite" aria-atomic="true">{announcement}</div>
     </div>

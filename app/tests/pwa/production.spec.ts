@@ -9,6 +9,8 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await expect(setup).toBeVisible();
   await setup.getByLabel("Sınıf adı").fill("Güneş Sınıfı");
+  await setup.getByLabel("Program katalog kimliği").fill("KURGU-PWA");
+  await setup.getByLabel("Kaynak sürümü").fill("2026-test");
   await setup.getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" }).click();
   await expect(setup).toBeHidden();
   await expect(page.getByRole("heading", { name: "Bugün", exact: true })).toBeVisible();

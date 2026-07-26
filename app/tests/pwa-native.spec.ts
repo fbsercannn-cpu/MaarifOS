@@ -7,6 +7,8 @@ test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerl
   await expect(page.locator(".native-app-runtime")).toBeVisible();
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await setup.getByLabel("Sınıf adı").fill("Kurgu PWA Sınıfı");
+  await setup.getByLabel("Program katalog kimliği").fill("KURGU-PWA");
+  await setup.getByLabel("Kaynak sürümü").fill("2026-test");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();

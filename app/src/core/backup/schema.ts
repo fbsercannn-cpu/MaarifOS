@@ -63,9 +63,46 @@ const UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const CURRICULUM_PROGRAM_LABELS = {
+  tymm: "Türkiye Yüzyılı Maarif Modeli",
+  meb_2024: "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı",
+} as const;
+
+type CurriculumProvenance = {
+  referenceOrigin: "teacher-declared" | "official-catalog";
+  officialCatalogVerified: boolean;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValidCivilDate(value: unknown): value is string {
+  if (typeof value !== "string" || !CIVIL_DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
+function validatedCurriculumProvenance(
+  value: Record<string, unknown>,
+  recordLabel: string,
+): CurriculumProvenance {
+  const referenceOrigin = value.referenceOrigin ?? "teacher-declared";
+  const officialCatalogVerified = value.officialCatalogVerified ?? false;
+  if (
+    (referenceOrigin !== "teacher-declared" &&
+      referenceOrigin !== "official-catalog") ||
+    typeof officialCatalogVerified !== "boolean" ||
+    (officialCatalogVerified && referenceOrigin !== "official-catalog")
+  ) {
+    throw new Error(`${recordLabel} program kaynağı/doğrulama bilgisi geçersiz.`);
+  }
+  return { referenceOrigin, officialCatalogVerified };
 }
 
 function assertStoredRecord(value: unknown, collection: CollectionName): asserts value is StoredRecord {
@@ -372,9 +409,16 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       const profile = isRecord(plan.curriculumProfileSnapshot)
         ? plan.curriculumProfileSnapshot
         : null;
+      const expectedLabel =
+        profile?.framework === "tymm"
+          ? CURRICULUM_PROGRAM_LABELS.tymm
+          : profile?.framework === "meb_2024"
+            ? CURRICULUM_PROGRAM_LABELS.meb_2024
+            : null;
       if (
         !profile ||
-        (profile.framework !== "tymm" && profile.framework !== "meb_2024") ||
+        !expectedLabel ||
+        profile.programLabel !== expectedLabel ||
         typeof profile.catalogId !== "string" ||
         profile.catalogId.trim().length === 0 ||
         typeof profile.sourceVersion !== "string" ||
@@ -382,6 +426,7 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       ) {
         throw new Error(`plans/${plan.id} doğrulanmış program profilini taşımıyor.`);
       }
+      validatedCurriculumProvenance(profile, `plans/${plan.id}`);
     }
   }
   const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
@@ -469,9 +514,9 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       : null;
     const expectedLabel =
       link.framework === "tymm"
-        ? "Türkiye Yüzyılı Maarif Modeli"
+        ? CURRICULUM_PROGRAM_LABELS.tymm
         : link.framework === "meb_2024"
-          ? "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı"
+          ? CURRICULUM_PROGRAM_LABELS.meb_2024
           : null;
     const plan =
       observation && typeof observation.planId === "string"
@@ -479,6 +524,13 @@ function assertBackupRelationships(payload: DataSnapshot): void {
         : undefined;
     const profile = plan && isRecord(plan.curriculumProfileSnapshot)
       ? plan.curriculumProfileSnapshot
+      : null;
+    const linkProvenance = validatedCurriculumProvenance(
+      link,
+      `evidenceCurriculumLinks/${link.id}`,
+    );
+    const profileProvenance = profile
+      ? validatedCurriculumProvenance(profile, `plans/${plan?.id ?? "bilinmeyen"}`)
       : null;
     if (
       !observation ||
@@ -503,7 +555,11 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       !profile ||
       profile.framework !== link.framework ||
       profile.catalogId !== link.catalogId ||
-      profile.sourceVersion !== link.sourceVersion
+      profile.sourceVersion !== link.sourceVersion ||
+      !profileProvenance ||
+      profileProvenance.referenceOrigin !== linkProvenance.referenceOrigin ||
+      profileProvenance.officialCatalogVerified !==
+        linkProvenance.officialCatalogVerified
     ) {
       throw new Error(
         `evidenceCurriculumLinks/${link.id} öğretmen onaylı program bağı geçersiz.`,
@@ -521,23 +577,111 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       "reportDrafts",
       classroomsById,
     );
-    const draftStudentIds = Array.isArray(draft.studentIds)
-      ? draft.studentIds.filter((id): id is string => typeof id === "string")
-      : [];
-    const draftObservationIds = Array.isArray(draft.observationIds)
-      ? draft.observationIds.filter((id): id is string => typeof id === "string")
-      : [];
+    const draftStudentIds =
+      Array.isArray(draft.studentIds) &&
+      draft.studentIds.every((id) => typeof id === "string" && UUID_PATTERN.test(id))
+        ? draft.studentIds
+        : [];
+    const draftObservationIds =
+      Array.isArray(draft.observationIds) &&
+      draft.observationIds.every(
+        (id) => typeof id === "string" && UUID_PATTERN.test(id),
+      )
+        ? draft.observationIds
+        : [];
     const distinctObservationIds = new Set(draftObservationIds);
     const observations = draftObservationIds.map((id) =>
       payload.observations.find((record) => record.id === id),
     );
-    const linkProfiles = observations.flatMap((observation) =>
-      observation
-        ? (linksByObservation.get(observation.id) ?? []).map(
-            (link) => `${String(link.framework)}\u0000${String(link.catalogId)}`,
-          )
-        : [],
+    const citations =
+      Array.isArray(draft.evidenceCitations) &&
+      draft.evidenceCitations.every((citation) => isRecord(citation))
+        ? draft.evidenceCitations
+        : [];
+    const citationsByObservation = new Map<string, Record<string, unknown>>();
+    let citationsValid = citations.length === draftObservationIds.length;
+    const citedLinks: StoredRecord[] = [];
+    for (const citation of citations) {
+      const observationId = citation.observationId;
+      const observation =
+        typeof observationId === "string"
+          ? payload.observations.find((record) => record.id === observationId)
+          : undefined;
+      const linkIds = Array.isArray(citation.confirmedCurriculumLinkIds)
+        ? citation.confirmedCurriculumLinkIds
+        : [];
+      const distinctLinkIds = new Set(linkIds);
+      if (
+        typeof observationId !== "string" ||
+        !distinctObservationIds.has(observationId) ||
+        citationsByObservation.has(observationId) ||
+        !observation ||
+        citation.observedAt !== observation.observedAt ||
+        linkIds.length === 0 ||
+        distinctLinkIds.size !== linkIds.length ||
+        linkIds.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id))
+      ) {
+        citationsValid = false;
+        continue;
+      }
+      const observationLinks = linksByObservation.get(observationId) ?? [];
+      const resolvedLinks = linkIds.map((id) =>
+        observationLinks.find((link) => link.id === id),
+      );
+      if (resolvedLinks.some((link) => !link)) {
+        citationsValid = false;
+        continue;
+      }
+      citationsByObservation.set(observationId, citation);
+      citedLinks.push(...(resolvedLinks as StoredRecord[]));
+    }
+    const linkProfiles = citedLinks.map(
+      (link) =>
+        `${String(link.framework)}\u0000${String(link.catalogId)}\u0000${String(link.sourceVersion)}`,
     );
+    const linkProvenanceProfiles = citedLinks.map((link) => {
+      const provenance = validatedCurriculumProvenance(
+        link,
+        `evidenceCurriculumLinks/${link.id}`,
+      );
+      return `${provenance.referenceOrigin}\u0000${String(
+        provenance.officialCatalogVerified,
+      )}`;
+    });
+    const allCitedLinksOfficial =
+      citedLinks.length > 0 &&
+      citedLinks.every((link) => {
+        const provenance = validatedCurriculumProvenance(
+          link,
+          `evidenceCurriculumLinks/${link.id}`,
+        );
+        return (
+          provenance.referenceOrigin === "official-catalog" &&
+          provenance.officialCatalogVerified
+        );
+      });
+    const expectedVerificationStatus = allCitedLinksOfficial
+      ? "official-catalog-verified"
+      : "teacher-declared-unverified";
+    const storedVerificationStatus =
+      draft.referenceVerificationStatus ?? "teacher-declared-unverified";
+    const periodStart = isValidCivilDate(draft.periodStart)
+      ? draft.periodStart
+      : null;
+    const periodEnd = isValidCivilDate(draft.periodEnd)
+      ? draft.periodEnd
+      : null;
+    const periodAndObservationsValid =
+      periodStart !== null &&
+      periodEnd !== null &&
+      periodStart <= periodEnd &&
+      observations.every(
+        (observation) =>
+          observation !== undefined &&
+          isValidCivilDate(observation.civilDate) &&
+          observation.civilDate >= periodStart &&
+          observation.civilDate <= periodEnd,
+      );
     if (
       !draftScope ||
       draftStudentIds.length !== 1 ||
@@ -555,12 +699,23 @@ function assertBackupRelationships(payload: DataSnapshot): void {
           ) ||
           (linksByObservation.get(observation.id) ?? []).length === 0,
       ) ||
+      !citationsValid ||
+      citationsByObservation.size !== draftObservationIds.length ||
       new Set(linkProfiles).size !== 1 ||
+      new Set(linkProvenanceProfiles).size !== 1 ||
+      typeof draft.teacherAssessmentText !== "string" ||
+      draft.teacherAssessmentText.trim().length === 0 ||
+      !periodAndObservationsValid ||
+      draft.status !== "teacher-review-required" ||
       draft.authoredBy !== "teacher" ||
       draft.teacherReviewRequired !== true ||
       draft.reviewStatus !== "pending" ||
       draft.reviewedByUserId !== null ||
-      draft.reviewedAt !== null
+      draft.reviewedAt !== null ||
+      draft.generationMode !== "teacher-authored-cited-draft" ||
+      (storedVerificationStatus !== "official-catalog-verified" &&
+        storedVerificationStatus !== "teacher-declared-unverified") ||
+      storedVerificationStatus !== expectedVerificationStatus
     ) {
       throw new Error(`reportDrafts/${draft.id} kanıta bağlı taslak sözleşmesine uymuyor.`);
     }

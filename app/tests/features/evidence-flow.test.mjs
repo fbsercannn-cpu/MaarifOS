@@ -9,10 +9,13 @@ import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import { archiveAcademicYear } from "../../src/features/archive/academic-year-archive.ts";
 import {
   CURRICULUM_PROGRAM_LABELS,
+  LOCAL_TEACHER_IDENTITY_SETTING_ID,
+  LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
   captureImmutableRawObservation,
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
   createPlanWithActivity,
+  normalizeCurriculumProfile,
 } from "../../src/features/evidence/evidence-flow.ts";
 import { persistDashboardObservation } from "../../src/features/dashboard/dashboard-data.ts";
 
@@ -64,6 +67,15 @@ const planId = "00000000-0000-4000-8000-000000000404";
 const activityId = "00000000-0000-4000-8000-000000000405";
 const observationId = "00000000-0000-4000-8000-000000000406";
 const draftId = "00000000-0000-4000-8000-000000000407";
+const secondObservationId = "00000000-0000-4000-8000-000000000408";
+const curriculumProfile = {
+  framework: "tymm",
+  programLabel: CURRICULUM_PROGRAM_LABELS.tymm,
+  catalogId: "tymm-2024-okul-oncesi-v1",
+  sourceVersion: "2024.1",
+  referenceOrigin: "teacher-declared",
+  officialCatalogVerified: false,
+};
 
 function activeStore() {
   const snapshot = createEmptySnapshot();
@@ -80,6 +92,7 @@ function activeStore() {
     id: classroom,
     academicYearId: year,
     name: "Kurgu Kanıt Sınıfı",
+    curriculumProfileSnapshot: curriculumProfile,
     schemaVersion: 2,
   });
   snapshot.settings.push({
@@ -108,12 +121,7 @@ async function createEvidenceChain(store) {
     activityTitle: "Kaplarda su aktarımı",
     startTime: "09:30",
     endTime: "10:00",
-    curriculumProfile: {
-      framework: "tymm",
-      programLabel: CURRICULUM_PROGRAM_LABELS.tymm,
-      catalogId: "tymm-2024-okul-oncesi-v1",
-      sourceVersion: "2024.1",
-    },
+    curriculumProfile,
     now: new Date("2026-09-01T06:10:00.000Z"),
   });
   const rawText = "  Çocuk, suyu geniş kaptan dar kaba aktarırken “Burada daha hızlı doldu.” dedi.  ";
@@ -153,7 +161,6 @@ test("D1 plan-etkinlik-ham gözlem-onaylı bağ-kaynaklı taslak zincirini eksik
     sourceVersion: "2024.1",
     referenceCode: "TYMM-OÖ-FEN-GÖZLEM-01",
     referenceTitle: "Nesne ve olayları özelliklerine göre gözlemleme",
-    approvedByUserId: "local-teacher",
     now: new Date("2026-09-01T08:00:00.000Z"),
   });
   const draft = await createCitedAssessmentDraft(store, {
@@ -171,9 +178,13 @@ test("D1 plan-etkinlik-ham gözlem-onaylı bağ-kaynaklı taslak zincirini eksik
   assert.equal(snapshot.observations[0].rawText, chain.rawText);
   assert.equal(snapshot.evidenceCurriculumLinks.length, 1);
   assert.equal(link.confirmationMethod, "teacher-confirmed");
+  assert.equal(link.referenceOrigin, "teacher-declared");
+  assert.equal(link.officialCatalogVerified, false);
+  assert.match(link.approvedByUserId, /^[0-9a-f-]{36}$/i);
   assert.equal(snapshot.observations[0].confirmedCurriculumLinks, undefined);
   assert.equal(draft.draft.reviewStatus, "pending");
   assert.equal(draft.draft.authoredBy, "teacher");
+  assert.equal(draft.draft.referenceVerificationStatus, "teacher-declared-unverified");
   assert.deepEqual(draft.draft.observationIds, [observationId]);
   assert.equal(draft.draft.evidenceCitations[0].observationId, observationId);
   assert.equal(draft.draft.evidenceCitations[0].rawText, undefined);
@@ -201,7 +212,6 @@ test("ham gözlemin üzerine yazmayı ve TYMM planına MEB 2024 bağlantısını
       sourceVersion: "2024.1",
       referenceCode: "MEB-OÖ-01",
       referenceTitle: "Kurgu uyumsuz başlık",
-      approvedByUserId: "local-teacher",
     }),
     /planın doğrulanmış katalog ve program profiliyle uyuşmuyor/,
   );
@@ -225,13 +235,147 @@ test("arşivlenen eğitim yılında yeni plan veya ham kanıt yazılamaz", async
       planTitle: "Arşive yazılmamalı",
       activityTitle: "Arşive yazılmamalı",
       startTime: "09:00",
-      curriculumProfile: {
-        framework: "tymm",
-        programLabel: CURRICULUM_PROGRAM_LABELS.tymm,
-        catalogId: "tymm-2024-okul-oncesi-v1",
-        sourceVersion: "2024.1",
-      },
+      curriculumProfile,
     }),
     /etkin ve arşivlenmemiş bir sınıf/,
+  );
+});
+
+test("plan profili aktif sınıf profiliyle tam eşleşir ve eğitim yılı dışına taşamaz", async () => {
+  const store = activeStore();
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planTitle: "Uyuşmayan katalog planı",
+      activityTitle: "Uyuşmayan katalog etkinliği",
+      startTime: "09:00",
+      curriculumProfile: {
+        ...curriculumProfile,
+        sourceVersion: "2024.2",
+      },
+    }),
+    /aktif sınıfın kayıtlı program profiliyle uyuşmuyor/,
+  );
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2027-07-01",
+      planTitle: "Dönem dışı plan",
+      activityTitle: "Dönem dışı etkinlik",
+      startTime: "09:00",
+      curriculumProfile,
+    }),
+    /aktif eğitim yılının tarih aralığında/,
+  );
+  assert.equal((await store.readSnapshot()).plans.length, 0);
+});
+
+test("öğretmen onay kimliğini bir kez üretir ve sonraki bağlantılarda aynı UUID'yi kullanır", async () => {
+  const store = activeStore();
+  await createEvidenceChain(store);
+  const firstLink = await confirmObservationCurriculumLink(store, {
+    observationId,
+    framework: "tymm",
+    catalogId: curriculumProfile.catalogId,
+    sourceVersion: curriculumProfile.sourceVersion,
+    referenceCode: "TYMM-OÖ-FEN-01",
+    referenceTitle: "İlk öğretmen beyanı",
+    now: new Date("2026-09-01T08:00:00.000Z"),
+  });
+  await captureImmutableRawObservation(store, {
+    observationId: secondObservationId,
+    studentId: student,
+    planId,
+    activityId,
+    rawText: "Çocuk ikinci kaptaki su seviyesini parmağıyla gösterdi.",
+    observedAt: "2026-09-01T08:05:00.000Z",
+    now: new Date("2026-09-01T08:06:00.000Z"),
+  });
+  const secondLink = await confirmObservationCurriculumLink(store, {
+    observationId: secondObservationId,
+    framework: "tymm",
+    catalogId: curriculumProfile.catalogId,
+    sourceVersion: curriculumProfile.sourceVersion,
+    referenceCode: "TYMM-OÖ-FEN-02",
+    referenceTitle: "İkinci öğretmen beyanı",
+    now: new Date("2026-09-01T08:10:00.000Z"),
+  });
+  const identity = (await store.readSnapshot()).settings.find(
+    (record) =>
+      record.id === LOCAL_TEACHER_IDENTITY_SETTING_ID &&
+      record.settingType === LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
+  );
+
+  assert.ok(identity);
+  assert.equal(firstLink.approvedByUserId, identity.teacherUserId);
+  assert.equal(secondLink.approvedByUserId, identity.teacherUserId);
+  assert.match(identity.teacherUserId, /^[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  await assert.rejects(
+    confirmObservationCurriculumLink(store, {
+      observationId: secondObservationId,
+      framework: "tymm",
+      catalogId: curriculumProfile.catalogId,
+      sourceVersion: curriculumProfile.sourceVersion,
+      referenceCode: "TYMM-OÖ-FEN-03",
+      referenceTitle: "Kimlik değiştirme denemesi",
+      approvedByUserId: "00000000-0000-4000-8000-000000000499",
+    }),
+    /kalıcı kimlikle uyuşmuyor/,
+  );
+});
+
+test("değerlendirme dönemi seçilen gözlemleri kapsar ve kaynak sürümlerini karıştırmaz", async () => {
+  const store = activeStore();
+  await createEvidenceChain(store);
+  await confirmObservationCurriculumLink(store, {
+    observationId,
+    framework: "tymm",
+    catalogId: curriculumProfile.catalogId,
+    sourceVersion: curriculumProfile.sourceVersion,
+    referenceCode: "TYMM-OÖ-FEN-01",
+    referenceTitle: "Öğretmen beyanı",
+  });
+
+  await assert.rejects(
+    createCitedAssessmentDraft(store, {
+      studentId: student,
+      observationIds: [observationId],
+      teacherAssessmentText: "Dönem dışı değerlendirme.",
+      periodStart: "2026-09-02",
+      periodEnd: "2026-09-30",
+    }),
+    /gözlemler değerlendirme tarih aralığında/,
+  );
+  await store.transaction("readwrite", ["evidenceCurriculumLinks"], async (transaction) => {
+    const links = await transaction.getAll("evidenceCurriculumLinks");
+    await transaction.putMany("evidenceCurriculumLinks", [
+      {
+        ...links[0],
+        id: "00000000-0000-4000-8000-000000000409",
+        sourceVersion: "2024.2",
+        referenceCode: "TYMM-OÖ-FEN-02",
+      },
+    ]);
+  });
+  await assert.rejects(
+    createCitedAssessmentDraft(store, {
+      studentId: student,
+      observationIds: [observationId],
+      teacherAssessmentText: "Sürümü karışık değerlendirme.",
+      periodStart: "2026-09-01",
+      periodEnd: "2026-09-30",
+    }),
+    /kaynak sürümleri karıştırılamaz/,
+  );
+});
+
+test("öğretmen beyanı doğrulanmış resmî katalog gibi işaretlenemez", () => {
+  assert.throws(
+    () =>
+      normalizeCurriculumProfile({
+        ...curriculumProfile,
+        officialCatalogVerified: true,
+      }),
+    /Yalnız resmî katalog kaynağı/,
   );
 });

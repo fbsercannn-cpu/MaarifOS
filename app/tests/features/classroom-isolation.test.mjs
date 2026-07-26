@@ -219,24 +219,33 @@ test("aktif A sınıfında B öğrencisi, gözlemi, planı ve etkinliği görün
       id: "00000000-0000-4000-8000-000000000213",
       studentIds: [studentA],
       rawText: "A gözlemi",
+      rawTextImmutable: true,
+      planId: "00000000-0000-4000-8000-000000000217",
+      activityId: "00000000-0000-4000-8000-000000000215",
       observedAt: "2026-07-22T06:30:00.000Z",
       classroomId: classA,
       academicYearId: yearA,
+      schemaVersion: 2,
     },
     {
       ...base,
       id: "00000000-0000-4000-8000-000000000214",
       studentIds: [studentB],
       rawText: "B gözlemi",
+      rawTextImmutable: true,
+      planId: "00000000-0000-4000-8000-000000000218",
+      activityId: "00000000-0000-4000-8000-000000000216",
       observedAt: "2026-07-22T06:35:00.000Z",
       classroomId: classB,
       academicYearId: yearB,
+      schemaVersion: 2,
     },
   );
   snapshot.activities.push(
     {
       ...base,
       id: "00000000-0000-4000-8000-000000000215",
+      planId: "00000000-0000-4000-8000-000000000217",
       title: "A etkinliği",
       startTime: "09:00",
       status: "in_progress",
@@ -246,6 +255,7 @@ test("aktif A sınıfında B öğrencisi, gözlemi, planı ve etkinliği görün
     {
       ...base,
       id: "00000000-0000-4000-8000-000000000216",
+      planId: "00000000-0000-4000-8000-000000000218",
       title: "B etkinliği",
       startTime: "09:15",
       status: "in_progress",
@@ -256,6 +266,26 @@ test("aktif A sınıfında B öğrencisi, gözlemi, planı ve etkinliği görün
   snapshot.plans.push(
     { ...base, id: "00000000-0000-4000-8000-000000000217", title: "A planı", maarifRefs: ["A-1"], classroomId: classA, academicYearId: yearA },
     { ...base, id: "00000000-0000-4000-8000-000000000218", title: "B planı", maarifRefs: ["B-1"], classroomId: classB, academicYearId: yearB },
+  );
+  snapshot.evidenceCurriculumLinks.push(
+    {
+      ...base,
+      id: "00000000-0000-4000-8000-000000000219",
+      observationId: "00000000-0000-4000-8000-000000000213",
+      referenceCode: "A-1",
+      confirmationMethod: "teacher-confirmed",
+      classroomId: classA,
+      academicYearId: yearA,
+    },
+    {
+      ...base,
+      id: "00000000-0000-4000-8000-000000000220",
+      observationId: "00000000-0000-4000-8000-000000000214",
+      referenceCode: "B-1",
+      confirmationMethod: "teacher-confirmed",
+      classroomId: classB,
+      academicYearId: yearB,
+    },
   );
   snapshot.settings.push({
     ...base,

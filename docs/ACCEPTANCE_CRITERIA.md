@@ -49,6 +49,18 @@
 - TYMM planına MEB 2024 referansı veya tersi bağlanamaz.
 - Değerlendirme taslağı gözlem kimliklerine atıf yapar, öğretmen tarafından
   yazılır ve `pending` inceleme durumuyla başlar.
+- Yeni gözlem yolu plansız veya etkinliksiz legacy kayıt üretmez; etkinlik
+  yoksa önce plan oluşturma akışını açar.
+- Plan, gözlem notu, program bağlantısı ve değerlendirme gerçek tam ekran
+  telefon akışında tamamlanabilir; gözlem kaydından sonra çıkılırsa bağlantı
+  bekleyen kayıt veri kaybı olmadan yeniden açılır.
+- Program kodu ve başlığı öğretmen tarafından girilir; açık onay kutusu
+  seçilmeden bağlantı oluşmaz.
+- Öğretmen beyanı resmî katalog doğrulaması gibi gösterilmez.
+- Değerlendirme ekranı tanı veya çocuk etiketi üretmediğini açıkça belirtir.
+- Aynı sınıf ve İstanbul sivil gününde yalnız bir etkinlik `in_progress`
+  olabilir.
+- Plan günü aktif eğitim yılının başlangıç ve bitiş tarihleri dışında olamaz.
 
 ## Medya
 - Kamera veya galeriden eklenir.
@@ -83,6 +95,9 @@
   kayıtlar ham içerikleri korunarak karantinaya alınır.
 - V1 yedek doğrulandıktan sonra V2'ye yükseltilir; D1 program-onay kayıtları ve
   çok yıllı öğrenci üyelikleri eksiksiz geri yüklenir.
+- D1 yedeğinde değerlendirme atıfları gözlem kimlikleriyle birebir değilse,
+  atıf bağlantısı yanlış gözleme aitse, gözlem değerlendirme dönemi dışındaysa
+  veya katalog kaynak sürümleri karışıyorsa geri yükleme veri yazmadan reddedilir.
 
 ## Hesap ve kimlik
 

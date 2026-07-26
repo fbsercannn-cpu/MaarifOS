@@ -50,16 +50,23 @@ Hız uğruna atlanmayacak üç kapı:
 
 ## 2. Mevcut doğrulanmış temel
 
-### 23 Temmuz 2026 uygulama durumu
+### 26 Temmuz 2026 uygulama durumu
 
 - D0 aktif sınıf/eğitim yılı yalıtımı ve eski veri karantinası tamamlandı.
 - Eğitim yılı kapanışı, salt-okunur arşiv özeti ve aynı öğrenci kimliğiyle yeni
   yıla yeniden kayıt çekirdeği tamamlandı.
 - D1 plan → etkinlik → değiştirilemez ham gözlem → ayrı öğretmen onayı →
   kaynaklı pending değerlendirme taslağı veri ve servis zinciri tamamlandı.
+- D1 zinciri gerçek tam ekran telefon akışına bağlandı. Yeni kayıt yolu artık
+  plansız legacy gözlem üretmiyor; plan, etkinlik, çocuk, gözlem notu, açık
+  program onayı ve öğretmen değerlendirmesi aynı izlenebilir akışta ilerliyor.
+- Program katalog kimliği ve kaynak sürümü sınıf profilinde öğretmen beyanı
+  olarak tutuluyor; resmî katalog doğrulaması yapılmış gibi gösterilmiyor.
+- Eğitim yılı tarih sınırı, aynı gün tek aktif etkinlik, cihazda kalıcı öğretmen
+  UUID'si ve yalnız bugünkü D1 kanıtlarından türetilen sayaçlar doğrulandı.
 - IndexedDB sürümü 2, yedek veri şeması V2 ve V1→V2 uyumluluk geçidi eklendi.
-- Bu teslimat domain/application ve yedek omurgasıdır; mobil arşiv ve D1
-  kullanıcı ekranları sonraki dikey dilimde bağlanacaktır.
+- D1 yedek grafı; gözlem, program bağlantısı, atıf ve değerlendirme dönemi
+  kopukluklarını geri yükleme başlamadan reddediyor.
 
 ### Çalışan özellikler
 
@@ -73,7 +80,8 @@ Hız uğruna atlanmayacak üç kapı:
 - Günlük yoklama tamamlama durumu
 - Son yoklama değişikliğini geri alma
 - Çok sekmeli yazmada dar kayıt güncellemesi
-- Hızlı ham gözlem kaydı
+- Etkinliğe bağlı değiştirilemez gözlem notu ve program bağlantısı iş akışı
+- Öğretmen yazarlı, tarihli kanıta atıf yapan değerlendirme taslağı
 - Sürümlü, SHA-256 doğrulamalı JSON yedek
 - Atomik replace ve çakışma raporlu merge restore
 - Restore sırasında CS-001 mükerrer işaretleme
@@ -82,9 +90,10 @@ Hız uğruna atlanmayacak üç kapı:
 
 ### Bugünkü stratejik açıklar
 
-1. Eğitim yılı, sınıf ve öğrenci CRUD gerçek ürün akışı değildir.
+1. Eğitim yılı arşivine kullanıcı arayüzünden erişim ve yıl geçiş sihirbazı eksiktir.
 2. Yoklamada erken ayrılma, kısmi gün, saat, neden ve geçmiş görünümü eksiktir.
-3. Gözlem; revizyon, bağlam, zaman çizelgesi ve Maarif referansına bağlı değildir.
+3. Gözlem zaman çizelgesi, bağlam/alıntı alanları ve resmî sürümlü katalog
+   içe aktarımı henüz kullanıcı arayüzünde değildir.
 4. Çocuklar, Arşiv ve Raporlar menüleri tam işlevli değildir.
 5. Uygulama kilidi ve şifreli yedek yoktur.
 6. Medya/blob, portfolyo, PDF ve tam ZIP yedek yoktur.

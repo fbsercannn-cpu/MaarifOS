@@ -19,6 +19,11 @@ import {
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import { migrateLegacyClassroomScopes } from "../../core/migrations/classroom-scope-migration.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
+import {
+  normalizeCurriculumProfile,
+  type CurriculumProfileInput,
+  type CurriculumProfileSnapshot,
+} from "../evidence/evidence-flow.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
@@ -30,11 +35,14 @@ export type ClassroomContext =
       status: "configured";
       academicYearId: string;
       academicYearName: string;
+      academicYearStart: string;
+      academicYearEnd: string;
       classroomId: string;
       classroomName: string;
       ageGroup?: string;
       curriculumProgram?: string;
       curriculumCatalogLabel?: string;
+      curriculumProfile?: CurriculumProfileSnapshot;
       schedule: ClassroomSchedule;
       scheduleLabel: string;
     };
@@ -73,6 +81,7 @@ export interface SaveClassroomConfigurationInput {
     ageGroup?: string;
     curriculumProgram?: string;
     curriculumCatalogLabel?: string;
+    curriculumProfile?: CurriculumProfileInput;
   };
   schedule: ClassroomScheduleInput;
   now?: Date;
@@ -157,14 +166,38 @@ function classroomContext(snapshot: DataSnapshot): ClassroomContext {
       record.status !== "archived" &&
       typeof record.deletedAt !== "string",
   );
-  if (!academicYear || typeof academicYear.name !== "string" || !academicYear.name.trim()) {
+  if (
+    !academicYear ||
+    typeof academicYear.name !== "string" ||
+    !academicYear.name.trim() ||
+    !isCivilDate(academicYear.startDate) ||
+    !isCivilDate(academicYear.endDate) ||
+    academicYear.startDate > academicYear.endDate
+  ) {
     return { status: "not_configured" };
+  }
+
+  let curriculumProfile: CurriculumProfileSnapshot | undefined;
+  if (
+    typeof classroom.curriculumProfileSnapshot === "object" &&
+    classroom.curriculumProfileSnapshot !== null &&
+    !Array.isArray(classroom.curriculumProfileSnapshot)
+  ) {
+    try {
+      curriculumProfile = normalizeCurriculumProfile(
+        classroom.curriculumProfileSnapshot as unknown as CurriculumProfileInput,
+      );
+    } catch {
+      curriculumProfile = undefined;
+    }
   }
 
   return {
     status: "configured",
     academicYearId: classroom.academicYearId,
     academicYearName: academicYear.name.trim(),
+    academicYearStart: academicYear.startDate,
+    academicYearEnd: academicYear.endDate,
     classroomId: classroom.id,
     classroomName: classroom.name.trim(),
     ...(classroom.ageGroup ? { ageGroup: classroom.ageGroup } : {}),
@@ -172,6 +205,7 @@ function classroomContext(snapshot: DataSnapshot): ClassroomContext {
     ...(classroom.curriculumCatalogLabel
       ? { curriculumCatalogLabel: classroom.curriculumCatalogLabel }
       : {}),
+    ...(curriculumProfile ? { curriculumProfile } : {}),
     schedule: classroom.schedule,
     scheduleLabel: classroomScheduleLabel(classroom.schedule),
   };
@@ -214,12 +248,6 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
   };
 }
 
-function curriculumReferenceIds(record: StoredRecord): string[] {
-  return Array.isArray(record.maarifRefs)
-    ? record.maarifRefs.filter((id): id is string => typeof id === "string" && id.length > 0)
-    : [];
-}
-
 export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
   const civilDate = civilDateInIstanbul(now);
   const classroom = classroomContext(snapshot);
@@ -229,12 +257,7 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
         recordBelongsToClassroomScope(record, scope),
       )
     : [];
-  const scopedPlans = scope
-    ? snapshot.plans.filter((record) =>
-        recordBelongsToClassroomScope(record, scope),
-      )
-    : [];
-  const planItems = scopedActivities
+  const basePlanItems = scopedActivities
     .map((record) => activityFromRecord(record, civilDate))
     .filter((item): item is TodayPlanItem => item !== null)
     .sort((left, right) => left.startTime.localeCompare(right.startTime) || left.id.localeCompare(right.id));
@@ -246,16 +269,36 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
           typeof record.deletedAt !== "string",
       )
     : [];
-  const linkedGoals = new Set<string>();
-  for (const record of [...scopedActivities, ...scopedPlans]) {
-    if (record.civilDate !== civilDate || typeof record.deletedAt === "string") continue;
-    for (const referenceId of curriculumReferenceIds(record)) linkedGoals.add(referenceId);
+  const structuredTodayObservations = todayObservations.filter(
+    (record) =>
+      record.rawTextImmutable === true &&
+      typeof record.planId === "string" &&
+      typeof record.activityId === "string",
+  );
+  const evidenceCountByActivity = new Map<string, number>();
+  for (const record of structuredTodayObservations) {
+    evidenceCountByActivity.set(
+      record.activityId as string,
+      (evidenceCountByActivity.get(record.activityId as string) ?? 0) + 1,
+    );
   }
+  const planItems = basePlanItems.map((item) => ({
+    ...item,
+    evidenceCount: evidenceCountByActivity.get(item.id) ?? item.evidenceCount,
+  }));
+  const todayObservationIds = new Set(
+    structuredTodayObservations.map((record) => record.id),
+  );
   const scopedEvidenceLinks = scope
-    ? snapshot.evidenceCurriculumLinks.filter((record) =>
-        recordBelongsToClassroomScope(record, scope),
+    ? snapshot.evidenceCurriculumLinks.filter(
+        (record) =>
+          typeof record.deletedAt !== "string" &&
+          typeof record.observationId === "string" &&
+          todayObservationIds.has(record.observationId) &&
+          recordBelongsToClassroomScope(record, scope),
       )
     : [];
+  const linkedGoals = new Set<string>();
   const linkedObservationIds = new Set(
     scopedEvidenceLinks
       .map((record) => record.observationId)
@@ -272,13 +315,11 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
     classroom,
     currentActivity: planItems.find((item) => item.status === "in_progress") ?? null,
     planItems,
-    pendingEvidenceLinks: todayObservations.filter(
-      (record) =>
-        curriculumReferenceIds(record).length === 0 &&
-        !linkedObservationIds.has(record.id),
+    pendingEvidenceLinks: structuredTodayObservations.filter(
+      (record) => !linkedObservationIds.has(record.id),
     ).length,
     linkedLearningGoalCount: linkedGoals.size,
-    datedEvidenceCount: todayObservations.length,
+    datedEvidenceCount: structuredTodayObservations.length,
   };
 }
 
@@ -308,6 +349,9 @@ export async function saveClassroomConfiguration(
   const academicYearName = requiredText(input.academicYear.name, "Eğitim yılı adı");
   const classroomName = requiredText(input.classroom.name, "Sınıf adı");
   const schedule = normalizeClassroomSchedule(input.schedule);
+  const curriculumProfile = input.classroom.curriculumProfile
+    ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
+    : undefined;
   const updatedAt = now.toISOString();
   const civilDate = civilDateInIstanbul(now);
 
@@ -332,6 +376,16 @@ export async function saveClassroomConfiguration(
         throw new Error("Arşivlenmiş sınıf değiştirilemez; yeni sınıf oluşturun.");
       }
       const existingSelection = settings.find((record) => record.id === ACTIVE_CLASSROOM_SETTING_ID);
+      let resolvedCurriculumProfile = curriculumProfile;
+      if (!resolvedCurriculumProfile && existingClassroom?.curriculumProfileSnapshot) {
+        try {
+          resolvedCurriculumProfile = normalizeCurriculumProfile(
+            existingClassroom.curriculumProfileSnapshot as unknown as CurriculumProfileInput,
+          );
+        } catch {
+          resolvedCurriculumProfile = undefined;
+        }
+      }
       const preservedClassroom: Record<string, unknown> = existingClassroom
         ? { ...existingClassroom }
         : {};
@@ -341,6 +395,7 @@ export async function saveClassroomConfiguration(
       delete preservedClassroom.ageGroup;
       delete preservedClassroom.curriculumProgram;
       delete preservedClassroom.curriculumCatalogLabel;
+      delete preservedClassroom.curriculumProfileSnapshot;
       delete preservedSelection.archivedAt;
 
       await transaction.putMany("academicYears", [
@@ -372,6 +427,9 @@ export async function saveClassroomConfiguration(
             : {}),
           ...(optionalText(input.classroom.curriculumCatalogLabel)
             ? { curriculumCatalogLabel: optionalText(input.classroom.curriculumCatalogLabel) }
+            : {}),
+          ...(resolvedCurriculumProfile
+            ? { curriculumProfileSnapshot: resolvedCurriculumProfile }
             : {}),
           schedule,
           createdAt: existingClassroom?.createdAt ?? updatedAt,
@@ -433,6 +491,21 @@ export async function setTodayActivityStatus(
     );
     if (!existing) {
       throw new Error("Etkinlik aktif sınıfta bulunamadı; mevcut kayıtlar değiştirilmedi.");
+    }
+    if (
+      status === "in_progress" &&
+      activities.some(
+        (record) =>
+          record.id !== activityId &&
+          record.status === "in_progress" &&
+          record.civilDate === existing.civilDate &&
+          typeof record.deletedAt !== "string" &&
+          recordBelongsToClassroomScope(record, scope),
+      )
+    ) {
+      throw new Error(
+        "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
+      );
     }
     await transaction.putMany("activities", [
       {

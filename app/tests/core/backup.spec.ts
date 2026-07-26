@@ -700,6 +700,14 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
           academicYearId: yearId,
           name: "Kurgu D1 Sınıfı",
           schemaVersion: 2,
+          curriculumProfileSnapshot: {
+            framework: "tymm",
+            programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
+            catalogId: "tymm-2024-okul-oncesi-v1",
+            sourceVersion: "2024.1",
+            referenceOrigin: "teacher-declared",
+            officialCatalogVerified: false,
+          },
         }]);
         await transaction.putMany("students", [{
           ...base,
@@ -749,7 +757,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       sourceVersion: "2024.1",
       referenceCode: "TYMM-OÖ-KURGU-01",
       referenceTitle: "Kurgu doğrulanmış referans",
-      approvedByUserId: "local-teacher",
+      approvedByUserId: "00000000-0000-4000-9000-000000000178",
       now: new Date("2026-09-01T08:00:00.000Z"),
     });
     await evidence.createCitedAssessmentDraft(source, {
@@ -766,6 +774,81 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       appVersion: "d1-test",
       clock: () => new Date("2026-10-01T09:00:00.000Z"),
     }).exportBackup();
+    const verificationService = new core.BackupService(source, {
+      appVersion: "d1-test",
+    });
+    const integrityErrors: Record<string, string> = {};
+    const mutations: Array<[
+      string,
+      (value: typeof backup) => void,
+    ]> = [
+      ["emptyTeacherAssessment", (value) => {
+        value.payload.reportDrafts[0].teacherAssessmentText = "   ";
+      }],
+      ["invalidPeriod", (value) => {
+        value.payload.reportDrafts[0].periodStart = "2026-02-30";
+      }],
+      ["observationOutsidePeriod", (value) => {
+        value.payload.reportDrafts[0].periodStart = "2026-09-02";
+      }],
+      ["citationObservationMismatch", (value) => {
+        value.payload.reportDrafts[0].evidenceCitations[0].observationId =
+          "00000000-0000-4000-8000-000000000179";
+      }],
+      ["citationLinkMismatch", (value) => {
+        value.payload.reportDrafts[0].evidenceCitations[0]
+          .confirmedCurriculumLinkIds = [
+            "00000000-0000-4000-8000-000000000179",
+          ];
+      }],
+      ["generationMode", (value) => {
+        value.payload.reportDrafts[0].generationMode = "automatic-summary";
+      }],
+      ["reviewStatus", (value) => {
+        value.payload.reportDrafts[0].status = "approved";
+      }],
+      ["verificationStatus", (value) => {
+        value.payload.reportDrafts[0].referenceVerificationStatus =
+          "official-catalog-verified";
+      }],
+      ["provenance", (value) => {
+        value.payload.evidenceCurriculumLinks[0].officialCatalogVerified = true;
+      }],
+      ["sourceVersion", (value) => {
+        value.payload.evidenceCurriculumLinks[0].sourceVersion = "2024.2";
+      }],
+    ];
+    for (const [name, mutate] of mutations) {
+      const invalid = structuredClone(backup);
+      mutate(invalid);
+      invalid.manifest.payloadChecksum = await core.sha256Hex(
+        core.canonicalJson(invalid.payload),
+      );
+      try {
+        await verificationService.parseAndVerifyBackup(invalid);
+      } catch (error) {
+        integrityErrors[name] =
+          error instanceof Error ? error.message : String(error);
+      }
+    }
+    const legacyProvenance = structuredClone(backup);
+    delete legacyProvenance.payload.classrooms[0].curriculumProfileSnapshot
+      .referenceOrigin;
+    delete legacyProvenance.payload.classrooms[0].curriculumProfileSnapshot
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.plans[0].curriculumProfileSnapshot
+      .referenceOrigin;
+    delete legacyProvenance.payload.plans[0].curriculumProfileSnapshot
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.evidenceCurriculumLinks[0].referenceOrigin;
+    delete legacyProvenance.payload.evidenceCurriculumLinks[0]
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.reportDrafts[0].referenceVerificationStatus;
+    legacyProvenance.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(legacyProvenance.payload),
+    );
+    const legacyVerified =
+      await verificationService.parseAndVerifyBackup(legacyProvenance);
     await new core.BackupService(target, { appVersion: "d1-test" }).restoreBackup(
       backup,
       { mode: "replace" },
@@ -780,6 +863,12 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       link: restored.evidenceCurriculumLinks[0],
       draft: restored.reportDrafts[0],
       expectedLinkId: link.id,
+      integrityErrors,
+      legacyVerified: {
+        planCount: legacyVerified.payload.plans.length,
+        linkCount: legacyVerified.payload.evidenceCurriculumLinks.length,
+        draftCount: legacyVerified.payload.reportDrafts.length,
+      },
     };
   });
 
@@ -788,11 +877,42 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
   expect(result.link.confirmationMethod).toBe("teacher-confirmed");
+  expect(result.link).toMatchObject({
+    referenceOrigin: "teacher-declared",
+    officialCatalogVerified: false,
+  });
   expect(result.draft).toMatchObject({
     reviewStatus: "pending",
     authoredBy: "teacher",
     teacherReviewRequired: true,
     observationIds: ["00000000-0000-4000-8000-000000000176"],
+    generationMode: "teacher-authored-cited-draft",
+    referenceVerificationStatus: "teacher-declared-unverified",
+  });
+  expect(result.draft.evidenceCitations).toEqual([{
+    observationId: "00000000-0000-4000-8000-000000000176",
+    observedAt: "2026-09-01T07:00:00.000Z",
+    confirmedCurriculumLinkIds: [result.expectedLinkId],
+  }]);
+  expect(Object.keys(result.integrityErrors).sort()).toEqual([
+    "citationLinkMismatch",
+    "citationObservationMismatch",
+    "emptyTeacherAssessment",
+    "generationMode",
+    "invalidPeriod",
+    "observationOutsidePeriod",
+    "provenance",
+    "reviewStatus",
+    "sourceVersion",
+    "verificationStatus",
+  ]);
+  for (const error of Object.values(result.integrityErrors)) {
+    expect(error).toMatch(/geçersiz|uymuyor/);
+  }
+  expect(result.legacyVerified).toEqual({
+    planCount: 1,
+    linkCount: 1,
+    draftCount: 1,
   });
 });
 
