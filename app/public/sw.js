@@ -1,15 +1,21 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const SHELL_CACHE = `${CACHE_PREFIX}shell-v1`;
-const ASSET_CACHE = `${CACHE_PREFIX}assets-v1`;
+const SHELL_CACHE = `${CACHE_PREFIX}shell-v2`;
+const ASSET_CACHE = `${CACHE_PREFIX}assets-v2`;
 const CACHEABLE_DESTINATIONS = new Set(["font", "image", "script", "style"]);
 const NETWORK_TIMEOUT_MS = 5000;
 
 const scopeUrl = new URL("./", self.registration.scope);
 const indexUrl = new URL("index.html", scopeUrl);
 const manifestUrl = new URL("manifest.webmanifest", scopeUrl);
-const iconUrl = new URL("assets/emine-ogretmen-avatar.png", scopeUrl);
+const iconUrls = [
+  "assets/brand/maarifos-icon-192.png",
+  "assets/brand/maarifos-icon-512.png",
+  "assets/brand/maarifos-icon-maskable-512.png",
+  "assets/brand/apple-touch-icon-180.png",
+  "assets/brand/favicon-32.png",
+].map((path) => new URL(path, scopeUrl));
 const assetsPath = new URL("assets/", scopeUrl).pathname;
 
 function canStore(response) {
@@ -69,7 +75,9 @@ async function installAppShell() {
     cache.put(scopeUrl, indexResponse.clone()),
     cache.put(indexUrl, indexResponse.clone()),
     fetchAndStore(cache, new Request(manifestUrl, { cache: "reload" })),
-    fetchAndStore(cache, new Request(iconUrl, { cache: "reload" })),
+    ...iconUrls.map((url) =>
+      fetchAndStore(cache, new Request(url, { cache: "reload" })),
+    ),
     ...discoverBuiltAssets(html).map((url) =>
       fetchAndStore(cache, new Request(url, { cache: "reload" })),
     ),

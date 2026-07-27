@@ -4,7 +4,16 @@ import test from "node:test";
 
 const projectFile = (relativePath) => new URL(`../${relativePath}`, import.meta.url);
 
-test("manifest kurulabilir uygulama sözleşmesini ve gerçek ikon ölçüsünü korur", async () => {
+const pngDimensions = async (relativePath) => {
+  const png = await readFile(projectFile(relativePath));
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  return {
+    width: png.readUInt32BE(16),
+    height: png.readUInt32BE(20),
+  };
+};
+
+test("manifest kurulabilir uygulama sözleşmesini ve marka ikonlarını korur", async () => {
   const manifest = JSON.parse(await readFile(projectFile("public/manifest.webmanifest"), "utf8"));
 
   assert.equal(manifest.id, "/");
@@ -15,15 +24,25 @@ test("manifest kurulabilir uygulama sözleşmesini ve gerçek ikon ölçüsünü
   assert.match(manifest.theme_color, /^#[0-9a-f]{6}$/i);
   assert.match(manifest.background_color, /^#[0-9a-f]{6}$/i);
 
-  const icon = manifest.icons.find((candidate) => candidate.src === "/assets/emine-ogretmen-avatar.png");
-  assert.ok(icon, "Kurulum ikonu manifestte bulunmalı");
-  assert.equal(icon.sizes, "1254x1254");
-  assert.equal(icon.type, "image/png");
+  const expectedIcons = [
+    { src: "/assets/brand/maarifos-icon-192.png", sizes: "192x192", purpose: "any", size: 192 },
+    { src: "/assets/brand/maarifos-icon-512.png", sizes: "512x512", purpose: "any", size: 512 },
+    { src: "/assets/brand/maarifos-icon-maskable-512.png", sizes: "512x512", purpose: "maskable", size: 512 },
+  ];
 
-  const png = await readFile(projectFile(`public${icon.src}`));
-  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  assert.equal(png.readUInt32BE(16), 1254);
-  assert.equal(png.readUInt32BE(20), 1254);
+  for (const expected of expectedIcons) {
+    const icon = manifest.icons.find((candidate) => candidate.src === expected.src);
+    assert.ok(icon, `${expected.src} manifestte bulunmalı`);
+    assert.equal(icon.sizes, expected.sizes);
+    assert.equal(icon.type, "image/png");
+    assert.equal(icon.purpose, expected.purpose);
+    assert.deepEqual(
+      await pngDimensions(`public${icon.src}`),
+      { width: expected.size, height: expected.size },
+    );
+  }
+
+  assert.doesNotMatch(JSON.stringify(manifest), /emine-ogretmen-avatar/);
 });
 
 test("HTML manifesti ve iOS kurulum metalarını yayınlar", async () => {
@@ -36,8 +55,18 @@ test("HTML manifesti ve iOS kurulum metalarını yayınlar", async () => {
   assert.match(html, /name="apple-mobile-web-app-title" content="MaarifOS"/);
   assert.match(
     html,
-    /rel="apple-touch-icon" sizes="1254x1254" href="\/assets\/emine-ogretmen-avatar\.png"/,
+    /rel="apple-touch-icon" sizes="180x180" href="\/assets\/brand\/apple-touch-icon-180\.png"/,
   );
+  assert.match(html, /rel="icon" type="image\/png" sizes="32x32" href="\/assets\/brand\/favicon-32\.png"/);
+  assert.deepEqual(
+    await pngDimensions("public/assets/brand/apple-touch-icon-180.png"),
+    { width: 180, height: 180 },
+  );
+  assert.deepEqual(
+    await pngDimensions("public/assets/brand/favicon-32.png"),
+    { width: 32, height: 32 },
+  );
+  assert.doesNotMatch(html, /emine-ogretmen-avatar/);
 });
 
 test("service worker app-shell yedeği ile güvenli cache sınırlarını içerir", async () => {
@@ -55,6 +84,13 @@ test("service worker app-shell yedeği ile güvenli cache sınırlarını içeri
   assert.match(worker, /no-store/);
   assert.match(worker, /function isSensitivePath\(url\)/);
   assert.match(worker, /isSensitivePath\(url\) \|\|/);
+  assert.match(worker, /maarifos-icon-192\.png/);
+  assert.match(worker, /maarifos-icon-512\.png/);
+  assert.match(worker, /maarifos-icon-maskable-512\.png/);
+  assert.match(worker, /apple-touch-icon-180\.png/);
+  assert.match(worker, /shell-v2/);
+  assert.match(worker, /assets-v2/);
+  assert.doesNotMatch(worker, /emine-ogretmen-avatar/);
 });
 
 test("PWA girişi service worker kaydını yalnız üretimde etkinleştirir", async () => {

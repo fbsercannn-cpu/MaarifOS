@@ -1819,7 +1819,18 @@ export default function Prototype() {
         <main className="maarif-screen" aria-label="MaarifOS Bugün ekranı" data-testid="today-screen">
           <header className="today-header">
             <div className="today-title-row">
-              <h1>Bugün</h1>
+              <div className="today-brand-title">
+                <img
+                  className="today-brand-logo"
+                  src="/assets/brand/maarifos-icon-192.png"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <div>
+                  <span className="today-brand-name">MaarifOS</span>
+                  <h1>Bugün</h1>
+                </div>
+              </div>
               <button
                 className="settings-button"
                 type="button"

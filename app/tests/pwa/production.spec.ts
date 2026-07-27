@@ -18,7 +18,37 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
-  expect((await manifest.json()).display).toBe("standalone");
+  const manifestBody = await manifest.json();
+  expect(manifestBody.display).toBe("standalone");
+  expect(manifestBody.icons).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        src: "/assets/brand/maarifos-icon-192.png",
+        sizes: "192x192",
+        purpose: "any",
+      }),
+      expect.objectContaining({
+        src: "/assets/brand/maarifos-icon-512.png",
+        sizes: "512x512",
+        purpose: "any",
+      }),
+      expect.objectContaining({
+        src: "/assets/brand/maarifos-icon-maskable-512.png",
+        sizes: "512x512",
+        purpose: "maskable",
+      }),
+    ]),
+  );
+
+  for (const icon of manifestBody.icons) {
+    const iconResponse = await page.request.get(icon.src);
+    expect(iconResponse.ok()).toBeTruthy();
+    expect(iconResponse.headers()["content-type"]).toContain("image/png");
+  }
+  await expect(page.locator(".today-brand-logo")).toHaveAttribute(
+    "src",
+    "/assets/brand/maarifos-icon-192.png",
+  );
 
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
