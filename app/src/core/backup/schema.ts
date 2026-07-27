@@ -453,6 +453,107 @@ function assertBackupRelationships(payload: DataSnapshot): void {
       ) {
         throw new Error(`activities/${activity.id} plan ilişkisi geçersiz.`);
       }
+      if (activity.assignmentMode !== undefined) {
+        const assignedStudentIds =
+          Array.isArray(activity.studentIds) &&
+          activity.studentIds.every(
+            (id) => typeof id === "string" && UUID_PATTERN.test(id),
+          )
+            ? activity.studentIds
+            : [];
+        const distinctStudentIds = new Set(assignedStudentIds);
+        const targets =
+          Array.isArray(activity.curriculumTargets) &&
+          activity.curriculumTargets.every((target) => isRecord(target))
+            ? activity.curriculumTargets
+            : [];
+        const targetIds = targets
+          .map((target) => target.id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
+        const distinctTargetIds = new Set(targetIds);
+        const planProfile =
+          plan && isRecord(plan.curriculumProfileSnapshot)
+            ? plan.curriculumProfileSnapshot
+            : null;
+        const targetsValid =
+          targets.length > 0 &&
+          targetIds.length === targets.length &&
+          distinctTargetIds.size === targetIds.length &&
+          targets.every(
+            (target) =>
+              typeof target.referenceCode === "string" &&
+              target.referenceCode.trim().length > 0 &&
+              typeof target.referenceTitle === "string" &&
+              target.referenceTitle.trim().length > 0 &&
+              typeof target.kind === "string" &&
+              target.kind.trim().length > 0 &&
+              typeof target.domain === "string" &&
+              target.domain.trim().length > 0 &&
+              typeof target.sourceUrl === "string" &&
+              target.sourceUrl.trim().length > 0 &&
+              typeof target.sourceCheckedOn === "string" &&
+              CIVIL_DATE_PATTERN.test(target.sourceCheckedOn) &&
+              (target.catalogCompleteness === "partial" ||
+                target.catalogCompleteness === "complete") &&
+              (target.verificationStatus === "official-source-checked" ||
+                target.verificationStatus === "teacher-declared-unverified") &&
+              planProfile !== null &&
+              target.framework === planProfile.framework &&
+              target.catalogId === planProfile.catalogId &&
+              target.sourceVersion === planProfile.sourceVersion &&
+              target.referenceOrigin ===
+                (planProfile.referenceOrigin ?? "teacher-declared") &&
+              target.officialCatalogVerified ===
+                (planProfile.officialCatalogVerified === true),
+          );
+        const studentsValid =
+          assignedStudentIds.length > 0 &&
+          distinctStudentIds.size === assignedStudentIds.length &&
+          assignedStudentIds.every((studentId) => {
+            const allowedScopes = studentScopes.get(studentId) ?? [];
+            return (
+              activityScope !== null &&
+              allowedScopes.some((studentScope) =>
+                scopesMatch(activityScope, studentScope),
+              )
+            );
+          });
+        const assignments =
+          Array.isArray(activity.targetAssignments) &&
+          activity.targetAssignments.every((assignment) => isRecord(assignment))
+            ? activity.targetAssignments
+            : [];
+        const assignmentKeys = assignments.map(
+          (assignment) =>
+            `${String(assignment.studentId)}\u0000${String(assignment.targetId)}`,
+        );
+        const assignmentsValid =
+          assignments.length === assignedStudentIds.length * targetIds.length &&
+          new Set(assignmentKeys).size === assignments.length &&
+          assignments.every(
+            (assignment) =>
+              typeof assignment.studentId === "string" &&
+              distinctStudentIds.has(assignment.studentId) &&
+              typeof assignment.targetId === "string" &&
+              distinctTargetIds.has(assignment.targetId) &&
+              assignment.status === "planned" &&
+              typeof assignment.assignedAt === "string" &&
+              UTC_ISO_PATTERN.test(assignment.assignedAt),
+          );
+        if (
+          (activity.assignmentMode !== "whole-class" &&
+            activity.assignmentMode !== "selected-students") ||
+          activity.coverageStatus !== "planned" ||
+          activity.schemaVersion < 2 ||
+          !studentsValid ||
+          !targetsValid ||
+          !assignmentsValid
+        ) {
+          throw new Error(
+            `activities/${activity.id} program hedefi dağıtım sözleşmesine uymuyor.`,
+          );
+        }
+      }
     }
   }
   const activitiesById = new Map(

@@ -6,6 +6,10 @@ import {
 } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
+import type {
+  CurriculumAssignmentMode,
+  CurriculumTargetSnapshot,
+} from "../curriculum/curriculum-catalog.ts";
 import {
   normalizeCurriculumProfile,
   type CurriculumFramework,
@@ -24,6 +28,9 @@ export interface EvidenceActivitySummary {
   status: EvidenceActivityStatus;
   civilDate: string;
   curriculumProfile: CurriculumProfileSnapshot;
+  curriculumTargets: CurriculumTargetSnapshot[];
+  assignedStudentIds: string[];
+  assignmentMode: CurriculumAssignmentMode | "legacy-unscoped";
 }
 
 export interface EvidenceObservationSummary {
@@ -37,6 +44,7 @@ export interface EvidenceObservationSummary {
   observedAt: string;
   civilDate: string;
   curriculumProfile: CurriculumProfileSnapshot;
+  plannedCurriculumTargets: CurriculumTargetSnapshot[];
   confirmedCurriculumLinkIds: string[];
 }
 
@@ -86,6 +94,28 @@ function activitySummary(
   const plan = plansById.get(planId);
   const curriculumProfile = profileFromRecord(plan) ?? profileFromRecord(activity);
   if (!plan || !curriculumProfile) return null;
+  const curriculumTargets = Array.isArray(activity.curriculumTargets)
+    ? activity.curriculumTargets.filter(
+        (target): target is CurriculumTargetSnapshot =>
+          typeof target === "object" &&
+          target !== null &&
+          !Array.isArray(target) &&
+          typeof target.id === "string" &&
+          typeof target.referenceCode === "string" &&
+          typeof target.referenceTitle === "string" &&
+          target.framework === curriculumProfile.framework,
+      )
+    : [];
+  const assignedStudentIds = Array.isArray(activity.studentIds)
+    ? activity.studentIds.filter(
+        (studentId): studentId is string => typeof studentId === "string",
+      )
+    : [];
+  const assignmentMode =
+    activity.assignmentMode === "whole-class" ||
+    activity.assignmentMode === "selected-students"
+      ? activity.assignmentMode
+      : "legacy-unscoped";
 
   return {
     id: activity.id,
@@ -96,6 +126,9 @@ function activitySummary(
     status,
     civilDate,
     curriculumProfile,
+    curriculumTargets,
+    assignedStudentIds,
+    assignmentMode,
   };
 }
 
@@ -149,6 +182,7 @@ export function resolveEvidenceWorkspace(
       typeof record.deletedAt !== "string" &&
       record.enrollmentStatus !== "left" &&
       record.enrollmentStatus !== "completed" &&
+      record.enrollmentStatus !== "transferred" &&
       recordBelongsToClassroomScope(record, scope),
   );
   const studentsById = new Map(activeStudents.map((record) => [record.id, record]));
@@ -197,6 +231,7 @@ export function resolveEvidenceWorkspace(
         observedAt: record.observedAt as string,
         civilDate: record.civilDate,
         curriculumProfile: activity.curriculumProfile,
+        plannedCurriculumTargets: activity.curriculumTargets,
         confirmedCurriculumLinkIds: teacherConfirmedLinkIds(scopedLinks, record.id),
       };
     })

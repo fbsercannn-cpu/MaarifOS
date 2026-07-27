@@ -13,6 +13,13 @@ import type {
   DataTransaction,
   LocalDataStore,
 } from "../../core/repository/contracts.ts";
+import {
+  isCurriculumAssessmentLevel,
+  type CurriculumAssessmentLevel,
+  type CurriculumAssignmentMode,
+  type CurriculumTargetSnapshot,
+  type PlannedCurriculumAssignment,
+} from "../curriculum/curriculum-catalog.ts";
 
 export const CURRICULUM_PROGRAM_LABELS = {
   tymm: "Türkiye Yüzyılı Maarif Modeli",
@@ -145,6 +152,84 @@ function curriculumProfileFromUnknown(value: unknown): CurriculumProfileSnapshot
   }
 }
 
+function normalizeCurriculumTargets(
+  targets: readonly CurriculumTargetSnapshot[],
+  profile: CurriculumProfileSnapshot,
+): CurriculumTargetSnapshot[] {
+  if (targets.length === 0) {
+    throw new Error("Plan için en az bir program hedefi seçilmelidir.");
+  }
+  const uniqueIds = new Set<string>();
+  return targets.map((target) => {
+    if (
+      !target.id.trim() ||
+      !target.referenceCode.trim() ||
+      !target.referenceTitle.trim() ||
+      !target.kind.trim() ||
+      !target.domain.trim() ||
+      !target.sourceUrl.trim() ||
+      !target.sourceLabel.trim() ||
+      !isCivilDate(target.sourceCheckedOn) ||
+      (target.catalogCompleteness !== "partial" &&
+        target.catalogCompleteness !== "complete") ||
+      (target.verificationStatus !== "official-source-checked" &&
+        target.verificationStatus !== "teacher-declared-unverified")
+    ) {
+      throw new Error("Seçilen program hedefinin kaynak veya başlık bilgisi eksik.");
+    }
+    if (uniqueIds.has(target.id)) {
+      throw new Error("Aynı program hedefi bir plana birden fazla eklenemez.");
+    }
+    uniqueIds.add(target.id);
+    if (
+      target.framework !== profile.framework ||
+      target.catalogId !== profile.catalogId ||
+      target.sourceVersion !== profile.sourceVersion ||
+      target.referenceOrigin !== profile.referenceOrigin ||
+      target.officialCatalogVerified !== profile.officialCatalogVerified
+    ) {
+      throw new Error(
+        "Seçilen program hedefi aktif sınıfın program, katalog ve kaynak sürümüyle uyuşmuyor.",
+      );
+    }
+    if (
+      profile.officialCatalogVerified &&
+      target.verificationStatus !== "official-source-checked"
+    ) {
+      throw new Error("Doğrulanmış katalog hedefinin resmî kaynak kontrolü eksik.");
+    }
+    return {
+      ...target,
+      id: target.id.trim(),
+      referenceCode: target.referenceCode.trim(),
+      referenceTitle: target.referenceTitle.trim(),
+      domain: target.domain.trim(),
+      sourceUrl: target.sourceUrl.trim(),
+      sourceLabel: target.sourceLabel.trim(),
+      ...(target.parentCode?.trim()
+        ? { parentCode: target.parentCode.trim() }
+        : {}),
+    };
+  });
+}
+
+function activeStudentIdsForScope(
+  students: readonly StoredRecord[],
+  scope: ActiveClassroomScope,
+): string[] {
+  return students
+    .filter(
+      (record) =>
+        typeof record.deletedAt !== "string" &&
+        record.enrollmentStatus !== "left" &&
+        record.enrollmentStatus !== "completed" &&
+        record.enrollmentStatus !== "transferred" &&
+        sameScope(record, scope),
+    )
+    .map((record) => record.id)
+    .sort((left, right) => left.localeCompare(right));
+}
+
 async function activeScopeInTransaction(
   transaction: DataTransaction,
 ): Promise<ActiveClassroomScope> {
@@ -177,6 +262,9 @@ export async function createPlanWithActivity(
     startTime: string;
     endTime?: string;
     curriculumProfile: CurriculumProfileInput;
+    curriculumTargets: CurriculumTargetSnapshot[];
+    assignmentMode: CurriculumAssignmentMode;
+    studentIds: string[];
     now?: Date;
   },
 ): Promise<PlanActivityResult> {
@@ -192,6 +280,19 @@ export async function createPlanWithActivity(
   const planId = validUuid(input.planId, "Plan");
   const activityId = validUuid(input.activityId, "Etkinlik");
   const profile = normalizeCurriculumProfile(input.curriculumProfile);
+  const curriculumTargets = normalizeCurriculumTargets(
+    input.curriculumTargets,
+    profile,
+  );
+  if (
+    input.assignmentMode !== "whole-class" &&
+    input.assignmentMode !== "selected-students"
+  ) {
+    throw new Error("Öğrenci dağıtım biçimi tüm sınıf veya seçili çocuklar olmalıdır.");
+  }
+  const requestedStudentIds = [
+    ...new Set(input.studentIds.map((id) => validUuid(id, "Öğrenci"))),
+  ];
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
   const timestamp = now.toISOString();
@@ -199,12 +300,20 @@ export async function createPlanWithActivity(
 
   await store.transaction(
     "readwrite",
-    ["academicYears", "classrooms", "settings", "plans", "activities"],
+    [
+      "academicYears",
+      "classrooms",
+      "settings",
+      "students",
+      "plans",
+      "activities",
+    ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [academicYears, classrooms, plans, activities] = await Promise.all([
+      const [academicYears, classrooms, students, plans, activities] = await Promise.all([
         transaction.getAll("academicYears"),
         transaction.getAll("classrooms"),
+        transaction.getAll("students"),
         transaction.getAll("plans"),
         transaction.getAll("activities"),
       ]);
@@ -238,19 +347,54 @@ export async function createPlanWithActivity(
       if (activities.some((record) => record.id === activityId)) {
         throw new Error("Bu etkinlik kimliği zaten kullanılıyor.");
       }
+      const activeStudentIds = activeStudentIdsForScope(students, scope);
+      const assignedStudentIds =
+        input.assignmentMode === "whole-class"
+          ? activeStudentIds
+          : requestedStudentIds;
+      if (assignedStudentIds.length === 0) {
+        throw new Error(
+          input.assignmentMode === "whole-class"
+            ? "Tüm sınıfa dağıtım için etkin sınıfta en az bir çocuk bulunmalıdır."
+            : "Seçili çocuklara dağıtım için en az bir çocuk seçilmelidir.",
+        );
+      }
+      const activeStudentIdSet = new Set(activeStudentIds);
+      if (assignedStudentIds.some((studentId) => !activeStudentIdSet.has(studentId))) {
+        throw new Error(
+          "Program hedefleri yalnız etkin sınıftaki aktif çocuklara dağıtılabilir.",
+        );
+      }
+      const assignments: PlannedCurriculumAssignment[] =
+        curriculumTargets.flatMap((target) =>
+          assignedStudentIds.map((studentId) => ({
+            studentId,
+            targetId: target.id,
+            referenceCode: target.referenceCode,
+            status: "planned",
+            assignedAt: timestamp,
+          })),
+        );
+      const maarifRefs = curriculumTargets.map((target) => target.referenceCode);
       const plan: StoredRecord = {
         id: planId,
         planType: "daily",
         title: requiredText(input.planTitle, "Plan başlığı"),
         status: "active",
         curriculumProfileSnapshot: profile,
+        curriculumTargets,
+        maarifRefs,
+        studentIds: assignedStudentIds,
+        assignmentMode: input.assignmentMode,
+        assignmentSnapshotAt: timestamp,
+        coverageStatus: "planned",
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
         updatedAt: timestamp,
         civilDate: input.civilDate,
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: 2,
       };
       const activity: StoredRecord = {
         id: activityId,
@@ -260,13 +404,20 @@ export async function createPlanWithActivity(
         ...(input.endTime ? { endTime: input.endTime } : {}),
         status: "planned",
         curriculumProfileSnapshot: profile,
+        curriculumTargets,
+        maarifRefs,
+        studentIds: assignedStudentIds,
+        assignmentMode: input.assignmentMode,
+        assignmentSnapshotAt: timestamp,
+        targetAssignments: assignments,
+        coverageStatus: "planned",
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
         updatedAt: timestamp,
         civilDate: input.civilDate,
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: 2,
       };
       await transaction.putMany("plans", [plan]);
       await transaction.putMany("activities", [activity]);
@@ -329,6 +480,7 @@ export async function captureImmutableRawObservation(
           typeof record.deletedAt !== "string" &&
           record.enrollmentStatus !== "left" &&
           record.enrollmentStatus !== "completed" &&
+          record.enrollmentStatus !== "transferred" &&
           sameScope(record, scope),
       );
       if (!student) throw new Error("Gözlem notu yalnız etkin sınıftaki çocuğa bağlanabilir.");
@@ -347,6 +499,15 @@ export async function captureImmutableRawObservation(
       );
       if (!plan || !activity) {
         throw new Error("Gözlemin plan ve etkinlik ilişkisi etkin sınıfla uyuşmuyor.");
+      }
+      if (
+        Array.isArray(activity.studentIds) &&
+        activity.studentIds.length > 0 &&
+        !activity.studentIds.includes(studentId)
+      ) {
+        throw new Error(
+          "Gözlem yalnız bu etkinlik için planlı takip açılan çocuğa kaydedilebilir.",
+        );
       }
       if (observations.some((record) => record.id === observationId)) {
         throw new Error("Gözlem notu kimliği daha önce kullanılmış; kanıtın üzerine yazılamaz.");
@@ -389,6 +550,7 @@ export async function confirmObservationCurriculumLink(
     approvedByUserId?: string;
     referenceOrigin?: CurriculumProfileOrigin;
     officialCatalogVerified?: boolean;
+    plannedTargetId?: string;
     now?: Date;
   },
 ): Promise<StoredRecord> {
@@ -416,13 +578,15 @@ export async function confirmObservationCurriculumLink(
       "classrooms",
       "settings",
       "plans",
+      "activities",
       "observations",
       "evidenceCurriculumLinks",
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [plans, observations, links, settings] = await Promise.all([
+      const [plans, activities, observations, links, settings] = await Promise.all([
         transaction.getAll("plans"),
+        transaction.getAll("activities"),
         transaction.getAll("observations"),
         transaction.getAll("evidenceCurriculumLinks"),
         transaction.getAll("settings"),
@@ -451,10 +615,46 @@ export async function confirmObservationCurriculumLink(
           "Program bağlantısı planın doğrulanmış katalog ve program profiliyle uyuşmuyor.",
         );
       }
+      const activity = activities.find(
+        (record) =>
+          record.id === observation.activityId &&
+          record.planId === observation.planId &&
+          typeof record.deletedAt !== "string" &&
+          sameScope(record, scope),
+      );
+      if (!activity) {
+        throw new Error("Program bağlantısının etkinlik kaydı bulunamadı.");
+      }
       const existingLinks = links.filter(
         (link) => link.observationId === observationId,
       );
       const referenceCode = requiredText(input.referenceCode, "Program referans kodu");
+      const referenceTitle = requiredText(
+        input.referenceTitle,
+        "Program referans başlığı",
+      );
+      let plannedTarget: CurriculumTargetSnapshot | undefined;
+      if (input.plannedTargetId) {
+        const activityTargets = Array.isArray(activity.curriculumTargets)
+          ? activity.curriculumTargets
+          : [];
+        plannedTarget = activityTargets.find(
+          (candidate): candidate is CurriculumTargetSnapshot =>
+            typeof candidate === "object" &&
+            candidate !== null &&
+            !Array.isArray(candidate) &&
+            candidate.id === input.plannedTargetId,
+        );
+        if (
+          !plannedTarget ||
+          plannedTarget.referenceCode !== referenceCode ||
+          plannedTarget.referenceTitle !== referenceTitle
+        ) {
+          throw new Error(
+            "Program bağlantısı yalnız etkinlikte planlanan hedeflerden seçilebilir.",
+          );
+        }
+      }
       const identitySetting = settings.find(
         (record) =>
           record.id === LOCAL_TEACHER_IDENTITY_SETTING_ID &&
@@ -507,7 +707,7 @@ export async function confirmObservationCurriculumLink(
         catalogId: profile.catalogId,
         sourceVersion: profile.sourceVersion,
         referenceCode,
-        referenceTitle: requiredText(input.referenceTitle, "Program referans başlığı"),
+        referenceTitle,
         confirmedAt: timestamp,
         approvedByUserId,
         confirmationMethod: "teacher-confirmed",
@@ -516,6 +716,14 @@ export async function confirmObservationCurriculumLink(
       };
       result = {
         ...link,
+        ...(plannedTarget
+          ? {
+              plannedTargetId: plannedTarget.id,
+              targetKind: plannedTarget.kind,
+              targetDomain: plannedTarget.domain,
+              targetSourceUrl: plannedTarget.sourceUrl,
+            }
+          : {}),
         observationId,
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
@@ -548,6 +756,8 @@ export async function createCitedAssessmentDraft(
     studentId: string;
     observationIds: string[];
     teacherAssessmentText: string;
+    assessmentLevel?: CurriculumAssessmentLevel;
+    assessmentTargetIds?: string[];
     periodStart: string;
     periodEnd: string;
     now?: Date;
@@ -567,6 +777,17 @@ export async function createCitedAssessmentDraft(
   const observationIds = [...new Set(
     input.observationIds.map((id) => validUuid(id, "Gözlem")),
   )];
+  const assessmentLevel = input.assessmentLevel ?? "not_assessed";
+  if (!isCurriculumAssessmentLevel(assessmentLevel)) {
+    throw new Error("Değerlendirme düzeyi geçersiz.");
+  }
+  const assessmentTargetIds = [
+    ...new Set(
+      (input.assessmentTargetIds ?? []).map((targetId) =>
+        requiredText(targetId, "Program hedefi"),
+      ),
+    ),
+  ];
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir taslak zamanı gerekli.");
   const timestamp = now.toISOString();
@@ -610,6 +831,7 @@ export async function createCitedAssessmentDraft(
           typeof record.deletedAt !== "string" &&
           record.enrollmentStatus !== "left" &&
           record.enrollmentStatus !== "completed" &&
+          record.enrollmentStatus !== "transferred" &&
           sameScope(record, scope),
       );
       if (!student) {
@@ -689,6 +911,8 @@ export async function createCitedAssessmentDraft(
           input.teacherAssessmentText,
           "Öğretmen değerlendirmesi",
         ),
+        assessmentLevel,
+        assessmentTargetIds,
         authoredBy: "teacher",
         teacherReviewRequired: true,
         reviewStatus: "pending",

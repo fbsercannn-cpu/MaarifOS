@@ -17,6 +17,10 @@ import {
   createPlanWithActivity,
   normalizeCurriculumProfile,
 } from "../../src/features/evidence/evidence-flow.ts";
+import {
+  STARTER_CURRICULUM_TARGETS,
+  curriculumTargetsForProfile,
+} from "../../src/features/curriculum/curriculum-catalog.ts";
 import { persistDashboardObservation } from "../../src/features/dashboard/dashboard-data.ts";
 
 class MemoryStore {
@@ -76,6 +80,15 @@ const curriculumProfile = {
   referenceOrigin: "teacher-declared",
   officialCatalogVerified: false,
 };
+const starterTarget = curriculumTargetsForProfile(curriculumProfile).find(
+  (target) => target.referenceCode === "FAB.1",
+);
+assert.ok(starterTarget);
+const planAssignment = {
+  curriculumTargets: [starterTarget],
+  assignmentMode: "selected-students",
+  studentIds: [student],
+};
 
 function activeStore() {
   const snapshot = createEmptySnapshot();
@@ -122,6 +135,7 @@ async function createEvidenceChain(store) {
     startTime: "09:30",
     endTime: "10:00",
     curriculumProfile,
+    ...planAssignment,
     now: new Date("2026-09-01T06:10:00.000Z"),
   });
   const rawText = "  Çocuk, suyu geniş kaptan dar kaba aktarırken “Burada daha hızlı doldu.” dedi.  ";
@@ -236,6 +250,7 @@ test("arşivlenen eğitim yılında yeni plan veya ham kanıt yazılamaz", async
       activityTitle: "Arşive yazılmamalı",
       startTime: "09:00",
       curriculumProfile,
+      ...planAssignment,
     }),
     /etkin ve arşivlenmemiş bir sınıf/,
   );
@@ -254,6 +269,14 @@ test("plan profili aktif sınıf profiliyle tam eşleşir ve eğitim yılı dı�
         ...curriculumProfile,
         sourceVersion: "2024.2",
       },
+      curriculumTargets: [
+        {
+          ...starterTarget,
+          sourceVersion: "2024.2",
+        },
+      ],
+      assignmentMode: "selected-students",
+      studentIds: [student],
     }),
     /aktif sınıfın kayıtlı program profiliyle uyuşmuyor/,
   );
@@ -264,6 +287,7 @@ test("plan profili aktif sınıf profiliyle tam eşleşir ve eğitim yılı dı�
       activityTitle: "Dönem dışı etkinlik",
       startTime: "09:00",
       curriculumProfile,
+      ...planAssignment,
     }),
     /aktif eğitim yılının tarih aralığında/,
   );
@@ -377,5 +401,127 @@ test("öğretmen beyanı doğrulanmış resmî katalog gibi işaretlenemez", () 
         officialCatalogVerified: true,
       }),
     /Yalnız resmî katalog kaynağı/,
+  );
+});
+
+test("tüm sınıfa dağıtım etkin çocukların sabit planlı takip fotoğrafını oluşturur; öğrenildi kaydı üretmez", async () => {
+  const store = activeStore();
+  const secondStudent = "00000000-0000-4000-8000-000000000410";
+  const leftStudent = "00000000-0000-4000-8000-000000000411";
+  await store.transaction("readwrite", ["students"], async (transaction) => {
+    const students = await transaction.getAll("students");
+    await transaction.putMany("students", [
+      ...students,
+      {
+        ...base,
+        id: secondStudent,
+        displayName: "Kurgu İkinci Öğrenci",
+        academicYearId: year,
+        classroomId: classroom,
+      },
+      {
+        ...base,
+        id: leftStudent,
+        displayName: "Kurgu Ayrılmış Öğrenci",
+        academicYearId: year,
+        classroomId: classroom,
+        enrollmentStatus: "left",
+      },
+    ]);
+  });
+
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planTitle: "Tüm sınıf fen planı",
+    activityTitle: "Bahçede bilimsel gözlem",
+    startTime: "09:00",
+    curriculumProfile,
+    curriculumTargets: [
+      starterTarget,
+      curriculumTargetsForProfile(curriculumProfile).find(
+        (target) => target.referenceCode === "FAB.1.b",
+      ),
+    ].filter(Boolean),
+    assignmentMode: "whole-class",
+    studentIds: [leftStudent],
+    now: new Date("2026-09-01T06:15:00.000Z"),
+  });
+  const snapshot = await store.readSnapshot();
+
+  assert.deepEqual(
+    [...result.activity.studentIds].sort(),
+    [student, secondStudent].sort(),
+  );
+  assert.equal(result.activity.assignmentMode, "whole-class");
+  assert.equal(result.activity.coverageStatus, "planned");
+  assert.equal(result.activity.targetAssignments.length, 4);
+  assert.ok(
+    result.activity.targetAssignments.every(
+      (assignment) => assignment.status === "planned",
+    ),
+  );
+  assert.equal(snapshot.observations.length, 0);
+  assert.equal(snapshot.evidenceCurriculumLinks.length, 0);
+  assert.equal(snapshot.reportDrafts.length, 0);
+  assert.equal(result.activity.learned, undefined);
+});
+
+test("seçili çocuk kapsamı bilinmeyen çocuğu atomik olarak reddeder", async () => {
+  const store = activeStore();
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planTitle: "Geçersiz kapsam",
+      activityTitle: "Geçersiz kapsam",
+      startTime: "09:00",
+      curriculumProfile,
+      curriculumTargets: [starterTarget],
+      assignmentMode: "selected-students",
+      studentIds: ["00000000-0000-4000-8000-000000000499"],
+    }),
+    /yalnız etkin sınıftaki aktif çocuklara/,
+  );
+  const snapshot = await store.readSnapshot();
+  assert.equal(snapshot.plans.length, 0);
+  assert.equal(snapshot.activities.length, 0);
+});
+
+test("gözlem ve resmî hedef bağı etkinlikte planlanan öğrenci-hedef kapsamından çıkamaz", async () => {
+  const store = activeStore();
+  await createEvidenceChain(store);
+  const otherTarget = curriculumTargetsForProfile(curriculumProfile).find(
+    (target) => target.referenceCode === "MAB.1",
+  );
+  assert.ok(otherTarget);
+
+  await assert.rejects(
+    confirmObservationCurriculumLink(store, {
+      observationId,
+      framework: curriculumProfile.framework,
+      catalogId: curriculumProfile.catalogId,
+      sourceVersion: curriculumProfile.sourceVersion,
+      referenceCode: otherTarget.referenceCode,
+      referenceTitle: otherTarget.referenceTitle,
+      plannedTargetId: otherTarget.id,
+    }),
+    /yalnız etkinlikte planlanan hedeflerden/,
+  );
+  assert.equal((await store.readSnapshot()).evidenceCurriculumLinks.length, 0);
+});
+
+test("başlangıç katalog seti framework içinde tekil ve açıkça sınırlıdır", () => {
+  const keys = STARTER_CURRICULUM_TARGETS.map(
+    (target) => `${target.framework}\u0000${target.referenceCode}`,
+  );
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(
+    STARTER_CURRICULUM_TARGETS.every(
+      (target) =>
+        target.sourceUrl.startsWith("https://") &&
+        /^\d{4}-\d{2}-\d{2}$/.test(target.sourceCheckedOn) &&
+        target.catalogCompleteness === "partial" &&
+        target.verificationStatus === "official-source-checked",
+    ),
   );
 });

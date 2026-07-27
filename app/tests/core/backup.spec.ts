@@ -662,6 +662,9 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
   const result = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
     const evidence = await import("/src/features/evidence/evidence-flow.ts");
+    const curriculum = await import(
+      "/src/features/curriculum/curriculum-catalog.ts"
+    );
     const source = new core.IndexedDbDataStore({
       databaseName: `maarifos-test-d1-source-${crypto.randomUUID()}`,
     });
@@ -725,6 +728,18 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
         }]);
       },
     );
+    const curriculumProfile = {
+      framework: "tymm" as const,
+      programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
+      catalogId: "tymm-2024-okul-oncesi-v1",
+      sourceVersion: "2024.1",
+      referenceOrigin: "teacher-declared" as const,
+      officialCatalogVerified: false,
+    };
+    const curriculumTarget = curriculum
+      .curriculumTargetsForProfile(curriculumProfile)
+      .find((item) => item.referenceCode === "FAB.1");
+    if (!curriculumTarget) throw new Error("Kurgu program hedefi bulunamadı.");
     await evidence.createPlanWithActivity(source, {
       civilDate: "2026-09-01",
       planId,
@@ -732,12 +747,10 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       activityId,
       activityTitle: "Kurgu D1 etkinliği",
       startTime: "09:00",
-      curriculumProfile: {
-        framework: "tymm",
-        programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
-        catalogId: "tymm-2024-okul-oncesi-v1",
-        sourceVersion: "2024.1",
-      },
+      curriculumProfile,
+      curriculumTargets: [curriculumTarget],
+      assignmentMode: "whole-class",
+      studentIds: [studentId],
       now: new Date("2026-09-01T06:10:00.000Z"),
     });
     const rawText = "  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ";
@@ -817,6 +830,10 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       ["sourceVersion", (value) => {
         value.payload.evidenceCurriculumLinks[0].sourceVersion = "2024.2";
       }],
+      ["assignmentStudent", (value) => {
+        value.payload.activities[0].targetAssignments[0].studentId =
+          "00000000-0000-4000-8000-000000000199";
+      }],
     ];
     for (const [name, mutate] of mutations) {
       const invalid = structuredClone(backup);
@@ -895,6 +912,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
     confirmedCurriculumLinkIds: [result.expectedLinkId],
   }]);
   expect(Object.keys(result.integrityErrors).sort()).toEqual([
+    "assignmentStudent",
     "citationLinkMismatch",
     "citationObservationMismatch",
     "emptyTeacherAssessment",

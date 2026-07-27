@@ -27,6 +27,7 @@ async function createD1Observation(page: Page, text: string) {
   const activityTitle = page.getByLabel("Etkinlik adı");
   if (await activityTitle.isVisible().catch(() => false)) {
     await activityTitle.fill("Kurgu keşif etkinliği");
+    await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
     await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
   }
   await expect(page.getByRole("heading", { name: "Gözlem notu" })).toBeVisible();
@@ -171,17 +172,18 @@ test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değe
 
   await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
   await page.getByLabel("Etkinlik adı").fill("Yaprakları karşılaştırma");
+  await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
   await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
 
-  await page.getByLabel("Çocuk").selectOption({ label: childName });
+  await page.getByLabel("Çocuk", { exact: true }).selectOption({ label: childName });
   await page.getByLabel("Ne oldu?").fill("Ece iki yaprağı yan yana koydu ve çizgilerini tek tek gösterdi.");
   await page.getByRole("button", { name: "Gözlem notunu kaydet" }).click();
 
-  await page.getByLabel("Program referans kodu").fill("KURGU-ÇIKTI-1");
-  await page.getByLabel("Program öğesi / başlığı").fill("Nesnelerin gözlenebilir özelliklerini karşılaştırır.");
+  await page.getByLabel("Program hedefi").selectOption("tymm-fab-1");
   await page.getByLabel("Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.").check();
   await page.getByRole("button", { name: "Bağlantıyı onayla" }).click();
 
+  await page.getByLabel("Dört düzeyli gözlem ölçütü").selectOption("mostly_independent");
   await page.getByLabel("Öğretmen değerlendirmesi").fill(
     "Ece, yaprakların çizgi örüntülerini karşılaştırırken farklılıkları işaret ederek gözlemini sözlü olarak açıkladı.",
   );

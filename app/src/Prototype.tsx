@@ -60,6 +60,15 @@ import {
   type EvidenceWorkspace,
 } from "./features/evidence/evidence-workspace";
 import {
+  CURRICULUM_ASSESSMENT_LEVELS,
+  CURRICULUM_TARGET_KIND_LABELS,
+  OFFICIAL_STARTER_CATALOG_PROFILES,
+  curriculumTargetsForProfile,
+  type CurriculumAssessmentLevel,
+  type CurriculumAssignmentMode,
+  type CurriculumTargetSnapshot,
+} from "./features/curriculum/curriculum-catalog";
+import {
   loadTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
@@ -136,8 +145,8 @@ const initialClassroomForm: ClassroomFormState = {
   ageGroup: "60–72 ay",
   curriculumProgram: "Türkiye Yüzyılı Maarif Modeli",
   curriculumCatalogLabel: "",
-  curriculumCatalogId: "",
-  curriculumSourceVersion: "",
+  curriculumCatalogId: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.catalogId,
+  curriculumSourceVersion: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.sourceVersion,
   scheduleKind: "morning",
   startTime: "08:30",
   endTime: "12:30",
@@ -240,6 +249,9 @@ type PlanCreationCommand = {
   activityTitle: string;
   startTime: string;
   endTime?: string;
+  curriculumTargets: CurriculumTargetSnapshot[];
+  assignmentMode: CurriculumAssignmentMode;
+  studentIds: string[];
 };
 
 function PlanCreationScreen({
@@ -247,12 +259,14 @@ function PlanCreationScreen({
   defaultStartTime,
   defaultEndTime,
   curriculumProfile,
+  students,
   onCreate,
 }: {
   civilDate: string;
   defaultStartTime: string;
   defaultEndTime: string;
   curriculumProfile: CurriculumProfileSnapshot;
+  students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
 }) {
   const [ids] = useState(() => ({
@@ -263,11 +277,49 @@ function PlanCreationScreen({
   const [activityTitle, setActivityTitle] = useState("");
   const [startTime, setStartTime] = useState(defaultStartTime);
   const [endTime, setEndTime] = useState(defaultEndTime);
+  const availableTargets = useMemo(
+    () => curriculumTargetsForProfile(curriculumProfile),
+    [curriculumProfile],
+  );
+  const [targetQuery, setTargetQuery] = useState("");
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+  const [assignmentMode, setAssignmentMode] =
+    useState<CurriculumAssignmentMode>("whole-class");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const visibleTargets = useMemo(() => {
+    const query = targetQuery.trim().toLocaleLowerCase("tr-TR");
+    if (!query) return availableTargets;
+    return availableTargets.filter((target) =>
+      [
+        target.referenceCode,
+        target.referenceTitle,
+        target.domain,
+        CURRICULUM_TARGET_KIND_LABELS[target.kind],
+      ]
+        .join(" ")
+        .toLocaleLowerCase("tr-TR")
+        .includes(query),
+    );
+  }, [availableTargets, targetQuery]);
+  const selectedTargets = availableTargets.filter((target) =>
+    selectedTargetIds.includes(target.id),
+  );
+  const assignedStudentIds =
+    assignmentMode === "whole-class"
+      ? students.map((student) => student.id)
+      : selectedStudentIds;
+  const assignmentCount = selectedTargets.length * assignedStudentIds.length;
 
   const save = async () => {
-    if (!planTitle.trim() || !activityTitle.trim() || busy) return;
+    if (
+      !planTitle.trim() ||
+      !activityTitle.trim() ||
+      selectedTargets.length === 0 ||
+      assignedStudentIds.length === 0 ||
+      busy
+    ) return;
     setBusy(true);
     setError("");
     try {
@@ -277,6 +329,9 @@ function PlanCreationScreen({
         activityTitle,
         startTime,
         ...(endTime ? { endTime } : {}),
+        curriculumTargets: selectedTargets,
+        assignmentMode,
+        studentIds: assignedStudentIds,
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Plan kaydedilemedi.");
@@ -297,7 +352,11 @@ function PlanCreationScreen({
           <span>{formatTurkishCivilDate(civilDate)}</span>
           <strong>{curriculumDisplayLabel(curriculumProfile)}</strong>
           <small>{curriculumProfile.catalogId} · {curriculumProfile.sourceVersion}</small>
-          <em>Öğretmen beyanı · resmî katalogda doğrulanmadı</em>
+          <em>
+            {curriculumProfile.officialCatalogVerified
+              ? "Resmî MEB kaynaklarıyla eşleşen kısmi başlangıç kataloğu"
+              : "Hedef başlıkları resmî kaynaktan; sınıf katalog kimliği öğretmen beyanı"}
+          </em>
         </section>
 
         <div className="d1-form">
@@ -339,12 +398,119 @@ function PlanCreationScreen({
           </div>
         </div>
 
+        <section className="curriculum-picker" aria-labelledby="curriculum-picker-title">
+          <div className="curriculum-section-heading">
+            <div>
+              <span className="d1-kicker">Program omurgası</span>
+              <h2 id="curriculum-picker-title">Bu etkinlikte ele alınacak hedefler</h2>
+            </div>
+            <strong>{selectedTargets.length} seçili</strong>
+          </div>
+          <KeyboardInput
+            value={targetQuery}
+            onChange={(event) => setTargetQuery(event.target.value)}
+            placeholder="Kod, başlık veya alan ara"
+            aria-label="Program hedeflerinde ara"
+          />
+          <div className="curriculum-target-list" role="group" aria-label="Program hedefleri">
+            {visibleTargets.map((target) => {
+              const selected = selectedTargetIds.includes(target.id);
+              return (
+                <button
+                  type="button"
+                  className={selected ? "curriculum-target is-selected" : "curriculum-target"}
+                  aria-pressed={selected}
+                  key={target.id}
+                  onClick={() =>
+                    setSelectedTargetIds((current) =>
+                      current.includes(target.id)
+                        ? current.filter((id) => id !== target.id)
+                        : [...current, target.id],
+                    )
+                  }
+                >
+                  <span>
+                    <b>{target.referenceCode}</b>
+                    <small>{target.domain} · {CURRICULUM_TARGET_KIND_LABELS[target.kind]}</small>
+                  </span>
+                  <strong>{target.referenceTitle}</strong>
+                  <em>{selected ? "Seçildi" : "Seç"}</em>
+                </button>
+              );
+            })}
+          </div>
+          <p className="catalog-scope-note">
+            Bu aşamada görünen liste tam resmî katalog değildir. Her öğenin kaynağı
+            kayıtla birlikte saklanır; katalog genişledikçe eski planlar değişmez.
+          </p>
+        </section>
+
+        <section className="curriculum-picker" aria-labelledby="assignment-title">
+          <div className="curriculum-section-heading">
+            <div>
+              <span className="d1-kicker">Takip kapsamı</span>
+              <h2 id="assignment-title">Kimler için planlansın?</h2>
+            </div>
+          </div>
+          <div className="assignment-mode" role="radiogroup" aria-label="Öğrenci kapsamı">
+            <label>
+              <input
+                type="radio"
+                name="assignment-mode"
+                checked={assignmentMode === "whole-class"}
+                onChange={() => setAssignmentMode("whole-class")}
+              />
+              <span><strong>Tüm sınıf</strong><small>Şu anki {students.length} aktif çocuk</small></span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="assignment-mode"
+                checked={assignmentMode === "selected-students"}
+                onChange={() => setAssignmentMode("selected-students")}
+              />
+              <span><strong>Seçili çocuklar</strong><small>Farklılaştırılmış takip</small></span>
+            </label>
+          </div>
+          {assignmentMode === "selected-students" ? (
+            <div className="student-assignment-list" role="group" aria-label="Seçilecek çocuklar">
+              {students.map((student) => (
+                <label key={student.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedStudentIds.includes(student.id)}
+                    onChange={(event) =>
+                      setSelectedStudentIds((current) =>
+                        event.target.checked
+                          ? [...current, student.id]
+                          : current.filter((id) => id !== student.id),
+                      )
+                    }
+                  />
+                  <span>{student.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+          <div className="assignment-summary" aria-live="polite">
+            <strong>{selectedTargets.length} hedef × {assignedStudentIds.length} çocuk</strong>
+            <span>{assignmentCount} planlı takip kaydı açılacak.</span>
+            <small>Bu işlem “öğrendi” veya “başardı” kaydı oluşturmaz.</small>
+          </div>
+        </section>
+
         {error ? <p className="d1-error" role="alert">{error}</p> : null}
         <button
           className="d1-primary"
           type="button"
           onClick={() => void save()}
-          disabled={busy || !planTitle.trim() || !activityTitle.trim()}
+          disabled={
+            busy ||
+            !planTitle.trim() ||
+            !activityTitle.trim() ||
+            selectedTargets.length === 0 ||
+            assignedStudentIds.length === 0
+          }
         >
           {busy ? "Kaydediliyor…" : "Planı kaydet ve etkinliği başlat"}
         </button>
@@ -358,6 +524,7 @@ function PlanCreationFlow({
   defaultStartTime,
   defaultEndTime,
   curriculumProfile,
+  students,
   onCreate,
   onClose,
 }: {
@@ -365,6 +532,7 @@ function PlanCreationFlow({
   defaultStartTime: string;
   defaultEndTime: string;
   curriculumProfile: CurriculumProfileSnapshot;
+  students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
   onClose: () => void;
 }) {
@@ -380,6 +548,7 @@ function PlanCreationFlow({
           defaultStartTime={defaultStartTime}
           defaultEndTime={defaultEndTime}
           curriculumProfile={curriculumProfile}
+          students={students}
           onCreate={onCreate}
         />
       ),
@@ -389,6 +558,7 @@ function PlanCreationFlow({
       curriculumProfile,
       defaultEndTime,
       defaultStartTime,
+      students,
       onClose,
       onCreate,
     ],
@@ -402,17 +572,24 @@ type EvidenceFlowActions = {
   manageChildren: () => void;
   capture: (
     activity: EvidenceActivitySummary,
-    input: { observationId: string; studentId: string; rawText: string },
+    input: {
+      observationId: string;
+      studentId: string;
+      rawText: string;
+      context?: string;
+      childQuote?: string;
+    },
   ) => Promise<EvidenceObservationSummary>;
   confirm: (
     observation: EvidenceObservationSummary,
-    referenceCode: string,
-    referenceTitle: string,
+    target: CurriculumTargetSnapshot,
   ) => Promise<void>;
   createDraft: (
     observation: EvidenceObservationSummary,
     teacherAssessmentText: string,
     draftId: string,
+    assessmentLevel: CurriculumAssessmentLevel,
+    assessmentTargetIds: string[],
   ) => Promise<void>;
 };
 
@@ -427,9 +604,14 @@ function EvidenceCaptureScreen({
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
+  const eligibleStudents = activity.assignedStudentIds.length > 0
+    ? students.filter((student) => activity.assignedStudentIds.includes(student.id))
+    : students;
   const [observationId] = useState(() => crypto.randomUUID());
-  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const [studentId, setStudentId] = useState(eligibleStudents[0]?.id ?? "");
   const [rawText, setRawText] = useState("");
+  const [context, setContext] = useState("");
+  const [childQuote, setChildQuote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -442,6 +624,8 @@ function EvidenceCaptureScreen({
         observationId,
         studentId,
         rawText,
+        ...(context.trim() ? { context } : {}),
+        ...(childQuote.trim() ? { childQuote } : {}),
       });
       flow.replace(createEvidenceLinkScreen(observation, actions));
     } catch (reason) {
@@ -459,7 +643,7 @@ function EvidenceCaptureScreen({
           <p>Gördüğünüz ve duyduğunuz olayı yorum eklemeden kaydedin.</p>
         </div>
 
-        {students.length === 0 ? (
+        {eligibleStudents.length === 0 ? (
           <section className="d1-empty-state">
             <strong>Önce sınıfa bir çocuk ekleyin.</strong>
             <p>Gözlem notu yalnız etkin sınıftaki bir çocukla ilişkilendirilebilir.</p>
@@ -474,7 +658,7 @@ function EvidenceCaptureScreen({
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
               >
-                {students.map((student) => (
+                {eligibleStudents.map((student) => (
                   <option value={student.id} key={student.id}>{student.name}</option>
                 ))}
               </select>
@@ -487,6 +671,22 @@ function EvidenceCaptureScreen({
                 placeholder="Örn. Ece iki farklı yaprağı yan yana koydu ve “Bunun çizgileri daha çok” dedi."
                 rows={7}
                 autoFocus
+              />
+              <label htmlFor="d1-observation-context">Bağlam / ne sırasında?</label>
+              <KeyboardInput
+                id="d1-observation-context"
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+                placeholder="Örn. Fen merkezinde küçük grup çalışması"
+                autoComplete="off"
+              />
+              <label htmlFor="d1-observation-quote">Çocuğun sözü veya görülen davranış</label>
+              <KeyboardTextarea
+                id="d1-observation-quote"
+                value={childQuote}
+                onChange={(event) => setChildQuote(event.target.value)}
+                placeholder="Varsa çocuğun kendi cümlesini tırnaksız ve değiştirmeden yazın."
+                rows={3}
               />
             </div>
             <p className="d1-integrity-note"><LockClosedIcon aria-hidden="true" /> İlk gözlem notu kaydedildikten sonra değişmeden korunur.</p>
@@ -515,19 +715,46 @@ function EvidenceLinkScreen({
   observation: EvidenceObservationSummary;
   actions: EvidenceFlowActions;
 }) {
-  const [referenceCode, setReferenceCode] = useState("");
-  const [referenceTitle, setReferenceTitle] = useState("");
+  const [selectedTargetId, setSelectedTargetId] = useState(
+    observation.plannedCurriculumTargets[0]?.id ?? "",
+  );
+  const [legacyReferenceCode, setLegacyReferenceCode] = useState("");
+  const [legacyReferenceTitle, setLegacyReferenceTitle] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const selectedTarget = observation.plannedCurriculumTargets.find(
+    (target) => target.id === selectedTargetId,
+  );
+  const targetForSave: CurriculumTargetSnapshot | undefined =
+    selectedTarget ??
+    (legacyReferenceCode.trim() && legacyReferenceTitle.trim()
+      ? {
+          id: `legacy-teacher-declared-${observation.id}`,
+          framework: observation.curriculumProfile.framework,
+          catalogId: observation.curriculumProfile.catalogId,
+          sourceVersion: observation.curriculumProfile.sourceVersion,
+          referenceCode: legacyReferenceCode.trim(),
+          referenceTitle: legacyReferenceTitle.trim(),
+          kind: "learning-outcome",
+          domain: "Öğretmen beyanı",
+          sourceUrl: "about:blank",
+          sourceLabel: "Eski plan kaydı · öğretmen beyanı",
+          sourceCheckedOn: observation.civilDate,
+          catalogCompleteness: "partial",
+          verificationStatus: "teacher-declared-unverified",
+          referenceOrigin: "teacher-declared",
+          officialCatalogVerified: false,
+        }
+      : undefined);
 
   const save = async () => {
-    if (!referenceCode.trim() || !referenceTitle.trim() || !confirmed || busy) return;
+    if (!targetForSave || !confirmed || busy) return;
     setBusy(true);
     setError("");
     try {
-      await actions.confirm(observation, referenceCode, referenceTitle);
-      flow.replace(createAssessmentScreen(observation, actions));
+      await actions.confirm(observation, targetForSave);
+      flow.replace(createAssessmentScreen(observation, targetForSave, actions));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Program bağlantısı kaydedilemedi.");
       setBusy(false);
@@ -540,34 +767,61 @@ function EvidenceLinkScreen({
         <div className="d1-flow-intro">
           <span className="d1-kicker">{observation.studentName} · {observation.activityTitle}</span>
           <h1>Program bağlantısı</h1>
-          <p>Notunuzu hangi program öğesiyle ilişkilendirdiğinizi açıkça kaydedin.</p>
+          <p>Etkinlikte planladığınız hedeflerden gözlemin doğrudan kanıtladığını seçin.</p>
         </div>
 
         <blockquote className="d1-observation-quote">{observation.rawText}</blockquote>
 
         <section className="d1-warning-card">
-          <strong>Öğretmen beyanı</strong>
-          <p>Bu referans resmî katalogda doğrulanmadı. Kod ve başlığı kullandığınız program kaynağından siz giriyorsunuz.</p>
+          <strong>Planlanan hedefle sınırlandırıldı</strong>
+          <p>Bağlantı yalnız bu etkinlik için önceden seçilen program hedeflerinden kurulabilir. Son karar öğretmen onayıdır.</p>
           <small>{curriculumDisplayLabel(observation.curriculumProfile)} · {observation.curriculumProfile.sourceVersion}</small>
         </section>
 
         <div className="d1-form">
-          <label htmlFor="d1-reference-code">Program referans kodu</label>
-          <KeyboardInput
-            id="d1-reference-code"
-            value={referenceCode}
-            onChange={(event) => setReferenceCode(event.target.value)}
-            placeholder="Kullandığınız kaynaktaki kod"
-            autoComplete="off"
-          />
-          <label htmlFor="d1-reference-title">Program öğesi / başlığı</label>
-          <KeyboardTextarea
-            id="d1-reference-title"
-            value={referenceTitle}
-            onChange={(event) => setReferenceTitle(event.target.value)}
-            placeholder="Kazanım, öğrenme çıktısı veya beceri başlığı"
-            rows={3}
-          />
+          {observation.plannedCurriculumTargets.length > 0 ? (
+            <>
+              <label htmlFor="d1-reference-target">Program hedefi</label>
+              <select
+                id="d1-reference-target"
+                value={selectedTargetId}
+                onChange={(event) => setSelectedTargetId(event.target.value)}
+              >
+                {observation.plannedCurriculumTargets.map((target) => (
+                  <option value={target.id} key={target.id}>
+                    {target.referenceCode} · {target.referenceTitle}
+                  </option>
+                ))}
+              </select>
+              {selectedTarget ? (
+                <section className="selected-target-detail">
+                  <span>{selectedTarget.domain} · {CURRICULUM_TARGET_KIND_LABELS[selectedTarget.kind]}</span>
+                  <strong>{selectedTarget.referenceTitle}</strong>
+                  <small>{selectedTarget.sourceLabel} · {selectedTarget.sourceCheckedOn}</small>
+                </section>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="catalog-scope-note">
+                Bu gözlem eski, programsız hedef seçicisiyle oluşturulmuş. Kaydı kaybetmemek için öğretmen beyanı yolu açık tutuluyor.
+              </p>
+              <label htmlFor="d1-reference-code">Program referans kodu</label>
+              <KeyboardInput
+                id="d1-reference-code"
+                value={legacyReferenceCode}
+                onChange={(event) => setLegacyReferenceCode(event.target.value)}
+                autoComplete="off"
+              />
+              <label htmlFor="d1-reference-title">Program öğesi / başlığı</label>
+              <KeyboardTextarea
+                id="d1-reference-title"
+                value={legacyReferenceTitle}
+                onChange={(event) => setLegacyReferenceTitle(event.target.value)}
+                rows={3}
+              />
+            </>
+          )}
           <label className="d1-confirmation" htmlFor="d1-reference-confirmed">
             <input
               id="d1-reference-confirmed"
@@ -584,7 +838,7 @@ function EvidenceLinkScreen({
           className="d1-primary"
           type="button"
           onClick={() => void save()}
-          disabled={busy || !referenceCode.trim() || !referenceTitle.trim() || !confirmed}
+          disabled={busy || !targetForSave || !confirmed}
         >
           {busy ? "Kaydediliyor…" : "Bağlantıyı onayla"}
         </button>
@@ -597,14 +851,18 @@ function EvidenceLinkScreen({
 function AssessmentScreen({
   flow,
   observation,
+  target,
   actions,
 }: {
   flow: FlowControls;
   observation: EvidenceObservationSummary;
+  target: CurriculumTargetSnapshot;
   actions: EvidenceFlowActions;
 }) {
   const [draftId] = useState(() => crypto.randomUUID());
   const [text, setText] = useState("");
+  const [assessmentLevel, setAssessmentLevel] =
+    useState<CurriculumAssessmentLevel>("not_assessed");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -613,7 +871,13 @@ function AssessmentScreen({
     setBusy(true);
     setError("");
     try {
-      await actions.createDraft(observation, text, draftId);
+      await actions.createDraft(
+        observation,
+        text,
+        draftId,
+        assessmentLevel,
+        [target.id],
+      );
       flow.replace(createCompletionScreen(observation, actions));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Değerlendirme taslağı kaydedilemedi.");
@@ -636,12 +900,33 @@ function AssessmentScreen({
           <span>{formatTurkishCivilDate(observation.civilDate)} · {observation.activityTitle}</span>
         </section>
 
+        <section className="selected-target-detail">
+          <span>{target.referenceCode} · {target.domain}</span>
+          <strong>{target.referenceTitle}</strong>
+          <small>Değerlendirme yalnız bu seçili hedef ve tarihli kanıta dayanır.</small>
+        </section>
+
         <section className="d1-safety-card">
           <strong>Pedagojik sınır</strong>
           <p>MaarifOS tanı koymaz, çocuğu etiketlemez ve gelişim hükmü üretmez. Bu alan yalnız öğretmenin seçili gözleme dayanan mesleki değerlendirmesidir.</p>
         </section>
 
         <div className="d1-form">
+          <label htmlFor="d1-assessment-level">Dört düzeyli gözlem ölçütü</label>
+          <select
+            id="d1-assessment-level"
+            value={assessmentLevel}
+            onChange={(event) =>
+              setAssessmentLevel(event.target.value as CurriculumAssessmentLevel)
+            }
+          >
+            {CURRICULUM_ASSESSMENT_LEVELS.map((level) => (
+              <option value={level.value} key={level.value}>{level.label}</option>
+            ))}
+          </select>
+          <p className="assessment-level-help">
+            {CURRICULUM_ASSESSMENT_LEVELS.find((level) => level.value === assessmentLevel)?.description}
+          </p>
           <label htmlFor="d1-assessment-text">Öğretmen değerlendirmesi</label>
           <KeyboardTextarea
             id="d1-assessment-text"
@@ -703,6 +988,7 @@ function createEvidenceLinkScreen(
 
 function createAssessmentScreen(
   observation: EvidenceObservationSummary,
+  target: CurriculumTargetSnapshot,
   actions: EvidenceFlowActions,
 ): FlowScreen {
   return {
@@ -710,7 +996,14 @@ function createAssessmentScreen(
     title: "Değerlendirme",
     headerHeight: 64,
     header: createFlowHeader("Değerlendirme", "3 / 3", actions.close),
-    render: (flow) => <AssessmentScreen flow={flow} observation={observation} actions={actions} />,
+    render: (flow) => (
+      <AssessmentScreen
+        flow={flow}
+        observation={observation}
+        target={target}
+        actions={actions}
+      />
+    ),
   };
 }
 
@@ -1246,13 +1539,21 @@ export default function Prototype() {
     setClassroomError("");
     try {
       const framework = curriculumFrameworkForProgram(classroomForm.curriculumProgram);
+      const officialStarterProfile = OFFICIAL_STARTER_CATALOG_PROFILES[framework];
+      const usesOfficialStarterProfile =
+        classroomForm.curriculumCatalogId.trim() ===
+          officialStarterProfile.catalogId &&
+        classroomForm.curriculumSourceVersion.trim() ===
+          officialStarterProfile.sourceVersion;
       const curriculumProfile: CurriculumProfileSnapshot = {
         framework,
         programLabel: CURRICULUM_PROGRAM_LABELS[framework],
         catalogId: classroomForm.curriculumCatalogId,
         sourceVersion: classroomForm.curriculumSourceVersion,
-        referenceOrigin: "teacher-declared",
-        officialCatalogVerified: false,
+        referenceOrigin: usesOfficialStarterProfile
+          ? "official-catalog"
+          : "teacher-declared",
+        officialCatalogVerified: usesOfficialStarterProfile,
       };
       const context = await saveClassroomConfiguration(store, {
         academicYear: {
@@ -1392,6 +1693,9 @@ export default function Prototype() {
       status: "completed" as const,
       civilDate: pending.civilDate,
       curriculumProfile: pending.curriculumProfile,
+      curriculumTargets: pending.plannedCurriculumTargets,
+      assignedStudentIds: [pending.studentId],
+      assignmentMode: "legacy-unscoped" as const,
     };
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
@@ -1438,26 +1742,39 @@ export default function Prototype() {
       setAnnouncement(`${observation.studentName} için gözlem notu kaydedildi.`);
       return observation;
     },
-    confirm: async (observation, referenceCode, referenceTitle) => {
+    confirm: async (observation, target) => {
+      const isPlannedTarget = observation.plannedCurriculumTargets.some(
+        (planned) => planned.id === target.id,
+      );
       await confirmObservationCurriculumLink(store, {
         observationId: observation.id,
         framework: observation.curriculumProfile.framework,
         catalogId: observation.curriculumProfile.catalogId,
         sourceVersion: observation.curriculumProfile.sourceVersion,
-        referenceCode,
-        referenceTitle,
-        referenceOrigin: "teacher-declared",
-        officialCatalogVerified: false,
+        referenceCode: target.referenceCode,
+        referenceTitle: target.referenceTitle,
+        referenceOrigin: observation.curriculumProfile.referenceOrigin,
+        officialCatalogVerified:
+          observation.curriculumProfile.officialCatalogVerified,
+        ...(isPlannedTarget ? { plannedTargetId: target.id } : {}),
       });
       await refreshD1Workspaces();
       setAnnouncement("Program bağlantısı öğretmen onayıyla kaydedildi.");
     },
-    createDraft: async (observation, teacherAssessmentText, draftId) => {
+    createDraft: async (
+      observation,
+      teacherAssessmentText,
+      draftId,
+      assessmentLevel,
+      assessmentTargetIds,
+    ) => {
       await createCitedAssessmentDraft(store, {
         draftId,
         studentId: observation.studentId,
         observationIds: [observation.id],
         teacherAssessmentText,
+        assessmentLevel,
+        assessmentTargetIds,
         periodStart: observation.civilDate,
         periodEnd: observation.civilDate,
       });
@@ -1712,12 +2029,17 @@ export default function Prototype() {
           <select
             id="curriculum-program"
             value={classroomForm.curriculumProgram}
-            onChange={(event) => setClassroomForm((current) => ({
-              ...current,
-              curriculumProgram: event.target.value,
-              curriculumCatalogId: "",
-              curriculumSourceVersion: "",
-            }))}
+            onChange={(event) => {
+              const curriculumProgram = event.target.value;
+              const framework = curriculumFrameworkForProgram(curriculumProgram);
+              const starter = OFFICIAL_STARTER_CATALOG_PROFILES[framework];
+              setClassroomForm((current) => ({
+                ...current,
+                curriculumProgram,
+                curriculumCatalogId: starter.catalogId,
+                curriculumSourceVersion: starter.sourceVersion,
+              }));
+            }}
           >
             <option>Türkiye Yüzyılı Maarif Modeli</option>
             <option>Okul Öncesi Eğitim Programı — EÇE/2024</option>
@@ -1750,7 +2072,9 @@ export default function Prototype() {
             </label>
           </div>
           <p className="classroom-provenance-note">
-            Bu iki bilgi öğretmen beyanı olarak saklanır; MaarifOS henüz resmî katalog doğrulaması yapmaz.
+            Varsayılan değerler resmî MEB kaynaklarıyla kontrol edilmiş kısmi
+            başlangıç kataloğudur. Kimlik veya sürümü değiştirirseniz kayıt
+            öğretmen beyanı olarak işaretlenir.
           </p>
 
           <div className="settings-grid">
@@ -2052,6 +2376,7 @@ export default function Prototype() {
             defaultStartTime={configuredClassroom.schedule.startTime}
             defaultEndTime={configuredClassroom.schedule.endTime}
             curriculumProfile={configuredClassroom.curriculumProfile}
+            students={students}
             onCreate={createPlanAndStart}
             onClose={closeD1Flow}
           />

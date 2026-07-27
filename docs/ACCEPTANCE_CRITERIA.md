@@ -61,6 +61,30 @@
 - Aynı sınıf ve İstanbul sivil gününde yalnız bir etkinlik `in_progress`
   olabilir.
 - Plan günü aktif eğitim yılının başlangıç ve bitiş tarihleri dışında olamaz.
+- Plan en az bir sürümlü program hedefi ve en az bir aktif çocuk kapsamı
+  olmadan oluşturulamaz.
+- Tüm sınıfa dağıtım işlem anındaki aktif çocuk UUID'lerini sabitler; sonradan
+  gelen çocuğu geçmiş plana sessizce eklemez.
+- Toplu dağıtım yalnız `planned` takip kaydı üretir; gözlem, program bağı,
+  değerlendirme veya “öğrendi/başardı” hükmü üretmez.
+- Seçili çocuk kapsamına başka sınıftaki, ayrılmış veya bilinmeyen çocuk
+  eklenemez; hata plan ve etkinliği atomik olarak yazmadan bırakır.
+- Yeni gözlem yalnız etkinliğin planlı öğrenci kapsamındaki çocuğa yazılabilir.
+- Yeni program bağlantısı yalnız etkinlikte planlanan hedeflerden seçilir.
+- Bağlam ve çocuğun özgün sözü ham gözlemden ayrı alanlarda yedek/geri
+  yükleme boyunca korunur.
+- Kısmi program kataloğu arayüzde tam resmî katalog gibi sunulmaz.
+
+## Program değerlendirmesi
+
+- TYMM ve MEB 2024 hedefleri aynı plan, bağ veya değerlendirmede karıştırılamaz.
+- Dört resmî değerlendirme düzeyi gözleme dayanır.
+- `not_assessed`, başarısızlık düzeyi değildir; ele alınmayan veya kanıtı
+  yetersiz hedef boş/değerlendirilmemiş kalır.
+- Dönem sonu yalnız dönem içinde ele alınan hedefleri ve aynı dönem kanıtlarını
+  kullanır.
+- Yıl sonu önceki dönem snapshot'larını değiştirmez; yeni ve kaynaklı bir
+  sentez oluşturur.
 
 ## Medya
 - Kamera veya galeriden eklenir.

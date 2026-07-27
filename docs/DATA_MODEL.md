@@ -158,6 +158,19 @@ eklemeli kayıt olarak oluşur.
 - studentIds[]
 - mediaIds[]
 - maarifRefs[]
+- curriculumTargets[]
+- assignmentMode: whole-class | selected-students
+- assignmentSnapshotAt
+- coverageStatus: planned
+- targetAssignments[]
+  - studentId
+  - targetId
+  - referenceCode
+  - status: planned
+  - assignedAt
+
+`whole-class`, işlem anındaki etkin sınıf üyelerinin sabit UUID snapshot'ıdır.
+Toplu dağıtım başarı/öğrenme hükmü oluşturmaz; yalnız planlı takip açar.
 
 ## MediaAsset
 - id
@@ -198,6 +211,14 @@ eklemeli kayıt olarak oluşur.
 - title
 - description?
 - parentId?
+- framework: tymm | meb_2024
+- catalogId
+- sourceUrl
+- sourceCheckedOn
+- catalogCompleteness: partial | complete
+
+TYMM ve MEB 2024 türleri ayrı ontolojilerdir. Başlangıç kataloğu `partial`
+olarak sunulur; tam resmî katalog olduğu iddia edilmez.
 
 ## PortfolioSelection
 - id
@@ -225,6 +246,13 @@ eklemeli kayıt olarak oluşur.
 öğretmen onaylı program bağlantısına dayanır. D1 aşamasında metin öğretmen
 tarafından yazılır; `authoredBy: teacher`, `teacherReviewRequired: true` ve
 `reviewStatus: pending` değişmezleridir.
+
+Kanıt düzeyi `not_assessed | not_yet | with_frequent_support |
+mostly_independent | independent` değerlerinden biridir. `not_assessed`
+resmî dört düzeyden ayrı teknik durumdur; ele alınmayan hedefi başarısız
+saymaz. Dönem ve yıl sonu kesinleşmiş hükümleri sonraki dilimde ayrı
+`AssessmentJudgment` kayıtları olarak, eski dönem snapshot'larını ezmeden
+tutulacaktır. Ayrıntı: `CURRICULUM_EVIDENCE_ARCHITECTURE.md`.
 
 ## Eğitim yılı arşivi
 
