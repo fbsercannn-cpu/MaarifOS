@@ -67,6 +67,26 @@ Etiketler kayıt sonrası isteğe bağlı tamamlanabilir. Böylece olay anı ka�
 - Kurulum yardım ekranı
 - Güncelleme sonrası veri migration kontrolü
 
+## Güvenli güncelleme deneyimi
+
+- Yeni service worker hazır olduğunda açık plan veya gözlem formu zorla
+  yenilenmez. Ana ekranda `Yeni sürüm hazır` kartı gösterilir ve öğretmen
+  güvenli anda `Şimdi güncelle` eylemini seçer.
+- Güncel kod ilk açıldığında sürüm numarası, İstanbul sivil yayın tarihi ve
+  somut sürüm notları `MaarifOS güncellendi` penceresinde bir kez gösterilir.
+- Aynı sürüm notları daha sonra Ayarlar içindeki `Sürüm ve yenilikler`
+  kartından yeniden okunabilir.
+- Sürüm onayı yalnız cihaz-özel `localStorage` alanında teknik metadata olarak
+  tutulur; öğretmen ve çocuk verisi içermez, yedeğe taşınmaz.
+- Tamamen boş yeni kurulumda yanıltıcı bir güncelleme bildirimi gösterilmez.
+  Sürüm kaydı bulunmayan fakat yapılandırılmış sınıfı olan eski kurulum ilk
+  yükseltme bildirimini bir kez görür.
+
+Yeni yayın hazırlanırken `app/src/release.ts` içindeki `CURRENT_RELEASE`,
+`app/package.json` ve `app/package-lock.json` sürümleri birlikte yükseltilir.
+Kalite kapısı bu üç kaynağın, yedek manifestinin ve sürümlü service worker
+URL'sinin aynı uygulama sürümünü kullanmasını doğrular.
+
 ## Performans bütçesi
 
 - İlk ekran hızlı açılmalı.

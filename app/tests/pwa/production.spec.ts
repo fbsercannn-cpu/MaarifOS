@@ -51,9 +51,11 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
     "/assets/brand/maarifos-icon-192.png",
   );
 
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
+  const serviceWorkerScript = await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return registration.active?.scriptURL ?? "";
   });
+  expect(serviceWorkerScript).toContain("/sw.js?v=0.2.0");
   await page.reload({ waitUntil: "networkidle" });
 
   await context.setOffline(true);

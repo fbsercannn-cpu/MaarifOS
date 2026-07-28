@@ -101,6 +101,12 @@ import {
   type TodayWorkspace,
 } from "./features/today/today-data";
 import type { ClassroomScheduleKind } from "./core/domain/classroom";
+import {
+  acknowledgeCurrentRelease,
+  CURRENT_RELEASE,
+  inspectCurrentRelease,
+  PWA_UPDATE_READY_EVENT,
+} from "./release";
 
 const initialStudents: Student[] = [];
 
@@ -1653,7 +1659,10 @@ export default function Prototype() {
   const { device } = useMobileDevice();
   const { bottomInset } = useKeyboardInsets();
   const store = useMemo(() => new IndexedDbDataStore(), []);
-  const backupService = useMemo(() => new BackupService(store, { appVersion: "0.1.0" }), [store]);
+  const backupService = useMemo(
+    () => new BackupService(store, { appVersion: CURRENT_RELEASE.version }),
+    [store],
+  );
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dayRefreshInFlightRef = useRef(false);
@@ -1700,6 +1709,11 @@ export default function Prototype() {
   const [dataStatus, setDataStatus] = useState("Bu cihazdaki veriler hazırlanıyor.");
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [standalone, setStandalone] = useState(() => isStandaloneApp());
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [releaseNotesExpanded, setReleaseNotesExpanded] = useState(false);
+  const [releasePreviousVersion, setReleasePreviousVersion] =
+    useState<string | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
   const [installStatus, setInstallStatus] = useState(() =>
     isStandaloneApp()
       ? "MaarifOS bu cihazda uygulama olarak çalışıyor."
@@ -1820,6 +1834,20 @@ export default function Prototype() {
         } else {
           setClassroomOpen(true);
         }
+        const releaseState = inspectCurrentRelease();
+        const isExistingInstallation =
+          workspace.classroom.status === "configured";
+        const isLegacyUpdate =
+          releaseState.kind === "first_install" && isExistingInstallation;
+        if (releaseState.shouldPresent || isLegacyUpdate) {
+          setReleasePreviousVersion(releaseState.previousVersion);
+          setReleaseNotesOpen(true);
+          setAnnouncement(
+            `MaarifOS ${CURRENT_RELEASE.version} sürümüne güncellendi.`,
+          );
+        } else if (releaseState.kind === "first_install") {
+          acknowledgeCurrentRelease();
+        }
         setDataHydrated(true);
         setDataStatus("Veriler bu cihazda saklanıyor · çevrimdışı çalışır");
       })
@@ -1879,6 +1907,19 @@ export default function Prototype() {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [attendanceCivilDate, dataHydrated, store]);
+
+  useEffect(() => {
+    const announceReadyUpdate = () => {
+      setUpdateReady(true);
+      setAnnouncement(
+        "Yeni MaarifOS sürümü hazır. Kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
+      );
+    };
+
+    window.addEventListener(PWA_UPDATE_READY_EVENT, announceReadyUpdate);
+    return () =>
+      window.removeEventListener(PWA_UPDATE_READY_EVENT, announceReadyUpdate);
+  }, []);
 
   useEffect(() => {
     const updateNetwork = () => {
@@ -2662,6 +2703,21 @@ export default function Prototype() {
     setAttendanceOpen(open);
   };
 
+  const completeReleaseNotice = () => {
+    acknowledgeCurrentRelease();
+    setReleaseNotesOpen(false);
+    setReleasePreviousVersion(null);
+    setAnnouncement(
+      `MaarifOS ${CURRENT_RELEASE.version} sürüm notları okundu.`,
+    );
+  };
+
+  const applyReadyUpdate = () => {
+    setUpdateReady(false);
+    setAnnouncement("MaarifOS güncelleniyor.");
+    window.location.reload();
+  };
+
   return (
     <div className="maarif-app-shell" style={shellStyle}>
       <MobileScroll className="maarif-scroll">
@@ -2703,6 +2759,21 @@ export default function Prototype() {
             </div>
             <p className="sync-state"><CheckCircledIcon aria-hidden="true" /> Kaydedildi · Çevrimdışı hazır</p>
           </header>
+
+          {updateReady ? (
+            <section className="update-ready-card" aria-labelledby="update-ready-title">
+              <span className="update-ready-icon" aria-hidden="true">
+                <MagicWandIcon />
+              </span>
+              <span className="update-ready-copy">
+                <strong id="update-ready-title">Yeni sürüm hazır</strong>
+                <small>Kaydınızı tamamladıysanız güvenle güncelleyin.</small>
+              </span>
+              <button type="button" onClick={applyReadyUpdate}>
+                Şimdi güncelle
+              </button>
+            </section>
+          ) : null}
 
           <section className="daily-summary" aria-label="Günlük özet">
             <button className="summary-action" type="button" onClick={() => setAttendanceOpen(true)}>
@@ -3598,6 +3669,46 @@ export default function Prototype() {
             <small className="provider-status" role="status">{installStatus}</small>
           </section>
 
+          <section className="release-summary-card" aria-labelledby="release-summary-heading">
+            <div className="release-summary-heading">
+              <span className="release-summary-icon" aria-hidden="true">
+                <MagicWandIcon />
+              </span>
+              <span>
+                <small>Güncel sürüm</small>
+                <h3 id="release-summary-heading">MaarifOS {CURRENT_RELEASE.version}</h3>
+              </span>
+              <b><CheckCircledIcon aria-hidden="true" /> Güncel</b>
+            </div>
+            <p>{CURRENT_RELEASE.title}</p>
+            <div className="release-meta" aria-label="Sürüm bilgileri">
+              <span>Sürüm {CURRENT_RELEASE.version}</span>
+              <time dateTime={CURRENT_RELEASE.releasedOn}>
+                {formatTurkishCivilDate(CURRENT_RELEASE.releasedOn)}
+              </time>
+            </div>
+            <button
+              className="release-notes-toggle"
+              type="button"
+              aria-expanded={releaseNotesExpanded}
+              aria-controls="current-release-notes"
+              onClick={() => setReleaseNotesExpanded((current) => !current)}
+            >
+              {releaseNotesExpanded ? "Sürüm notlarını gizle" : "Sürüm notlarını göster"}
+              <ChevronDownIcon aria-hidden="true" />
+            </button>
+            {releaseNotesExpanded ? (
+              <ul className="release-notes-list" id="current-release-notes">
+                {CURRENT_RELEASE.notes.map((note) => (
+                  <li key={note}>
+                    <CheckCircledIcon aria-hidden="true" />
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+
           <section className="security-section" aria-labelledby="backup-heading">
             <div className="security-heading-row">
               <div>
@@ -3638,6 +3749,51 @@ export default function Prototype() {
               </div>
             ) : null}
           </section>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={releaseNotesOpen}
+        onOpenChange={(open) => {
+          if (!open) completeReleaseNotice();
+        }}
+        title="MaarifOS güncellendi"
+        description={`Sürüm ${CURRENT_RELEASE.version} · ${formatTurkishCivilDate(CURRENT_RELEASE.releasedOn)}`}
+        snap={0.86}
+      >
+        <div className="release-celebration">
+          <span className="release-celebration-icon" aria-hidden="true">
+            <MagicWandIcon />
+          </span>
+          <span className="release-kicker">Yeni sürüm kullanıma hazır</span>
+          <h3>{CURRENT_RELEASE.title}</h3>
+          {releasePreviousVersion ? (
+            <p className="release-version-transition">
+              Sürüm {releasePreviousVersion} → {CURRENT_RELEASE.version}
+            </p>
+          ) : null}
+          <ul className="release-notes-list release-notes-list--featured">
+            {CURRENT_RELEASE.notes.map((note) => (
+              <li key={note}>
+                <CheckCircledIcon aria-hidden="true" />
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="release-data-safe">
+            <LockClosedIcon aria-hidden="true" />
+            <span>
+              <strong>Kayıtlarınız korundu</strong>
+              <small>Çocuk, gözlem, plan ve arşiv verileri bu cihazda yerinde duruyor.</small>
+            </span>
+          </div>
+          <button
+            className="sheet-primary release-complete-button"
+            type="button"
+            onClick={completeReleaseNotice}
+          >
+            Harika, başlayalım
+          </button>
         </div>
       </BottomSheet>
 

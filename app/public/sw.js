@@ -1,8 +1,11 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const SHELL_CACHE = `${CACHE_PREFIX}shell-v2`;
-const ASSET_CACHE = `${CACHE_PREFIX}assets-v2`;
+const WORKER_RELEASE =
+  new URL(self.location.href).searchParams.get("v") || "legacy";
+const CACHE_VERSION = WORKER_RELEASE.replace(/[^0-9A-Za-z._-]/g, "-");
+const SHELL_CACHE = `${CACHE_PREFIX}shell-${CACHE_VERSION}`;
+const ASSET_CACHE = `${CACHE_PREFIX}assets-${CACHE_VERSION}`;
 const CACHEABLE_DESTINATIONS = new Set(["font", "image", "script", "style"]);
 const NETWORK_TIMEOUT_MS = 5000;
 
