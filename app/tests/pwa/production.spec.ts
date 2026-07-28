@@ -57,6 +57,9 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
   });
   expect(serviceWorkerScript).toContain("/sw.js?v=0.2.0");
   await page.reload({ waitUntil: "networkidle" });
+  await expect(
+    page.getByRole("button", { name: "Şimdi güncelle" }),
+  ).toHaveCount(0);
 
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });

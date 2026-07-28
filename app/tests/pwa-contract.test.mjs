@@ -88,10 +88,12 @@ test("service worker app-shell yedeği ile güvenli cache sınırlarını içeri
   assert.match(worker, /maarifos-icon-512\.png/);
   assert.match(worker, /maarifos-icon-maskable-512\.png/);
   assert.match(worker, /apple-touch-icon-180\.png/);
-  assert.match(worker, /new URL\(self\.location\.href\)/);
-  assert.match(worker, /searchParams\.get\("v"\)/);
+  assert.match(worker, /const WORKER_RELEASE = "0\.2\.0"/);
   assert.match(worker, /shell-\$\{CACHE_VERSION\}/);
   assert.match(worker, /assets-\$\{CACHE_VERSION\}/);
+  assert.match(worker, /self\.clients\.matchAll/);
+  assert.match(worker, /client\.postMessage/);
+  assert.match(worker, /version: WORKER_RELEASE/);
   assert.doesNotMatch(worker, /emine-ogretmen-avatar/);
 });
 
@@ -112,20 +114,21 @@ test("PWA girişi service worker kaydını ve güvenli canlı güncellemeyi koru
   );
   assert.match(
     pwa,
-    /const wasControlledBeforeRegistration = navigator\.serviceWorker\.controller !== null/,
+    /navigator\.serviceWorker\.addEventListener\("message"/,
   );
   assert.match(
     pwa,
-    /navigator\.serviceWorker\.addEventListener\("controllerchange"/,
+    /candidate\.version !== CURRENT_RELEASE\.version/,
   );
   assert.match(
     pwa,
-    /if \(!wasControlledBeforeRegistration \|\| hasAnnouncedServiceWorkerUpdate\) return/,
+    /if \(!isNewReleaseMessage\(event\.data\) \|\| hasAnnouncedServiceWorkerUpdate\) return/,
   );
   assert.match(
     pwa,
     /window\.dispatchEvent\(new CustomEvent\(PWA_UPDATE_READY_EVENT\)\)/,
   );
   assert.doesNotMatch(pwa, /window\.location\.reload\(\)/);
+  assert.doesNotMatch(pwa, /controllerchange/);
   assert.match(pwa, /registerServiceWorker\(\);\s*$/);
 });

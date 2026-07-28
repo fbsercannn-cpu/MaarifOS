@@ -1,18 +1,29 @@
 import { CURRENT_RELEASE, PWA_UPDATE_READY_EVENT } from "./release";
 
 const SERVICE_WORKER_URL = `/sw.js?v=${encodeURIComponent(CURRENT_RELEASE.version)}`;
+const SERVICE_WORKER_UPDATE_MESSAGE = "maarifos:update-ready";
 let hasAnnouncedServiceWorkerUpdate = false;
+
+function isNewReleaseMessage(
+  value: unknown,
+): value is { readonly type: string; readonly version: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { readonly type?: unknown; readonly version?: unknown };
+  return (
+    candidate.type === SERVICE_WORKER_UPDATE_MESSAGE &&
+    typeof candidate.version === "string" &&
+    candidate.version !== CURRENT_RELEASE.version
+  );
+}
 
 async function installServiceWorker(): Promise<void> {
   try {
-    const wasControlledBeforeRegistration = navigator.serviceWorker.controller !== null;
-
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!wasControlledBeforeRegistration || hasAnnouncedServiceWorkerUpdate) return;
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (!isNewReleaseMessage(event.data) || hasAnnouncedServiceWorkerUpdate) return;
 
       hasAnnouncedServiceWorkerUpdate = true;
       window.dispatchEvent(new CustomEvent(PWA_UPDATE_READY_EVENT));
-    }, { once: true });
+    });
 
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
       scope: "/",

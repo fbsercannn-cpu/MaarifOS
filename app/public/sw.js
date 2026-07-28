@@ -1,9 +1,9 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE =
-  new URL(self.location.href).searchParams.get("v") || "legacy";
-const CACHE_VERSION = WORKER_RELEASE.replace(/[^0-9A-Za-z._-]/g, "-");
+const WORKER_RELEASE = "0.2.0";
+const UPDATE_READY_MESSAGE = "maarifos:update-ready";
+const CACHE_VERSION = WORKER_RELEASE;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `${CACHE_PREFIX}assets-${CACHE_VERSION}`;
 const CACHEABLE_DESTINATIONS = new Set(["font", "image", "script", "style"]);
@@ -111,6 +111,16 @@ self.addEventListener("activate", (event) => {
       }
 
       await self.clients.claim();
+      const windowClients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const client of windowClients) {
+        client.postMessage({
+          type: UPDATE_READY_MESSAGE,
+          version: WORKER_RELEASE,
+        });
+      }
     })(),
   );
 });

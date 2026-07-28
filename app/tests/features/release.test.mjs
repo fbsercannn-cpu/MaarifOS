@@ -50,10 +50,11 @@ test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata ta�
 });
 
 test("paket, yedek ve PWA aynı kanonik uygulama sürümünü kullanır", async () => {
-  const [packageJson, prototype, pwa] = await Promise.all([
+  const [packageJson, prototype, pwa, worker] = await Promise.all([
     readFile(new URL("../../package.json", import.meta.url), "utf8").then(JSON.parse),
     readFile(new URL("../../src/Prototype.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../src/pwa.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../public/sw.js", import.meta.url), "utf8"),
   ]);
 
   assert.equal(packageJson.version, CURRENT_RELEASE.version);
@@ -61,6 +62,10 @@ test("paket, yedek ve PWA aynı kanonik uygulama sürümünü kullanır", async 
   assert.match(
     pwa,
     /encodeURIComponent\(CURRENT_RELEASE\.version\)/,
+  );
+  assert.match(
+    worker,
+    new RegExp(`const WORKER_RELEASE = "${CURRENT_RELEASE.version.replaceAll(".", "\\.")}"`),
   );
 });
 
