@@ -26,6 +26,13 @@ Do not use `data-scroll-drag="ignore"` for carousels or ordinary rails. It is a 
 
 Use `KeyboardInput`, `KeyboardTextarea`, or `MobileTextField` for all text entry. Position a composer, search surface, or other keyboard-linked UI from `useKeyboardInsets().bottomInset`. The inset is relative to the app viewport: Android's closed-keyboard viewport already ends above its navigation bar, while iOS still needs its overlaid home-indicator inset; both platforms return the keyboard height while the keyboard is open. Never pin those surfaces to only `keyboardHeight`. When that surface closes, call `keyboard.hide()` in the same event before updating its own open state.
 
+In native PWA mode, the provider measures `VisualViewport` only while a writable
+input, textarea, or contenteditable surface owns focus. If the browser has
+already resized the layout viewport, `isKeyboardVisible` remains accurate but
+the returned keyboard inset is zero so consumers do not reserve the same space
+twice. A focused field inside `MobileScroll` is brought above the visible
+viewport edge with a 16 px margin.
+
 ## BottomSheet
 
 `BottomSheet` dismisses the keyboard before opening and animates both in and out by default. Keep its `open` state controlled through `onOpenChange`; no consumer exit-animation wrapper is needed.

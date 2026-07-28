@@ -17,6 +17,12 @@ import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   type ActiveClassroomScope,
 } from "../domain/classroom-scope";
+import {
+  QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
+  isQuickObservationCategory,
+  isQuickObservationDraftRecord,
+  isQuickObservationType,
+} from "../domain/quick-observation";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
@@ -597,6 +603,23 @@ function assertBackupRelationships(payload: DataSnapshot): void {
     ) {
       throw new Error(`observations/${observation.id} ham kanıt zinciri geçersiz.`);
     }
+    const observationCategories = observation.observationCategories;
+    if (
+      (observation.context !== undefined &&
+        typeof observation.context !== "string") ||
+      (observation.childQuote !== undefined &&
+        typeof observation.childQuote !== "string") ||
+      (observation.observationType !== undefined &&
+        !isQuickObservationType(observation.observationType)) ||
+      (observationCategories !== undefined &&
+        (!Array.isArray(observationCategories) ||
+          !observationCategories.every(isQuickObservationCategory) ||
+          new Set(observationCategories).size !== observationCategories.length))
+    ) {
+      throw new Error(
+        `observations/${observation.id} hızlı gözlem alanları geçersiz.`,
+      );
+    }
   }
 
   const linksByObservation = new Map<string, StoredRecord[]>();
@@ -823,6 +846,44 @@ function assertBackupRelationships(payload: DataSnapshot): void {
   }
 
   for (const setting of payload.settings) {
+    if (setting.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
+      if (!isQuickObservationDraftRecord(setting)) {
+        throw new Error(`settings/${setting.id} hızlı gözlem taslağı geçersiz.`);
+      }
+      const draftScope = validatedRecordScope(
+        setting,
+        "settings",
+        classroomsById,
+      );
+      const allowedStudentScopes = studentScopes.get(setting.studentId) ?? [];
+      const plan = plansById.get(setting.planId);
+      const activity = activitiesById.get(setting.activityId);
+      const planScope = plan ? planScopes.get(plan.id) ?? null : null;
+      const activityScope = activity
+        ? activityScopes.get(activity.id) ?? null
+        : null;
+      if (
+        !draftScope ||
+        allowedStudentScopes.length === 0 ||
+        !allowedStudentScopes.some((studentScope) =>
+          scopesMatch(draftScope, studentScope),
+        ) ||
+        !plan ||
+        !planScope ||
+        !scopesMatch(draftScope, planScope) ||
+        !activity ||
+        activity.planId !== plan.id ||
+        !activityScope ||
+        !scopesMatch(draftScope, activityScope) ||
+        (Array.isArray(activity.studentIds) &&
+          activity.studentIds.length > 0 &&
+          !activity.studentIds.includes(setting.studentId))
+      ) {
+        throw new Error(
+          `settings/${setting.id} hızlı gözlem taslağı ilişkileri geçersiz.`,
+        );
+      }
+    }
     if (
       setting.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE &&
       !isAttendanceCompletionSetting(setting)

@@ -6,7 +6,7 @@ import {
   type CSSProperties,
   type PropsWithChildren,
 } from "react";
-import { useKeyboardInsets } from "./Keyboard";
+import { useKeyboard, useKeyboardInsets } from "./Keyboard";
 
 type MobileScrollProps = PropsWithChildren<{
   className?: string;
@@ -48,6 +48,7 @@ type DragSession = {
 
 export function MobileScroll({ className, children }: MobileScrollProps) {
   const { isKeyboardVisible, keyboardHeight, keyboardDragging } = useKeyboardInsets();
+  const { focusedElement } = useKeyboard();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const inertiaFrameRef = useRef<number | null>(null);
@@ -235,6 +236,49 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
   useEffect(() => {
     updateThumb(false);
   }, [keyboardHeight, updateThumb]);
+
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!isKeyboardVisible || !scroll || !focusedElement || !scroll.contains(focusedElement)) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportBottom = viewport
+        ? viewport.height + viewport.offsetTop
+        : window.innerHeight;
+      const scrollRect = scroll.getBoundingClientRect();
+      const fieldRect = focusedElement.getBoundingClientRect();
+      const visibleTop = Math.max(scrollRect.top, viewportTop);
+      const visibleBottom = Math.min(scrollRect.bottom, viewportBottom);
+      const margin = 16;
+      let delta = 0;
+
+      if (fieldRect.bottom > visibleBottom - margin) {
+        delta = fieldRect.bottom - (visibleBottom - margin);
+      } else if (fieldRect.top < visibleTop + margin) {
+        delta = fieldRect.top - (visibleTop + margin);
+      }
+
+      if (Math.abs(delta) > 0.5) {
+        scroll.scrollTop = Math.max(
+          0,
+          Math.min(maxScrollTop(scroll), scroll.scrollTop + delta),
+        );
+        updateThumb(true);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    focusedElement,
+    isKeyboardVisible,
+    keyboardHeight,
+    maxScrollTop,
+    updateThumb,
+  ]);
 
   const startMomentum = useCallback((scroll: HTMLDivElement, initialVelocity: number) => {
     let velocity = initialVelocity;

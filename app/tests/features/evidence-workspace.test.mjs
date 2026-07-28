@@ -123,6 +123,10 @@ function workspaceSnapshot() {
       planId,
       activityId: todayActivityId,
       rawText: "Çocuk şekilleri iki ayrı gruba yerleştirdi.",
+      context: "  Masa etkinliği sırasında  ",
+      childQuote: "  “Bunlar aynı.”  ",
+      observationType: "anecdotal",
+      observationCategories: ["cognitive", "language-communication"],
       rawTextImmutable: true,
       observedAt: "2026-09-02T07:00:00.000Z",
       civilDate: "2026-09-02",
@@ -209,6 +213,16 @@ test("D1 read-model yalnız aktif sınıfın yapılandırılmış kanıtlarını
     [pendingObservationId],
   );
   assert.equal(workspace.linkedObservations[0].studentName, "Kurgu Çocuk");
+  assert.equal(
+    workspace.linkedObservations[0].context,
+    "  Masa etkinliği sırasında  ",
+  );
+  assert.equal(workspace.linkedObservations[0].childQuote, "  “Bunlar aynı.”  ");
+  assert.equal(workspace.linkedObservations[0].observationType, "anecdotal");
+  assert.deepEqual(workspace.linkedObservations[0].observationCategories, [
+    "cognitive",
+    "language-communication",
+  ]);
   assert.deepEqual(workspace.linkedObservations[0].curriculumProfile, {
     framework: "meb_2024",
     programLabel: CURRICULUM_PROGRAM_LABELS.meb_2024,

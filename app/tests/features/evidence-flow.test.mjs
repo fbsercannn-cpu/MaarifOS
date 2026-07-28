@@ -145,8 +145,8 @@ async function createEvidenceChain(store) {
     planId,
     activityId,
     rawText,
-    childQuote: "Burada daha hızlı doldu.",
-    context: "Serbest keşif sırasında",
+    childQuote: "  Burada daha hızlı doldu.  ",
+    context: "  Serbest keşif sırasında  ",
     observedAt: "2026-09-01T07:00:00.000Z",
     now: new Date("2026-09-01T07:01:00.000Z"),
   });
@@ -190,6 +190,8 @@ test("D1 plan-etkinlik-ham gözlem-onaylı bağ-kaynaklı taslak zincirini eksik
 
   assert.equal(chain.observation.rawText, chain.rawText);
   assert.equal(snapshot.observations[0].rawText, chain.rawText);
+  assert.equal(snapshot.observations[0].context, "  Serbest keşif sırasında  ");
+  assert.equal(snapshot.observations[0].childQuote, "  Burada daha hızlı doldu.  ");
   assert.equal(snapshot.evidenceCurriculumLinks.length, 1);
   assert.equal(link.confirmationMethod, "teacher-confirmed");
   assert.equal(link.referenceOrigin, "teacher-declared");

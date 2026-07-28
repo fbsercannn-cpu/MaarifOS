@@ -40,6 +40,13 @@
 
 ## Gözlem
 - Öğrenci + metin ile hızlı kayıt yapılır.
+- Hızlı gözlem ekranı öğrenci seçmeden açılır; öğretmen öğrenciyi açıkça seçer.
+- Her öğrencinin yarım kalan hızlı gözlem taslağı diğer öğrencilerin
+  taslaklarından ayrı tutulur ve yeniden açılışta geri gelir.
+- Gözlem türü ve nötr kategoriler hazır seçeneklerden seçilebilir; bunlar
+  kendiliğinden başarı veya gelişim hükmü üretmez.
+- Final kayıt başarısız olursa taslak kaybolmaz; başarılı kayıtta ilgili taslak
+  aynı yerel işlem içinde kapanır.
 - Etiketler daha sonra eklenebilir.
 - Ham metnin düzenleme geçmişi korunur.
 - Tarih aralığına göre filtrelenir.
@@ -73,6 +80,8 @@
 - Yeni program bağlantısı yalnız etkinlikte planlanan hedeflerden seçilir.
 - Bağlam ve çocuğun özgün sözü ham gözlemden ayrı alanlarda yedek/geri
   yükleme boyunca korunur.
+- Ham metin, bağlam ve çocuğun özgün sözü hızlı gözlem taslağından final kanıta
+  aktarılırken öğretmenin yazdığı biçimiyle korunur.
 - Kısmi program kataloğu arayüzde tam resmî katalog gibi sunulmaz.
 
 ## Program değerlendirmesi

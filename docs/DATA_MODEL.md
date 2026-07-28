@@ -121,6 +121,40 @@ tek `studentId`, `planId` ve `activityId` zorunludur. Boşluklar dâhil ham meti
 aynen korunur; program bağlantısı veya değerlendirme metni gözlem kaydının içine
 yazılmaz.
 
+Hızlı Gözlem 2.0 kayıtları ayrıca şu nötr sınıflandırmaları taşır:
+
+- `observationType`: `quick-note | child-quote | anecdotal | systematic`
+- `observationCategories[]`: `language-communication | cognitive |
+  social-emotional-values | physical-health | self-care | art-creativity |
+  play-participation | other`
+- `context?`
+- `childQuote?`
+
+Bu alanlar öğretmen kanıtını düzenlemek içindir; başarı, tanı veya gelişim hükmü
+üretmez. `rawText`, `context` ve `childQuote` final kayıtta öğretmenin girdiği
+biçimiyle korunur.
+
+## QuickObservationDraft
+
+Hızlı gözlem formunun otomatik taslağı `settings` koleksiyonunda
+`settingType: quick-observation-draft` ve `schemaVersion: 1` ile tutulur:
+
+- `studentId`
+- `classroomId`
+- `academicYearId`
+- `planId`
+- `activityId`
+- `rawText`
+- `context`
+- `childQuote`
+- `observationType`
+- `categoryIds[]`
+
+Taslaklar öğrenci ve aktif sınıf kapsamına göre birbirinden yalıtılır. Final
+gözlem ile taslağın kapanış kaydı aynı yerel veritabanı işlemi içinde yazılır;
+gözlem kaydı başarısızsa taslak etkin kalır. Kapanan taslak fiziksel olarak
+silinmez, `deletedAt` tombstone'u ile korunur.
+
 ## EvidenceCurriculumLink
 
 - id

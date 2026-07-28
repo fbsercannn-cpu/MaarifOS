@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import {
   ArchiveIcon,
   CheckCircledIcon,
+  ChatBubbleIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   ClockIcon,
   Cross2Icon,
@@ -11,13 +13,16 @@ import {
   Link2Icon,
   LockClosedIcon,
   PersonIcon,
+  Pencil1Icon,
   PlusIcon,
+  QuoteIcon,
   ReaderIcon,
   TargetIcon,
   UploadIcon,
 } from "@radix-ui/react-icons";
 import {
   BottomSheet,
+  Carousel,
   FlowStack,
   KeyboardInput,
   KeyboardTextarea,
@@ -45,13 +50,21 @@ import {
   type DashboardStudent as Student,
 } from "./features/dashboard/dashboard-data";
 import {
-  captureImmutableRawObservation,
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
   createPlanWithActivity,
   CURRICULUM_PROGRAM_LABELS,
   type CurriculumProfileSnapshot,
 } from "./features/evidence/evidence-flow";
+import {
+  finalizeQuickObservationDraft,
+  loadQuickObservationDraft,
+  persistQuickObservationDraft,
+  QUICK_OBSERVATION_NEUTRAL_TEMPLATES,
+  type QuickObservationCategory,
+  type QuickObservationDraft,
+  type QuickObservationType,
+} from "./features/evidence/quick-observation";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -236,6 +249,29 @@ function createFlowHeader(title: string, step: string, onClose: () => void) {
         <strong>{title}</strong>
       </div>
       <button type="button" onClick={onClose} aria-label={`${flow.current.title ?? title} akışını kapat`}>
+        <Cross2Icon aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function createQuickObservationHeader(activityTitle: string, onClose: () => void) {
+  return (flow: FlowControls) => (
+    <div className="quick-observation-header">
+      <img
+        src="/assets/brand/maarifos-icon-192.png"
+        alt=""
+        aria-hidden="true"
+      />
+      <div>
+        <strong>Hızlı Gözlem</strong>
+        <small>{activityTitle}</small>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={`${flow.current.title ?? "Hızlı Gözlem"} akışını kapat`}
+      >
         <Cross2Icon aria-hidden="true" />
       </button>
     </div>
@@ -578,8 +614,22 @@ type EvidenceFlowActions = {
       rawText: string;
       context?: string;
       childQuote?: string;
+      observationType: QuickObservationType;
+      categoryIds: QuickObservationCategory[];
     },
   ) => Promise<EvidenceObservationSummary>;
+  loadDraft: (studentId: string) => Promise<QuickObservationDraft | null>;
+  saveDraft: (
+    activity: EvidenceActivitySummary,
+    input: {
+      studentId: string;
+      rawText: string;
+      context?: string;
+      childQuote?: string;
+      observationType: QuickObservationType;
+      categoryIds: QuickObservationCategory[];
+    },
+  ) => Promise<QuickObservationDraft>;
   confirm: (
     observation: EvidenceObservationSummary,
     target: CurriculumTargetSnapshot,
@@ -593,13 +643,46 @@ type EvidenceFlowActions = {
   ) => Promise<void>;
 };
 
+const quickObservationTypes: Array<{
+  id: QuickObservationType;
+  label: string;
+  icon: typeof Pencil1Icon;
+}> = [
+  { id: "quick-note", label: "Kısa not", icon: Pencil1Icon },
+  { id: "child-quote", label: "Çocuk sözü", icon: QuoteIcon },
+  { id: "anecdotal", label: "Anekdot", icon: ReaderIcon },
+  { id: "systematic", label: "Sistematik", icon: TargetIcon },
+];
+
+const quickObservationCategories: Array<{
+  id: QuickObservationCategory;
+  label: string;
+  tone: "teal" | "amber" | "plum" | "leaf" | "coral";
+}> = [
+  { id: "language-communication", label: "Dil ve iletişim", tone: "teal" },
+  { id: "cognitive", label: "Bilişsel", tone: "amber" },
+  { id: "social-emotional-values", label: "Sosyal-duygusal", tone: "plum" },
+  { id: "physical-health", label: "Fiziksel ve sağlık", tone: "leaf" },
+  { id: "self-care", label: "Öz bakım", tone: "coral" },
+  { id: "art-creativity", label: "Sanat ve yaratıcılık", tone: "plum" },
+  { id: "play-participation", label: "Oyun ve katılım", tone: "teal" },
+  { id: "other", label: "Diğer", tone: "leaf" },
+];
+
+function studentInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toLocaleUpperCase("tr-TR"))
+    .join("");
+}
+
 function EvidenceCaptureScreen({
-  flow,
   activity,
   students,
   actions,
 }: {
-  flow: FlowControls;
   activity: EvidenceActivitySummary;
   students: Student[];
   actions: EvidenceFlowActions;
@@ -608,26 +691,157 @@ function EvidenceCaptureScreen({
     ? students.filter((student) => activity.assignedStudentIds.includes(student.id))
     : students;
   const [observationId] = useState(() => crypto.randomUUID());
-  const [studentId, setStudentId] = useState(eligibleStudents[0]?.id ?? "");
+  const [studentId, setStudentId] = useState("");
   const [rawText, setRawText] = useState("");
   const [context, setContext] = useState("");
   const [childQuote, setChildQuote] = useState("");
+  const [observationType, setObservationType] =
+    useState<QuickObservationType>("quick-note");
+  const [categories, setCategories] = useState<QuickObservationCategory[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [draftStatus, setDraftStatus] = useState<
+    "ready" | "loading" | "saving" | "saved" | "error"
+  >("ready");
+  const draftTimerRef = useRef<number | null>(null);
+  const draftLoadSequenceRef = useRef(0);
+  const finalizedRef = useRef(false);
+  const actionsRef = useRef(actions);
+  const draftSnapshotRef = useRef({
+    studentId,
+    rawText,
+    context,
+    childQuote,
+    observationType,
+    categoryIds: categories,
+  });
+  const selectedStudent = eligibleStudents.find((student) => student.id === studentId);
+  actionsRef.current = actions;
+  draftSnapshotRef.current = {
+    studentId,
+    rawText,
+    context,
+    childQuote,
+    observationType,
+    categoryIds: categories,
+  };
+
+  const hasDraftContent = (
+    value: Pick<
+      typeof draftSnapshotRef.current,
+      "rawText" | "context" | "childQuote" | "categoryIds"
+    >,
+  ) =>
+    Boolean(
+      value.rawText.trim() ||
+      value.context.trim() ||
+      value.childQuote.trim() ||
+      value.categoryIds.length > 0,
+    );
+
+  useEffect(() => {
+    if (!studentId || finalizedRef.current || !hasDraftContent(draftSnapshotRef.current)) {
+      return;
+    }
+    if (draftTimerRef.current !== null) window.clearTimeout(draftTimerRef.current);
+    setDraftStatus("saving");
+    draftTimerRef.current = window.setTimeout(() => {
+      const draft = draftSnapshotRef.current;
+      void actionsRef.current
+        .saveDraft(activity, draft)
+        .then(() => setDraftStatus("saved"))
+        .catch(() => setDraftStatus("error"));
+      draftTimerRef.current = null;
+    }, 450);
+    return () => {
+      if (draftTimerRef.current !== null) {
+        window.clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+    };
+  }, [activity, categories, childQuote, context, observationType, rawText, studentId]);
+
+  useEffect(
+    () => () => {
+      if (draftTimerRef.current !== null) window.clearTimeout(draftTimerRef.current);
+      const draft = draftSnapshotRef.current;
+      if (!finalizedRef.current && draft.studentId && hasDraftContent(draft)) {
+        void actionsRef.current.saveDraft(activity, draft);
+      }
+    },
+    [activity],
+  );
+
+  const chooseStudent = async (nextStudentId: string) => {
+    if (nextStudentId === studentId) return;
+    const previous = draftSnapshotRef.current;
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    if (previous.studentId && hasDraftContent(previous)) {
+      try {
+        await actions.saveDraft(activity, previous);
+      } catch {
+        setDraftStatus("error");
+      }
+    }
+
+    const loadSequence = draftLoadSequenceRef.current + 1;
+    draftLoadSequenceRef.current = loadSequence;
+    setStudentId(nextStudentId);
+    setRawText("");
+    setContext("");
+    setChildQuote("");
+    setObservationType("quick-note");
+    setCategories([]);
+    setDraftStatus("loading");
+    try {
+      const draft = await actions.loadDraft(nextStudentId);
+      if (draftLoadSequenceRef.current !== loadSequence) return;
+      if (draft) {
+        setRawText(draft.rawText);
+        setContext(draft.context);
+        setChildQuote(draft.childQuote);
+        setObservationType(draft.observationType);
+        setCategories(draft.categoryIds);
+        setDraftStatus("saved");
+      } else {
+        setDraftStatus("ready");
+      }
+    } catch {
+      if (draftLoadSequenceRef.current === loadSequence) setDraftStatus("error");
+    }
+  };
+
+  const toggleCategory = (category: QuickObservationCategory) => {
+    setCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category],
+    );
+  };
+
+  const applyStarter = (starter: string) => {
+    setRawText((current) => (current.trim() ? `${current.trim()} ${starter}` : starter));
+  };
 
   const save = async () => {
     if (!studentId || !rawText.trim() || busy) return;
     setBusy(true);
     setError("");
     try {
-      const observation = await actions.capture(activity, {
+      await actions.capture(activity, {
         observationId,
         studentId,
         rawText,
         ...(context.trim() ? { context } : {}),
         ...(childQuote.trim() ? { childQuote } : {}),
+        observationType,
+        categoryIds: categories,
       });
-      flow.replace(createEvidenceLinkScreen(observation, actions));
+      finalizedRef.current = true;
+      actions.close();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Gözlem notu kaydedilemedi.");
       setBusy(false);
@@ -635,74 +849,184 @@ function EvidenceCaptureScreen({
   };
 
   return (
-    <MobileScroll className="d1-flow-scroll">
-      <div className="d1-flow-content">
-        <div className="d1-flow-intro">
-          <span className="d1-kicker">{activity.title}</span>
-          <h1>Gözlem notu</h1>
-          <p>Gördüğünüz ve duyduğunuz olayı yorum eklemeden kaydedin.</p>
-        </div>
-
-        {eligibleStudents.length === 0 ? (
-          <section className="d1-empty-state">
-            <strong>Önce sınıfa bir çocuk ekleyin.</strong>
-            <p>Gözlem notu yalnız etkin sınıftaki bir çocukla ilişkilendirilebilir.</p>
-            <button type="button" onClick={actions.manageChildren}>Sınıfımı aç</button>
-          </section>
-        ) : (
-          <>
-            <div className="d1-form">
-              <label htmlFor="d1-observation-student">Çocuk</label>
-              <select
-                id="d1-observation-student"
-                value={studentId}
-                onChange={(event) => setStudentId(event.target.value)}
+    <div className="quick-observation-page">
+      <MobileScroll className="d1-flow-scroll quick-observation-scroll">
+        <div className="quick-observation-content">
+          {eligibleStudents.length === 0 ? (
+            <section className="d1-empty-state">
+              <strong>Önce sınıfa bir çocuk ekleyin.</strong>
+              <p>Gözlem notu yalnız etkin sınıftaki bir çocukla ilişkilendirilebilir.</p>
+              <button type="button" onClick={actions.manageChildren}>Sınıfımı aç</button>
+            </section>
+          ) : (
+            <>
+            <section className="quick-student-section" aria-labelledby="quick-student-heading">
+              <div className="quick-section-heading">
+                <div>
+                  <h1 id="quick-student-heading">Çocuk seç</h1>
+                </div>
+                {selectedStudent ? <strong>{selectedStudent.name}</strong> : <small>Zorunlu</small>}
+              </div>
+              <Carousel
+                className="quick-student-strip"
+                contentClassName="quick-student-track"
+                ariaLabel="Gözlem yapılacak çocuk"
               >
-                {eligibleStudents.map((student) => (
-                  <option value={student.id} key={student.id}>{student.name}</option>
-                ))}
-              </select>
+                {eligibleStudents.map((student, index) => {
+                  const selected = student.id === studentId;
+                  return (
+                    <button
+                      className={`quick-student-card quick-student-card--tone-${(index % 5) + 1}`}
+                      type="button"
+                      key={student.id}
+                      onClick={() => void chooseStudent(student.id)}
+                      aria-pressed={selected}
+                      disabled={draftStatus === "loading" || busy}
+                    >
+                      <span className="quick-student-avatar" aria-hidden="true">
+                        {studentInitials(student.name)}
+                        {selected ? <CheckCircledIcon /> : null}
+                      </span>
+                      <span>{student.name}</span>
+                    </button>
+                  );
+                })}
+              </Carousel>
+            </section>
 
-              <label htmlFor="d1-observation-text">Ne oldu?</label>
+            <section className="quick-note-card">
+              <div className="quick-note-label-row">
+                <div>
+                  <label id="quick-note-heading" htmlFor="d1-observation-text">Ne oldu?</label>
+                </div>
+                <small>{rawText.length} / 500</small>
+              </div>
               <KeyboardTextarea
                 id="d1-observation-text"
                 value={rawText}
-                onChange={(event) => setRawText(event.target.value)}
-                placeholder="Örn. Ece iki farklı yaprağı yan yana koydu ve “Bunun çizgileri daha çok” dedi."
-                rows={7}
-                autoFocus
+                onChange={(event) => setRawText(event.target.value.slice(0, 500))}
+                placeholder="… sırasında … yaptı / söyledi."
+                rows={6}
+                aria-describedby="quick-observation-guidance"
               />
-              <label htmlFor="d1-observation-context">Bağlam / ne sırasında?</label>
-              <KeyboardInput
-                id="d1-observation-context"
-                value={context}
-                onChange={(event) => setContext(event.target.value)}
-                placeholder="Örn. Fen merkezinde küçük grup çalışması"
-                autoComplete="off"
-              />
-              <label htmlFor="d1-observation-quote">Çocuğun sözü veya görülen davranış</label>
-              <KeyboardTextarea
-                id="d1-observation-quote"
-                value={childQuote}
-                onChange={(event) => setChildQuote(event.target.value)}
-                placeholder="Varsa çocuğun kendi cümlesini tırnaksız ve değiştirmeden yazın."
-                rows={3}
-              />
-            </div>
-            <p className="d1-integrity-note"><LockClosedIcon aria-hidden="true" /> İlk gözlem notu kaydedildikten sonra değişmeden korunur.</p>
-            {error ? <p className="d1-error" role="alert">{error}</p> : null}
-            <button
-              className="d1-primary"
-              type="button"
-              onClick={() => void save()}
-              disabled={busy || !studentId || !rawText.trim()}
-            >
-              {busy ? "Kaydediliyor…" : "Gözlem notunu kaydet"}
-            </button>
-          </>
-        )}
-      </div>
-    </MobileScroll>
+              <p id="quick-observation-guidance">
+                Gördüğünüz ve duyduğunuz olayı yorum eklemeden yazın.
+              </p>
+              <Carousel
+                className="quick-starter-row"
+                contentClassName="quick-starter-track"
+                ariaLabel="Tarafsız cümle başlangıçları"
+              >
+                {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
+                  <button type="button" key={starter.id} onClick={() => applyStarter(starter.text)}>
+                    {starter.text}
+                  </button>
+                ))}
+              </Carousel>
+              <Carousel
+                className="quick-type-carousel"
+                contentClassName="quick-type-grid"
+                ariaLabel="Gözlem türleri"
+              >
+                {quickObservationTypes.map(({ id, label, icon: Icon }) => (
+                  <button
+                    type="button"
+                    key={id}
+                    onClick={() => setObservationType(id)}
+                    aria-pressed={observationType === id}
+                  >
+                    <Icon aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </Carousel>
+            </section>
+
+            <section className="quick-choice-section" aria-labelledby="quick-category-heading">
+              <div className="quick-section-heading quick-section-heading--plain">
+                <h2 id="quick-category-heading">Gözlem alanı</h2>
+                <small>Birden çok seçilebilir</small>
+              </div>
+              <Carousel
+                className="quick-category-list"
+                contentClassName="quick-category-track"
+                ariaLabel="Gözlem alanları"
+              >
+                {quickObservationCategories.map(({ id, label, tone }) => (
+                  <button
+                    className={`quick-category-chip quick-category-chip--${tone}`}
+                    type="button"
+                    key={id}
+                    onClick={() => toggleCategory(id)}
+                    aria-pressed={categories.includes(id)}
+                  >
+                    <ChatBubbleIcon aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </Carousel>
+            </section>
+
+            <details className="quick-details">
+              <summary>
+                <span>
+                  <ReaderIcon aria-hidden="true" />
+                  <strong>Ayrıntı ekle</strong>
+                  <small>Bağlam ve çocuğun sözü</small>
+                </span>
+                <ChevronDownIcon aria-hidden="true" />
+              </summary>
+              <div className="quick-details-fields">
+                <label htmlFor="d1-observation-context">Bağlam / ne sırasında?</label>
+                <KeyboardInput
+                  id="d1-observation-context"
+                  value={context}
+                  onChange={(event) => setContext(event.target.value)}
+                  placeholder="Örn. Fen merkezinde küçük grup çalışması"
+                  autoComplete="off"
+                />
+                <label htmlFor="d1-observation-quote">Çocuğun sözü</label>
+                <KeyboardTextarea
+                  id="d1-observation-quote"
+                  value={childQuote}
+                  onChange={(event) => setChildQuote(event.target.value)}
+                  placeholder="Çocuğun kendi cümlesini değiştirmeden yazın."
+                  rows={3}
+                />
+              </div>
+            </details>
+
+              {error ? <p className="d1-error" role="alert">{error}</p> : null}
+            </>
+          )}
+        </div>
+      </MobileScroll>
+      {eligibleStudents.length > 0 ? (
+        <div className="quick-save-dock">
+          <p>
+            <CheckCircledIcon aria-hidden="true" />
+            {draftStatus === "loading"
+              ? "Taslak yükleniyor"
+              : draftStatus === "saving"
+                ? "Taslak kaydediliyor"
+                : draftStatus === "saved"
+                  ? "Taslak bu cihazda korundu"
+                  : draftStatus === "error"
+                    ? "Taslak kaydedilemedi"
+                    : "Not yazmaya hazır"}
+          </p>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy || !studentId || !rawText.trim()}
+          >
+            <LockClosedIcon aria-hidden="true" />
+            {busy ? "Kaydediliyor…" : "Gözlemi kaydet"}
+          </button>
+          <small>Program bağı daha sonra tamamlanabilir.</small>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1038,11 +1362,10 @@ function EvidenceCaptureFlow({
         : {
             id: `capture-${activity.id}`,
             title: "Gözlem notu",
-            headerHeight: 64,
-            header: createFlowHeader("Gözlem notu", "1 / 3", actions.close),
-            render: (flow) => (
+            headerHeight: 68,
+            header: createQuickObservationHeader(activity.title, actions.close),
+            render: () => (
               <EvidenceCaptureScreen
-                flow={flow}
                 activity={activity}
                 students={students}
                 actions={actions}
@@ -1726,12 +2049,38 @@ export default function Prototype() {
       closeD1Flow();
       setChildrenOpen(true);
     },
-    capture: async (activity, input) => {
-      const result = await captureImmutableRawObservation(store, {
+    loadDraft: (studentId) => loadQuickObservationDraft(store, { studentId }),
+    saveDraft: (activity, input) =>
+      persistQuickObservationDraft(store, {
         ...input,
         planId: activity.planId,
         activityId: activity.id,
-        observedAt: new Date().toISOString(),
+      }),
+    capture: async (activity, input) => {
+      const {
+        observationId,
+        studentId,
+        rawText,
+        context,
+        childQuote,
+        observationType,
+        categoryIds,
+      } = input;
+      const observedAt = new Date().toISOString();
+      await persistQuickObservationDraft(store, {
+        studentId,
+        rawText,
+        ...(context ? { context } : {}),
+        ...(childQuote ? { childQuote } : {}),
+        observationType,
+        categoryIds,
+        planId: activity.planId,
+        activityId: activity.id,
+      });
+      const result = await finalizeQuickObservationDraft(store, {
+        studentId,
+        observationId,
+        observedAt,
       });
       const refreshed = await refreshD1Workspaces();
       const observation = [

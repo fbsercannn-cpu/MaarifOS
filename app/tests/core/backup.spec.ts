@@ -1072,3 +1072,166 @@ test("arşivlenmiş yılı ve aynı öğrencinin yeni yıl üyeliğini tek kimli
   expect(result.observation.rawText).toBe("Eski yıldan korunacak kurgu ham gözlem.");
   expect(result.archiveEnrollmentCount).toBe(2);
 });
+
+test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yedekle geri gelir", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const quick = await import("/src/features/evidence/quick-observation.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-o1-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-o1-target-${crypto.randomUUID()}`,
+    });
+    const base = {
+      createdAt: "2026-09-02T06:00:00.000Z",
+      updatedAt: "2026-09-02T06:00:00.000Z",
+      civilDate: "2026-09-02",
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    const yearId = "00000000-0000-4000-8000-000000000711";
+    const classroomId = "00000000-0000-4000-8000-000000000712";
+    const studentAId = "00000000-0000-4000-8000-000000000713";
+    const studentBId = "00000000-0000-4000-8000-000000000714";
+    const planId = "00000000-0000-4000-8000-000000000715";
+    const activityId = "00000000-0000-4000-8000-000000000716";
+    const observationId = "00000000-0000-4000-8000-000000000717";
+    await source.transaction(
+      "readwrite",
+      [
+        "academicYears",
+        "classrooms",
+        "students",
+        "settings",
+        "plans",
+        "activities",
+      ],
+      async (transaction) => {
+        await transaction.putMany("academicYears", [{
+          ...base,
+          id: yearId,
+          name: "2026-2027 Eğitim Yılı",
+          startDate: "2026-09-01",
+          endDate: "2027-06-30",
+          status: "active",
+        }]);
+        await transaction.putMany("classrooms", [{
+          ...base,
+          id: classroomId,
+          academicYearId: yearId,
+          name: "Kurgu O1 Sınıfı",
+          schemaVersion: 2,
+        }]);
+        await transaction.putMany("students", [
+          {
+            ...base,
+            id: studentAId,
+            displayName: "Kurgu O1 Öğrencisi A",
+            academicYearId: yearId,
+            classroomId,
+            enrollmentStatus: "active",
+          },
+          {
+            ...base,
+            id: studentBId,
+            displayName: "Kurgu O1 Öğrencisi B",
+            academicYearId: yearId,
+            classroomId,
+            enrollmentStatus: "active",
+          },
+        ]);
+        await transaction.putMany("settings", [{
+          ...base,
+          id: core.ACTIVE_CLASSROOM_SETTING_ID,
+          settingType: core.ACTIVE_CLASSROOM_SETTING_TYPE,
+          academicYearId: yearId,
+          classroomId,
+        }]);
+        await transaction.putMany("plans", [{
+          ...base,
+          id: planId,
+          title: "Kurgu O1 planı",
+          academicYearId: yearId,
+          classroomId,
+        }]);
+        await transaction.putMany("activities", [{
+          ...base,
+          id: activityId,
+          planId,
+          title: "Kurgu O1 etkinliği",
+          studentIds: [studentAId, studentBId],
+          academicYearId: yearId,
+          classroomId,
+        }]);
+      },
+    );
+    const exactRawText = "  Boşluklarıyla korunacak kurgu gözlem.  ";
+    const exactContext = "  Serbest oyun sırasında  ";
+    const exactChildQuote = "  “Aynı olanları buraya koydum.”  ";
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentAId,
+      planId,
+      activityId,
+      rawText: exactRawText,
+      context: exactContext,
+      childQuote: exactChildQuote,
+      observationType: "child-quote",
+      categoryIds: ["cognitive", "language-communication"],
+      now: new Date("2026-09-02T07:00:00.000Z"),
+    });
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentBId,
+      planId,
+      activityId,
+      rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+      observationType: "systematic",
+      categoryIds: ["physical-health", "self-care"],
+      now: new Date("2026-09-02T07:01:00.000Z"),
+    });
+    await quick.finalizeQuickObservationDraft(source, {
+      studentId: studentAId,
+      observationId,
+      observedAt: "2026-09-02T07:05:00.000Z",
+      now: new Date("2026-09-02T07:06:00.000Z"),
+    });
+
+    const backup = await new core.BackupService(source, {
+      appVersion: "o1-test",
+      clock: () => new Date("2026-09-02T08:00:00.000Z"),
+    }).exportBackup();
+    await new core.BackupService(target, { appVersion: "o1-test" }).restoreBackup(
+      backup,
+      { mode: "replace" },
+    );
+    const restored = await target.readSnapshot();
+    const restoredDraft = await quick.loadQuickObservationDraft(target, {
+      studentId: studentBId,
+    });
+    source.close();
+    target.close();
+    return {
+      observation: restored.observations[0],
+      draft: restoredDraft,
+      settingsCount: backup.manifest.entityCounts.settings,
+    };
+  });
+
+  expect(result.observation).toMatchObject({
+    rawText: "  Boşluklarıyla korunacak kurgu gözlem.  ",
+    context: "  Serbest oyun sırasında  ",
+    childQuote: "  “Aynı olanları buraya koydum.”  ",
+    observationType: "child-quote",
+    observationCategories: ["cognitive", "language-communication"],
+  });
+  expect(result.draft).toMatchObject({
+    studentId: "00000000-0000-4000-8000-000000000714",
+    rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+    observationType: "systematic",
+    categoryIds: ["physical-health", "self-care"],
+  });
+  expect(result.settingsCount).toBe(3);
+});

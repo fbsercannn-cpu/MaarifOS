@@ -32,6 +32,10 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
   doğrulanır; bilinmeyen öğrenciye bağlı yoklama restore edilmeden reddedilir.
 - Günlük yoklama geçmişi ve tarihe bağlı tamamlanma ayarı diğer koleksiyonlarla
   birlikte aynı checksum ve atomik restore kapsamındadır.
+- Öğrenciye özel hızlı gözlem taslakları `settings` koleksiyonunda; gözlem türü,
+  nötr kategoriler, ham metin, bağlam ve çocuğun özgün sözü ise gözlem kaydıyla
+  aynı sürümlü checksum kapsamında korunur. Restore öncesinde taslağın
+  öğrenci-plan-etkinlik-sınıf ilişkileri doğrulanır.
 - Eğitim yılına bağlı sınıf programı ve kalıcı çalışma düzeni `classrooms`
   koleksiyonunda yedeklenir. Restore öncesinde `academicYearId` bağı doğrulanır;
   kopuk sınıf kaydı hiçbir koleksiyona yazılmadan reddedilir.
@@ -116,3 +120,6 @@ maarifos-backup-YYYY-MM-DD.zip
 20. V1 JSON yedeğin özgün checksum sonrasında V2'ye güvenli yükseltilmesi
 21. D1 kanıt grafının kimlik, ham metin, öğretmen onayı ve pending taslakla round-trip yapması
 22. Arşivlenmiş yıl + yeni yıl üyeliklerinin tek kalıcı öğrenci kimliğiyle round-trip yapması
+23. Canlı öğrenci taslağı ile tamamlanmış hızlı gözlemin ham metin, bağlam,
+    çocuk sözü, tür ve kategorilerle round-trip yapması
+24. Final gözlem yazımı başarısız olduğunda ilgili öğrenci taslağının etkin kalması

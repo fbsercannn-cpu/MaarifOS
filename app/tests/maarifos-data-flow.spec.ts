@@ -30,11 +30,15 @@ async function createD1Observation(page: Page, text: string) {
     await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
     await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
   }
-  await expect(page.getByRole("heading", { name: "Gözlem notu" })).toBeVisible();
+  await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+  await page
+    .getByRole("region", { name: "Gözlem yapılacak çocuk" })
+    .getByRole("button")
+    .first()
+    .click();
   await page.getByLabel("Ne oldu?").fill(text);
-  await page.getByRole("button", { name: "Gözlem notunu kaydet" }).click();
-  await expect(page.getByRole("heading", { name: "Program bağlantısı" })).toBeVisible();
-  await page.getByRole("button", { name: "Daha sonra tamamla" }).click();
+  await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
 }
 
 test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunur", async ({ page }) => {
@@ -175,9 +179,13 @@ test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değe
   await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
   await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
 
-  await page.getByLabel("Çocuk", { exact: true }).selectOption({ label: childName });
+  await page.getByRole("button", { name: new RegExp(childName) }).click();
   await page.getByLabel("Ne oldu?").fill("Ece iki yaprağı yan yana koydu ve çizgilerini tek tek gösterdi.");
-  await page.getByRole("button", { name: "Gözlem notunu kaydet" }).click();
+  await page.getByRole("button", { name: "Bilişsel", exact: true }).click();
+  await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
+
+  await expect(page.getByText("1 bağlantı bekliyor")).toBeVisible();
+  await page.getByRole("button", { name: /1 bağlantı bekliyor/ }).click();
 
   await page.getByLabel("Program hedefi").selectOption("tymm-fab-1");
   await page.getByLabel("Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.").check();

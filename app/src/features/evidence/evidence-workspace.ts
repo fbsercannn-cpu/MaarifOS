@@ -5,6 +5,12 @@ import {
   resolveActiveClassroomScope,
 } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
+import {
+  isQuickObservationCategory,
+  isQuickObservationType,
+  type QuickObservationCategory,
+  type QuickObservationType,
+} from "../../core/domain/quick-observation.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import type {
   CurriculumAssignmentMode,
@@ -41,6 +47,10 @@ export interface EvidenceObservationSummary {
   activityId: string;
   activityTitle: string;
   rawText: string;
+  context?: string;
+  childQuote?: string;
+  observationType: QuickObservationType;
+  observationCategories: QuickObservationCategory[];
   observedAt: string;
   civilDate: string;
   curriculumProfile: CurriculumProfileSnapshot;
@@ -228,6 +238,16 @@ export function resolveEvidenceWorkspace(
         activityId: activity.id,
         activityTitle: activity.title,
         rawText,
+        ...(typeof record.context === "string" ? { context: record.context } : {}),
+        ...(typeof record.childQuote === "string"
+          ? { childQuote: record.childQuote }
+          : {}),
+        observationType: isQuickObservationType(record.observationType)
+          ? record.observationType
+          : "quick-note",
+        observationCategories: Array.isArray(record.observationCategories)
+          ? record.observationCategories.filter(isQuickObservationCategory)
+          : [],
         observedAt: record.observedAt as string,
         civilDate: record.civilDate,
         curriculumProfile: activity.curriculumProfile,

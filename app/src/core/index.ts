@@ -6,6 +6,7 @@ export * from "./domain/attendance";
 export * from "./domain/classroom";
 export * from "./domain/classroom-scope";
 export * from "./domain/model";
+export * from "./domain/quick-observation";
 export * from "./migrations/classroom-scope-migration";
 export * from "./repository/contracts";
 export * from "./repository/indexed-db";
