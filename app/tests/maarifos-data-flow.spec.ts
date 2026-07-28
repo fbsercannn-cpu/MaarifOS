@@ -166,6 +166,80 @@ test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context
   await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geç geldi", { exact: true })).toBeVisible();
 });
 
+test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıcı çalışır", async ({
+  page,
+}, testInfo) => {
+  const childName = `Profil Akış ${testInfo.workerIndex + 1}`;
+  const preferredName = "Minik Kâşif";
+  const birthDate = "2021-04-23";
+  const optionalCode = "SINIF-A7";
+  const homeLanguages = "Türkçe, İngilizce";
+  const interests = "Yapılar kurma ve bahçedeki küçük canlıları inceleme";
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  await addChild(page, childName);
+
+  const childrenRail = page.getByRole("region", { name: /Çocuklarım/i });
+  await expect(childrenRail).toBeVisible();
+  await childrenRail
+    .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
+    .click();
+
+  const profileDialog = page.getByRole("dialog", { name: /çocuk profili|profili/i });
+  await expect(profileDialog).toBeVisible();
+  await profileDialog.getByLabel(/Tercih edilen ad/i).fill(preferredName);
+  await profileDialog.getByLabel(/Doğum tarihi/i).fill(birthDate);
+  await profileDialog.getByLabel(/İsteğe bağlı kod|Sınıf içi kod/i).fill(optionalCode);
+  await profileDialog.getByLabel(/Evde kullanılan diller/i).fill(homeLanguages);
+  await profileDialog.getByLabel(/İlgi ve merak alanları/i).fill(interests);
+  await profileDialog
+    .getByRole("button", { name: /Profili kaydet|Bilgileri kaydet/i })
+    .click();
+  await expect(profileDialog).toBeHidden();
+
+  await page.reload({ waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  const reloadedChildrenRail = page.getByRole("region", { name: /Çocuklarım/i });
+  await reloadedChildrenRail
+    .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
+    .click();
+
+  const reloadedProfileDialog = page.getByRole("dialog", { name: /çocuk profili|profili/i });
+  await expect(reloadedProfileDialog.getByLabel(/Tercih edilen ad/i)).toHaveValue(preferredName);
+  await expect(reloadedProfileDialog.getByLabel(/Doğum tarihi/i)).toHaveValue(birthDate);
+  await expect(
+    reloadedProfileDialog.getByLabel(/İsteğe bağlı kod|Sınıf içi kod/i),
+  ).toHaveValue(optionalCode);
+  await expect(
+    reloadedProfileDialog.getByLabel(/Evde kullanılan diller/i),
+  ).toHaveValue(homeLanguages);
+  await expect(
+    reloadedProfileDialog.getByLabel(/İlgi ve merak alanları/i),
+  ).toHaveValue(interests);
+  await page.keyboard.press("Escape");
+  await expect(reloadedProfileDialog).toBeHidden();
+
+  await reloadedChildrenRail
+    .getByRole("button", { name: new RegExp(`${childName}.*hızlı gözlem`, "i") })
+    .click();
+
+  await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+  const selectedChild = page
+    .getByRole("region", { name: "Gözlem yapılacak çocuk" })
+    .getByRole("button", { name: new RegExp(childName) });
+  await expect(selectedChild).toHaveAttribute("aria-pressed", "true");
+
+  await page
+    .getByLabel("Ne oldu?")
+    .fill("Oyun sırasında üç taşı yan yana dizdi ve arkadaşına sırasını anlattı.");
+  await page.getByRole("button", { name: /Oyun ve katılım/i }).click();
+  await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
+
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
+  await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();
+});
+
 test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değerlendirme telefonda tamamlanır", async ({
   page,
 }) => {
@@ -179,9 +253,12 @@ test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değe
   await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
   await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
 
-  await page.getByRole("button", { name: new RegExp(childName) }).click();
+  await page
+    .getByRole("region", { name: "Gözlem yapılacak çocuk" })
+    .getByRole("button", { name: new RegExp(childName) })
+    .click();
   await page.getByLabel("Ne oldu?").fill("Ece iki yaprağı yan yana koydu ve çizgilerini tek tek gösterdi.");
-  await page.getByRole("button", { name: "Bilişsel", exact: true }).click();
+  await page.getByRole("button", { name: "Bilişsel ve öğrenme", exact: true }).click();
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
 
   await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();

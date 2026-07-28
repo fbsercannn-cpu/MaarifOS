@@ -24,6 +24,7 @@ import {
   type CurriculumProfileInput,
   type CurriculumProfileSnapshot,
 } from "../evidence/evidence-flow.ts";
+import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-observation.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
@@ -253,8 +254,10 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   const classroom = classroomContext(snapshot);
   const scope = resolveActiveClassroomScope(snapshot);
   const scopedActivities = scope
-    ? snapshot.activities.filter((record) =>
-        recordBelongsToClassroomScope(record, scope),
+    ? snapshot.activities.filter(
+        (record) =>
+          record.activityKind !== SPONTANEOUS_OBSERVATION_ACTIVITY_KIND &&
+          recordBelongsToClassroomScope(record, scope),
       )
     : [];
   const basePlanItems = scopedActivities

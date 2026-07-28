@@ -11,6 +11,10 @@ import {
 } from "../../core/domain/attendance.ts";
 import type { StoredRecord } from "../../core/domain/model.ts";
 import {
+  normalizeStudentProfile,
+  studentProfileFromRecord,
+} from "../../core/domain/student.ts";
+import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   recordBelongsToClassroomScope,
   resolveActiveClassroomScope,
@@ -30,6 +34,14 @@ export type DashboardStudent = {
   id: string;
   name: string;
   status: AttendanceStatus;
+  preferredName?: string;
+  birthDate?: string;
+  optionalCode?: string;
+  enrollmentDate?: string;
+  homeLanguages?: string;
+  interests?: string;
+  strengths?: string;
+  supportPreferences?: string;
 };
 
 export type DashboardObservation = {
@@ -54,8 +66,27 @@ export const LEGACY_STORAGE_KEY = "maarifos-akis-pusulasi-v1";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
-  if (typeof record.displayName !== "string") return null;
-  return { id: record.id, name: record.displayName, status: "present" };
+  const profile = studentProfileFromRecord(record);
+  if (!profile) return null;
+  return {
+    id: record.id,
+    name: profile.displayName,
+    status: "present",
+    ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
+    ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+    ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
+    ...(profile.enrollmentDate
+      ? { enrollmentDate: profile.enrollmentDate }
+      : {}),
+    ...(profile.homeLanguages
+      ? { homeLanguages: profile.homeLanguages }
+      : {}),
+    ...(profile.interests ? { interests: profile.interests } : {}),
+    ...(profile.strengths ? { strengths: profile.strengths } : {}),
+    ...(profile.supportPreferences
+      ? { supportPreferences: profile.supportPreferences }
+      : {}),
+  };
 };
 
 const observationFromRecord = (record: StoredRecord): DashboardObservation | null => {
@@ -326,6 +357,20 @@ export async function persistStudentRosterChange(
   const now = new Date();
   const updatedAt = now.toISOString();
   const scope = requireActiveClassroomScope(await store.readSnapshot());
+  const profile = normalizeStudentProfile(
+    {
+      displayName: options.student.name,
+      preferredName: options.student.preferredName,
+      birthDate: options.student.birthDate,
+      optionalCode: options.student.optionalCode,
+      enrollmentDate: options.student.enrollmentDate,
+      homeLanguages: options.student.homeLanguages,
+      interests: options.student.interests,
+      strengths: options.student.strengths,
+      supportPreferences: options.student.supportPreferences,
+    },
+    civilDateInIstanbul(now),
+  );
   await store.transaction("readwrite", ["students"], async (transaction) => {
     const existing = (await transaction.getAll("students")).find(
       (record) => record.id === options.student.id,
@@ -336,6 +381,15 @@ export async function persistStudentRosterChange(
     const preserved: Record<string, unknown> = existing ? { ...existing } : {};
     delete preserved.attendanceStatus;
     delete preserved.legacyAssignmentStatus;
+    delete preserved.preferredName;
+    delete preserved.birthDate;
+    delete preserved.optionalCode;
+    delete preserved.enrollmentDate;
+    delete preserved.homeLanguages;
+    delete preserved.interests;
+    delete preserved.strengths;
+    delete preserved.supportPreferences;
+    delete preserved.profileSchemaVersion;
     const enrollments = existing ? studentEnrollments(existing) : [];
     const matchingEnrollment = enrollments.find(
       (enrollment) =>
@@ -368,7 +422,22 @@ export async function persistStudentRosterChange(
       {
         ...preserved,
         id: options.student.id,
-        displayName: options.student.name,
+        displayName: profile.displayName,
+        ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
+        ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+        ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
+        ...(profile.enrollmentDate
+          ? { enrollmentDate: profile.enrollmentDate }
+          : {}),
+        ...(profile.homeLanguages
+          ? { homeLanguages: profile.homeLanguages }
+          : {}),
+        ...(profile.interests ? { interests: profile.interests } : {}),
+        ...(profile.strengths ? { strengths: profile.strengths } : {}),
+        ...(profile.supportPreferences
+          ? { supportPreferences: profile.supportPreferences }
+          : {}),
+        profileSchemaVersion: profile.profileSchemaVersion,
         active: !options.archived,
         enrollmentStatus: enrollment.status,
         enrollments: nextEnrollments,
@@ -379,7 +448,10 @@ export async function persistStudentRosterChange(
           ? { legacyRosterDeletedAt: existing.deletedAt }
           : {}),
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: Math.max(
+          typeof existing?.schemaVersion === "number" ? existing.schemaVersion : 1,
+          profile.profileSchemaVersion,
+        ),
         ...scopeFields(scope),
       },
     ]);
@@ -500,6 +572,25 @@ export async function persistDashboardState(
   const updatedAt = now.toISOString();
   const civilDate = state.attendanceCivilDate;
   const scope = resolveActiveClassroomScope(await store.readSnapshot());
+  const studentProfiles = new Map(
+    state.students.map((student) => [
+      student.id,
+      normalizeStudentProfile(
+        {
+          displayName: student.name,
+          preferredName: student.preferredName,
+          birthDate: student.birthDate,
+          optionalCode: student.optionalCode,
+          enrollmentDate: student.enrollmentDate,
+          homeLanguages: student.homeLanguages,
+          interests: student.interests,
+          strengths: student.strengths,
+          supportPreferences: student.supportPreferences,
+        },
+        civilDateInIstanbul(now),
+      ),
+    ]),
+  );
   await store.transaction(
     "readwrite",
     ["students", "attendanceRecords", "observations", "settings"],
@@ -563,17 +654,51 @@ export async function persistDashboardState(
         "students",
         state.students.map((student) => {
           const existing = studentsById.get(student.id);
+          const profile = studentProfiles.get(student.id)!;
           const preserved: Record<string, unknown> = existing ? { ...existing } : {};
           delete preserved.attendanceStatus;
+          delete preserved.preferredName;
+          delete preserved.birthDate;
+          delete preserved.optionalCode;
+          delete preserved.enrollmentDate;
+          delete preserved.homeLanguages;
+          delete preserved.interests;
+          delete preserved.strengths;
+          delete preserved.supportPreferences;
+          delete preserved.profileSchemaVersion;
           return {
             ...preserved,
             id: student.id,
-            displayName: student.name,
+            displayName: profile.displayName,
+            ...(profile.preferredName
+              ? { preferredName: profile.preferredName }
+              : {}),
+            ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+            ...(profile.optionalCode
+              ? { optionalCode: profile.optionalCode }
+              : {}),
+            ...(profile.enrollmentDate
+              ? { enrollmentDate: profile.enrollmentDate }
+              : {}),
+            ...(profile.homeLanguages
+              ? { homeLanguages: profile.homeLanguages }
+              : {}),
+            ...(profile.interests ? { interests: profile.interests } : {}),
+            ...(profile.strengths ? { strengths: profile.strengths } : {}),
+            ...(profile.supportPreferences
+              ? { supportPreferences: profile.supportPreferences }
+              : {}),
+            profileSchemaVersion: profile.profileSchemaVersion,
             createdAt: existing?.createdAt ?? updatedAt,
             updatedAt,
             civilDate: existing?.civilDate ?? civilDate,
             deletedAt: null,
-            schemaVersion: 1,
+            schemaVersion: Math.max(
+              typeof existing?.schemaVersion === "number"
+                ? existing.schemaVersion
+                : 1,
+              profile.profileSchemaVersion,
+            ),
             ...scopeFields(scope),
           };
         }),

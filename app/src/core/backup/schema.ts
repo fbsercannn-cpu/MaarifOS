@@ -243,6 +243,101 @@ function validatedEnrollmentScopes(
   });
 }
 
+function validateOptionalStudentText(
+  student: StoredRecord,
+  field: string,
+  fieldLabel: string,
+  maximumLength: number,
+): void {
+  const value = student[field];
+  if (
+    value !== undefined &&
+    (typeof value !== "string" ||
+      !value.trim() ||
+      value.trim().length > maximumLength)
+  ) {
+    throw new Error(`students/${student.id} ${fieldLabel} geçersiz.`);
+  }
+}
+
+function validateStudentProfile(
+  student: StoredRecord,
+  currentCivilDate: string,
+): void {
+  if (
+    typeof student.displayName !== "string" ||
+    !student.displayName.trim() ||
+    student.displayName.trim().length > 120
+  ) {
+    throw new Error(`students/${student.id} çocuk adı eksik veya geçersiz.`);
+  }
+  if (
+    student.preferredName !== undefined &&
+    (typeof student.preferredName !== "string" ||
+      !student.preferredName.trim() ||
+      student.preferredName.trim().length > 60)
+  ) {
+    throw new Error(`students/${student.id} kullanılan ad geçersiz.`);
+  }
+  if (
+    student.birthDate !== undefined &&
+    (!isValidCivilDate(student.birthDate) ||
+      student.birthDate > currentCivilDate)
+  ) {
+    throw new Error(`students/${student.id} doğum tarihi geçersiz.`);
+  }
+  if (
+    student.optionalCode !== undefined &&
+    (typeof student.optionalCode !== "string" ||
+      !student.optionalCode.trim() ||
+      student.optionalCode.trim().length > 40 ||
+      /^\d{10,11}$/.test(student.optionalCode.trim()))
+  ) {
+    throw new Error(`students/${student.id} okul içi kodu geçersiz.`);
+  }
+  if (
+    student.enrollmentDate !== undefined &&
+    (!isValidCivilDate(student.enrollmentDate) ||
+      student.enrollmentDate > currentCivilDate ||
+      (typeof student.birthDate === "string" &&
+        isValidCivilDate(student.birthDate) &&
+        student.enrollmentDate < student.birthDate))
+  ) {
+    throw new Error(`students/${student.id} kayıt tarihi geçersiz.`);
+  }
+  validateOptionalStudentText(
+    student,
+    "homeLanguages",
+    "evde kullanılan diller alanı",
+    200,
+  );
+  validateOptionalStudentText(
+    student,
+    "interests",
+    "ilgi alanları",
+    500,
+  );
+  validateOptionalStudentText(
+    student,
+    "strengths",
+    "güçlü yönler",
+    500,
+  );
+  validateOptionalStudentText(
+    student,
+    "supportPreferences",
+    "öğretmen desteği notu",
+    1_000,
+  );
+  if (
+    student.profileSchemaVersion !== undefined &&
+    student.profileSchemaVersion !== 2 &&
+    student.profileSchemaVersion !== 3
+  ) {
+    throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
+  }
+}
+
 export function assertBackupEnvelopeStructure(value: unknown): asserts value is BackupEnvelope {
   if (!isRecord(value) || !isRecord(value.manifest) || !isRecord(value.payload)) {
     throw new Error("Yedek zarfı veya manifest eksik.");
@@ -312,7 +407,10 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
 
 }
 
-function assertBackupRelationships(payload: DataSnapshot): void {
+function assertBackupRelationships(
+  payload: DataSnapshot,
+  currentCivilDate: string,
+): void {
   const academicYearIds = new Set(payload.academicYears.map((academicYear) => academicYear.id));
   for (const classroom of payload.classrooms) {
     if (!isClassroomRecord(classroom)) {
@@ -332,6 +430,7 @@ function assertBackupRelationships(payload: DataSnapshot): void {
   );
   const studentScopes = new Map<string, ActiveClassroomScope[]>();
   for (const student of payload.students) {
+    validateStudentProfile(student, currentCivilDate);
     const currentScope = validatedRecordScope(student, "students", classroomsById);
     studentScopes.set(student.id, [
       ...(currentScope ? [currentScope] : []),
@@ -933,5 +1032,5 @@ export function assertBackupEnvelope(value: unknown): asserts value is BackupEnv
   if (value.manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION) {
     throw new Error("Eski yedek ilişkileri doğrulanmadan önce veri şeması yükseltilmelidir.");
   }
-  assertBackupRelationships(value.payload);
+  assertBackupRelationships(value.payload, value.manifest.civilDate);
 }

@@ -1,4 +1,16 @@
 import type { StoredRecord } from "./model.ts";
+import {
+  OBSERVATION_CATEGORIES_V1,
+  OBSERVATION_CATEGORIES_V2,
+  OBSERVATION_TAXONOMY_VERSION_V1,
+  inferLegacyObservationTaxonomyVersion,
+  isObservationCategory,
+  isObservationCategoryForVersion,
+  isObservationTaxonomyVersion,
+  normalizeObservationCategories,
+  type ObservationCategory,
+  type ObservationTaxonomyVersion,
+} from "./observation-taxonomy.ts";
 
 export const QUICK_OBSERVATION_DRAFT_SETTING_TYPE =
   "quick-observation-draft" as const;
@@ -13,19 +25,10 @@ export const QUICK_OBSERVATION_TYPES = [
 
 export type QuickObservationType = (typeof QUICK_OBSERVATION_TYPES)[number];
 
-export const QUICK_OBSERVATION_CATEGORIES = [
-  "language-communication",
-  "cognitive",
-  "social-emotional-values",
-  "physical-health",
-  "self-care",
-  "art-creativity",
-  "play-participation",
-  "other",
-] as const;
-
-export type QuickObservationCategory =
-  (typeof QUICK_OBSERVATION_CATEGORIES)[number];
+/** Mevcut arayüz/yedek sözleşmesi için değişmez v1 kodları. */
+export const QUICK_OBSERVATION_CATEGORIES = OBSERVATION_CATEGORIES_V1;
+export const QUICK_OBSERVATION_CATEGORIES_V2 = OBSERVATION_CATEGORIES_V2;
+export type QuickObservationCategory = ObservationCategory;
 
 export const QUICK_OBSERVATION_NEUTRAL_TEMPLATES = [
   {
@@ -58,6 +61,7 @@ export interface QuickObservationDraft extends StoredRecord {
   childQuote: string;
   observationType: QuickObservationType;
   categoryIds: QuickObservationCategory[];
+  observationTaxonomyVersion?: ObservationTaxonomyVersion;
   schemaVersion: typeof QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION;
 }
 
@@ -70,23 +74,35 @@ export function isQuickObservationType(
 export function isQuickObservationCategory(
   value: unknown,
 ): value is QuickObservationCategory {
-  return QUICK_OBSERVATION_CATEGORIES.includes(
-    value as QuickObservationCategory,
-  );
+  return isObservationCategory(value);
 }
 
 export function normalizeQuickObservationCategories(
   values: readonly QuickObservationCategory[],
+  taxonomyVersion: ObservationTaxonomyVersion =
+    OBSERVATION_TAXONOMY_VERSION_V1,
 ): QuickObservationCategory[] {
-  if (!values.every(isQuickObservationCategory)) {
-    throw new Error("Hızlı gözlem kategorilerinden biri geçersiz.");
-  }
-  return [...new Set(values)];
+  return normalizeObservationCategories(taxonomyVersion, values);
 }
 
 export function isQuickObservationDraftRecord(
   record: StoredRecord,
 ): record is QuickObservationDraft {
+  const categoryIds = Array.isArray(record.categoryIds)
+    ? record.categoryIds
+    : [];
+  let taxonomyVersion: ObservationTaxonomyVersion;
+  if (record.observationTaxonomyVersion === undefined) {
+    try {
+      taxonomyVersion = inferLegacyObservationTaxonomyVersion(categoryIds);
+    } catch {
+      return false;
+    }
+  } else if (isObservationTaxonomyVersion(record.observationTaxonomyVersion)) {
+    taxonomyVersion = record.observationTaxonomyVersion;
+  } else {
+    return false;
+  }
   return (
     record.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE &&
     record.schemaVersion === QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION &&
@@ -100,7 +116,9 @@ export function isQuickObservationDraftRecord(
     typeof record.childQuote === "string" &&
     isQuickObservationType(record.observationType) &&
     Array.isArray(record.categoryIds) &&
-    record.categoryIds.every(isQuickObservationCategory) &&
+    record.categoryIds.every((value) =>
+      isObservationCategoryForVersion(taxonomyVersion, value),
+    ) &&
     new Set(record.categoryIds).size === record.categoryIds.length
   );
 }

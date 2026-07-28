@@ -73,6 +73,109 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
 });
 
+test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ page }) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-profile-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-profile-target-${crypto.randomUUID()}`,
+    });
+    const profile = {
+      id: "00000000-0000-4000-8000-000000000031",
+      createdAt: "2026-09-01T06:00:00.000Z",
+      updatedAt: "2026-09-01T06:00:00.000Z",
+      civilDate: "2026-09-01",
+      deletedAt: null,
+      schemaVersion: 2,
+      displayName: "Kurgu Profil Öğrencisi",
+      preferredName: "Kurgu",
+      birthDate: "2021-03-14",
+      optionalCode: "OKUL-MAVI-42",
+      enrollmentDate: "2025-09-01",
+      homeLanguages: "Türkçe, Almanca",
+      interests: "Doğa incelemeleri ve blok oyunları",
+      strengths: "Akranlarıyla iş birliği kuruyor",
+      supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
+      profileSchemaVersion: 3,
+    };
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [profile]),
+    );
+
+    const sourceService = new core.BackupService(source, {
+      appVersion: "student-profile-test",
+      clock: () => new Date("2026-09-01T09:00:00.000Z"),
+      civilDateProvider: () => "2026-09-01",
+    });
+    const backup = await sourceService.exportBackup();
+    const verified = await sourceService.parseAndVerifyBackup(
+      sourceService.serializeBackup(backup),
+    );
+    const invalidEnrollment = structuredClone(backup);
+    invalidEnrollment.payload.students[0].enrollmentDate = "2026-09-02";
+    invalidEnrollment.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidEnrollment.payload),
+    );
+    let invalidEnrollmentError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidEnrollment);
+    } catch (error) {
+      invalidEnrollmentError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidSupport = structuredClone(backup);
+    invalidSupport.payload.students[0].supportPreferences = "d".repeat(1_001);
+    invalidSupport.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidSupport.payload),
+    );
+    let invalidSupportError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidSupport);
+    } catch (error) {
+      invalidSupportError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const restoreReport = await new core.BackupService(target, {
+      appVersion: "student-profile-test",
+    }).restoreBackup(verified, { mode: "replace" });
+    const restored = await target.readSnapshot();
+    source.close();
+    target.close();
+    return {
+      backupStudent: verified.payload.students[0],
+      restoredStudent: restored.students[0],
+      studentCount: verified.manifest.entityCounts.students,
+      inserted: restoreReport.inserted,
+      invalidEnrollmentError,
+      invalidSupportError,
+    };
+  });
+
+  const expectedProfile = {
+    displayName: "Kurgu Profil Öğrencisi",
+    preferredName: "Kurgu",
+    birthDate: "2021-03-14",
+    optionalCode: "OKUL-MAVI-42",
+    enrollmentDate: "2025-09-01",
+    homeLanguages: "Türkçe, Almanca",
+    interests: "Doğa incelemeleri ve blok oyunları",
+    strengths: "Akranlarıyla iş birliği kuruyor",
+    supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
+    profileSchemaVersion: 3,
+  };
+  expect(result.studentCount).toBe(1);
+  expect(result.inserted).toBe(1);
+  expect(result.backupStudent).toMatchObject(expectedProfile);
+  expect(result.restoredStudent).toMatchObject(expectedProfile);
+  expect(result.invalidEnrollmentError).toContain("kayıt tarihi geçersiz");
+  expect(result.invalidSupportError).toContain(
+    "öğretmen desteği notu geçersiz",
+  );
+});
+
 test("iki günlük yoklama geçmişini JSON yedekle geri yükler", async ({ page }) => {
   await page.goto("/tests/runtime-fixture.html");
   const result = await page.evaluate(async () => {

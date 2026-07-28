@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ArchiveIcon,
+  CalendarIcon,
   CheckCircledIcon,
   ChatBubbleIcon,
   ChevronDownIcon,
@@ -12,11 +13,13 @@ import {
   HomeIcon,
   Link2Icon,
   LockClosedIcon,
+  MagicWandIcon,
   PersonIcon,
   Pencil1Icon,
   PlusIcon,
   QuoteIcon,
   ReaderIcon,
+  StarIcon,
   TargetIcon,
   UploadIcon,
 } from "@radix-ui/react-icons";
@@ -36,6 +39,8 @@ import {
 import {
   BackupService,
   IndexedDbDataStore,
+  OBSERVATION_TAXONOMY_VERSION_V2,
+  ageInMonthsOn,
   civilDateInIstanbul,
   type BackupEnvelope,
   type RestoreMode,
@@ -61,10 +66,17 @@ import {
   loadQuickObservationDraft,
   persistQuickObservationDraft,
   QUICK_OBSERVATION_NEUTRAL_TEMPLATES,
+  QUICK_OBSERVATION_CATEGORIES_V2,
   type QuickObservationCategory,
   type QuickObservationDraft,
   type QuickObservationType,
 } from "./features/evidence/quick-observation";
+import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
+import {
+  PRESCHOOL_ACTIVITY_AREAS,
+  PRESCHOOL_ACTIVITY_SUGGESTIONS,
+  type PreschoolActivityArea,
+} from "./features/planning/activity-suggestions";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -144,6 +156,18 @@ type ClassroomFormState = {
   endTime: string;
 };
 
+type StudentProfileFormState = {
+  name: string;
+  preferredName: string;
+  birthDate: string;
+  optionalCode: string;
+  enrollmentDate: string;
+  homeLanguages: string;
+  interests: string;
+  strengths: string;
+  supportPreferences: string;
+};
+
 const currentCivilDate = civilDateInIstanbul(new Date());
 const currentCivilYear = Number(currentCivilDate.slice(0, 4));
 const currentCivilMonth = Number(currentCivilDate.slice(5, 7));
@@ -209,6 +233,7 @@ type PendingRestore = {
 type EvidenceFlowRequest = {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
+  initialStudentId?: string;
 };
 
 type InstallPromptEvent = Event & {
@@ -245,6 +270,18 @@ function formatTurkishCivilDate(civilDate: string) {
     weekday: "long",
   }).format(date);
   return `${dateLabel}, ${weekday.slice(0, 1).toLocaleUpperCase("tr-TR")}${weekday.slice(1)}`;
+}
+
+function formatChildAge(birthDate: string | undefined, civilDate: string): string {
+  if (!birthDate) return "Yaş bilgisi ekle";
+  try {
+    const ageMonths = ageInMonthsOn(birthDate, civilDate);
+    const years = Math.floor(ageMonths / 12);
+    const months = ageMonths % 12;
+    return `${years} yaş ${months} ay`;
+  } catch {
+    return "Yaş hesaplanamadı";
+  }
 }
 
 function curriculumDisplayLabel(profile: CurriculumProfileSnapshot): string {
@@ -325,6 +362,8 @@ function PlanCreationScreen({
   const [activityTitle, setActivityTitle] = useState("");
   const [startTime, setStartTime] = useState(defaultStartTime);
   const [endTime, setEndTime] = useState(defaultEndTime);
+  const [suggestionArea, setSuggestionArea] =
+    useState<PreschoolActivityArea>("all");
   const availableTargets = useMemo(
     () => curriculumTargetsForProfile(curriculumProfile),
     [curriculumProfile],
@@ -353,6 +392,15 @@ function PlanCreationScreen({
   }, [availableTargets, targetQuery]);
   const selectedTargets = availableTargets.filter((target) =>
     selectedTargetIds.includes(target.id),
+  );
+  const visibleActivitySuggestions = useMemo(
+    () =>
+      suggestionArea === "all"
+        ? PRESCHOOL_ACTIVITY_SUGGESTIONS
+        : PRESCHOOL_ACTIVITY_SUGGESTIONS.filter(
+            (suggestion) => suggestion.area === suggestionArea,
+          ),
+    [suggestionArea],
   );
   const assignedStudentIds =
     assignmentMode === "whole-class"
@@ -405,6 +453,61 @@ function PlanCreationScreen({
               ? "Resmî MEB kaynaklarıyla eşleşen kısmi başlangıç kataloğu"
               : "Hedef başlıkları resmî kaynaktan; sınıf katalog kimliği öğretmen beyanı"}
           </em>
+        </section>
+
+        <section className="plan-ideas" aria-labelledby="plan-ideas-title">
+          <div className="plan-ideas-heading">
+            <div>
+              <span className="d1-kicker">Oyun temelli fikir havuzu</span>
+              <h2 id="plan-ideas-title">Bugün neyi keşfedelim?</h2>
+            </div>
+            <strong>{PRESCHOOL_ACTIVITY_SUGGESTIONS.length} fikir</strong>
+          </div>
+          <p>
+            Bir başlangıç seçin; etkinlik adını dolduralım. Program hedefini
+            aşağıdan öğretmen olarak siz belirlersiniz.
+          </p>
+          <Carousel
+            className="plan-area-carousel"
+            contentClassName="plan-area-track"
+            ariaLabel="Etkinlik fikir alanları"
+          >
+            {PRESCHOOL_ACTIVITY_AREAS.map((area) => (
+              <button
+                type="button"
+                key={area.id}
+                aria-pressed={suggestionArea === area.id}
+                onClick={() => setSuggestionArea(area.id)}
+              >
+                {area.label}
+              </button>
+            ))}
+          </Carousel>
+          <Carousel
+            className="plan-suggestion-carousel"
+            contentClassName="plan-suggestion-track"
+            ariaLabel="Etkinlik fikirleri"
+          >
+            {visibleActivitySuggestions.map((suggestion) => (
+              <button
+                type="button"
+                className="plan-suggestion"
+                key={suggestion.id}
+                aria-pressed={activityTitle === suggestion.title}
+                onClick={() => {
+                  setActivityTitle(suggestion.title);
+                  if (planTitle === "Günlük öğrenme planı") {
+                    setPlanTitle(`${suggestion.title} planı`);
+                  }
+                }}
+              >
+                <StarIcon aria-hidden="true" />
+                <strong>{suggestion.title}</strong>
+                <small>{suggestion.teacherPrompt}</small>
+                <span>Bu fikri kullan</span>
+              </button>
+            ))}
+          </Carousel>
         </section>
 
         <div className="d1-form">
@@ -628,9 +731,13 @@ type EvidenceFlowActions = {
       childQuote?: string;
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
+      taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
     },
   ) => Promise<EvidenceObservationSummary>;
-  loadDraft: (studentId: string) => Promise<QuickObservationDraft | null>;
+  loadDraft: (
+    activity: EvidenceActivitySummary,
+    studentId: string,
+  ) => Promise<QuickObservationDraft | null>;
   saveDraft: (
     activity: EvidenceActivitySummary,
     input: {
@@ -640,6 +747,7 @@ type EvidenceFlowActions = {
       childQuote?: string;
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
+      taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
     },
   ) => Promise<QuickObservationDraft>;
   confirm: (
@@ -672,14 +780,83 @@ const quickObservationCategories: Array<{
   tone: "teal" | "amber" | "plum" | "leaf" | "coral";
 }> = [
   { id: "language-communication", label: "Dil ve iletişim", tone: "teal" },
-  { id: "cognitive", label: "Bilişsel", tone: "amber" },
-  { id: "social-emotional-values", label: "Sosyal-duygusal", tone: "plum" },
-  { id: "physical-health", label: "Fiziksel ve sağlık", tone: "leaf" },
-  { id: "self-care", label: "Öz bakım", tone: "coral" },
+  { id: "cognitive-learning", label: "Bilişsel ve öğrenme", tone: "amber" },
+  { id: "social-emotional", label: "Sosyal-duygusal", tone: "plum" },
+  {
+    id: "values-dispositions-participation",
+    label: "Değerler, eğilimler ve katılım",
+    tone: "coral",
+  },
+  {
+    id: "physical-motor-health",
+    label: "Fiziksel, motor ve sağlık",
+    tone: "leaf",
+  },
+  { id: "self-care-daily-life", label: "Öz bakım ve günlük yaşam", tone: "coral" },
   { id: "art-creativity", label: "Sanat ve yaratıcılık", tone: "plum" },
   { id: "play-participation", label: "Oyun ve katılım", tone: "teal" },
+  {
+    id: "interest-attention-curiosity",
+    label: "İlgi, dikkat ve merak",
+    tone: "amber",
+  },
   { id: "other", label: "Diğer", tone: "leaf" },
 ];
+
+const quickObservationGuides: Partial<
+  Record<QuickObservationCategory, readonly string[]>
+> = {
+  "language-communication": [
+    "Kendi cümlesiyle ne anlattı veya hangi soruyu sordu?",
+    "Sohbeti başlatmak ya da sürdürmek için ne yaptı?",
+    "Yeni bir sözcüğü hangi bağlamda kullandı?",
+  ],
+  "cognitive-learning": [
+    "Problemi çözerken hangi yolu denedi?",
+    "Neleri karşılaştırdı, sıraladı, eşleştirdi veya grupladı?",
+    "Tahmini ile gözlemlediği sonuç arasında nasıl bağ kurdu?",
+  ],
+  "social-emotional": [
+    "Duygusunu nasıl ifade etti ve düzenlemek için ne yaptı?",
+    "Akranının duygusuna veya isteğine nasıl karşılık verdi?",
+    "Bir anlaşmazlığı çözmek için hangi sözü ya da davranışı kullandı?",
+  ],
+  "values-dispositions-participation": [
+    "Sorumluluğu üstlenirken hangi adımları izledi?",
+    "Adil paylaşım, saygı veya yardımlaşma hangi davranışta görünür oldu?",
+    "Zorlandığında sürdürme isteğini nasıl gösterdi?",
+  ],
+  "physical-motor-health": [
+    "Bedenini, aracını veya malzemeyi nasıl kontrol etti?",
+    "Denge, koordinasyon ya da el-göz uyumu hangi anda görüldü?",
+    "Sağlık ve güvenlik kuralını kendiliğinden nasıl uyguladı?",
+  ],
+  "self-care-daily-life": [
+    "Günlük işi hangi adımlarla ve ne kadar yardımla tamamladı?",
+    "Eşyasını ya da ortamı düzenlemek için ne yaptı?",
+    "İhtiyacını fark edip nasıl ifade etti?",
+  ],
+  "art-creativity": [
+    "Malzemeyi alışılmışın dışında nasıl kullandı?",
+    "Üretim sürecinde hangi seçimi yaptı ve değiştirdi?",
+    "Fikrini ses, hareket, çizgi, renk ya da rolle nasıl anlattı?",
+  ],
+  "play-participation": [
+    "Oyuna nasıl katıldı, rolünü nasıl kurdu veya değiştirdi?",
+    "Oyun kuralını akranlarıyla nasıl oluşturdu ya da sürdürdü?",
+    "Bir nesneye oyunda hangi yeni anlamı verdi?",
+  ],
+  "interest-attention-curiosity": [
+    "Dikkatini çeken ayrıntıya nasıl yöneldi?",
+    "Merakını hangi soru, deneme veya incelemeyle sürdürdü?",
+    "Bir deneyime kendiliğinden geri dönmesine ne sebep oldu?",
+  ],
+  other: [
+    "Gözlenebilir olarak ne yaptı veya ne söyledi?",
+    "Olay hangi bağlamda ve kimlerle gerçekleşti?",
+    "Davranışın öncesinde ve sonrasında ne oldu?",
+  ],
+};
 
 function studentInitials(name: string): string {
   return name
@@ -692,10 +869,12 @@ function studentInitials(name: string): string {
 
 function EvidenceCaptureScreen({
   activity,
+  initialStudentId,
   students,
   actions,
 }: {
   activity: EvidenceActivitySummary;
+  initialStudentId?: string;
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
@@ -710,6 +889,7 @@ function EvidenceCaptureScreen({
   const [observationType, setObservationType] =
     useState<QuickObservationType>("quick-note");
   const [categories, setCategories] = useState<QuickObservationCategory[]>([]);
+  const [observationGuide, setObservationGuide] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [draftStatus, setDraftStatus] = useState<
@@ -718,6 +898,7 @@ function EvidenceCaptureScreen({
   const draftTimerRef = useRef<number | null>(null);
   const draftLoadSequenceRef = useRef(0);
   const finalizedRef = useRef(false);
+  const initialSelectionAppliedRef = useRef(false);
   const actionsRef = useRef(actions);
   const draftSnapshotRef = useRef({
     studentId,
@@ -726,6 +907,7 @@ function EvidenceCaptureScreen({
     childQuote,
     observationType,
     categoryIds: categories,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
   });
   const selectedStudent = eligibleStudents.find((student) => student.id === studentId);
   actionsRef.current = actions;
@@ -736,7 +918,25 @@ function EvidenceCaptureScreen({
     childQuote,
     observationType,
     categoryIds: categories,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
   };
+  const visibleObservationGuides = useMemo(
+    () =>
+      categories.length > 0
+        ? Array.from(
+            new Set(
+              categories.flatMap(
+                (category) => quickObservationGuides[category] ?? [],
+              ),
+            ),
+          )
+        : [
+            "Ne yaptı veya ne söyledi?",
+            "Hangi yardım ya da ipucuyla sürdürdü?",
+            "Akranıyla veya materyalle nasıl etkileşti?",
+          ],
+    [categories],
+  );
 
   const hasDraftContent = (
     value: Pick<
@@ -809,14 +1009,23 @@ function EvidenceCaptureScreen({
     setCategories([]);
     setDraftStatus("loading");
     try {
-      const draft = await actions.loadDraft(nextStudentId);
+      const draft = await actions.loadDraft(activity, nextStudentId);
       if (draftLoadSequenceRef.current !== loadSequence) return;
       if (draft) {
         setRawText(draft.rawText);
         setContext(draft.context);
         setChildQuote(draft.childQuote);
         setObservationType(draft.observationType);
-        setCategories(draft.categoryIds);
+        setCategories(
+          draft.observationTaxonomyVersion ===
+            OBSERVATION_TAXONOMY_VERSION_V2
+            ? draft.categoryIds.filter((category) =>
+                QUICK_OBSERVATION_CATEGORIES_V2.includes(
+                  category as (typeof QUICK_OBSERVATION_CATEGORIES_V2)[number],
+                ),
+              )
+            : [],
+        );
         setDraftStatus("saved");
       } else {
         setDraftStatus("ready");
@@ -825,6 +1034,18 @@ function EvidenceCaptureScreen({
       if (draftLoadSequenceRef.current === loadSequence) setDraftStatus("error");
     }
   };
+
+  useEffect(() => {
+    if (
+      initialStudentId &&
+      !initialSelectionAppliedRef.current &&
+      !studentId &&
+      eligibleStudents.some((student) => student.id === initialStudentId)
+    ) {
+      initialSelectionAppliedRef.current = true;
+      void chooseStudent(initialStudentId);
+    }
+  }, [initialStudentId]);
 
   const toggleCategory = (category: QuickObservationCategory) => {
     setCategories((current) =>
@@ -851,6 +1072,7 @@ function EvidenceCaptureScreen({
         ...(childQuote.trim() ? { childQuote } : {}),
         observationType,
         categoryIds: categories,
+        taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
       });
       finalizedRef.current = true;
       actions.close();
@@ -977,6 +1199,39 @@ function EvidenceCaptureScreen({
                   </button>
                 ))}
               </Carousel>
+            </section>
+
+            <section className="quick-guide-section" aria-labelledby="quick-guide-heading">
+              <div className="quick-section-heading quick-section-heading--plain">
+                <div>
+                  <span className="d1-kicker">Nötr gözlem istemleri</span>
+                  <h2 id="quick-guide-heading">
+                    {selectedStudent
+                      ? `${selectedStudent.preferredName ?? selectedStudent.name} için neye bakabilirim?`
+                      : "Neye bakabilirim?"}
+                  </h2>
+                </div>
+                <small>Olgu cümlesi üretmez</small>
+              </div>
+              <div className="quick-guide-grid">
+                {visibleObservationGuides.map((guide) => (
+                  <button
+                    type="button"
+                    key={guide}
+                    aria-pressed={observationGuide === guide}
+                    onClick={() => setObservationGuide(guide)}
+                  >
+                    <MagicWandIcon aria-hidden="true" />
+                    <span>{guide}</span>
+                  </button>
+                ))}
+              </div>
+              {observationGuide ? (
+                <p className="quick-guide-focus" role="status">
+                  <TargetIcon aria-hidden="true" />
+                  Bakış odağı: <strong>{observationGuide}</strong>
+                </p>
+              ) : null}
             </section>
 
             <details className="quick-details">
@@ -1359,11 +1614,13 @@ function createCompletionScreen(
 function EvidenceCaptureFlow({
   activity,
   pendingObservation,
+  initialStudentId,
   students,
   actions,
 }: {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
+  initialStudentId?: string;
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
@@ -1379,12 +1636,13 @@ function EvidenceCaptureFlow({
             render: () => (
               <EvidenceCaptureScreen
                 activity={activity}
+                initialStudentId={initialStudentId}
                 students={students}
                 actions={actions}
               />
             ),
           },
-    [actions, activity, pendingObservation, students],
+    [actions, activity, initialStudentId, pendingObservation, students],
   );
 
   return <FlowStack initial={initial} />;
@@ -1409,6 +1667,21 @@ export default function Prototype() {
   const [dataHydrated, setDataHydrated] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [childrenOpen, setChildrenOpen] = useState(false);
+  const [studentProfileOpen, setStudentProfileOpen] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentProfileForm, setStudentProfileForm] =
+    useState<StudentProfileFormState>({
+      name: "",
+      preferredName: "",
+      birthDate: "",
+      optionalCode: "",
+      enrollmentDate: "",
+      homeLanguages: "",
+      interests: "",
+      strengths: "",
+      supportPreferences: "",
+    });
+  const [studentProfileError, setStudentProfileError] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
@@ -1458,6 +1731,35 @@ export default function Prototype() {
     ?? todayWorkspace.planItems.find((item) => item.status === "planned")
     ?? todayWorkspace.planItems[0]
     ?? null;
+  const selectedProfileStudent =
+    students.find((student) => student.id === selectedStudentId) ??
+    archivedStudents.find((student) => student.id === selectedStudentId) ??
+    null;
+  const selectedStudentObservations = selectedStudentId
+    ? [
+        ...evidenceWorkspace.pendingObservations,
+        ...evidenceWorkspace.linkedObservations,
+      ].filter((observation) => observation.studentId === selectedStudentId)
+    : [];
+  const selectedStudentPendingLinks = selectedStudentObservations.filter(
+    (observation) => observation.confirmedCurriculumLinkIds.length === 0,
+  ).length;
+  const observationCountByStudent = useMemo(() => {
+    const countsByStudent = new Map<string, number>();
+    for (const observation of [
+      ...evidenceWorkspace.pendingObservations,
+      ...evidenceWorkspace.linkedObservations,
+    ]) {
+      countsByStudent.set(
+        observation.studentId,
+        (countsByStudent.get(observation.studentId) ?? 0) + 1,
+      );
+    }
+    return countsByStudent;
+  }, [
+    evidenceWorkspace.linkedObservations,
+    evidenceWorkspace.pendingObservations,
+  ]);
 
   const shellStyle = {
     "--app-safe-top": `max(env(safe-area-inset-top, 0px), ${device.geometry.safeArea.top}px)`,
@@ -1832,6 +2134,112 @@ export default function Prototype() {
     }
   };
 
+  const openStudentProfile = (studentId: string) => {
+    const student =
+      students.find((item) => item.id === studentId) ??
+      archivedStudents.find((item) => item.id === studentId);
+    if (!student) {
+      setAnnouncement("Çocuk profili açılamadı.");
+      return;
+    }
+    keyboard.hide();
+    setSelectedStudentId(student.id);
+    setStudentProfileForm({
+      name: student.name,
+      preferredName: student.preferredName ?? "",
+      birthDate: student.birthDate ?? "",
+      optionalCode: student.optionalCode ?? "",
+      enrollmentDate: student.enrollmentDate ?? "",
+      homeLanguages: student.homeLanguages ?? "",
+      interests: student.interests ?? "",
+      strengths: student.strengths ?? "",
+      supportPreferences: student.supportPreferences ?? "",
+    });
+    setStudentProfileError("");
+    setChildrenOpen(false);
+    setStudentProfileOpen(true);
+    setAnnouncement(`${student.name} profili açıldı.`);
+  };
+
+  const saveStudentProfile = async () => {
+    if (!selectedProfileStudent || dataBusy) return;
+    const updatedStudent: Student = {
+      ...selectedProfileStudent,
+      name: studentProfileForm.name,
+      ...(studentProfileForm.preferredName.trim()
+        ? { preferredName: studentProfileForm.preferredName }
+        : {}),
+      ...(studentProfileForm.birthDate
+        ? { birthDate: studentProfileForm.birthDate }
+        : {}),
+      ...(studentProfileForm.optionalCode.trim()
+        ? { optionalCode: studentProfileForm.optionalCode }
+        : {}),
+      ...(studentProfileForm.enrollmentDate
+        ? { enrollmentDate: studentProfileForm.enrollmentDate }
+        : {}),
+      ...(studentProfileForm.homeLanguages.trim()
+        ? { homeLanguages: studentProfileForm.homeLanguages }
+        : {}),
+      ...(studentProfileForm.interests.trim()
+        ? { interests: studentProfileForm.interests }
+        : {}),
+      ...(studentProfileForm.strengths.trim()
+        ? { strengths: studentProfileForm.strengths }
+        : {}),
+      ...(studentProfileForm.supportPreferences.trim()
+        ? { supportPreferences: studentProfileForm.supportPreferences }
+        : {}),
+    };
+    if (!studentProfileForm.preferredName.trim()) {
+      delete updatedStudent.preferredName;
+    }
+    if (!studentProfileForm.birthDate) delete updatedStudent.birthDate;
+    if (!studentProfileForm.optionalCode.trim()) delete updatedStudent.optionalCode;
+    if (!studentProfileForm.enrollmentDate) delete updatedStudent.enrollmentDate;
+    if (!studentProfileForm.homeLanguages.trim()) delete updatedStudent.homeLanguages;
+    if (!studentProfileForm.interests.trim()) delete updatedStudent.interests;
+    if (!studentProfileForm.strengths.trim()) delete updatedStudent.strengths;
+    if (!studentProfileForm.supportPreferences.trim()) {
+      delete updatedStudent.supportPreferences;
+    }
+
+    setDataBusy(true);
+    setStudentProfileError("");
+    try {
+      await enqueuePersistence(() =>
+        persistStudentRosterChange(store, {
+          student: updatedStudent,
+          archived: archivedStudents.some(
+            (student) => student.id === updatedStudent.id,
+          ),
+        }),
+      );
+      setStudents((current) =>
+        current.map((student) =>
+          student.id === updatedStudent.id ? updatedStudent : student,
+        ),
+      );
+      setArchivedStudents((current) =>
+        current.map((student) =>
+          student.id === updatedStudent.id ? updatedStudent : student,
+        ),
+      );
+      keyboard.hide();
+      setStudentProfileOpen(false);
+      setAnnouncement(`${updatedStudent.name} profili kaydedildi.`);
+    } catch (reason) {
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : "Çocuk profili kaydedilemedi.";
+      setStudentProfileError(message);
+      setAnnouncement("Çocuk profili kaydedilemedi; mevcut kayıt korundu.");
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
   const archiveStudent = async (studentId: string) => {
     if (students.length <= 1) {
       setAnnouncement("Sınıfta en az bir çocuk kalmalı.");
@@ -1975,7 +2383,10 @@ export default function Prototype() {
     setPlanFlowOpen(true);
   };
 
-  const openActivityEvidence = async (activityId: string) => {
+  const openActivityEvidence = async (
+    activityId: string,
+    initialStudentId?: string,
+  ) => {
     const selected = evidenceWorkspace.activities.find((item) => item.id === activityId);
     if (!selected) {
       setAnnouncement("Etkinliğin kanıt bağlantısı açılamadı; planı yeniden kontrol edin.");
@@ -1990,11 +2401,77 @@ export default function Prototype() {
       const activity = refreshed.evidence.activities.find((item) => item.id === selected.id);
       if (!activity) throw new Error("Etkinlik yeniden yüklenemedi.");
       setPlansOpen(false);
-      setEvidenceFlowRequest({ activity });
+      setEvidenceFlowRequest({
+        activity,
+        ...(initialStudentId ? { initialStudentId } : {}),
+      });
       setAnnouncement(`${activity.title} için gözlem notu açıldı.`);
     } catch (reason) {
       setAnnouncement(
         reason instanceof Error ? reason.message : "Etkinlik başlatılamadı; mevcut kayıt korundu.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const openStudentObservation = async (studentId: string) => {
+    const student = students.find((item) => item.id === studentId);
+    if (!student) {
+      setAnnouncement("Hızlı gözlem yalnız sınıftaki etkin çocuk için açılabilir.");
+      return;
+    }
+    if (!configuredClassroom?.curriculumProfile) {
+      setClassroomOpen(true);
+      setAnnouncement("Hızlı gözlem için önce sınıf ve program kurulumunu tamamlayın.");
+      return;
+    }
+
+    const activeActivity =
+      evidenceWorkspace.activities.find(
+        (activity) =>
+          activity.status === "in_progress" &&
+          (activity.assignedStudentIds.length === 0 ||
+            activity.assignedStudentIds.includes(studentId)),
+      ) ??
+      evidenceWorkspace.activities.find(
+        (activity) =>
+          activity.status === "planned" &&
+          (activity.assignedStudentIds.length === 0 ||
+            activity.assignedStudentIds.includes(studentId)),
+      );
+    if (activeActivity) {
+      setStudentProfileOpen(false);
+      setChildrenOpen(false);
+      await openActivityEvidence(activeActivity.id, studentId);
+      return;
+    }
+
+    setDataBusy(true);
+    setStudentProfileError("");
+    try {
+      const context = await ensureSpontaneousObservationContext(store, {
+        studentId,
+        civilDate: attendanceCivilDate,
+      });
+      const refreshed = await refreshD1Workspaces();
+      const activity = refreshed.evidence.activities.find(
+        (item) => item.id === context.activity.id,
+      );
+      if (!activity) {
+        throw new Error("Anlık gözlem bağlamı yeniden açılamadı.");
+      }
+      keyboard.hide();
+      setStudentProfileOpen(false);
+      setChildrenOpen(false);
+      setPlansOpen(false);
+      setEvidenceFlowRequest({ activity, initialStudentId: studentId });
+      setAnnouncement(`${student.name} için anlık gözlem hazır.`);
+    } catch (reason) {
+      setAnnouncement(
+        reason instanceof Error
+          ? reason.message
+          : "Anlık gözlem açılamadı; mevcut kayıtlar korundu.",
       );
     } finally {
       setDataBusy(false);
@@ -2061,7 +2538,13 @@ export default function Prototype() {
       closeD1Flow();
       setChildrenOpen(true);
     },
-    loadDraft: (studentId) => loadQuickObservationDraft(store, { studentId }),
+    loadDraft: (activity, studentId) =>
+      loadQuickObservationDraft(store, {
+        studentId,
+        planId: activity.planId,
+        activityId: activity.id,
+        taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+      }),
     saveDraft: (activity, input) =>
       persistQuickObservationDraft(store, {
         ...input,
@@ -2077,6 +2560,7 @@ export default function Prototype() {
         childQuote,
         observationType,
         categoryIds,
+        taxonomyVersion,
       } = input;
       const observedAt = new Date().toISOString();
       await persistQuickObservationDraft(store, {
@@ -2086,6 +2570,7 @@ export default function Prototype() {
         ...(childQuote ? { childQuote } : {}),
         observationType,
         categoryIds,
+        taxonomyVersion,
         planId: activity.planId,
         activityId: activity.id,
       });
@@ -2093,6 +2578,9 @@ export default function Prototype() {
         studentId,
         observationId,
         observedAt,
+        planId: activity.planId,
+        activityId: activity.id,
+        taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
       });
       const refreshed = await refreshD1Workspaces();
       const observation = [
@@ -2228,6 +2716,81 @@ export default function Prototype() {
               <ClockIcon aria-hidden="true" />
               <span><small>Program bağı</small><strong>{todayWorkspace.pendingEvidenceLinks} gözlem bekliyor</strong></span>
             </button>
+          </section>
+
+          <section className="home-children" aria-labelledby="home-children-title">
+            <div className="home-section-heading">
+              <div>
+                <span className="section-eyebrow">Sınıfın kalbi</span>
+                <h2 id="home-children-title">Çocuklarım</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setChildrenOpen(true);
+                  setAnnouncement("Sınıfım bölümü açıldı.");
+                }}
+              >
+                Tümünü gör
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            </div>
+            {students.length > 0 ? (
+              <Carousel
+                className="home-child-carousel"
+                contentClassName="home-child-track"
+                ariaLabel="Çocuk profilleri ve hızlı gözlem eylemleri"
+              >
+                {students.map((student, index) => (
+                  <article
+                    className={`home-child-card home-child-card--tone-${(index % 5) + 1}`}
+                    key={student.id}
+                  >
+                    <button
+                      className="home-child-profile"
+                      type="button"
+                      onClick={() => openStudentProfile(student.id)}
+                      aria-label={`${student.name} profilini aç`}
+                    >
+                      <span className="home-child-avatar" aria-hidden="true">
+                        {studentInitials(student.name)}
+                      </span>
+                      <span className="home-child-copy">
+                        <strong>{student.preferredName ?? student.name}</strong>
+                        {student.preferredName ? <small>{student.name}</small> : null}
+                        <small>
+                          {formatChildAge(student.birthDate, attendanceCivilDate)}
+                        </small>
+                        <em>
+                          {observationCountByStudent.get(student.id) ?? 0} gözlem
+                        </em>
+                      </span>
+                      <ChevronRightIcon aria-hidden="true" />
+                    </button>
+                    <button
+                      className="home-child-observe"
+                      type="button"
+                      onClick={() => void openStudentObservation(student.id)}
+                      disabled={dataBusy}
+                      aria-label={`${student.name} için hızlı gözlem`}
+                    >
+                      <PlusIcon aria-hidden="true" />
+                      Hızlı gözlem
+                    </button>
+                  </article>
+                ))}
+              </Carousel>
+            ) : (
+              <button
+                className="home-children-empty"
+                type="button"
+                onClick={() => setChildrenOpen(true)}
+              >
+                <span><PersonIcon aria-hidden="true" /></span>
+                <strong>Çocukları ekleyin</strong>
+                <small>Profil, günlük gözlem ve gelişim izi burada başlayacak.</small>
+              </button>
+            )}
           </section>
 
           <section className={`current-work ${focusActivity ? "" : "empty-work"}`} aria-labelledby="current-work-title" data-testid="current-work">
@@ -2572,11 +3135,42 @@ export default function Prototype() {
           <div className="children-list">
             {students.map((student) => (
               <div className="children-row" key={student.id}>
-                <span className="student-avatar" aria-hidden="true">{student.name.split(" ").map((part) => part[0]).join("")}</span>
-                <span className="student-name">{student.name}</span>
-                <button type="button" onClick={() => void archiveStudent(student.id)} disabled={dataBusy} aria-label={`${student.name} çocuğunu sınıftan ayır`}>
-                  Sınıftan ayır
+                <button
+                  className="children-profile-button"
+                  type="button"
+                  onClick={() => openStudentProfile(student.id)}
+                  aria-label={`${student.name} profilini aç`}
+                >
+                  <span className="student-avatar" aria-hidden="true">
+                    {studentInitials(student.name)}
+                  </span>
+                  <span className="student-name">
+                    <strong>{student.preferredName ?? student.name}</strong>
+                    <small>
+                      {student.preferredName ? `${student.name} · ` : ""}
+                      {formatChildAge(student.birthDate, attendanceCivilDate)}
+                    </small>
+                  </span>
+                  <ChevronRightIcon aria-hidden="true" />
                 </button>
+                <div className="children-row-actions">
+                  <button
+                    type="button"
+                    onClick={() => void openStudentObservation(student.id)}
+                    disabled={dataBusy}
+                    aria-label={`${student.name} için hızlı gözlem`}
+                  >
+                    <PlusIcon aria-hidden="true" /> Gözlem
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void archiveStudent(student.id)}
+                    disabled={dataBusy}
+                    aria-label={`${student.name} çocuğunu sınıftan ayır`}
+                  >
+                    Sınıftan ayır
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -2597,6 +3191,309 @@ export default function Prototype() {
               ))}
             </div>
           </section>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={studentProfileOpen}
+        onOpenChange={(open) => {
+          if (!open) keyboard.hide();
+          setStudentProfileOpen(open);
+        }}
+        title={selectedProfileStudent ? `${selectedProfileStudent.name} profili` : "Çocuk profili"}
+        description="Kimlik, sınıf bağlamı ve kanıt izi tek yerde"
+        snap={0.94}
+      >
+        {selectedProfileStudent ? (
+          <div className="student-profile-sheet">
+            <section className="student-profile-hero" aria-label="Çocuk profil özeti">
+              <span className="student-profile-avatar" aria-hidden="true">
+                {studentInitials(selectedProfileStudent.name)}
+              </span>
+              <div>
+                <span className="section-eyebrow">Bireysel gelişim izi</span>
+                <h3>
+                  {selectedProfileStudent.preferredName ??
+                    selectedProfileStudent.name}
+                </h3>
+                {selectedProfileStudent.preferredName ? (
+                  <p>{selectedProfileStudent.name}</p>
+                ) : null}
+                <strong>
+                  {formatChildAge(
+                    selectedProfileStudent.birthDate,
+                    attendanceCivilDate,
+                  )}
+                </strong>
+              </div>
+            </section>
+
+            <section className="student-profile-metrics" aria-label="Profil göstergeleri">
+              <div>
+                <small>Bugünkü devam</small>
+                <strong>{statusLabels[selectedProfileStudent.status]}</strong>
+              </div>
+              <div>
+                <small>Toplam gözlem</small>
+                <strong>{selectedStudentObservations.length}</strong>
+              </div>
+              <div>
+                <small>Bağ bekleyen</small>
+                <strong>{selectedStudentPendingLinks}</strong>
+              </div>
+            </section>
+
+            <button
+              className="student-profile-observe"
+              type="button"
+              onClick={() => void openStudentObservation(selectedProfileStudent.id)}
+              disabled={dataBusy || archivedStudents.some(
+                (student) => student.id === selectedProfileStudent.id,
+              )}
+            >
+              <PlusIcon aria-hidden="true" />
+              {selectedProfileStudent.preferredName ??
+                selectedProfileStudent.name} için hızlı gözlem
+            </button>
+
+            <form
+              className="student-profile-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveStudentProfile();
+              }}
+            >
+              <div className="student-profile-section-heading">
+                <div>
+                  <span className="d1-kicker">Temel bilgiler</span>
+                  <h3>Çocuğu doğru tanıyın</h3>
+                </div>
+                <CalendarIcon aria-hidden="true" />
+              </div>
+
+              <label htmlFor="student-profile-name">Adı ve soyadı</label>
+              <KeyboardInput
+                id="student-profile-name"
+                value={studentProfileForm.name}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                autoComplete="off"
+              />
+
+              <label htmlFor="student-profile-preferred-name">
+                Tercih edilen ad
+                <small>Varsa çocuğun günlük yaşamda tercih ettiği ad</small>
+              </label>
+              <KeyboardInput
+                id="student-profile-preferred-name"
+                value={studentProfileForm.preferredName}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    preferredName: event.target.value,
+                  }))
+                }
+                placeholder="Örn. Ece"
+                autoComplete="off"
+              />
+
+              <div className="student-profile-form-grid">
+                <label htmlFor="student-profile-birth-date">
+                  Doğum tarihi
+                  <KeyboardInput
+                    id="student-profile-birth-date"
+                    type="date"
+                    max={attendanceCivilDate}
+                    value={studentProfileForm.birthDate}
+                    onChange={(event) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        birthDate: event.target.value,
+                      }))
+                    }
+                    onInput={(event) => {
+                      const birthDate = event.currentTarget.value;
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        birthDate,
+                      }));
+                    }}
+                  />
+                </label>
+                <label htmlFor="student-profile-code">
+                  İsteğe bağlı kod
+                  <KeyboardInput
+                    id="student-profile-code"
+                    value={studentProfileForm.optionalCode}
+                    onChange={(event) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        optionalCode: event.target.value,
+                      }))
+                    }
+                    placeholder="T.C. kimlik no değil"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+
+              <div className="student-profile-section-heading student-profile-section-heading--secondary">
+                <div>
+                  <span className="d1-kicker">Tanıma ve katılım</span>
+                  <h3>Çocuğun günlük bağlamı</h3>
+                </div>
+                <StarIcon aria-hidden="true" />
+              </div>
+
+              <label htmlFor="student-profile-enrollment-date">
+                Sınıfa kayıt tarihi
+                <KeyboardInput
+                  id="student-profile-enrollment-date"
+                  type="date"
+                  min={studentProfileForm.birthDate || undefined}
+                  max={attendanceCivilDate}
+                  value={studentProfileForm.enrollmentDate}
+                  onChange={(event) =>
+                    setStudentProfileForm((current) => ({
+                      ...current,
+                      enrollmentDate: event.target.value,
+                    }))
+                  }
+                  onInput={(event) => {
+                    const enrollmentDate = event.currentTarget.value;
+                    setStudentProfileForm((current) => ({
+                      ...current,
+                      enrollmentDate,
+                    }));
+                  }}
+                />
+              </label>
+
+              <label htmlFor="student-profile-languages">
+                Evde kullanılan diller
+                <small>
+                  Çocuğun iletişim bağlamını anlamak için; tek bir dil
+                  varsayılmaz.
+                </small>
+              </label>
+              <KeyboardInput
+                id="student-profile-languages"
+                value={studentProfileForm.homeLanguages}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    homeLanguages: event.target.value.slice(0, 200),
+                  }))
+                }
+                placeholder="Örn. Türkçe, İngilizce"
+                autoComplete="off"
+              />
+
+              <label htmlFor="student-profile-interests">
+                İlgi ve merak alanları
+                <small>
+                  Oyunlarda, sohbetlerde veya araştırmalarda tekrar döndüğü
+                  konular
+                </small>
+              </label>
+              <KeyboardTextarea
+                id="student-profile-interests"
+                value={studentProfileForm.interests}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    interests: event.target.value.slice(0, 500),
+                  }))
+                }
+                placeholder="Örn. yapılar kurma, böcekleri inceleme, ritim üretme"
+                rows={3}
+              />
+
+              <label htmlFor="student-profile-strengths">
+                Görünür güçlü yönleri
+                <small>
+                  Yalnız gözlenebilir davranış ve ürünlere dayanan öğretmen
+                  notu
+                </small>
+              </label>
+              <KeyboardTextarea
+                id="student-profile-strengths"
+                value={studentProfileForm.strengths}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    strengths: event.target.value.slice(0, 500),
+                  }))
+                }
+                placeholder="Örn. akranlarını oyuna davet ediyor; birden çok çözüm deniyor"
+                rows={3}
+              />
+
+              <label htmlFor="student-profile-support">
+                Katılımını destekleyen tercihler
+                <small>
+                  Tanı veya değerlendirme hükmü değil; sınıfta işe yarayan
+                  rutin ve düzenlemeler
+                </small>
+              </label>
+              <KeyboardTextarea
+                id="student-profile-support"
+                value={studentProfileForm.supportPreferences}
+                onChange={(event) =>
+                  setStudentProfileForm((current) => ({
+                    ...current,
+                    supportPreferences: event.target.value.slice(0, 1_000),
+                  }))
+                }
+                placeholder="Örn. geçişten önce kısa haber vermek; seçimleri görsel olarak sunmak"
+                rows={4}
+              />
+
+              <section className="student-profile-context" aria-label="Sınıf ve program bağlamı">
+                <div>
+                  <small>Sınıf</small>
+                  <strong>
+                    {configuredClassroom?.classroomName ?? "Sınıf belirtilmedi"}
+                  </strong>
+                </div>
+                <div>
+                  <small>Yaş grubu</small>
+                  <strong>
+                    {configuredClassroom?.ageGroup ?? "Belirtilmedi"}
+                  </strong>
+                </div>
+                <div>
+                  <small>Program</small>
+                  <strong>
+                    {compactProgramLabel(
+                      configuredClassroom?.curriculumProgram,
+                    )}
+                  </strong>
+                </div>
+              </section>
+
+              <p className="student-profile-privacy">
+                <LockClosedIcon aria-hidden="true" />
+                Profil bu cihazda saklanır ve doğrulanmış MaarifOS yedeğine
+                dâhildir. Kimlik numarası bu alanda tutulmaz.
+              </p>
+              {studentProfileError ? (
+                <p className="d1-error" role="alert">{studentProfileError}</p>
+              ) : null}
+              <button
+                className="student-profile-save"
+                type="submit"
+                disabled={!studentProfileForm.name.trim() || dataBusy}
+              >
+                <CheckCircledIcon aria-hidden="true" />
+                {dataBusy ? "Kaydediliyor…" : "Profili kaydet"}
+              </button>
+            </form>
+          </div>
         ) : null}
       </BottomSheet>
 
@@ -2770,11 +3667,12 @@ export default function Prototype() {
           role="dialog"
           aria-modal="true"
           aria-label="Gözlem ve değerlendirme akışı"
-          key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}`}
+          key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}-${evidenceFlowRequest.initialStudentId ?? "none"}`}
         >
           <EvidenceCaptureFlow
             activity={evidenceFlowRequest.activity}
             pendingObservation={evidenceFlowRequest.pendingObservation}
+            initialStudentId={evidenceFlowRequest.initialStudentId}
             students={students}
             actions={evidenceFlowActions}
           />

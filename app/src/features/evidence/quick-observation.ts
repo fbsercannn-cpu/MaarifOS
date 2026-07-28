@@ -6,6 +6,11 @@ import {
 } from "../../core/domain/classroom-scope.ts";
 import type { StoredRecord } from "../../core/domain/model.ts";
 import {
+  OBSERVATION_TAXONOMY_VERSION_V1,
+  isObservationTaxonomyVersion,
+  type ObservationTaxonomyVersion,
+} from "../../core/domain/observation-taxonomy.ts";
+import {
   QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION,
   QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
   isQuickObservationDraftRecord,
@@ -22,6 +27,7 @@ import type {
 
 export {
   QUICK_OBSERVATION_CATEGORIES,
+  QUICK_OBSERVATION_CATEGORIES_V2,
   QUICK_OBSERVATION_NEUTRAL_TEMPLATES,
   QUICK_OBSERVATION_TYPES,
   type QuickObservationCategory,
@@ -38,14 +44,25 @@ export interface PersistQuickObservationDraftInput {
   childQuote?: string;
   observationType: QuickObservationType;
   categoryIds: readonly QuickObservationCategory[];
+  taxonomyVersion?: ObservationTaxonomyVersion;
   now?: Date;
 }
 
 export interface FinalizeQuickObservationDraftInput {
   studentId: string;
+  planId?: string;
+  activityId?: string;
+  taxonomyVersion?: ObservationTaxonomyVersion;
   observationId?: string;
   observedAt?: string;
   now?: Date;
+}
+
+export interface QuickObservationDraftSelector {
+  studentId: string;
+  planId?: string;
+  activityId?: string;
+  taxonomyVersion?: ObservationTaxonomyVersion;
 }
 
 export interface FinalizedQuickObservation {
@@ -160,6 +177,11 @@ function liveStudentDrafts(
         record.studentId === studentId &&
         recordBelongsToClassroomScope(record, scope),
     )
+    .map((record) => ({
+      ...record,
+      observationTaxonomyVersion:
+        record.observationTaxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1,
+    }))
     .sort(
       (left, right) =>
         right.updatedAt.localeCompare(left.updatedAt) ||
@@ -167,15 +189,79 @@ function liveStudentDrafts(
     );
 }
 
+function validDraftSelector(
+  input: QuickObservationDraftSelector,
+): Required<Pick<QuickObservationDraftSelector, "studentId">> &
+  Omit<QuickObservationDraftSelector, "studentId"> {
+  const studentId = validUuid(input.studentId, "Öğrenci");
+  if ((input.planId === undefined) !== (input.activityId === undefined)) {
+    throw new Error(
+      "Hızlı gözlem taslağı bağlamı için plan ve etkinlik birlikte verilmelidir.",
+    );
+  }
+  if (
+    input.taxonomyVersion !== undefined &&
+    input.planId === undefined
+  ) {
+    throw new Error(
+      "Hızlı gözlem taksonomi sürümü yalnız plan ve etkinlik bağlamıyla seçilebilir.",
+    );
+  }
+  const planId =
+    input.planId === undefined ? undefined : validUuid(input.planId, "Plan");
+  const activityId =
+    input.activityId === undefined
+      ? undefined
+      : validUuid(input.activityId, "Etkinlik");
+  if (
+    input.taxonomyVersion !== undefined &&
+    !isObservationTaxonomyVersion(input.taxonomyVersion)
+  ) {
+    throw new Error("Hızlı gözlem taksonomi sürümü geçersiz.");
+  }
+  return {
+    studentId,
+    ...(planId === undefined ? {} : { planId }),
+    ...(activityId === undefined ? {} : { activityId }),
+    ...(input.taxonomyVersion === undefined
+      ? {}
+      : { taxonomyVersion: input.taxonomyVersion }),
+  };
+}
+
+function matchingDrafts(
+  drafts: readonly QuickObservationDraft[],
+  selector: Omit<QuickObservationDraftSelector, "studentId">,
+): QuickObservationDraft[] {
+  return drafts.filter(
+    (draft) =>
+      (selector.planId === undefined || draft.planId === selector.planId) &&
+      (selector.activityId === undefined ||
+        draft.activityId === selector.activityId) &&
+      (selector.taxonomyVersion === undefined ||
+        draft.observationTaxonomyVersion === selector.taxonomyVersion),
+  );
+}
+
 export async function loadQuickObservationDraft(
   store: LocalDataStore,
-  input: { studentId: string },
+  input: QuickObservationDraftSelector,
 ): Promise<QuickObservationDraft | null> {
-  const studentId = validUuid(input.studentId, "Öğrenci");
+  const selector = validDraftSelector(input);
   const snapshot = await store.readSnapshot();
   const scope = resolveActiveClassroomScope(snapshot);
-  if (!scope || !activeStudent(snapshot.students, studentId, scope)) return null;
-  return liveStudentDrafts(snapshot.settings, studentId, scope)[0] ?? null;
+  if (
+    !scope ||
+    !activeStudent(snapshot.students, selector.studentId, scope)
+  ) {
+    return null;
+  }
+  return (
+    matchingDrafts(
+      liveStudentDrafts(snapshot.settings, selector.studentId, scope),
+      selector,
+    )[0] ?? null
+  );
 }
 
 export async function persistQuickObservationDraft(
@@ -188,7 +274,15 @@ export async function persistQuickObservationDraft(
   if (!isQuickObservationType(input.observationType)) {
     throw new Error("Hızlı gözlem türü geçersiz.");
   }
-  const categoryIds = normalizeQuickObservationCategories(input.categoryIds);
+  const taxonomyVersion =
+    input.taxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1;
+  if (!isObservationTaxonomyVersion(taxonomyVersion)) {
+    throw new Error("Hızlı gözlem taksonomi sürümü geçersiz.");
+  }
+  const categoryIds = normalizeQuickObservationCategories(
+    input.categoryIds,
+    taxonomyVersion,
+  );
   const now = validDate(input.now ?? new Date(), "Taslak kayıt zamanı");
   const timestamp = now.toISOString();
   let result: QuickObservationDraft | null = null;
@@ -220,7 +314,14 @@ export async function persistQuickObservationDraft(
         { studentId, planId, activityId },
         scope,
       );
-      const existing = liveStudentDrafts(settings, studentId, scope)[0];
+      const existing = matchingDrafts(
+        liveStudentDrafts(settings, studentId, scope),
+        {
+          planId,
+          activityId,
+          taxonomyVersion,
+        },
+      )[0];
       result = {
         id: existing?.id ?? crypto.randomUUID(),
         settingType: QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
@@ -234,6 +335,7 @@ export async function persistQuickObservationDraft(
         childQuote: input.childQuote ?? "",
         observationType: input.observationType,
         categoryIds,
+        observationTaxonomyVersion: taxonomyVersion,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
         civilDate: existing?.civilDate ?? civilDateInIstanbul(now),
@@ -249,9 +351,9 @@ export async function persistQuickObservationDraft(
 
 export async function discardQuickObservationDraft(
   store: LocalDataStore,
-  input: { studentId: string; now?: Date },
+  input: QuickObservationDraftSelector & { now?: Date },
 ): Promise<boolean> {
-  const studentId = validUuid(input.studentId, "Öğrenci");
+  const selector = validDraftSelector(input);
   const now = validDate(input.now ?? new Date(), "Taslak kapatma zamanı");
   const timestamp = now.toISOString();
   let discarded = false;
@@ -261,16 +363,19 @@ export async function discardQuickObservationDraft(
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
       const settings = await transaction.getAll("settings");
-      const drafts = liveStudentDrafts(settings, studentId, scope);
-      if (drafts.length === 0) return;
+      const draft = matchingDrafts(
+        liveStudentDrafts(settings, selector.studentId, scope),
+        selector,
+      )[0];
+      if (!draft) return;
       discarded = true;
       await transaction.putMany(
         "settings",
-        drafts.map((draft) => ({
+        [{
           ...draft,
           updatedAt: timestamp,
           deletedAt: timestamp,
-        })),
+        }],
       );
     },
   );
@@ -281,7 +386,8 @@ export async function finalizeQuickObservationDraft(
   store: LocalDataStore,
   input: FinalizeQuickObservationDraftInput,
 ): Promise<FinalizedQuickObservation> {
-  const studentId = validUuid(input.studentId, "Öğrenci");
+  const selector = validDraftSelector(input);
+  const studentId = selector.studentId;
   const observationId = validUuid(input.observationId, "Gözlem");
   const now = validDate(input.now ?? new Date(), "Gözlem kayıt zamanı");
   const observedAt = validUtc(
@@ -315,8 +421,10 @@ export async function finalizeQuickObservationDraft(
       if (!activeStudent(students, studentId, scope)) {
         throw new Error("Hızlı gözlem yalnız etkin sınıftaki çocuğa bağlanabilir.");
       }
-      const drafts = liveStudentDrafts(settings, studentId, scope);
-      const draft = drafts[0];
+      const draft = matchingDrafts(
+        liveStudentDrafts(settings, studentId, scope),
+        selector,
+      )[0];
       if (!draft) {
         throw new Error("Kaydedilecek hızlı gözlem taslağı bulunamadı.");
       }
@@ -349,6 +457,9 @@ export async function finalizeQuickObservationDraft(
         ...(draft.childQuote.trim() ? { childQuote: draft.childQuote } : {}),
         observationType: draft.observationType,
         observationCategories: [...draft.categoryIds],
+        observationTaxonomyVersion:
+          draft.observationTaxonomyVersion ??
+          OBSERVATION_TAXONOMY_VERSION_V1,
         observedAt,
         workflowStatus: "captured",
         academicYearId: scope.academicYearId,
@@ -362,11 +473,11 @@ export async function finalizeQuickObservationDraft(
       await transaction.putMany("observations", [observation]);
       await transaction.putMany(
         "settings",
-        drafts.map((record) => ({
-          ...record,
+        [{
+          ...draft,
           updatedAt: timestamp,
           deletedAt: timestamp,
-        })),
+        }],
       );
     },
   );
