@@ -95,7 +95,7 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
     page,
     "Kurgu test gözlemi; yedek geri yükleme sonrasında kaldırılmalı.",
   );
-  await expect(page.getByText("1 bağlantı bekliyor")).toBeVisible();
+  await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await page.getByLabel("MaarifOS yedek dosyası seç").setInputFiles(backupPath);
@@ -108,9 +108,9 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   expect(safety.suggestedFilename()).toMatch(/^maarifos-geri-yukleme-oncesi-\d{4}-\d{2}-\d{2}\.json$/);
   await expect(page.getByText(/Geri yükleme tamamlandı/)).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("0 bağlantı bekliyor")).toBeVisible();
+  await expect(page.getByText("0 gözlem bekliyor")).toBeVisible();
 
-  await page.getByRole("button", { name: /Devam\s+1\/1/ }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await page.getByRole("button", { name: new RegExp(childName) }).click();
   await expect(page.getByRole("button", { name: "Son değişikliği geri al" })).toBeVisible();
   await page.getByRole("button", { name: "Son değişikliği geri al" }).click();
@@ -119,7 +119,7 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  await page.getByRole("button", { name: /Devam\s+1\/1/ }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geç geldi", { exact: true })).toBeVisible();
 });
 
@@ -149,20 +149,20 @@ test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context
   const stalePage = await context.newPage();
   await stalePage.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(stalePage);
-  await stalePage.getByRole("button", { name: /Devam\s+1\/1/ }).click();
+  await stalePage.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await expect(stalePage.getByRole("button", { name: new RegExp(childName) }).getByText("Geldi", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Devam\s+1\/1/ }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await page.getByRole("button", { name: new RegExp(childName) }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
 
   await stalePage.keyboard.press("Escape");
   await createD1Observation(stalePage, "İkinci sekmeden kurgu gözlem.");
-  await expect(stalePage.getByText("1 bağlantı bekliyor")).toBeVisible();
+  await expect(stalePage.getByText("1 gözlem bekliyor")).toBeVisible();
 
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  await page.getByRole("button", { name: /Devam\s+1\/1/ }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geç geldi", { exact: true })).toBeVisible();
 });
 
@@ -184,8 +184,8 @@ test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değe
   await page.getByRole("button", { name: "Bilişsel", exact: true }).click();
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
 
-  await expect(page.getByText("1 bağlantı bekliyor")).toBeVisible();
-  await page.getByRole("button", { name: /1 bağlantı bekliyor/ }).click();
+  await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();
+  await page.getByRole("button", { name: /1 gözlem bekliyor/ }).click();
 
   await page.getByLabel("Program hedefi").selectOption("tymm-fab-1");
   await page.getByLabel("Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.").check();
@@ -201,6 +201,6 @@ test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değe
   await expect(page.getByText("Öğretmen incelemesi bekliyor")).toBeVisible();
   await expect(page.getByText("resmî katalogda doğrulanmadı", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Bugün ekranına dön" }).click();
-  await expect(page.getByText("0 bağlantı bekliyor")).toBeVisible();
+  await expect(page.getByText("0 gözlem bekliyor")).toBeVisible();
   await expect(page.getByText("1 öğrenme hedefi", { exact: false })).toBeVisible();
 });

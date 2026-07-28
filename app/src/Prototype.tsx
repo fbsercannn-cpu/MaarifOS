@@ -182,6 +182,18 @@ function compactProgramLabel(program: string | undefined): string {
   return program ?? "Program belirtilmedi";
 }
 
+function curriculumCatalogDisplayLabel(label: string | undefined): string {
+  if (!label) return "Katalog belirtilmedi";
+  const normalized = label.toLocaleLowerCase("tr-TR");
+  if (normalized.includes("meb-tymm-okul-oncesi-2024")) {
+    return "2024 Maarif Modeli başlangıç kataloğu";
+  }
+  if (normalized.includes("meb-okul-oncesi-egitim-programi-2024")) {
+    return "EÇE · 2024 başlangıç kataloğu";
+  }
+  return label;
+}
+
 type AttendanceChange = {
   studentId: string;
   previousStatus: AttendanceStatus;
@@ -2165,7 +2177,7 @@ export default function Prototype() {
   return (
     <div className="maarif-app-shell" style={shellStyle}>
       <MobileScroll className="maarif-scroll">
-        <main className="maarif-screen" aria-label="MaarifOS Bugün ekranı" data-testid="today-screen">
+        <main className="maarif-screen today-screen" aria-label="MaarifOS Bugün ekranı" data-testid="today-screen">
           <header className="today-header">
             <div className="today-title-row">
               <div className="today-brand-title">
@@ -2189,12 +2201,13 @@ export default function Prototype() {
                 <GearIcon aria-hidden="true" />
               </button>
             </div>
+            <p className="today-flow-label">Günün akışı</p>
             <p className="today-date">{formatTurkishCivilDate(attendanceCivilDate)}</p>
             <div className="today-context" aria-label="Sınıf ve program bilgisi">
               {configuredClassroom ? (
                 <>
-                  <span><strong>{configuredClassroom.classroomName}</strong> · {configuredClassroom.scheduleLabel}</span>
-                  <span>{configuredClassroom.ageGroup ?? "Yaş grubu belirtilmedi"} · {compactProgramLabel(configuredClassroom.curriculumProgram)} · {configuredClassroom.curriculumCatalogLabel ?? "Katalog belirtilmedi"}</span>
+                  <span className="today-context-primary"><strong>{configuredClassroom.classroomName}</strong><b>{configuredClassroom.scheduleLabel}</b></span>
+                  <span className="today-context-program">{configuredClassroom.ageGroup ?? "Yaş grubu belirtilmedi"} · {compactProgramLabel(configuredClassroom.curriculumProgram)} · {curriculumCatalogDisplayLabel(configuredClassroom.curriculumCatalogLabel)}</span>
                 </>
               ) : (
                 <span><strong>Sınıf kurulumu tamamlanmadı</strong> · Çalışma düzenini bir kez belirleyin</span>
@@ -2206,24 +2219,26 @@ export default function Prototype() {
           <section className="daily-summary" aria-label="Günlük özet">
             <button className="summary-action" type="button" onClick={() => setAttendanceOpen(true)}>
               <PersonIcon aria-hidden="true" />
-              <span>Devam&nbsp; {counts.present + counts.late}/{students.length}</span>
+              <span><small>Bugünkü devam</small><strong>{counts.present + counts.late}/{students.length} çocuk</strong></span>
             </button>
             <button className="summary-action summary-action--pending" type="button" onClick={() => {
               if (todayWorkspace.pendingEvidenceLinks > 0) openPendingObservation();
               else setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
             }}>
               <ClockIcon aria-hidden="true" />
-              <span>{todayWorkspace.pendingEvidenceLinks} bağlantı bekliyor</span>
+              <span><small>Program bağı</small><strong>{todayWorkspace.pendingEvidenceLinks} gözlem bekliyor</strong></span>
             </button>
           </section>
 
           <section className={`current-work ${focusActivity ? "" : "empty-work"}`} aria-labelledby="current-work-title" data-testid="current-work">
             {focusActivity ? (
               <>
-                <p className="section-eyebrow">{focusActivity.status === "in_progress" ? "Şimdi" : "Sıradaki"}</p>
+                <div className="current-work-heading">
+                  <p className="section-eyebrow">{focusActivity.status === "in_progress" ? "Sınıfta şimdi" : "Sıradaki etkinlik"}</p>
+                  <span className="status-label">{activityStatusLabels[focusActivity.status]}</span>
+                </div>
                 <h2 id="current-work-title">{focusActivity.title}</h2>
                 <p className="current-time">{focusActivity.startTime}{focusActivity.endTime ? `–${focusActivity.endTime}` : ""}{focusActivity.subject ? ` · ${focusActivity.subject}` : ""}</p>
-                <span className="status-label">{activityStatusLabels[focusActivity.status]}</span>
                 <div className="current-details">
                   <div className="current-meta-row"><TargetIcon aria-hidden="true" /><span>{focusActivity.curriculumConnection ?? `${focusActivity.subject ?? "Planlı etkinlik"} · Program bağlantısı`}</span></div>
                   <div className="current-evidence-row"><ReaderIcon aria-hidden="true" /><span>{focusActivity.evidenceCount} öğrenme kanıtı</span></div>
@@ -2234,7 +2249,7 @@ export default function Prototype() {
                   onClick={() => void openActivityEvidence(focusActivity.id)}
                   disabled={dataBusy}
                 >
-                  <PlusIcon aria-hidden="true" /> {focusActivity.status === "planned" ? "Etkinliği başlat" : "Gözlem notu ekle"}
+                  <PlusIcon aria-hidden="true" /> {focusActivity.status === "planned" ? "Etkinliği başlat" : "Hızlı gözlem ekle"}
                 </button>
                 {focusActivity.status === "in_progress" ? (
                   <button className="secondary-text-button" type="button" onClick={() => void completeCurrentActivity()} disabled={dataBusy}>
@@ -2255,7 +2270,13 @@ export default function Prototype() {
           </section>
 
           <section className="today-plan" aria-labelledby="today-plan-title">
-            <h2 id="today-plan-title">Günün planı</h2>
+            <div className="today-plan-heading">
+              <div>
+                <span className="today-plan-kicker">Sıradaki adımlar</span>
+                <h2 id="today-plan-title">Günün planı</h2>
+              </div>
+              <span className="today-plan-count">{todayWorkspace.planItems.length} etkinlik</span>
+            </div>
             {todayWorkspace.planItems.length > 0 ? (
               <div className="activity-list">
                 {todayWorkspace.planItems.map((item, index) => (

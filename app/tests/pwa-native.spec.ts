@@ -14,6 +14,10 @@ test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerl
     .click();
   await expect(setup).toBeHidden();
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
+  await expect(page.getByText("Günün akışı", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Bugünkü devam/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Program bağı/ })).toBeVisible();
+  await expect(page.locator(".today-header")).toHaveCSS("border-radius", "22px");
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await expect(page.getByRole("heading", { name: "Bu cihaza kur" })).toBeVisible();
