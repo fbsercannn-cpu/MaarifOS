@@ -69,6 +69,48 @@ export interface FinalizedQuickObservation {
   observation: StoredRecord;
 }
 
+export type QuickObservationCaptureScope = "selected-children";
+
+export interface QuickObservationBatchDraft extends QuickObservationDraft {
+  batchId: string;
+  captureScope: QuickObservationCaptureScope;
+}
+
+export interface PersistQuickObservationDraftBatchInput {
+  studentIds: readonly string[];
+  planId: string;
+  activityId: string;
+  rawText: string;
+  context?: string;
+  childQuote?: string;
+  observationType: QuickObservationType;
+  categoryIds: readonly QuickObservationCategory[];
+  taxonomyVersion?: ObservationTaxonomyVersion;
+  batchId?: string;
+  now?: Date;
+}
+
+export interface PersistQuickObservationDraftBatchResult {
+  drafts: QuickObservationBatchDraft[];
+  batchId: string;
+}
+
+export interface FinalizeQuickObservationDraftBatchInput {
+  studentIds: readonly string[];
+  planId: string;
+  activityId: string;
+  taxonomyVersion?: ObservationTaxonomyVersion;
+  batchId: string;
+  observationIds?: Readonly<Record<string, string>>;
+  observedAt?: string;
+  now?: Date;
+}
+
+export interface FinalizeQuickObservationDraftBatchResult {
+  observations: StoredRecord[];
+  batchId: string;
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -93,6 +135,21 @@ function validUtc(value: string, fieldName: string): string {
     throw new Error(`${fieldName} UTC ISO biçiminde olmalıdır.`);
   }
   return value;
+}
+
+function validSelectedStudentIds(studentIds: readonly string[]): string[] {
+  if (!Array.isArray(studentIds)) {
+    throw new Error("Toplu hızlı gözlem için çocuk seçimi geçersiz.");
+  }
+  const uniqueIds = [
+    ...new Set(studentIds.map((studentId) => validUuid(studentId, "Öğrenci"))),
+  ];
+  if (uniqueIds.length < 2) {
+    throw new Error(
+      "Toplu hızlı gözlem için en az iki farklı aktif çocuk seçilmelidir.",
+    );
+  }
+  return uniqueIds;
 }
 
 function activeStudent(
@@ -243,6 +300,30 @@ function matchingDrafts(
   );
 }
 
+function quickObservationBatchDraft(
+  draft: QuickObservationDraft,
+  batchId: string,
+): draft is QuickObservationBatchDraft {
+  return (
+    draft.batchId === batchId &&
+    draft.captureScope === "selected-children"
+  );
+}
+
+function batchDraftPayload(draft: QuickObservationDraft): string {
+  return JSON.stringify({
+    planId: draft.planId,
+    activityId: draft.activityId,
+    rawText: draft.rawText,
+    context: draft.context,
+    childQuote: draft.childQuote,
+    observationType: draft.observationType,
+    categoryIds: draft.categoryIds,
+    observationTaxonomyVersion:
+      draft.observationTaxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1,
+  });
+}
+
 export async function loadQuickObservationDraft(
   store: LocalDataStore,
   input: QuickObservationDraftSelector,
@@ -347,6 +428,116 @@ export async function persistQuickObservationDraft(
   );
   if (!result) throw new Error("Hızlı gözlem taslağı kaydedilemedi.");
   return result;
+}
+
+export async function persistQuickObservationDraftBatch(
+  store: LocalDataStore,
+  input: PersistQuickObservationDraftBatchInput,
+): Promise<PersistQuickObservationDraftBatchResult> {
+  const studentIds = validSelectedStudentIds(input.studentIds);
+  const planId = validUuid(input.planId, "Plan");
+  const activityId = validUuid(input.activityId, "Etkinlik");
+  const batchId = validUuid(input.batchId, "Toplu gözlem");
+  if (!isQuickObservationType(input.observationType)) {
+    throw new Error("Hızlı gözlem türü geçersiz.");
+  }
+  const taxonomyVersion =
+    input.taxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1;
+  if (!isObservationTaxonomyVersion(taxonomyVersion)) {
+    throw new Error("Hızlı gözlem taksonomi sürümü geçersiz.");
+  }
+  const categoryIds = normalizeQuickObservationCategories(
+    input.categoryIds,
+    taxonomyVersion,
+  );
+  const now = validDate(input.now ?? new Date(), "Toplu taslak kayıt zamanı");
+  const timestamp = now.toISOString();
+  let drafts: QuickObservationBatchDraft[] | null = null;
+
+  await store.transaction(
+    "readwrite",
+    [
+      "academicYears",
+      "classrooms",
+      "settings",
+      "students",
+      "plans",
+      "activities",
+    ],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [students, plans, activities, settings] = await Promise.all([
+        transaction.getAll("students"),
+        transaction.getAll("plans"),
+        transaction.getAll("activities"),
+        transaction.getAll("settings"),
+      ]);
+
+      for (const studentId of studentIds) {
+        if (!activeStudent(students, studentId, scope)) {
+          throw new Error(
+            "Toplu hızlı gözlem taslağı yalnız etkin sınıftaki çocuklara bağlanabilir.",
+          );
+        }
+        matchingPlanAndActivity(
+          plans,
+          activities,
+          { studentId, planId, activityId },
+          scope,
+        );
+      }
+
+      const conflictingBatchDraft = settings.find(
+        (record) =>
+          typeof record.deletedAt !== "string" &&
+          isQuickObservationDraftRecord(record) &&
+          record.batchId === batchId &&
+          (!studentIds.includes(record.studentId) ||
+            record.planId !== planId ||
+            record.activityId !== activityId),
+      );
+      if (conflictingBatchDraft) {
+        throw new Error(
+          "Toplu gözlem kimliği başka bir açık taslak grubunda kullanılıyor.",
+        );
+      }
+
+      drafts = studentIds.map((studentId) => {
+        const existing = matchingDrafts(
+          liveStudentDrafts(settings, studentId, scope),
+          { planId, activityId, taxonomyVersion },
+        )[0];
+        return {
+          id: existing?.id ?? crypto.randomUUID(),
+          settingType: QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
+          studentId,
+          classroomId: scope.classroomId,
+          academicYearId: scope.academicYearId,
+          planId,
+          activityId,
+          rawText: input.rawText,
+          context: input.context ?? "",
+          childQuote: input.childQuote ?? "",
+          observationType: input.observationType,
+          categoryIds: [...categoryIds],
+          observationTaxonomyVersion: taxonomyVersion,
+          batchId,
+          captureScope: "selected-children",
+          createdAt: existing?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+          civilDate: existing?.civilDate ?? civilDateInIstanbul(now),
+          deletedAt: null,
+          schemaVersion: QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION,
+        };
+      });
+      await transaction.putMany("settings", drafts);
+    },
+  );
+
+  if (!drafts) {
+    throw new Error("Toplu hızlı gözlem taslakları kaydedilemedi.");
+  }
+  return { drafts, batchId };
 }
 
 export async function discardQuickObservationDraft(
@@ -483,4 +674,140 @@ export async function finalizeQuickObservationDraft(
   );
   if (!observation) throw new Error("Hızlı gözlem kaydedilemedi.");
   return { observation };
+}
+
+export async function finalizeQuickObservationDraftBatch(
+  store: LocalDataStore,
+  input: FinalizeQuickObservationDraftBatchInput,
+): Promise<FinalizeQuickObservationDraftBatchResult> {
+  const studentIds = validSelectedStudentIds(input.studentIds);
+  const planId = validUuid(input.planId, "Plan");
+  const activityId = validUuid(input.activityId, "Etkinlik");
+  const batchId = validUuid(input.batchId, "Toplu gözlem");
+  const taxonomyVersion =
+    input.taxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1;
+  if (!isObservationTaxonomyVersion(taxonomyVersion)) {
+    throw new Error("Hızlı gözlem taksonomi sürümü geçersiz.");
+  }
+  const observationIds = studentIds.map((studentId) =>
+    validUuid(input.observationIds?.[studentId], "Gözlem"),
+  );
+  if (new Set(observationIds).size !== observationIds.length) {
+    throw new Error(
+      "Toplu gözlemde her çocuk için benzersiz bir gözlem kimliği gereklidir.",
+    );
+  }
+  const now = validDate(input.now ?? new Date(), "Toplu gözlem kayıt zamanı");
+  const observedAt = validUtc(
+    input.observedAt ?? now.toISOString(),
+    "Gözlem zamanı",
+  );
+  const timestamp = now.toISOString();
+  let finalizedObservations: StoredRecord[] | null = null;
+
+  await store.transaction(
+    "readwrite",
+    [
+      "academicYears",
+      "classrooms",
+      "settings",
+      "students",
+      "plans",
+      "activities",
+      "observations",
+    ],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [students, plans, activities, observations, settings] =
+        await Promise.all([
+          transaction.getAll("students"),
+          transaction.getAll("plans"),
+          transaction.getAll("activities"),
+          transaction.getAll("observations"),
+          transaction.getAll("settings"),
+        ]);
+
+      const drafts = studentIds.map((studentId) => {
+        if (!activeStudent(students, studentId, scope)) {
+          throw new Error(
+            "Toplu hızlı gözlem yalnız etkin sınıftaki çocuklara bağlanabilir.",
+          );
+        }
+        matchingPlanAndActivity(
+          plans,
+          activities,
+          { studentId, planId, activityId },
+          scope,
+        );
+        const draft = matchingDrafts(
+          liveStudentDrafts(settings, studentId, scope),
+          { planId, activityId, taxonomyVersion },
+        ).find((candidate) => quickObservationBatchDraft(candidate, batchId));
+        if (!draft) {
+          throw new Error(
+            "Seçili çocukların tamamı için açık toplu hızlı gözlem taslağı bulunmalıdır.",
+          );
+        }
+        return draft;
+      });
+
+      if (drafts.some((draft) => draft.rawText.trim().length === 0)) {
+        throw new Error("Gözlem notu boş bırakılamaz.");
+      }
+      if (new Set(drafts.map(batchDraftPayload)).size !== 1) {
+        throw new Error(
+          "Toplu hızlı gözlem taslak içerikleri uyuşmuyor; kanıtlar ayrı ayrı gözden geçirilmelidir.",
+        );
+      }
+      if (
+        observations.some((record) => observationIds.includes(record.id))
+      ) {
+        throw new Error(
+          "Toplu gözlem kimliklerinden biri daha önce kullanılmış; kanıtın üzerine yazılamaz.",
+        );
+      }
+
+      finalizedObservations = drafts.map((draft, index) => ({
+        id: observationIds[index],
+        studentIds: [draft.studentId],
+        planId,
+        activityId,
+        rawText: draft.rawText,
+        rawTextImmutable: true,
+        ...(draft.context.trim() ? { context: draft.context } : {}),
+        ...(draft.childQuote.trim() ? { childQuote: draft.childQuote } : {}),
+        observationType: draft.observationType,
+        observationCategories: [...draft.categoryIds],
+        observationTaxonomyVersion:
+          draft.observationTaxonomyVersion ??
+          OBSERVATION_TAXONOMY_VERSION_V1,
+        batchId,
+        captureScope: "selected-children",
+        observedAt,
+        workflowStatus: "captured",
+        academicYearId: scope.academicYearId,
+        classroomId: scope.classroomId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        civilDate: civilDateInIstanbul(new Date(observedAt)),
+        deletedAt: null,
+        schemaVersion: 2,
+      }));
+
+      await transaction.putMany("observations", finalizedObservations);
+      await transaction.putMany(
+        "settings",
+        drafts.map((draft) => ({
+          ...draft,
+          updatedAt: timestamp,
+          deletedAt: timestamp,
+        })),
+      );
+    },
+  );
+
+  if (!finalizedObservations) {
+    throw new Error("Toplu hızlı gözlemler kaydedilemedi.");
+  }
+  return { observations: finalizedObservations, batchId };
 }

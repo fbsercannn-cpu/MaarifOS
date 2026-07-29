@@ -5,11 +5,28 @@ import {
   type DataSnapshot,
   type StoredRecord,
 } from "../domain/model";
-import type { LocalDataStore } from "../repository/contracts";
+import {
+  isRecoverySnapshotRepository,
+  type LocalDataStore,
+  type RecoverySnapshotMetadata,
+  type RecoverySnapshotReason,
+} from "../repository/contracts";
+import {
+  createRecoverySnapshotRecord,
+  DEFAULT_RECOVERY_SNAPSHOT_RETENTION,
+  validateRecoveryRetentionLimit,
+  verifyRecoverySnapshotRecord,
+} from "../repository/recovery-snapshot";
 import { resolveAttendanceRecords } from "../domain/attendance";
 import { migrateLegacyClassroomScopes } from "../migrations/classroom-scope-migration";
 import { canonicalClone, canonicalJson } from "./canonical-json";
 import { sha256Hex } from "./crypto";
+import {
+  decryptBackupText,
+  encryptBackupText,
+  serializeEncryptedBackup,
+  type EncryptedBackupEnvelope,
+} from "./encrypted-backup";
 import {
   assertBackupEnvelope,
   assertBackupEnvelopeStructure,
@@ -26,10 +43,13 @@ export interface BackupServiceOptions {
   appVersion: string;
   clock?: () => Date;
   civilDateProvider?: (date: Date) => string;
+  recoveryRetentionLimit?: number;
 }
 
 export interface RestoreOptions {
   mode: RestoreMode;
+  createRecoverySnapshot?: boolean;
+  recoveryReason?: RecoverySnapshotReason;
 }
 
 function istanbulCivilDate(date: Date): string {
@@ -139,6 +159,7 @@ async function upgradeLegacyBackupEnvelope(
 export class BackupService {
   private readonly clock: () => Date;
   private readonly civilDateProvider: (date: Date) => string;
+  private readonly recoveryRetentionLimit: number;
 
   constructor(
     private readonly store: LocalDataStore,
@@ -149,6 +170,9 @@ export class BackupService {
     }
     this.clock = options.clock ?? (() => new Date());
     this.civilDateProvider = options.civilDateProvider ?? istanbulCivilDate;
+    this.recoveryRetentionLimit = validateRecoveryRetentionLimit(
+      options.recoveryRetentionLimit ?? DEFAULT_RECOVERY_SNAPSHOT_RETENTION,
+    );
   }
 
   async exportBackup(): Promise<BackupEnvelope> {
@@ -181,8 +205,37 @@ export class BackupService {
     return canonicalJson(envelope);
   }
 
+  async exportEncryptedBackup(
+    password: string,
+  ): Promise<EncryptedBackupEnvelope> {
+    const backup = await this.exportBackup();
+    return encryptBackupText(
+      this.serializeBackup(backup),
+      {
+        appVersion: backup.manifest.appVersion,
+        createdAt: backup.manifest.createdAt,
+      },
+      password,
+    );
+  }
+
+  serializeEncryptedBackup(envelope: EncryptedBackupEnvelope): string {
+    return serializeEncryptedBackup(envelope);
+  }
+
+  async parseAndDecryptBackup(
+    input: string | EncryptedBackupEnvelope,
+    password: string,
+  ): Promise<BackupEnvelope> {
+    const plaintext = await decryptBackupText(input, password);
+    return this.parseAndVerifyBackup(plaintext);
+  }
+
   async parseAndVerifyBackup(input: string | BackupEnvelope): Promise<BackupEnvelope> {
     let candidate: unknown;
+    if (typeof input === "string" && input.length > 20 * 1024 * 1024) {
+      throw new Error("Yedek dosyası izin verilen 20 MB sınırını aşıyor.");
+    }
     try {
       candidate = typeof input === "string" ? JSON.parse(input) : canonicalClone(input);
     } catch {
@@ -199,6 +252,71 @@ export class BackupService {
     return canonicalClone(normalized);
   }
 
+  async createRecoverySnapshot(
+    reason: RecoverySnapshotReason = "manual",
+  ): Promise<RecoverySnapshotMetadata> {
+    if (!isRecoverySnapshotRepository(this.store)) {
+      throw new Error(
+        "Bu veri deposu doğrulanmış kurtarma snapshot özelliğini desteklemiyor.",
+      );
+    }
+    const backup = await this.exportBackup();
+    const snapshot = await createRecoverySnapshotRecord(backup, reason, {
+      createdAt: backup.manifest.createdAt,
+    });
+    return this.store.saveRecoverySnapshot(snapshot, {
+      retentionLimit: this.recoveryRetentionLimit,
+    });
+  }
+
+  async listRecoverySnapshots(): Promise<RecoverySnapshotMetadata[]> {
+    if (!isRecoverySnapshotRepository(this.store)) {
+      throw new Error(
+        "Bu veri deposu kurtarma snapshot listesini desteklemiyor.",
+      );
+    }
+    return this.store.listRecoverySnapshots();
+  }
+
+  async deleteRecoverySnapshot(id: string): Promise<void> {
+    if (!isRecoverySnapshotRepository(this.store)) {
+      throw new Error(
+        "Bu veri deposu kurtarma snapshot silme işlemini desteklemiyor.",
+      );
+    }
+    await this.store.deleteRecoverySnapshot(id);
+  }
+
+  async restoreRecoverySnapshot(
+    id: string,
+    options: { createRecoverySnapshot?: boolean } = {},
+  ): Promise<RestoreReport> {
+    if (!isRecoverySnapshotRepository(this.store)) {
+      throw new Error(
+        "Bu veri deposu kurtarma snapshot geri yüklemesini desteklemiyor.",
+      );
+    }
+    const snapshot = await this.store.getRecoverySnapshot(id);
+    if (!snapshot) {
+      throw new Error("İstenen kurtarma snapshot kaydı bulunamadı.");
+    }
+    const verified = await verifyRecoverySnapshotRecord(snapshot);
+    return this.restoreBackup(verified.envelope, {
+      mode: "replace",
+      createRecoverySnapshot: options.createRecoverySnapshot ?? true,
+      recoveryReason: "before-restore",
+    });
+  }
+
+  async restoreEncryptedBackup(
+    input: string | EncryptedBackupEnvelope,
+    password: string,
+    options: RestoreOptions,
+  ): Promise<RestoreReport> {
+    const backup = await this.parseAndDecryptBackup(input, password);
+    return this.restoreBackup(backup, options);
+  }
+
   async restoreBackup(
     input: string | BackupEnvelope,
     options: RestoreOptions,
@@ -206,6 +324,11 @@ export class BackupService {
     const backup = await this.parseAndVerifyBackup(input);
     if (options.mode !== "replace" && options.mode !== "merge") {
       throw new Error("Geri yükleme modu replace veya merge olmalıdır.");
+    }
+    if (options.createRecoverySnapshot !== false) {
+      await this.createRecoverySnapshot(
+        options.recoveryReason ?? "before-restore",
+      );
     }
 
     return this.store.transaction(

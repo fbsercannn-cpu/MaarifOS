@@ -1,18 +1,28 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerleşir", async ({ page }) => {
-  await page.goto("/");
-
-  await expect(page.getByTestId("phone-frame")).toHaveCount(0);
-  await expect(page.locator(".native-app-runtime")).toBeVisible();
+async function configureNativeClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  await expect(setup).toBeVisible();
   await setup.getByLabel("Sınıf adı").fill("Kurgu PWA Sınıfı");
+  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
+  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup
+    .getByLabel("Uygulanan program")
+    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
   await setup.getByLabel("Program katalog kimliği").fill("KURGU-PWA");
   await setup.getByLabel("Kaynak sürümü").fill("2026-test");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();
   await expect(setup).toBeHidden();
+}
+
+test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerleşir", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByTestId("phone-frame")).toHaveCount(0);
+  await expect(page.locator(".native-app-runtime")).toBeVisible();
+  await configureNativeClassroom(page);
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(page.getByText("Günün akışı", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Bugünkü devam/ })).toBeVisible();
@@ -33,4 +43,127 @@ test("native mod masaüstünde merkezlenir, telefonda ekran genişliğini kullan
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileBox = await page.locator(".native-app-runtime").boundingBox();
   expect(mobileBox?.width).toBe(390);
+});
+
+test("telefon geri tuşu profil, sınıf listesi ve ana ekran sırasını korur", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await configureNativeClassroom(page);
+
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByLabel("Çocuğun adı").fill("Geri Akış Çocuğu");
+  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  const appUrl = page.url();
+
+  await page
+    .getByRole("button", { name: "Geri Akış Çocuğu profilini aç" })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Geri Akış Çocuğu profili" }),
+  ).toBeVisible();
+
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "Sınıfım" })).toBeVisible();
+  expect(page.url()).toBe(appUrl);
+
+  await page.goBack();
+  await expect(
+    page.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(page.url()).toBe(appUrl);
+});
+
+test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini korur", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await configureNativeClassroom(page);
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  for (const name of ["Ada", "Bora", "Cem", "Duru", "Ece", "Fırat"]) {
+    await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+    await page.getByLabel("Çocuğun adı").fill(name);
+    await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  }
+
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const layout = await page.getByRole("dialog", { name: "Sınıfım" }).evaluate(
+      (dialog, currentViewport) => {
+        const sheet = dialog as HTMLElement;
+        const content = sheet.querySelector<HTMLElement>(".sheet-content");
+        const visibleButtons = [...sheet.querySelectorAll<HTMLElement>("button")].filter(
+          (button) => {
+            const style = getComputedStyle(button);
+            const rect = button.getBoundingClientRect();
+            return style.display !== "none" && rect.width > 0 && rect.height > 0;
+          },
+        );
+        return {
+          sheetLeft: sheet.getBoundingClientRect().left,
+          sheetRight: sheet.getBoundingClientRect().right,
+          sheetTop: sheet.getBoundingClientRect().top,
+          sheetBottom: sheet.getBoundingClientRect().bottom,
+          contentScrollWidth: content?.scrollWidth ?? 0,
+          contentClientWidth: content?.clientWidth ?? 0,
+          undersizedTargets: visibleButtons
+            .map((button) => {
+              const rect = button.getBoundingClientRect();
+              return { label: button.getAttribute("aria-label") ?? button.textContent, width: rect.width, height: rect.height };
+            })
+            .filter((button) => button.width < 44 || button.height < 44),
+          overlappingTargets: visibleButtons.flatMap((button, index) => {
+            const left = button.getBoundingClientRect();
+            return visibleButtons.slice(index + 1).flatMap((candidate) => {
+              const right = candidate.getBoundingClientRect();
+              const overlaps =
+                Math.min(left.right, right.right) - Math.max(left.left, right.left) > 1 &&
+                Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top) > 1;
+              return overlaps
+                ? [
+                    `${button.getAttribute("aria-label") ?? button.textContent} / ${
+                      candidate.getAttribute("aria-label") ?? candidate.textContent
+                    }`,
+                  ]
+                : [];
+            });
+          }),
+          viewport: currentViewport,
+        };
+      },
+      viewport,
+    );
+
+    expect(layout.sheetLeft).toBeGreaterThanOrEqual(-0.5);
+    expect(layout.sheetRight).toBeLessThanOrEqual(viewport.width + 0.5);
+    expect(layout.sheetTop).toBeGreaterThanOrEqual(-0.5);
+    expect(layout.sheetBottom).toBeLessThanOrEqual(viewport.height + 0.5);
+    expect(layout.contentScrollWidth).toBeLessThanOrEqual(
+      layout.contentClientWidth,
+    );
+    expect(layout.undersizedTargets).toEqual([]);
+    expect(layout.overlappingTargets).toEqual([]);
+  }
+
+  const sheetContent = page.locator(".sheet-content");
+  await sheetContent.hover();
+  await page.mouse.wheel(0, 1200);
+  await expect(
+    page.getByRole("button", { name: "Fırat profilini aç" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Fırat için işlemler" }).click();
+  await expect(
+    page.getByRole("button", { name: "Fırat çocuğunu sınıftan ayır" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sınıfım ekranını kapat" }),
+  ).toBeVisible();
 });

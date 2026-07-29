@@ -1,17 +1,23 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.2.0";
+const WORKER_RELEASE = "0.3.1";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
+const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
+const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";
+const SKIP_WAITING_MESSAGE = "maarifos:skip-waiting";
 const CACHE_VERSION = WORKER_RELEASE;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `${CACHE_PREFIX}assets-${CACHE_VERSION}`;
+const META_CACHE = `${CACHE_PREFIX}meta`;
 const CACHEABLE_DESTINATIONS = new Set(["font", "image", "script", "style"]);
 const NETWORK_TIMEOUT_MS = 5000;
+const CACHE_HEALTH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const scopeUrl = new URL("./", self.registration.scope);
 const indexUrl = new URL("index.html", scopeUrl);
 const manifestUrl = new URL("manifest.webmanifest", scopeUrl);
+const metadataUrl = new URL("__maarifos_runtime_metadata__", scopeUrl);
 const iconUrls = [
   "assets/brand/maarifos-icon-192.png",
   "assets/brand/maarifos-icon-512.png",
@@ -20,6 +26,149 @@ const iconUrls = [
   "assets/brand/favicon-32.png",
 ].map((path) => new URL(path, scopeUrl));
 const assetsPath = new URL("assets/", scopeUrl).pathname;
+
+async function readRuntimeMetadata() {
+  try {
+    const cache = await caches.open(META_CACHE);
+    const response = await cache.match(metadataUrl);
+    if (!response) return null;
+    const value = await response.json();
+    return value &&
+      value.schemaVersion === 1 &&
+      typeof value.currentRelease === "string" &&
+      (value.previousRelease === null || typeof value.previousRelease === "string") &&
+      Number.isFinite(value.activatedAt) &&
+      (value.healthyAt === null || Number.isFinite(value.healthyAt))
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRuntimeMetadata(metadata) {
+  const cache = await caches.open(META_CACHE);
+  await cache.put(
+    metadataUrl,
+    new Response(JSON.stringify(metadata), {
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+function releaseFromShellCache(cacheName) {
+  const prefix = `${CACHE_PREFIX}shell-`;
+  return cacheName.startsWith(prefix) ? cacheName.slice(prefix.length) : null;
+}
+
+async function recordActivation() {
+  const existing = await readRuntimeMetadata();
+  if (existing?.currentRelease === WORKER_RELEASE) return existing;
+
+  const cacheNames = await caches.keys();
+  const inferredPrevious = cacheNames
+    .map(releaseFromShellCache)
+    .filter((release) => release && release !== WORKER_RELEASE)
+    .at(-1);
+  const metadata = {
+    schemaVersion: 1,
+    currentRelease: WORKER_RELEASE,
+    previousRelease:
+      existing?.currentRelease && existing.currentRelease !== WORKER_RELEASE
+        ? existing.currentRelease
+        : inferredPrevious ?? existing?.previousRelease ?? null,
+    activatedAt: Date.now(),
+    healthyAt: null,
+  };
+  await writeRuntimeMetadata(metadata);
+  return metadata;
+}
+
+async function verifyCurrentShellCache() {
+  const cache = await caches.open(SHELL_CACHE);
+  const [scope, index, manifest] = await Promise.all([
+    cache.match(scopeUrl),
+    cache.match(indexUrl),
+    cache.match(manifestUrl),
+  ]);
+  return Boolean(scope && index && manifest);
+}
+
+async function fallbackCacheNames(kind) {
+  const metadata = await readRuntimeMetadata();
+  const cacheNames = await caches.keys();
+  const currentName = kind === "shell" ? SHELL_CACHE : ASSET_CACHE;
+  const prefix = `${CACHE_PREFIX}${kind}-`;
+  const preferred =
+    metadata?.previousRelease
+      ? `${CACHE_PREFIX}${kind}-${metadata.previousRelease}`
+      : null;
+  const names = cacheNames.filter(
+    (cacheName) => cacheName.startsWith(prefix) && cacheName !== currentName,
+  );
+
+  if (preferred && names.includes(preferred)) {
+    return [preferred, ...names.filter((cacheName) => cacheName !== preferred).reverse()];
+  }
+  return names.reverse();
+}
+
+async function markHealthyAndCleanup() {
+  if (!(await verifyCurrentShellCache())) return false;
+
+  const metadata = (await readRuntimeMetadata()) ?? (await recordActivation());
+  const healthyAt = metadata.healthyAt ?? Date.now();
+  if (metadata.healthyAt === null) {
+    await writeRuntimeMetadata({ ...metadata, healthyAt });
+  }
+
+  if (Date.now() - healthyAt < CACHE_HEALTH_WINDOW_MS) return true;
+
+  const keep = new Set([SHELL_CACHE, ASSET_CACHE, META_CACHE]);
+  if (metadata.previousRelease) {
+    keep.add(`${CACHE_PREFIX}shell-${metadata.previousRelease}`);
+    keep.add(`${CACHE_PREFIX}assets-${metadata.previousRelease}`);
+  }
+  const cacheNames = await caches.keys();
+  await Promise.all(
+    cacheNames
+      .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && !keep.has(cacheName))
+      .map((cacheName) => caches.delete(cacheName)),
+  );
+  return true;
+}
+
+async function getWorkerHealth() {
+  const cacheNames = await caches.keys();
+  const shellReady = await verifyCurrentShellCache();
+  if (shellReady) await markHealthyAndCleanup();
+  return {
+    type: STATUS_RESPONSE_MESSAGE,
+    version: WORKER_RELEASE,
+    shellReady,
+    shellCache: SHELL_CACHE,
+    fallbackCacheCount: cacheNames.filter(
+      (cacheName) =>
+        cacheName.startsWith(CACHE_PREFIX) &&
+        cacheName !== SHELL_CACHE &&
+        cacheName !== ASSET_CACHE &&
+        cacheName !== META_CACHE,
+    ).length,
+  };
+}
+
+async function notifyClientsUpdateReady() {
+  const windowClients = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  for (const client of windowClients) {
+    client.postMessage({
+      type: UPDATE_READY_MESSAGE,
+      version: WORKER_RELEASE,
+    });
+  }
+}
 
 function canStore(response) {
   if (!response || !response.ok || response.type !== "basic") return false;
@@ -88,42 +237,63 @@ async function installAppShell() {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(installAppShell().then(() => self.skipWaiting()));
+  event.waitUntil(
+    installAppShell().then(() =>
+      self.registration.active ? notifyClientsUpdateReady() : undefined,
+    ),
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames
-          .filter(
-            (cacheName) =>
-              cacheName.startsWith(CACHE_PREFIX) &&
-              cacheName !== SHELL_CACHE &&
-              cacheName !== ASSET_CACHE,
-          )
-          .map((cacheName) => caches.delete(cacheName)),
-      );
+      await recordActivation();
 
       if (self.registration.navigationPreload) {
         await self.registration.navigationPreload.enable();
       }
 
       await self.clients.claim();
-      const windowClients = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      for (const client of windowClients) {
-        client.postMessage({
-          type: UPDATE_READY_MESSAGE,
-          version: WORKER_RELEASE,
-        });
-      }
     })(),
   );
 });
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === STATUS_REQUEST_MESSAGE) {
+    event.waitUntil(
+      getWorkerHealth().then((health) => {
+        event.ports[0]?.postMessage(health);
+      }),
+    );
+    return;
+  }
+
+  if (
+    event.data?.type === SKIP_WAITING_MESSAGE &&
+    event.data?.version === WORKER_RELEASE
+  ) {
+    event.waitUntil(self.skipWaiting());
+  }
+});
+
+async function matchNavigationFallback(request) {
+  const currentCache = await caches.open(SHELL_CACHE);
+  const currentMatch =
+    (await currentCache.match(request, { ignoreSearch: true })) ||
+    (await currentCache.match(scopeUrl)) ||
+    (await currentCache.match(indexUrl));
+  if (currentMatch) return currentMatch;
+
+  for (const cacheName of await fallbackCacheNames("shell")) {
+    const cache = await caches.open(cacheName);
+    const fallback =
+      (await cache.match(request, { ignoreSearch: true })) ||
+      (await cache.match(scopeUrl)) ||
+      (await cache.match(indexUrl));
+    if (fallback) return fallback;
+  }
+  return null;
+}
 
 async function networkFirstNavigation(event) {
   try {
@@ -136,15 +306,10 @@ async function networkFirstNavigation(event) {
       await cache.put(indexUrl, response.clone());
     }
 
+    event.waitUntil(markHealthyAndCleanup().catch(() => undefined));
     return response;
   } catch {
-    const cache = await caches.open(SHELL_CACHE);
-    return (
-      (await cache.match(event.request, { ignoreSearch: true })) ||
-      (await cache.match(scopeUrl)) ||
-      (await cache.match(indexUrl)) ||
-      Response.error()
-    );
+    return (await matchNavigationFallback(event.request)) || Response.error();
   }
 }
 
@@ -165,6 +330,14 @@ async function cacheFirstStaticAsset(event) {
   if (cached) {
     event.waitUntil(revalidateStaticAsset(event.request).catch(() => undefined));
     return cached;
+  }
+
+  for (const cacheName of [
+    ...(await fallbackCacheNames("assets")),
+    ...(await fallbackCacheNames("shell")),
+  ]) {
+    const fallback = await (await caches.open(cacheName)).match(event.request);
+    if (fallback) return fallback;
   }
 
   return revalidateStaticAsset(event.request);

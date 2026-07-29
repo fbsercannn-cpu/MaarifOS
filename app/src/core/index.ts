@@ -1,6 +1,7 @@
 export * from "./backup/backup-service";
 export * from "./backup/canonical-json";
 export * from "./backup/crypto";
+export * from "./backup/encrypted-backup";
 export * from "./backup/schema";
 export * from "./domain/attendance";
 export * from "./domain/classroom";
@@ -12,3 +13,5 @@ export * from "./domain/student";
 export * from "./migrations/classroom-scope-migration";
 export * from "./repository/contracts";
 export * from "./repository/indexed-db";
+export * from "./repository/recovery-snapshot";
+export * from "./security/app-lock";

@@ -1203,6 +1203,7 @@ test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yede
     const planId = "00000000-0000-4000-8000-000000000715";
     const activityId = "00000000-0000-4000-8000-000000000716";
     const observationId = "00000000-0000-4000-8000-000000000717";
+    const batchId = "00000000-0000-4000-8000-000000000718";
     await source.transaction(
       "readwrite",
       [
@@ -1301,11 +1302,54 @@ test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yede
       observedAt: "2026-09-02T07:05:00.000Z",
       now: new Date("2026-09-02T07:06:00.000Z"),
     });
+    await quick.persistQuickObservationDraftBatch(source, {
+      batchId,
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      rawText: "İki çocuk ortak yapıya sırayla birer parça ekledi.",
+      context: "Blok oyunu sırasında",
+      observationType: "anecdotal",
+      categoryIds: ["play-participation"],
+      now: new Date("2026-09-02T07:10:00.000Z"),
+    });
+    await quick.finalizeQuickObservationDraftBatch(source, {
+      batchId,
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      observedAt: "2026-09-02T07:11:00.000Z",
+      now: new Date("2026-09-02T07:12:00.000Z"),
+    });
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentBId,
+      planId,
+      activityId,
+      rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+      observationType: "systematic",
+      categoryIds: ["physical-health", "self-care"],
+      now: new Date("2026-09-02T07:13:00.000Z"),
+    });
 
-    const backup = await new core.BackupService(source, {
+    const sourceBackupService = new core.BackupService(source, {
       appVersion: "o1-test",
       clock: () => new Date("2026-09-02T08:00:00.000Z"),
-    }).exportBackup();
+    });
+    const backup = await sourceBackupService.exportBackup();
+    const invalidBatch = structuredClone(backup);
+    const invalidBatchObservation = invalidBatch.payload.observations.find(
+      (record) => record.batchId === batchId,
+    );
+    invalidBatchObservation.batchId = "geçersiz-toplu-kimlik";
+    invalidBatch.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidBatch.payload),
+    );
+    let invalidBatchError = "";
+    try {
+      await sourceBackupService.parseAndVerifyBackup(invalidBatch);
+    } catch (error) {
+      invalidBatchError = error instanceof Error ? error.message : String(error);
+    }
     await new core.BackupService(target, { appVersion: "o1-test" }).restoreBackup(
       backup,
       { mode: "replace" },
@@ -1318,8 +1362,12 @@ test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yede
     target.close();
     return {
       observation: restored.observations[0],
+      batchObservations: restored.observations.filter(
+        (record) => record.batchId === batchId,
+      ),
       draft: restoredDraft,
       settingsCount: backup.manifest.entityCounts.settings,
+      invalidBatchError,
     };
   });
 
@@ -1336,5 +1384,506 @@ test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yede
     observationType: "systematic",
     categoryIds: ["physical-health", "self-care"],
   });
-  expect(result.settingsCount).toBe(3);
+  expect(result.batchObservations).toHaveLength(2);
+  expect(result.batchObservations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        batchId: "00000000-0000-4000-8000-000000000718",
+        captureScope: "selected-children",
+        rawText: "İki çocuk ortak yapıya sırayla birer parça ekledi.",
+        rawTextImmutable: true,
+      }),
+    ]),
+  );
+  expect(result.invalidBatchError).toContain("hızlı gözlem alanları geçersiz");
+  expect(result.settingsCount).toBe(5);
+});
+
+test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kurcalama reddedilir", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-encrypted-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        id: "00000000-0000-4000-8000-000000000901",
+        createdAt: "2026-09-10T06:00:00.000Z",
+        updatedAt: "2026-09-10T06:00:00.000Z",
+        civilDate: "2026-09-10",
+        deletedAt: null,
+        schemaVersion: 1,
+        displayName: "Kurgu Şifreli Yedek Öğrencisi",
+      }]),
+    );
+    const service = new core.BackupService(store, {
+      appVersion: "encrypted-test",
+      clock: () => new Date("2026-09-10T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-10",
+    });
+    const password = "ÇokGüçlü-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(password);
+    const serialized = service.serializeEncryptedBackup(encrypted);
+    const decrypted = await service.parseAndDecryptBackup(serialized, password);
+
+    let wrongPasswordError = "";
+    try {
+      await service.parseAndDecryptBackup(serialized, "Yanlış-Parola-2026!");
+    } catch (error) {
+      wrongPasswordError = error instanceof Error ? error.message : String(error);
+    }
+
+    const tamperedCiphertext = structuredClone(encrypted);
+    const replacement = tamperedCiphertext.ciphertext[12] === "A" ? "B" : "A";
+    tamperedCiphertext.ciphertext =
+      tamperedCiphertext.ciphertext.slice(0, 12) +
+      replacement +
+      tamperedCiphertext.ciphertext.slice(13);
+    let tamperError = "";
+    try {
+      await service.parseAndDecryptBackup(tamperedCiphertext, password);
+    } catch (error) {
+      tamperError = error instanceof Error ? error.message : String(error);
+    }
+
+    const tamperedHeader = structuredClone(encrypted);
+    tamperedHeader.encryption.createdAt = "2026-09-10T08:00:01.000Z";
+    let headerTamperError = "";
+    try {
+      await service.parseAndDecryptBackup(tamperedHeader, password);
+    } catch (error) {
+      headerTamperError =
+        error instanceof Error ? error.message : String(error);
+    }
+    store.close();
+    return {
+      format: encrypted.encryption.format,
+      iterations: encrypted.encryption.iterations,
+      studentName: decrypted.payload.students[0].displayName,
+      serializedContainsPassword: serialized.includes(password),
+      wrongPasswordError,
+      tamperError,
+      headerTamperError,
+    };
+  });
+
+  expect(result.format).toBe("maarifos-encrypted-json");
+  expect(result.iterations).toBeGreaterThanOrEqual(600_000);
+  expect(result.studentName).toBe("Kurgu Şifreli Yedek Öğrencisi");
+  expect(result.serializedContainsPassword).toBe(false);
+  expect(result.wrongPasswordError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+  expect(result.tamperError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+  expect(result.headerTamperError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+});
+
+test("replace öncesi recovery snapshot doğrulanır; kesintide veri ve snapshot korunur", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-recovery-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-recovery-target-${crypto.randomUUID()}`,
+    });
+    const base = {
+      createdAt: "2026-09-11T06:00:00.000Z",
+      updatedAt: "2026-09-11T06:00:00.000Z",
+      civilDate: "2026-09-11",
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        ...base,
+        id: "00000000-0000-4000-8000-000000000911",
+        displayName: "Kurgu Yeni Öğrenci",
+      }]),
+    );
+    await target.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        ...base,
+        id: "00000000-0000-4000-8000-000000000912",
+        displayName: "Kurgu Korunacak Öğrenci",
+      }]),
+    );
+    const backup = await new core.BackupService(source, {
+      appVersion: "recovery-test",
+    }).exportBackup();
+    const service = new core.BackupService(target, {
+      appVersion: "recovery-test",
+      recoveryRetentionLimit: 3,
+    });
+
+    const originalTransaction = target.transaction.bind(target);
+    let interruptRestore = true;
+    target.transaction = (mode, collections, task) =>
+      originalTransaction(mode, collections, async (transaction) =>
+        task({
+          getAll: (collection) => transaction.getAll(collection),
+          putMany: (collection, records) =>
+            transaction.putMany(collection, records),
+          clear: async (collection) => {
+            await transaction.clear(collection);
+            if (interruptRestore && collection === "students") {
+              throw new Error("Test amaçlı restore kesintisi.");
+            }
+          },
+        }),
+      );
+
+    let restoreError = "";
+    try {
+      await service.restoreBackup(backup, { mode: "replace" });
+    } catch (error) {
+      restoreError = error instanceof Error ? error.message : String(error);
+    }
+    interruptRestore = false;
+    const afterFailure = await target.readSnapshot();
+    const recoveryAfterFailure = await service.listRecoverySnapshots();
+    const savedSnapshot = await target.getRecoverySnapshot(
+      recoveryAfterFailure[0].id,
+    );
+
+    await service.restoreBackup(backup, { mode: "replace" });
+    const afterSuccess = await target.readSnapshot();
+    const recoveryAfterSuccess = await service.listRecoverySnapshots();
+    await service.restoreRecoverySnapshot(recoveryAfterFailure[0].id, {
+      createRecoverySnapshot: false,
+    });
+    const recovered = await target.readSnapshot();
+    for (let index = 0; index < 4; index += 1) {
+      await service.createRecoverySnapshot("manual");
+    }
+    const retainedSnapshots = await service.listRecoverySnapshots();
+    source.close();
+    target.close();
+    return {
+      restoreError,
+      afterFailureName: afterFailure.students[0].displayName,
+      snapshotName: savedSnapshot?.envelope.payload.students[0].displayName,
+      afterSuccessName: afterSuccess.students[0].displayName,
+      recoveredName: recovered.students[0].displayName,
+      countAfterFailure: recoveryAfterFailure.length,
+      countAfterSuccess: recoveryAfterSuccess.length,
+      retainedSnapshotCount: retainedSnapshots.length,
+      retainedChecksums: retainedSnapshots.map(
+        (snapshot) => snapshot.snapshotChecksum,
+      ),
+    };
+  });
+
+  expect(result.restoreError).toContain("restore kesintisi");
+  expect(result.afterFailureName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.snapshotName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.afterSuccessName).toBe("Kurgu Yeni Öğrenci");
+  expect(result.recoveredName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.countAfterFailure).toBe(1);
+  expect(result.countAfterSuccess).toBe(2);
+  expect(result.retainedSnapshotCount).toBe(3);
+  expect(
+    result.retainedChecksums.every((checksum) => /^[0-9a-f]{64}$/.test(checksum)),
+  ).toBe(true);
+});
+
+test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini uygular", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const pin = "739251";
+    const config = await core.createAppLockConfig(pin, {
+      now: new Date("2026-09-12T08:00:00.000Z"),
+    });
+    const failed = await core.verifyAppLockSecret(
+      "000000",
+      config,
+      core.initialAppLockAttemptState(),
+      { now: new Date("2026-09-12T08:01:00.000Z") },
+    );
+    const blocked = await core.verifyAppLockSecret(
+      pin,
+      config,
+      failed.attemptState,
+      { now: new Date("2026-09-12T08:01:00.500Z") },
+    );
+    const session = new core.AppLockSession(config, failed.attemptState);
+    const unlocked = await session.unlock(pin, {
+      now: new Date("2026-09-12T08:01:01.000Z"),
+    });
+    const openState = session.getState();
+    session.lock();
+    const closedState = session.getState();
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-app-lock-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["settings"], (transaction) =>
+      transaction.putMany("settings", [{
+        id: "7aab50df-a47d-4dcb-8ac0-d8589a34b950",
+        settingType: "app-lock-config-v1",
+        config,
+        attemptState: failed.attemptState,
+        createdAt: config.createdAt,
+        updatedAt: "2026-09-12T08:01:00.000Z",
+        civilDate: "2026-09-12",
+        schemaVersion: core.DATA_SCHEMA_VERSION,
+      }]),
+    );
+    const backup = await new core.BackupService(store, {
+      appVersion: "app-lock-test",
+      clock: () => new Date("2026-09-12T08:02:00.000Z"),
+      civilDateProvider: () => "2026-09-12",
+    }).exportBackup();
+    store.close();
+    return {
+      configContainsPin: JSON.stringify(config).includes(pin),
+      iterations: config.iterations,
+      failed,
+      blocked,
+      unlocked,
+      openState,
+      closedState,
+      backedUpSettingType: backup.payload.settings[0].settingType,
+    };
+  });
+
+  expect(result.configContainsPin).toBe(false);
+  expect(result.iterations).toBeGreaterThanOrEqual(600_000);
+  expect(result.failed.status).toBe("invalid");
+  expect(result.failed.retryAfterMs).toBe(1_000);
+  expect(result.blocked.status).toBe("locked");
+  expect(result.blocked.retryAfterMs).toBe(500);
+  expect(result.unlocked.status).toBe("verified");
+  expect(result.openState.unlocked).toBe(true);
+  expect(result.closedState.unlocked).toBe(false);
+  expect(result.backedUpSettingType).toBe("app-lock-config-v1");
+});
+
+test("IndexedDB N-2 ve N-1 verisini v3'e kayıpsız taşır ve dar indeks sorgularını açar", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const classroomId = "00000000-0000-4000-8000-000000000921";
+    const createLegacy = async (version: number) => {
+      const databaseName =
+        `maarifos-test-migration-v${version}-${crypto.randomUUID()}`;
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(databaseName, version);
+        request.addEventListener("upgradeneeded", () => {
+          const database = request.result;
+          const students = database.createObjectStore("students", {
+            keyPath: "id",
+          });
+          students.put({
+            id:
+              version === 1
+                ? "00000000-0000-4000-8000-000000000922"
+                : "00000000-0000-4000-8000-000000000923",
+            createdAt: "2026-09-13T06:00:00.000Z",
+            updatedAt: "2026-09-13T06:00:00.000Z",
+            civilDate: "2026-09-13",
+            deletedAt: null,
+            schemaVersion: 1,
+            displayName: `Kurgu v${version} Öğrencisi`,
+            classroomId,
+          });
+          if (version === 2) {
+            for (const collection of core.COLLECTION_NAMES) {
+              if (!database.objectStoreNames.contains(collection)) {
+                database.createObjectStore(collection, { keyPath: "id" });
+              }
+            }
+          }
+        });
+        request.addEventListener("success", () => {
+          request.result.close();
+          resolve();
+        });
+        request.addEventListener("error", () => reject(request.error));
+      });
+      const statuses = [];
+      const store = new core.IndexedDbDataStore({
+        databaseName,
+        onStatusChange: (status) => statuses.push(status.status),
+      });
+      const snapshot = await store.readSnapshot();
+      const queried = await store.listStudentsByClassroom(classroomId);
+      const recovery = await store.listRecoverySnapshots();
+      store.close();
+      return {
+        name: snapshot.students[0].displayName,
+        queried: queried.length,
+        recovery: recovery.length,
+        statuses,
+      };
+    };
+    return Promise.all([createLegacy(1), createLegacy(2)]);
+  });
+
+  expect(result.map((item) => item.name)).toEqual([
+    "Kurgu v1 Öğrencisi",
+    "Kurgu v2 Öğrencisi",
+  ]);
+  expect(result.every((item) => item.queried === 1)).toBe(true);
+  expect(result.every((item) => item.recovery === 0)).toBe(true);
+  expect(result.every((item) => item.statuses.includes("ready"))).toBe(true);
+});
+
+test("yedek şeması tanımsız, semantik bozuk ve eksik koleksiyon kayıtlarını fail-closed reddeder", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-strict-schema-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        id: "00000000-0000-4000-8000-000000000931",
+        createdAt: "2026-09-14T06:00:00.000Z",
+        updatedAt: "2026-09-14T06:00:00.000Z",
+        civilDate: "2026-09-14",
+        deletedAt: null,
+        schemaVersion: 1,
+        displayName: "Kurgu Şema Öğrencisi",
+      }]),
+    );
+    const service = new core.BackupService(store, {
+      appVersion: "strict-schema-test",
+      clock: () => new Date("2026-09-14T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-14",
+    });
+    const backup = await service.exportBackup();
+    const verifyError = async (candidate) => {
+      candidate.manifest.payloadChecksum = await core.sha256Hex(
+        core.canonicalJson(candidate.payload),
+      );
+      try {
+        await service.parseAndVerifyBackup(candidate);
+        return "";
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    };
+
+    const unknownField = structuredClone(backup);
+    unknownField.payload.students[0].sessionToken = "yedekte-olmaması-gerekir";
+    const unknownFieldError = await verifyError(unknownField);
+
+    const impossibleDate = structuredClone(backup);
+    impossibleDate.payload.students[0].civilDate = "2026-02-30";
+    const impossibleDateError = await verifyError(impossibleDate);
+
+    const malformedMedia = structuredClone(backup);
+    malformedMedia.payload.mediaAssets.push({
+      id: "00000000-0000-4000-8000-000000000932",
+      createdAt: "2026-09-14T06:00:00.000Z",
+      updatedAt: "2026-09-14T06:00:00.000Z",
+      civilDate: "2026-09-14",
+      deletedAt: null,
+      schemaVersion: 1,
+      blobKey: "blob-only",
+    });
+    malformedMedia.manifest.entityCounts.mediaAssets = 1;
+    const malformedMediaError = await verifyError(malformedMedia);
+
+    const unknownManifestField = structuredClone(backup);
+    unknownManifestField.manifest.debug = true;
+    let unknownManifestError = "";
+    try {
+      await service.parseAndVerifyBackup(unknownManifestField);
+    } catch (error) {
+      unknownManifestError =
+        error instanceof Error ? error.message : String(error);
+    }
+    store.close();
+    return {
+      unknownFieldError,
+      impossibleDateError,
+      malformedMediaError,
+      unknownManifestError,
+    };
+  });
+
+  expect(result.unknownFieldError).toContain("tanımsız alan");
+  expect(result.impossibleDateError).toContain("civilDate");
+  expect(result.malformedMediaError).toContain("medya sözleşmesine");
+  expect(result.unknownManifestError).toContain("manifestinde tanımsız");
+});
+
+test("IndexedDB blocked ve versionchange olaylarını görünür kılar; eski bağlantıda veri kaybetmez", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const databaseName = `maarifos-test-lifecycle-${crypto.randomUUID()}`;
+    const oldConnection = await new Promise((resolve, reject) => {
+      const request = indexedDB.open(databaseName, 2);
+      request.addEventListener("upgradeneeded", () => {
+        for (const collection of core.COLLECTION_NAMES) {
+          request.result.createObjectStore(collection, { keyPath: "id" });
+        }
+        request.transaction.objectStore("students").put({
+          id: "00000000-0000-4000-8000-000000000941",
+          createdAt: "2026-09-15T06:00:00.000Z",
+          updatedAt: "2026-09-15T06:00:00.000Z",
+          civilDate: "2026-09-15",
+          deletedAt: null,
+          schemaVersion: 1,
+          displayName: "Kurgu Yaşam Döngüsü Öğrencisi",
+        });
+      });
+      request.addEventListener("success", () => resolve(request.result));
+      request.addEventListener("error", () => reject(request.error));
+    });
+    const statuses = [];
+    const store = new core.IndexedDbDataStore({
+      databaseName,
+      onStatusChange: (event) => statuses.push(event.status),
+    });
+    let blockedError = "";
+    try {
+      await store.readSnapshot();
+    } catch (error) {
+      blockedError = error instanceof Error ? error.message : String(error);
+    }
+    oldConnection.close();
+    const snapshot = await store.readSnapshot();
+
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open(databaseName, 4);
+      request.addEventListener("success", () => {
+        request.result.close();
+        resolve(undefined);
+      });
+      request.addEventListener("error", () => reject(request.error));
+    });
+    return {
+      blockedError,
+      statuses,
+      studentName: snapshot.students[0].displayName,
+    };
+  });
+
+  expect(result.blockedError).toContain("başka bir sekme");
+  expect(result.statuses).toContain("blocked");
+  expect(result.statuses).toContain("ready");
+  expect(result.statuses).toContain("versionchange");
+  expect(result.studentName).toBe("Kurgu Yaşam Döngüsü Öğrencisi");
 });

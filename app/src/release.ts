@@ -63,15 +63,14 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.2.0",
-  releasedOn: "2026-07-28",
-  title: "Çocuğu merkeze alan gözlem deneyimi",
+  version: "0.3.1",
+  releasedOn: "2026-07-29",
+  title: "Premium mobil deneyim ve kararlı geri akışı",
   notes: Object.freeze([
-    "Ana ekrandaki çocuk kartlarından çocuk profiline ve hızlı gözleme doğrudan erişim.",
-    "Doğum tarihi, yaş, ilgi alanları, güçlü yönler ve destek tercihleriyle zengin çocuk profili.",
-    "10 gözlem kategorisi ve 30 nötr öneriyle plansız hızlı gözlem.",
-    "Sekiz alanda 48 oyun temelli etkinlik fikri.",
-    "Telefon kullanımına uygun daha sıcak, renkli ve erişilebilir görünüm.",
+    "Telefonun geri işlemi artık profilden öğrenci listesine, ardından bugüne güvenle döner.",
+    "Tıklama ve kaydırma sahipliği ayrıştırılarak dokunmatik kullanım daha kararlı hâle getirildi.",
+    "Alt menü, açılır paneller ve güvenli ekran boşlukları küçük telefonlarda çakışmadan çalışır.",
+    "Öğrenci listesi arama, durum özeti ve hızlı işlemlerle profesyonel bir çalışma alanına dönüştürüldü.",
   ]),
 });
 

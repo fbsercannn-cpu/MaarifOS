@@ -23,6 +23,10 @@ import {
   isQuickObservationDraftRecord,
   isQuickObservationType,
 } from "../domain/quick-observation";
+import {
+  assertAppLockAttemptState,
+  assertAppLockConfig,
+} from "../security/app-lock";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
@@ -69,6 +73,304 @@ const UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const APP_LOCK_SETTING_TYPE = "app-lock-config-v1";
+const LOCAL_TEACHER_IDENTITY_SETTING_TYPE = "local-teacher-identity";
+const BASE_RECORD_KEYS = [
+  "id",
+  "createdAt",
+  "updatedAt",
+  "civilDate",
+  "deletedAt",
+  "schemaVersion",
+] as const;
+const SCOPE_RECORD_KEYS = [
+  "academicYearId",
+  "classroomId",
+  "legacyAssignmentStatus",
+] as const;
+const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
+  academicYears: [
+    ...BASE_RECORD_KEYS,
+    "name",
+    "startDate",
+    "endDate",
+    "status",
+    "archivedAt",
+    "closedOn",
+  ],
+  classrooms: [
+    ...BASE_RECORD_KEYS,
+    "academicYearId",
+    "name",
+    "ageGroup",
+    "teacherName",
+    "schoolName",
+    "curriculumProgram",
+    "curriculumCatalogLabel",
+    "curriculumProfileSnapshot",
+    "schedule",
+    "status",
+    "archiveStatus",
+    "archivedAt",
+  ],
+  students: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "displayName",
+    "preferredName",
+    "optionalCode",
+    "birthDate",
+    "enrollmentDate",
+    "homeLanguages",
+    "interests",
+    "strengths",
+    "supportPreferences",
+    "profileSchemaVersion",
+    "profileMediaId",
+    "active",
+    "notes",
+    "enrollmentStatus",
+    "enrollments",
+    "legacyRosterDeletedAt",
+    "attendanceStatus",
+  ],
+  attendanceRecords: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "studentId",
+    "status",
+    "arrivalTime",
+    "departureTime",
+    "reasonTag",
+    "note",
+    "_MUKERRER_INCELE",
+    "duplicateOf",
+  ],
+  observations: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "studentId",
+    "studentIds",
+    "observedAt",
+    "rawText",
+    "context",
+    "childQuote",
+    "tone",
+    "developmentDomains",
+    "maarifRefs",
+    "activityId",
+    "planId",
+    "mediaIds",
+    "useFlags",
+    "privacyLevel",
+    "authorId",
+    "requiresStudentReview",
+    "legacyStudentId",
+    "rawTextImmutable",
+    "observationType",
+    "observationTaxonomyVersion",
+    "observationCategories",
+    "workflowStatus",
+    "batchId",
+    "captureScope",
+    "_MUKERRER_INCELE",
+    "duplicateOf",
+  ],
+  observationRevisions: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "observationId",
+    "previousRawText",
+    "changedAt",
+    "reason",
+    "authorId",
+  ],
+  activities: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "title",
+    "date",
+    "description",
+    "planId",
+    "studentIds",
+    "mediaIds",
+    "maarifRefs",
+    "curriculumTargets",
+    "assignmentMode",
+    "assignmentSnapshotAt",
+    "coverageStatus",
+    "targetAssignments",
+    "status",
+    "startTime",
+    "endTime",
+    "activityKind",
+    "curriculumProfileSnapshot",
+    "subject",
+    "curriculumConnection",
+    "evidenceIds",
+    "evidenceCount",
+  ],
+  mediaAssets: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "blobKey",
+    "thumbnailBlobKey",
+    "mimeType",
+    "originalName",
+    "capturedAt",
+    "studentIds",
+    "activityId",
+    "caption",
+    "tags",
+    "sharingFlags",
+    "checksum",
+  ],
+  plans: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "date",
+    "type",
+    "planType",
+    "title",
+    "content",
+    "maarifRefs",
+    "activityIds",
+    "evaluationText",
+    "status",
+    "curriculumProfileSnapshot",
+    "curriculumTargets",
+    "assignmentMode",
+    "assignmentSnapshotAt",
+    "coverageStatus",
+    "studentIds",
+    "targetAssignments",
+  ],
+  maarifReferences: [
+    ...BASE_RECORD_KEYS,
+    "sourceVersion",
+    "ageGroup",
+    "category",
+    "code",
+    "title",
+    "description",
+    "parentId",
+    "framework",
+    "catalogId",
+    "sourceUrl",
+    "sourceCheckedOn",
+    "catalogCompleteness",
+  ],
+  evidenceCurriculumLinks: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "observationId",
+    "framework",
+    "programLabel",
+    "catalogId",
+    "sourceVersion",
+    "referenceCode",
+    "referenceTitle",
+    "confirmationMethod",
+    "approvedByUserId",
+    "confirmedAt",
+    "referenceOrigin",
+    "officialCatalogVerified",
+    "plannedTargetId",
+    "targetKind",
+    "targetDomain",
+    "targetSourceUrl",
+  ],
+  portfolioSelections: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "studentId",
+    "periodStart",
+    "periodEnd",
+    "itemType",
+    "itemId",
+    "order",
+    "teacherCaption",
+  ],
+  reportDrafts: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "reportType",
+    "scope",
+    "studentIds",
+    "periodStart",
+    "periodEnd",
+    "selectedObservationIds",
+    "selectedMediaIds",
+    "editableSections",
+    "generatedFileId",
+    "observationIds",
+    "evidenceCitations",
+    "teacherAssessmentText",
+    "assessmentLevel",
+    "assessmentTargetIds",
+    "status",
+    "authoredBy",
+    "teacherReviewRequired",
+    "reviewStatus",
+    "reviewedByUserId",
+    "reviewedAt",
+    "generationMode",
+    "referenceVerificationStatus",
+  ],
+  exportPackages: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "type",
+    "studentIds",
+    "periodStart",
+    "periodEnd",
+    "anonymizationMode",
+    "includedEntityIds",
+    "manifest",
+    "createdFileIds",
+  ],
+  notificationRules: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "type",
+    "enabled",
+    "threshold",
+    "scope",
+  ],
+  settings: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "settingType",
+    "attendanceCompleted",
+    "studentId",
+    "planId",
+    "activityId",
+    "rawText",
+    "context",
+    "childQuote",
+    "observationType",
+    "categoryIds",
+    "observationTaxonomyVersion",
+    "batchId",
+    "captureScope",
+    "approvedByUserId",
+    "teacherUserId",
+    "archivedAt",
+    "config",
+    "attemptState",
+  ],
+  auditLogs: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "action",
+    "entityType",
+    "entityId",
+    "timestamp",
+    "metadata",
+    "classroomCount",
+    "studentCount",
+  ],
+};
 const CURRICULUM_PROGRAM_LABELS = {
   tymm: "Türkiye Yüzyılı Maarif Modeli",
   meb_2024: "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı",
@@ -81,6 +383,349 @@ type CurriculumProvenance = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
+}
+
+function assertObjectAllowedKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new Error(`${label} tanımsız alan taşıyor: ${unknown.join(", ")}`);
+  }
+}
+
+function isValidUtcIso(value: unknown): value is string {
+  if (typeof value !== "string" || !UTC_ISO_PATTERN.test(value)) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+function isNonEmptyText(
+  value: unknown,
+  maximumLength: number,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumLength
+  );
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+function isSafeHttpsUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 2_048) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isUuidArray(
+  value: unknown,
+  options: { allowEmpty?: boolean; maximumLength?: number } = {},
+): value is string[] {
+  if (!Array.isArray(value)) return false;
+  const maximumLength = options.maximumLength ?? 10_000;
+  return (
+    (options.allowEmpty === true || value.length > 0) &&
+    value.length <= maximumLength &&
+    value.every(isUuid) &&
+    new Set(value).size === value.length
+  );
+}
+
+function assertAllowedRecordKeys(
+  record: StoredRecord,
+  collection: CollectionName,
+): void {
+  const allowed = new Set(COLLECTION_ALLOWED_KEYS[collection]);
+  const unknown = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new Error(
+      `${collection}/${record.id} kaydında tanımsız alan var: ${unknown.join(", ")}`,
+    );
+  }
+}
+
+function validateCollectionRecordSemantics(
+  record: StoredRecord,
+  collection: CollectionName,
+): void {
+  if (collection === "academicYears") {
+    if (
+      !isNonEmptyText(record.name, 120) ||
+      !isValidCivilDate(record.startDate) ||
+      !isValidCivilDate(record.endDate) ||
+      record.startDate > record.endDate ||
+      (record.status !== undefined &&
+        record.status !== "active" &&
+        record.status !== "archived") ||
+      (record.closedOn !== undefined &&
+        !isValidCivilDate(record.closedOn)) ||
+      (record.archivedAt !== undefined &&
+        !isValidUtcIso(record.archivedAt))
+    ) {
+      throw new Error(`academicYears/${record.id} eğitim yılı sözleşmesine uymuyor.`);
+    }
+    return;
+  }
+
+  if (collection === "observationRevisions") {
+    if (
+      !isUuid(record.observationId) ||
+      typeof record.previousRawText !== "string" ||
+      record.previousRawText.length > 100_000 ||
+      !isValidUtcIso(record.changedAt) ||
+      (record.reason !== undefined && !isNonEmptyText(record.reason, 1_000)) ||
+      (record.authorId !== undefined && !isNonEmptyText(record.authorId, 200))
+    ) {
+      throw new Error(
+        `observationRevisions/${record.id} revizyon sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "mediaAssets") {
+    const sharingFlags = record.sharingFlags;
+    if (
+      !isNonEmptyText(record.blobKey, 500) ||
+      !isNonEmptyText(record.mimeType, 200) ||
+      !isNonEmptyText(record.originalName, 500) ||
+      !isValidUtcIso(record.capturedAt) ||
+      !isUuidArray(record.studentIds, { maximumLength: 200 }) ||
+      (record.thumbnailBlobKey !== undefined &&
+        !isNonEmptyText(record.thumbnailBlobKey, 500)) ||
+      (record.activityId !== undefined && !isUuid(record.activityId)) ||
+      (record.caption !== undefined && !isNonEmptyText(record.caption, 2_000)) ||
+      (record.tags !== undefined &&
+        (!Array.isArray(record.tags) ||
+          record.tags.length > 100 ||
+          !record.tags.every((tag) => isNonEmptyText(tag, 100)) ||
+          new Set(record.tags).size !== record.tags.length)) ||
+      !isRecord(sharingFlags) ||
+      !hasExactKeys(sharingFlags, [
+        "classBulletinAllowed",
+        "individualReportAllowed",
+        "portfolioAllowed",
+      ]) ||
+      !Object.values(sharingFlags).every((flag) => typeof flag === "boolean") ||
+      (record.checksum !== undefined &&
+        (typeof record.checksum !== "string" ||
+          !SHA256_PATTERN.test(record.checksum)))
+    ) {
+      throw new Error(`mediaAssets/${record.id} medya sözleşmesine uymuyor.`);
+    }
+    return;
+  }
+
+  if (collection === "maarifReferences") {
+    if (
+      !isNonEmptyText(record.sourceVersion, 120) ||
+      !isNonEmptyText(record.ageGroup, 80) ||
+      !isNonEmptyText(record.category, 200) ||
+      !isNonEmptyText(record.code, 120) ||
+      !isNonEmptyText(record.title, 500) ||
+      (record.description !== undefined &&
+        !isNonEmptyText(record.description, 5_000)) ||
+      (record.parentId !== undefined && !isUuid(record.parentId)) ||
+      (record.framework !== "tymm" && record.framework !== "meb_2024") ||
+      !isNonEmptyText(record.catalogId, 200) ||
+      !isSafeHttpsUrl(record.sourceUrl) ||
+      !isValidCivilDate(record.sourceCheckedOn) ||
+      (record.catalogCompleteness !== "partial" &&
+        record.catalogCompleteness !== "complete")
+    ) {
+      throw new Error(
+        `maarifReferences/${record.id} program referansı sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "portfolioSelections") {
+    if (
+      !isUuid(record.studentId) ||
+      !isValidCivilDate(record.periodStart) ||
+      !isValidCivilDate(record.periodEnd) ||
+      record.periodStart > record.periodEnd ||
+      !isNonEmptyText(record.itemType, 80) ||
+      !isUuid(record.itemId) ||
+      !Number.isInteger(record.order) ||
+      (record.order as number) < 0 ||
+      (record.teacherCaption !== undefined &&
+        !isNonEmptyText(record.teacherCaption, 2_000))
+    ) {
+      throw new Error(
+        `portfolioSelections/${record.id} portfolyo seçimi sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "exportPackages") {
+    if (
+      record.type !== "ai_analysis" &&
+      record.type !== "student_archive" &&
+      record.type !== "class_bulletin_data"
+    ) {
+      throw new Error(
+        `exportPackages/${record.id} dışa aktarma türü geçersiz.`,
+      );
+    }
+    if (
+      !isUuidArray(record.studentIds, { maximumLength: 10_000 }) ||
+      !isValidCivilDate(record.periodStart) ||
+      !isValidCivilDate(record.periodEnd) ||
+      record.periodStart > record.periodEnd ||
+      !isNonEmptyText(record.anonymizationMode, 80) ||
+      !isRecord(record.includedEntityIds) ||
+      !isRecord(record.manifest) ||
+      !isUuidArray(record.createdFileIds, {
+        allowEmpty: true,
+        maximumLength: 10_000,
+      })
+    ) {
+      throw new Error(
+        `exportPackages/${record.id} dışa aktarma paketi sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "notificationRules") {
+    if (
+      !isNonEmptyText(record.type, 120) ||
+      typeof record.enabled !== "boolean" ||
+      (typeof record.threshold !== "number" &&
+        typeof record.threshold !== "string") ||
+      (typeof record.threshold === "number" &&
+        !Number.isFinite(record.threshold)) ||
+      !isRecord(record.scope)
+    ) {
+      throw new Error(
+        `notificationRules/${record.id} bildirim kuralı sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "auditLogs") {
+    const timestamp = record.timestamp ?? record.createdAt;
+    if (
+      !isNonEmptyText(record.action, 160) ||
+      !isNonEmptyText(record.entityType, 160) ||
+      !isUuid(record.entityId) ||
+      !isValidUtcIso(timestamp) ||
+      (record.metadata !== undefined && !isRecord(record.metadata)) ||
+      (record.classroomCount !== undefined &&
+        (!Number.isInteger(record.classroomCount) ||
+          (record.classroomCount as number) < 0)) ||
+      (record.studentCount !== undefined &&
+        (!Number.isInteger(record.studentCount) ||
+          (record.studentCount as number) < 0))
+    ) {
+      throw new Error(`auditLogs/${record.id} denetim kaydı sözleşmesine uymuyor.`);
+    }
+    return;
+  }
+
+  if (collection === "settings") {
+    if (!isNonEmptyText(record.settingType, 120)) {
+      throw new Error(`settings/${record.id} ayar türü geçersiz.`);
+    }
+    const scopedSettingKeys = [
+      ...BASE_RECORD_KEYS,
+      "settingType",
+      ...SCOPE_RECORD_KEYS,
+    ];
+    if (record.settingType === APP_LOCK_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [...BASE_RECORD_KEYS, "settingType", "config", "attemptState"],
+        `settings/${record.id}`,
+      );
+      assertAppLockConfig(record.config);
+      assertAppLockAttemptState(record.attemptState);
+      return;
+    }
+    if (record.settingType === LOCAL_TEACHER_IDENTITY_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [...BASE_RECORD_KEYS, "settingType", "teacherUserId"],
+        `settings/${record.id}`,
+      );
+      if (!isUuid(record.teacherUserId)) {
+        throw new Error(
+          `settings/${record.id} yerel öğretmen kimliği geçersiz.`,
+        );
+      }
+      return;
+    }
+    if (record.settingType === ACTIVE_CLASSROOM_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [...scopedSettingKeys, "archivedAt"],
+        `settings/${record.id}`,
+      );
+      return;
+    }
+    if (record.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [...scopedSettingKeys, "attendanceCompleted"],
+        `settings/${record.id}`,
+      );
+      return;
+    }
+    if (record.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [
+          ...scopedSettingKeys,
+          "studentId",
+          "planId",
+          "activityId",
+          "rawText",
+          "context",
+          "childQuote",
+          "observationType",
+          "categoryIds",
+          "observationTaxonomyVersion",
+          "batchId",
+          "captureScope",
+        ],
+        `settings/${record.id}`,
+      );
+      return;
+    }
+    throw new Error(`settings/${record.id} desteklenmeyen ayar türü taşıyor.`);
+  }
 }
 
 function isValidCivilDate(value: unknown): value is string {
@@ -111,6 +756,43 @@ function validatedCurriculumProvenance(
   return { referenceOrigin, officialCatalogVerified };
 }
 
+function validateCurriculumProfileShape(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`${label} program profili geçersiz.`);
+  }
+  assertObjectAllowedKeys(
+    value,
+    [
+      "framework",
+      "programLabel",
+      "catalogId",
+      "sourceVersion",
+      "referenceOrigin",
+      "officialCatalogVerified",
+    ],
+    `${label} program profili`,
+  );
+  const expectedLabel =
+    value.framework === "tymm"
+      ? CURRICULUM_PROGRAM_LABELS.tymm
+      : value.framework === "meb_2024"
+        ? CURRICULUM_PROGRAM_LABELS.meb_2024
+        : null;
+  if (
+    !expectedLabel ||
+    value.programLabel !== expectedLabel ||
+    !isNonEmptyText(value.catalogId, 200) ||
+    !isNonEmptyText(value.sourceVersion, 120)
+  ) {
+    throw new Error(`${label} program profili geçersiz.`);
+  }
+  validatedCurriculumProvenance(value, label);
+  return value;
+}
+
 function assertStoredRecord(value: unknown, collection: CollectionName): asserts value is StoredRecord {
   if (!isRecord(value)) {
     throw new Error(`${collection} koleksiyonunda geçersiz kayıt bulundu.`);
@@ -118,14 +800,17 @@ function assertStoredRecord(value: unknown, collection: CollectionName): asserts
   if (typeof value.id !== "string" || !UUID_PATTERN.test(value.id)) {
     throw new Error(`${collection} koleksiyonunda geçersiz UUID bulundu.`);
   }
-  if (typeof value.createdAt !== "string" || !UTC_ISO_PATTERN.test(value.createdAt)) {
+  if (!isValidUtcIso(value.createdAt)) {
     throw new Error(`${collection}/${value.id} createdAt UTC ISO biçiminde değil.`);
   }
-  if (typeof value.updatedAt !== "string" || !UTC_ISO_PATTERN.test(value.updatedAt)) {
+  if (!isValidUtcIso(value.updatedAt)) {
     throw new Error(`${collection}/${value.id} updatedAt UTC ISO biçiminde değil.`);
   }
-  if (typeof value.civilDate !== "string" || !CIVIL_DATE_PATTERN.test(value.civilDate)) {
-    throw new Error(`${collection}/${value.id} civilDate YYYY-MM-DD biçiminde değil.`);
+  if (!isValidCivilDate(value.civilDate)) {
+    throw new Error(`${collection}/${value.id} civilDate geçerli YYYY-MM-DD değil.`);
+  }
+  if (value.updatedAt < value.createdAt) {
+    throw new Error(`${collection}/${value.id} updatedAt createdAt öncesinde olamaz.`);
   }
   if (!Number.isInteger(value.schemaVersion) || (value.schemaVersion as number) < 1) {
     throw new Error(`${collection}/${value.id} schemaVersion geçersiz.`);
@@ -133,10 +818,13 @@ function assertStoredRecord(value: unknown, collection: CollectionName): asserts
   if (
     value.deletedAt !== undefined &&
     value.deletedAt !== null &&
-    (typeof value.deletedAt !== "string" || !UTC_ISO_PATTERN.test(value.deletedAt))
+    !isValidUtcIso(value.deletedAt)
   ) {
     throw new Error(`${collection}/${value.id} deletedAt UTC ISO biçiminde değil.`);
   }
+  const storedRecord = value as StoredRecord;
+  assertAllowedRecordKeys(storedRecord, collection);
+  validateCollectionRecordSemantics(storedRecord, collection);
 }
 
 function validatedRecordScope(
@@ -202,18 +890,28 @@ function validatedEnrollmentScopes(
       throw new Error(`students/${student.id} sınıf üyeliği geçmişi geçersiz.`);
     }
     const enrollment = value as Record<string, unknown>;
+    const enrollmentKeys = [
+      "id",
+      "classroomId",
+      "academicYearId",
+      "startedOn",
+      "status",
+      "schemaVersion",
+      ...(enrollment.endedOn === undefined ? [] : ["endedOn"]),
+    ];
     if (
+      !hasExactKeys(enrollment, enrollmentKeys) ||
       typeof enrollment.id !== "string" ||
       !UUID_PATTERN.test(enrollment.id) ||
       typeof enrollment.classroomId !== "string" ||
       !UUID_PATTERN.test(enrollment.classroomId) ||
       typeof enrollment.academicYearId !== "string" ||
       !UUID_PATTERN.test(enrollment.academicYearId) ||
-      typeof enrollment.startedOn !== "string" ||
-      !CIVIL_DATE_PATTERN.test(enrollment.startedOn) ||
+      !isValidCivilDate(enrollment.startedOn) ||
       (enrollment.endedOn !== undefined &&
-        (typeof enrollment.endedOn !== "string" ||
-          !CIVIL_DATE_PATTERN.test(enrollment.endedOn))) ||
+        !isValidCivilDate(enrollment.endedOn)) ||
+      (typeof enrollment.endedOn === "string" &&
+        enrollment.endedOn < (enrollment.startedOn as string)) ||
       (enrollment.status !== "active" &&
         enrollment.status !== "left" &&
         enrollment.status !== "completed" &&
@@ -339,10 +1037,30 @@ function validateStudentProfile(
 }
 
 export function assertBackupEnvelopeStructure(value: unknown): asserts value is BackupEnvelope {
-  if (!isRecord(value) || !isRecord(value.manifest) || !isRecord(value.payload)) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["manifest", "payload"]) ||
+    !isRecord(value.manifest) ||
+    !isRecord(value.payload)
+  ) {
     throw new Error("Yedek zarfı veya manifest eksik.");
   }
   const manifest = value.manifest;
+  if (
+    !hasExactKeys(manifest, [
+      "appVersion",
+      "backupVersion",
+      "checksumAlgorithm",
+      "civilDate",
+      "createdAt",
+      "dataSchemaVersion",
+      "entityCounts",
+      "format",
+      "payloadChecksum",
+    ])
+  ) {
+    throw new Error("Yedek manifestinde tanımsız veya eksik alan var.");
+  }
   if (manifest.format !== BACKUP_FORMAT || manifest.backupVersion !== BACKUP_VERSION) {
     throw new Error("Yedek biçimi veya sürümü desteklenmiyor.");
   }
@@ -355,11 +1073,11 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   if (typeof manifest.appVersion !== "string" || manifest.appVersion.length === 0) {
     throw new Error("Yedek uygulama sürümü eksik.");
   }
-  if (typeof manifest.createdAt !== "string" || !UTC_ISO_PATTERN.test(manifest.createdAt)) {
+  if (!isValidUtcIso(manifest.createdAt)) {
     throw new Error("Yedek oluşturma zamanı UTC ISO biçiminde değil.");
   }
-  if (typeof manifest.civilDate !== "string" || !CIVIL_DATE_PATTERN.test(manifest.civilDate)) {
-    throw new Error("Yedek takvim günü YYYY-MM-DD biçiminde değil.");
+  if (!isValidCivilDate(manifest.civilDate)) {
+    throw new Error("Yedek takvim günü geçerli YYYY-MM-DD değil.");
   }
   if (
     manifest.checksumAlgorithm !== "SHA-256" ||
@@ -373,13 +1091,45 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   }
 
   const payloadKeys = Object.keys(value.payload);
+  const expectedCollections =
+    manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
+      ? COLLECTION_NAMES.filter(
+          (collection) => collection !== "evidenceCurriculumLinks",
+        )
+      : [...COLLECTION_NAMES];
   const unknownCollections = payloadKeys.filter(
-    (key) => !COLLECTION_NAMES.includes(key as CollectionName),
+    (key) => !expectedCollections.includes(key as CollectionName),
   );
-  if (unknownCollections.length > 0) {
-    throw new Error(`Yedekte bilinmeyen koleksiyon var: ${unknownCollections.join(", ")}`);
+  const missingCollections = expectedCollections.filter(
+    (collection) => !payloadKeys.includes(collection),
+  );
+  if (unknownCollections.length > 0 || missingCollections.length > 0) {
+    throw new Error(
+      `Yedek koleksiyon sözleşmesi geçersiz${
+        unknownCollections.length > 0
+          ? `; bilinmeyen: ${unknownCollections.join(", ")}`
+          : ""
+      }${
+        missingCollections.length > 0
+          ? `; eksik: ${missingCollections.join(", ")}`
+          : ""
+      }.`,
+    );
+  }
+  const expectedCountKeys =
+    manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
+      ? expectedCollections
+      : COLLECTION_NAMES;
+  if (
+    !hasExactKeys(
+      manifest.entityCounts,
+      expectedCountKeys,
+    )
+  ) {
+    throw new Error("Yedek kayıt sayacı koleksiyon sözleşmesiyle uyuşmuyor.");
   }
 
+  let totalRecords = 0;
   for (const collection of COLLECTION_NAMES) {
     const records = value.payload[collection];
     if (
@@ -391,6 +1141,15 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     }
     if (!Array.isArray(records)) {
       throw new Error(`Yedekte ${collection} koleksiyonu eksik.`);
+    }
+    if (records.length > 100_000) {
+      throw new Error(
+        `${collection} koleksiyonu izin verilen kayıt sınırını aşıyor.`,
+      );
+    }
+    totalRecords += records.length;
+    if (totalRecords > 250_000) {
+      throw new Error("Yedek toplam kayıt sınırını aşıyor.");
     }
     const identifiers = new Set<string>();
     for (const record of records) {
@@ -415,6 +1174,26 @@ function assertBackupRelationships(
   for (const classroom of payload.classrooms) {
     if (!isClassroomRecord(classroom)) {
       throw new Error(`classrooms/${classroom.id} sınıf sözleşmesine uymuyor.`);
+    }
+    if (isRecord(classroom.schedule)) {
+      if (
+        !hasExactKeys(classroom.schedule, [
+          "endTime",
+          "kind",
+          "startTime",
+          "timeZone",
+        ])
+      ) {
+        throw new Error(
+          `classrooms/${classroom.id} çalışma düzeninde tanımsız alan var.`,
+        );
+      }
+    }
+    if (classroom.curriculumProfileSnapshot !== undefined) {
+      validateCurriculumProfileShape(
+        classroom.curriculumProfileSnapshot,
+        `classrooms/${classroom.id}`,
+      );
     }
     if (!academicYearIds.has(classroom.academicYearId)) {
       throw new Error(`classrooms/${classroom.id} bilinmeyen eğitim yılına bağlı.`);
@@ -510,6 +1289,12 @@ function assertBackupRelationships(
   for (const plan of payload.plans) {
     const planScope = validatedRecordScope(plan, "plans", classroomsById);
     planScopes.set(plan.id, planScope);
+    if (plan.curriculumProfileSnapshot !== undefined) {
+      validateCurriculumProfileShape(
+        plan.curriculumProfileSnapshot,
+        `plans/${plan.id}`,
+      );
+    }
     if (plan.planType === "daily") {
       const profile = isRecord(plan.curriculumProfileSnapshot)
         ? plan.curriculumProfileSnapshot
@@ -543,6 +1328,12 @@ function assertBackupRelationships(
       classroomsById,
     );
     activityScopes.set(activity.id, activityScope);
+    if (activity.curriculumProfileSnapshot !== undefined) {
+      validateCurriculumProfileShape(
+        activity.curriculumProfileSnapshot,
+        `activities/${activity.id}`,
+      );
+    }
     if (activity.planId !== undefined) {
       const plan =
         typeof activity.planId === "string"
@@ -572,6 +1363,30 @@ function assertBackupRelationships(
           activity.curriculumTargets.every((target) => isRecord(target))
             ? activity.curriculumTargets
             : [];
+        for (const target of targets) {
+          assertObjectAllowedKeys(
+            target,
+            [
+              "catalogCompleteness",
+              "catalogId",
+              "domain",
+              "framework",
+              "id",
+              "kind",
+              "officialCatalogVerified",
+              "parentCode",
+              "referenceCode",
+              "referenceOrigin",
+              "referenceTitle",
+              "sourceCheckedOn",
+              "sourceLabel",
+              "sourceUrl",
+              "sourceVersion",
+              "verificationStatus",
+            ],
+            `activities/${activity.id} program hedefi`,
+          );
+        }
         const targetIds = targets
           .map((target) => target.id)
           .filter((id): id is string => typeof id === "string" && id.length > 0);
@@ -594,10 +1409,8 @@ function assertBackupRelationships(
               target.kind.trim().length > 0 &&
               typeof target.domain === "string" &&
               target.domain.trim().length > 0 &&
-              typeof target.sourceUrl === "string" &&
-              target.sourceUrl.trim().length > 0 &&
-              typeof target.sourceCheckedOn === "string" &&
-              CIVIL_DATE_PATTERN.test(target.sourceCheckedOn) &&
+              isSafeHttpsUrl(target.sourceUrl) &&
+              isValidCivilDate(target.sourceCheckedOn) &&
               (target.catalogCompleteness === "partial" ||
                 target.catalogCompleteness === "complete") &&
               (target.verificationStatus === "official-source-checked" ||
@@ -628,6 +1441,21 @@ function assertBackupRelationships(
           activity.targetAssignments.every((assignment) => isRecord(assignment))
             ? activity.targetAssignments
             : [];
+        for (const assignment of assignments) {
+          if (
+            !hasExactKeys(assignment, [
+              "assignedAt",
+              "referenceCode",
+              "status",
+              "studentId",
+              "targetId",
+            ])
+          ) {
+            throw new Error(
+              `activities/${activity.id} hedef dağıtımında tanımsız alan var.`,
+            );
+          }
+        }
         const assignmentKeys = assignments.map(
           (assignment) =>
             `${String(assignment.studentId)}\u0000${String(assignment.targetId)}`,
@@ -664,6 +1492,113 @@ function assertBackupRelationships(
   const activitiesById = new Map(
     payload.activities.map((activity) => [activity.id, activity]),
   );
+  const observationsById = new Map(
+    payload.observations.map((observation) => [observation.id, observation]),
+  );
+  for (const revision of payload.observationRevisions) {
+    const observation = observationsById.get(
+      revision.observationId as string,
+    );
+    if (!observation) {
+      throw new Error(
+        `observationRevisions/${revision.id} bilinmeyen gözleme bağlı.`,
+      );
+    }
+    const observationScope = observationScopes.get(observation.id) ?? null;
+    const hasRevisionScope =
+      typeof revision.classroomId === "string" ||
+      typeof revision.academicYearId === "string";
+    if (hasRevisionScope) {
+      const revisionScope = validatedRecordScope(
+        revision,
+        "observationRevisions",
+        classroomsById,
+      );
+      if (
+        !revisionScope ||
+        !observationScope ||
+        !scopesMatch(revisionScope, observationScope)
+      ) {
+        throw new Error(
+          `observationRevisions/${revision.id} gözlem kapsamıyla uyuşmuyor.`,
+        );
+      }
+    }
+  }
+
+  const mediaById = new Map(
+    payload.mediaAssets.map((media) => [media.id, media]),
+  );
+  for (const media of payload.mediaAssets) {
+    const mediaStudentIds = media.studentIds as string[];
+    if (mediaStudentIds.some((studentId) => !studentIds.has(studentId))) {
+      throw new Error(`mediaAssets/${media.id} bilinmeyen öğrenciye bağlı.`);
+    }
+    if (
+      typeof media.activityId === "string" &&
+      !activitiesById.has(media.activityId)
+    ) {
+      throw new Error(`mediaAssets/${media.id} bilinmeyen etkinliğe bağlı.`);
+    }
+    const hasMediaScope =
+      typeof media.classroomId === "string" ||
+      typeof media.academicYearId === "string";
+    if (hasMediaScope) {
+      const mediaScope = validatedRecordScope(
+        media,
+        "mediaAssets",
+        classroomsById,
+      );
+      if (
+        !mediaScope ||
+        mediaStudentIds.some(
+          (studentId) =>
+            !(studentScopes.get(studentId) ?? []).some((scope) =>
+              scopesMatch(scope, mediaScope),
+            ),
+        )
+      ) {
+        throw new Error(
+          `mediaAssets/${media.id} öğrenci sınıf kapsamıyla uyuşmuyor.`,
+        );
+      }
+    }
+  }
+
+  const maarifReferenceIds = new Set(
+    payload.maarifReferences.map((reference) => reference.id),
+  );
+  for (const reference of payload.maarifReferences) {
+    if (
+      typeof reference.parentId === "string" &&
+      (reference.parentId === reference.id ||
+        !maarifReferenceIds.has(reference.parentId))
+    ) {
+      throw new Error(
+        `maarifReferences/${reference.id} üst referans ilişkisi geçersiz.`,
+      );
+    }
+  }
+
+  for (const selection of payload.portfolioSelections) {
+    if (!studentIds.has(selection.studentId as string)) {
+      throw new Error(
+        `portfolioSelections/${selection.id} bilinmeyen öğrenciye bağlı.`,
+      );
+    }
+    const itemId = selection.itemId as string;
+    const knownItem =
+      (selection.itemType === "observation" &&
+        observationsById.has(itemId)) ||
+      (selection.itemType === "media" && mediaById.has(itemId)) ||
+      (selection.itemType === "activity" && activitiesById.has(itemId)) ||
+      (selection.itemType === "plan" && plansById.has(itemId));
+    if (!knownItem) {
+      throw new Error(
+        `portfolioSelections/${selection.id} portfolyo öğesi bulunamadı.`,
+      );
+    }
+  }
 
   for (const observation of payload.observations) {
     if (observation.rawTextImmutable !== true && observation.schemaVersion < 2) {
@@ -703,6 +1638,12 @@ function assertBackupRelationships(
       throw new Error(`observations/${observation.id} ham kanıt zinciri geçersiz.`);
     }
     const observationCategories = observation.observationCategories;
+    const batchMetadataValid =
+      (observation.batchId === undefined &&
+        observation.captureScope === undefined) ||
+      (typeof observation.batchId === "string" &&
+        UUID_PATTERN.test(observation.batchId) &&
+        observation.captureScope === "selected-children");
     if (
       (observation.context !== undefined &&
         typeof observation.context !== "string") ||
@@ -713,7 +1654,8 @@ function assertBackupRelationships(
       (observationCategories !== undefined &&
         (!Array.isArray(observationCategories) ||
           !observationCategories.every(isQuickObservationCategory) ||
-          new Set(observationCategories).size !== observationCategories.length))
+          new Set(observationCategories).size !== observationCategories.length)) ||
+      !batchMetadataValid
     ) {
       throw new Error(
         `observations/${observation.id} hızlı gözlem alanları geçersiz.`,
@@ -773,8 +1715,9 @@ function assertBackupRelationships(
       link.confirmationMethod !== "teacher-confirmed" ||
       typeof link.approvedByUserId !== "string" ||
       link.approvedByUserId.trim().length === 0 ||
-      typeof link.confirmedAt !== "string" ||
-      !UTC_ISO_PATTERN.test(link.confirmedAt) ||
+      !isValidUtcIso(link.confirmedAt) ||
+      (link.targetSourceUrl !== undefined &&
+        !isSafeHttpsUrl(link.targetSourceUrl)) ||
       !profile ||
       profile.framework !== link.framework ||
       profile.catalogId !== link.catalogId ||
@@ -794,7 +1737,41 @@ function assertBackupRelationships(
   }
 
   for (const draft of payload.reportDrafts) {
-    if (draft.reportType !== "evidence-assessment") continue;
+    if (draft.reportType !== "evidence-assessment") {
+      const selectedObservationIds = draft.selectedObservationIds;
+      const selectedMediaIds = draft.selectedMediaIds;
+      if (
+        !isNonEmptyText(draft.reportType, 120) ||
+        (typeof draft.scope !== "string" && !isRecord(draft.scope)) ||
+        !isUuidArray(draft.studentIds, { maximumLength: 10_000 }) ||
+        (draft.studentIds as string[]).some(
+          (studentId) => !studentIds.has(studentId),
+        ) ||
+        !isValidCivilDate(draft.periodStart) ||
+        !isValidCivilDate(draft.periodEnd) ||
+        draft.periodStart > draft.periodEnd ||
+        !isUuidArray(selectedObservationIds, {
+          allowEmpty: true,
+          maximumLength: 50_000,
+        }) ||
+        (selectedObservationIds as string[]).some(
+          (id) => !observationsById.has(id),
+        ) ||
+        !isUuidArray(selectedMediaIds, {
+          allowEmpty: true,
+          maximumLength: 50_000,
+        }) ||
+        (selectedMediaIds as string[]).some((id) => !mediaById.has(id)) ||
+        !isRecord(draft.editableSections) ||
+        (draft.generatedFileId !== undefined &&
+          !isUuid(draft.generatedFileId))
+      ) {
+        throw new Error(
+          `reportDrafts/${draft.id} rapor taslağı sözleşmesine uymuyor.`,
+        );
+      }
+      continue;
+    }
     const draftScope = validatedRecordScope(
       draft,
       "reportDrafts",
@@ -825,6 +1802,16 @@ function assertBackupRelationships(
     let citationsValid = citations.length === draftObservationIds.length;
     const citedLinks: StoredRecord[] = [];
     for (const citation of citations) {
+      if (
+        !hasExactKeys(citation, [
+          "confirmedCurriculumLinkIds",
+          "observationId",
+          "observedAt",
+        ])
+      ) {
+        citationsValid = false;
+        continue;
+      }
       const observationId = citation.observationId;
       const observation =
         typeof observationId === "string"
@@ -944,10 +1931,71 @@ function assertBackupRelationships(
     }
   }
 
+  const allEntityIds = new Set(
+    COLLECTION_NAMES.flatMap((collection) =>
+      payload[collection].map((record) => record.id),
+    ),
+  );
+  for (const exportPackage of payload.exportPackages) {
+    if (
+      (exportPackage.studentIds as string[]).some(
+        (studentId) => !studentIds.has(studentId),
+      )
+    ) {
+      throw new Error(
+        `exportPackages/${exportPackage.id} bilinmeyen öğrenciye bağlı.`,
+      );
+    }
+    const includedGroups = Object.values(
+      exportPackage.includedEntityIds as Record<string, unknown>,
+    );
+    if (
+      includedGroups.some(
+        (group) =>
+          !isUuidArray(group, { allowEmpty: true, maximumLength: 100_000 }) ||
+          group.some((id) => !allEntityIds.has(id)),
+      )
+    ) {
+      throw new Error(
+        `exportPackages/${exportPackage.id} bilinmeyen veya geçersiz kayıt kimliği içeriyor.`,
+      );
+    }
+  }
+
+  const auditTargets: Record<string, ReadonlySet<string>> = {
+    academicYear: new Set(payload.academicYears.map((record) => record.id)),
+    classroom: new Set(payload.classrooms.map((record) => record.id)),
+    student: studentIds,
+    attendanceRecord: new Set(
+      payload.attendanceRecords.map((record) => record.id),
+    ),
+    observation: new Set(payload.observations.map((record) => record.id)),
+    plan: new Set(payload.plans.map((record) => record.id)),
+    activity: new Set(payload.activities.map((record) => record.id)),
+  };
+  for (const auditLog of payload.auditLogs) {
+    const knownTargets = auditTargets[auditLog.entityType as string];
+    if (knownTargets && !knownTargets.has(auditLog.entityId as string)) {
+      throw new Error(
+        `auditLogs/${auditLog.id} bilinmeyen hedef kayda bağlı.`,
+      );
+    }
+  }
+
   for (const setting of payload.settings) {
     if (setting.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
       if (!isQuickObservationDraftRecord(setting)) {
         throw new Error(`settings/${setting.id} hızlı gözlem taslağı geçersiz.`);
+      }
+      const batchMetadataValid =
+        (setting.batchId === undefined && setting.captureScope === undefined) ||
+        (typeof setting.batchId === "string" &&
+          UUID_PATTERN.test(setting.batchId) &&
+          setting.captureScope === "selected-children");
+      if (!batchMetadataValid) {
+        throw new Error(
+          `settings/${setting.id} toplu gözlem taslağı kimliği geçersiz.`,
+        );
       }
       const draftScope = validatedRecordScope(
         setting,

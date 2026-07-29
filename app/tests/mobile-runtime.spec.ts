@@ -180,6 +180,99 @@ test("native keyboard preserves the focus session across fields and cleans up on
   await expect(status).toHaveAttribute("data-focused", "");
 });
 
+test("native keyboard resets its viewport baseline after orientation changes", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const status = page.getByTestId("native-keyboard-status");
+  const input = page.getByLabel("Native message");
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 520, innerHeight: 844 });
+  await expect(status).toHaveAttribute("data-visible", "true");
+
+  await page.getByRole("button", { name: "Non-text control" }).focus();
+  await setVisualViewport(page, { height: 390, innerHeight: 390 });
+  await page.evaluate(() => window.dispatchEvent(new Event("orientationchange")));
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 390, innerHeight: 390 });
+
+  await expect(status).toHaveAttribute("data-visible", "false");
+  await expect(status).toHaveAttribute("data-height", "0");
+});
+
+test("native MobileScroll delegates vertical gestures and click handling to the browser", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const scroll = page.getByTestId("mobile-scroll");
+  await expect(scroll).toHaveAttribute("data-native-scroll", "true");
+  await expect(scroll).toHaveCSS("touch-action", "pan-y");
+  await expect(scroll).toHaveCSS("overscroll-behavior-y", "contain");
+
+  const result = await scroll.evaluate((element) => {
+    const target = element.querySelector<HTMLButtonElement>("button");
+    if (!target) throw new Error("Native scroll fixture button is missing");
+
+    let clickCount = 0;
+    target.addEventListener("click", () => {
+      clickCount += 1;
+    });
+
+    const pointerEvents = [
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 320,
+      }),
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 160,
+      }),
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 160,
+      }),
+    ];
+
+    const pointerDefaultPrevented = pointerEvents.map((event) => {
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    target.dispatchEvent(click);
+
+    return {
+      pointerDefaultPrevented,
+      clickDefaultPrevented: click.defaultPrevented,
+      clickCount,
+      dragging: element.getAttribute("data-dragging"),
+      overscroll: element.getAttribute("data-overscroll"),
+    };
+  });
+
+  expect(result.pointerDefaultPrevented).toEqual([false, false, false]);
+  expect(result.clickDefaultPrevented).toBe(false);
+  expect(result.clickCount).toBe(1);
+  expect(result.dragging).toBe("false");
+  expect(result.overscroll).toBe("0.00");
+});
+
 test("horizontal intent stays in Carousel and cannot create parent momentum", async ({ page }) => {
   const carousel = page.locator(".fixture-carousel");
   const card = page.locator(".carousel-card").nth(1);

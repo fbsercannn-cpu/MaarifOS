@@ -5,6 +5,23 @@
 - Tarayıcı çubuğu olmadan standalone açılır.
 - İnternet kapalıyken daha önce yüklenmiş uygulama açılır.
 
+## Mobil etkileşim ve gezinme
+
+- `320×568`, `360×800`, `390×844` ve `430×932` telefon görünümlerinde
+  yatay taşma, sabit başlık/alt menü çakışması veya erişilemeyen içerik oluşmaz.
+- Native PWA modunda dikey kaydırma, atalet ve dokunma tıklaması tarayıcının
+  yerel davranışına bırakılır; sürükleme sonrasında hayalet tıklama oluşmaz.
+- Telefonun geri işlemi çocuk profili → sınıf listesi → Bugün ekranı sırasını
+  aynı URL içinde izler; uygulama içi ekran varken görevden çıkmaz.
+- Tam ekran alt panellerde açık kapatma eylemi bulunur; kapanan panelin animasyon
+  katmanı alttaki içeriğin tıklamasını engellemez.
+- Görünür temel dokunma hedefleri en az `44×44 px` boyutundadır.
+- Sınıf listesi arama, sınıf özeti, çocuk profili ve hızlı gözlem eylemlerini
+  birincil; sınıftan ayırmayı geçmişin korunacağını belirten ikincil işlem olarak
+  sunar.
+- Sınıftan ayrılan çocuklar silinmez; daraltılabilir arşiv bölümünde geçmişleri
+  korunarak geri alınabilir.
+
 ## Öğrenci
 - Yeni öğrenci 30 saniyeden kısa sürede eklenir.
 - Öğrenci arşivlenebilir, geçmişi kaybolmaz.
@@ -40,7 +57,8 @@
 
 ## Gözlem
 - Öğrenci + metin ile hızlı kayıt yapılır.
-- Hızlı gözlem ekranı öğrenci seçmeden açılır; öğretmen öğrenciyi açıkça seçer.
+- Ana sayfadaki çocuk kartından açılan hızlı gözlem ilgili çocuğu açıkça
+  önseçer; genel kayıt girişinden açıldığında öğretmen çocuğu açıkça seçer.
 - Her öğrencinin yarım kalan hızlı gözlem taslağı diğer öğrencilerin
   taslaklarından ayrı tutulur ve yeniden açılışta geri gelir.
 - Gözlem türü ve nötr kategoriler hazır seçeneklerden seçilebilir; bunlar
@@ -82,6 +100,16 @@
   yükleme boyunca korunur.
 - Ham metin, bağlam ve çocuğun özgün sözü hızlı gözlem taslağından final kanıta
   aktarılırken öğretmenin yazdığı biçimiyle korunur.
+- Öğretmen tek çocuk ve seçili çocuklar kapsamı arasında geçebilir; tüm sınıf
+  seçimi işlem anındaki uygun çocuk listesini açıkça işaretler.
+- Toplu gözlem en az iki farklı aktif çocuk ve “her birini gözlemledim” öğretmen
+  doğrulaması olmadan finalleşmez.
+- Toplu işlem, öğrenci başına ayrı UUID'li ve tek-öğrencili ham gözlem üretir;
+  ortak `batchId` yalnız işlem ilişkisini taşır.
+- Bir çocuk bile başka sınıfta, pasif veya etkinliğe atanmamışsa bütün toplu
+  yazım atomik olarak reddedilir; açık taslaklar korunur.
+- Toplu gözlem program hedefini veya “öğrendi/başardı” hükmünü otomatik
+  dağıtmaz; program bağı her çocuk için ayrı öğretmen onayı ister.
 - Kısmi program kataloğu arayüzde tam resmî katalog gibi sunulmaz.
 
 ## Program değerlendirmesi

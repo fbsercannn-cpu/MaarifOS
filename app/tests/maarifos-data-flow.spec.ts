@@ -5,6 +5,11 @@ async function ensureClassroomConfigured(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   if (await setup.isVisible().catch(() => false)) {
     await setup.getByLabel("Sınıf adı").fill("Kurgu Test Sınıfı");
+    await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
+    await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+    await setup
+      .getByLabel("Uygulanan program")
+      .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
     await setup.getByLabel("Program katalog kimliği").fill("KURGU-KATALOG");
     await setup.getByLabel("Kaynak sürümü").fill("2026-test");
     await setup
@@ -16,10 +21,23 @@ async function ensureClassroomConfigured(page: Page) {
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill(name);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await page.getByRole("button", { name: `${name} için işlemler` }).click();
   await expect(page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` })).toBeVisible();
   await page.keyboard.press("Escape");
+}
+
+async function openStudentActions(page: Page, name: string) {
+  await page.getByRole("button", { name: `${name} için işlemler` }).click();
+}
+
+async function openArchivedStudents(page: Page) {
+  await page
+    .locator("summary")
+    .filter({ hasText: "Sınıftan ayrılanlar" })
+    .click();
 }
 
 async function createD1Observation(page: Page, text: string) {
@@ -51,16 +69,20 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await openStudentActions(page, childName);
   await page.getByRole("button", { name: `${childName} çocuğunu sınıftan ayır` }).click();
+  await openArchivedStudents(page);
   await expect(page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` })).toBeVisible();
 
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await openArchivedStudents(page);
   await page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` }).click();
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await openStudentActions(page, childName);
   await expect(page.getByRole("button", { name: `${childName} çocuğunu sınıftan ayır` })).toBeVisible();
 });
 
@@ -73,22 +95,24 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await addChild(page, childName);
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
-  await expect(page.getByText("Veriler bu cihazda saklanıyor · çevrimdışı çalışır")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Şifreli yedek ve geri yükle" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /Google ile giriş/ })).toBeDisabled();
 
+  const backupPassword = "Kurgu-Yedek-2026!";
+  await page.getByLabel("Yedek parolası").fill(backupPassword);
+  await page.getByLabel("Parolayı doğrula").fill(backupPassword);
   const backupDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Yedek oluştur/ }).click();
+  await page.getByRole("button", { name: /Şifreli yedek oluştur/ }).click();
   const backup = await backupDownload;
   const backupPath = await backup.path();
   if (!backupPath) throw new Error(`Playwright yedek dosya yolunu oluşturamadı: ${testInfo.title}`);
   const envelope = JSON.parse(await readFile(backupPath, "utf8"));
-  expect(envelope.manifest.format).toBe("maarifos-json");
-  expect(envelope.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
-  expect(envelope.manifest.entityCounts.students).toBe(1);
-  const backedUpRecordCount = Object.values(envelope.manifest.entityCounts).reduce(
-    (total: number, count) => total + Number(count),
-    0,
-  );
+  expect(envelope.encryption.format).toBe("maarifos-encrypted-json");
+  expect(envelope.encryption.algorithm).toBe("AES-256-GCM");
+  expect(envelope.ciphertext).toEqual(expect.any(String));
+  expect(await readFile(backupPath, "utf8")).not.toContain(childName);
 
   await page.keyboard.press("Escape");
   await createD1Observation(
@@ -99,14 +123,19 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await page.getByLabel("MaarifOS yedek dosyası seç").setInputFiles(backupPath);
-  await expect(page.getByText("Yedek bütünlük kontrolünü geçti. Geri yükleme modunu seçin.")).toBeVisible();
-  await expect(page.getByText(`${backedUpRecordCount} kayıt`, { exact: false })).toBeVisible();
-
-  const safetyDownload = page.waitForEvent("download");
+  await expect(
+    page.getByText("Şifreli yedek tanındı. İçeriği doğrulamak için parolayı girin."),
+  ).toBeVisible();
+  await page.getByLabel("Yedek parolası").last().fill(backupPassword);
+  await page.getByRole("button", { name: "Yedeği aç ve doğrula" }).click();
+  await expect(
+    page.getByText("Şifreli yedek doğrulandı. Geri yükleme modunu seçin."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Bu cihazdaki verilerin yerine yükle" }).click();
-  const safety = await safetyDownload;
-  expect(safety.suggestedFilename()).toMatch(/^maarifos-geri-yukleme-oncesi-\d{4}-\d{2}-\d{2}\.json$/);
   await expect(page.getByText(/Geri yükleme tamamlandı/)).toBeVisible();
+  await expect(
+    page.getByText(/kalıcı kurtarma noktası bu cihazda doğrulanmış olarak saklanıyor/),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByText("0 gözlem bekliyor")).toBeVisible();
 
@@ -127,7 +156,9 @@ test("bozuk yedek mevcut veriye dokunmadan Türkçe hata verir", async ({ page }
   await page.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Ayarları aç" }).click();
-  await expect(page.getByText("Veriler bu cihazda saklanıyor · çevrimdışı çalışır")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Şifreli yedek ve geri yükle" }),
+  ).toBeVisible();
   await page.getByLabel("MaarifOS yedek dosyası seç").setInputFiles({
     name: "bozuk-maarifos-yedegi.json",
     mimeType: "application/json",
@@ -238,6 +269,59 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
 
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();
+});
+
+test("seçili çocuklara toplu hızlı gözlem ayrı kaydedilir ve yeniden açılışta korunur", async ({
+  page,
+}) => {
+  const childNames = ["Ece Toplu", "Arda Toplu", "Mina Toplu"];
+  await page.goto("/", { waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  for (const childName of childNames) {
+    await addChild(page, childName);
+  }
+
+  const childrenRail = page.getByRole("region", { name: /Çocuklarım/i });
+  await childrenRail
+    .getByRole("button", { name: new RegExp(`${childNames[0]}.*hızlı gözlem`, "i") })
+    .click();
+
+  await page.getByRole("button", { name: "Seçili çocuklar" }).click();
+  await page.getByRole("button", { name: "Tüm sınıfı seç" }).click();
+  const studentRegion = page.getByRole("region", { name: "Gözlem yapılacak çocuk" });
+  for (const childName of childNames) {
+    await expect(
+      studentRegion.getByRole("button", { name: new RegExp(childName) }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+
+  await page
+    .getByLabel("Ne oldu?")
+    .fill("Blok oyununda sırayla birer parça seçerek ortak yapıyı sürdürdüler.");
+  await page.getByRole("button", { name: "Oyun ve katılım", exact: true }).click();
+  await page
+    .getByLabel("Seçtiğim çocukların her birini bu olay sırasında gözlemledim.")
+    .check();
+  await page
+    .getByRole("button", { name: "3 çocuk için gözlemi kaydet" })
+    .click();
+
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
+  await expect(page.getByText("3 gözlem bekliyor")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: /Çocuklarım/i }).getByText("1 gözlem", {
+      exact: true,
+    }),
+  ).toHaveCount(3);
+
+  await page.reload({ waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  await expect(page.getByText("3 gözlem bekliyor")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: /Çocuklarım/i }).getByText("1 gözlem", {
+      exact: true,
+    }),
+  ).toHaveCount(3);
 });
 
 test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değerlendirme telefonda tamamlanır", async ({

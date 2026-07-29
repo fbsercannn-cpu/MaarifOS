@@ -16,16 +16,20 @@ import {
 } from "../../src/core/domain/observation-taxonomy.ts";
 import {
   discardQuickObservationDraft,
+  finalizeQuickObservationDraftBatch,
   finalizeQuickObservationDraft,
   loadQuickObservationDraft,
+  persistQuickObservationDraftBatch,
   persistQuickObservationDraft,
 } from "../../src/features/evidence/quick-observation.ts";
 
 class MemoryStore {
   snapshot;
+  failPut;
 
   constructor(snapshot = createEmptySnapshot()) {
     this.snapshot = structuredClone(snapshot);
+    this.failPut = null;
   }
 
   async transaction(mode, collections, task) {
@@ -33,6 +37,9 @@ class MemoryStore {
     const transaction = {
       getAll: async (collection) => structuredClone(working[collection]),
       putMany: async (collection, records) => {
+        if (this.failPut?.(collection, records)) {
+          throw new Error("Kurgu transaction yazma hatası.");
+        }
         const byId = new Map(working[collection].map((record) => [record.id, record]));
         for (const record of records) byId.set(record.id, structuredClone(record));
         working[collection] = [...byId.values()];
@@ -67,6 +74,9 @@ const observationId = "00000000-0000-4000-8000-000000000707";
 const duplicateObservationId = "00000000-0000-4000-8000-000000000708";
 const otherPlanId = "00000000-0000-4000-8000-000000000709";
 const otherActivityId = "00000000-0000-4000-8000-000000000710";
+const batchId = "00000000-0000-4000-8000-000000000711";
+const bulkObservationAId = "00000000-0000-4000-8000-000000000712";
+const bulkObservationBId = "00000000-0000-4000-8000-000000000713";
 
 const base = {
   createdAt: "2026-09-02T06:00:00.000Z",
@@ -165,6 +175,19 @@ const draftAInput = {
     "language-communication",
   ],
   now: new Date("2026-09-02T07:00:00.000Z"),
+};
+
+const selectedChildrenDraftInput = {
+  studentIds: [studentAId, studentBId],
+  planId,
+  activityId,
+  rawText: "Çocuklar sırayla birer blok seçerek ortak yapıyı sürdürdü.",
+  context: "Küçük grup blok oyununda",
+  childQuote: "Sıra sende, sonra yine ben eklerim.",
+  observationType: "anecdotal",
+  categoryIds: ["play-participation", "social-emotional-values"],
+  batchId,
+  now: new Date("2026-09-02T08:00:00.000Z"),
 };
 
 test("gözlem taksonomisi v1 kodlarını değiştirmeden okur ve v2 nötr üst kategorilerini ayrı tutar", () => {
@@ -577,4 +600,216 @@ test("öğretmenin vazgeçtiği taslak fiziksel silinmeden tombstone ile kapanı
   );
   assert.equal(stored?.rawText, draftAInput.rawText);
   assert.equal(stored?.deletedAt, "2026-09-02T07:10:00.000Z");
+});
+
+test("seçili çocuklara toplu hızlı gözlem ayrı taslak ve ayrı değişmez kanıt olarak atomik kaydedilir", async () => {
+  const store = activeStore();
+  const persisted = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+
+  assert.equal(persisted.batchId, batchId);
+  assert.equal(persisted.drafts.length, 2);
+  assert.equal(new Set(persisted.drafts.map((draft) => draft.id)).size, 2);
+  assert.deepEqual(
+    persisted.drafts.map((draft) => draft.studentId),
+    [studentAId, studentBId],
+  );
+  assert.ok(
+    persisted.drafts.every(
+      (draft) =>
+        draft.batchId === batchId &&
+        draft.captureScope === "selected-children" &&
+        draft.rawText === selectedChildrenDraftInput.rawText,
+    ),
+  );
+
+  const finalized = await finalizeQuickObservationDraftBatch(
+    store,
+    {
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      batchId,
+      observationIds: {
+        [studentAId]: bulkObservationAId,
+        [studentBId]: bulkObservationBId,
+      },
+      observedAt: "2026-09-02T08:05:00.000Z",
+      now: new Date("2026-09-02T08:06:00.000Z"),
+    },
+  );
+
+  assert.equal(finalized.batchId, batchId);
+  assert.equal(finalized.observations.length, 2);
+  assert.equal(
+    new Set(finalized.observations.map((observation) => observation.id)).size,
+    2,
+  );
+  assert.deepEqual(
+    finalized.observations.map((observation) => observation.studentIds),
+    [[studentAId], [studentBId]],
+  );
+  assert.ok(
+    finalized.observations.every(
+      (observation) =>
+        observation.batchId === batchId &&
+        observation.captureScope === "selected-children" &&
+        observation.observedAt === "2026-09-02T08:05:00.000Z" &&
+        observation.rawTextImmutable === true,
+    ),
+  );
+  assert.equal(
+    await loadQuickObservationDraft(store, {
+      studentId: studentAId,
+      planId,
+      activityId,
+    }),
+    null,
+  );
+  assert.equal(
+    await loadQuickObservationDraft(store, {
+      studentId: studentBId,
+      planId,
+      activityId,
+    }),
+    null,
+  );
+});
+
+test("toplu hızlı gözlem mükerrer çocuk kimliklerini tekilleştirir ve en az iki farklı çocuk ister", async () => {
+  const store = activeStore();
+  const result = await persistQuickObservationDraftBatch(store, {
+    ...selectedChildrenDraftInput,
+    studentIds: [studentAId, studentAId, studentBId, studentBId],
+  });
+  assert.deepEqual(
+    result.drafts.map((draft) => draft.studentId),
+    [studentAId, studentBId],
+  );
+
+  const before = await store.readSnapshot();
+  await assert.rejects(
+    persistQuickObservationDraftBatch(store, {
+      ...selectedChildrenDraftInput,
+      studentIds: [studentAId, studentAId],
+    }),
+    /en az iki farklı aktif çocuk/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+});
+
+test("toplu hızlı gözlem başka sınıf, pasif veya etkinliğe atanmamış tek bir çocukta bütünüyle reddedilir", async (t) => {
+  const cases = [
+    {
+      name: "başka sınıf",
+      mutate(store) {
+        const student = store.snapshot.students.find(
+          (record) => record.id === studentBId,
+        );
+        student.classroomId = "00000000-0000-4000-8000-000000000799";
+      },
+    },
+    {
+      name: "pasif öğrenci",
+      mutate(store) {
+        const student = store.snapshot.students.find(
+          (record) => record.id === studentBId,
+        );
+        student.enrollmentStatus = "left";
+      },
+    },
+    {
+      name: "etkinliğe atanmamış öğrenci",
+      mutate(store) {
+        const activity = store.snapshot.activities.find(
+          (record) => record.id === activityId,
+        );
+        activity.studentIds = [studentAId];
+      },
+    },
+  ];
+
+  for (const item of cases) {
+    await t.test(item.name, async () => {
+      const store = activeStore();
+      item.mutate(store);
+      const before = await store.readSnapshot();
+      await assert.rejects(
+        persistQuickObservationDraftBatch(
+          store,
+          selectedChildrenDraftInput,
+        ),
+        /etkin sınıftaki çocuk|planlı takip açılan çocuğa/,
+      );
+      assert.deepEqual(await store.readSnapshot(), before);
+    });
+  }
+});
+
+test("toplu final uyuşmayan öğrenci taslaklarını kanıta dönüştürmez", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+  const studentBDraft = store.snapshot.settings.find(
+    (record) =>
+      record.settingType === "quick-observation-draft" &&
+      record.studentId === studentBId,
+  );
+  studentBDraft.rawText = "Uyuşmayan ayrı bir gözlem metni.";
+  const before = await store.readSnapshot();
+
+  await assert.rejects(
+    finalizeQuickObservationDraftBatch(store, {
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      batchId,
+      observedAt: "2026-09-02T08:05:00.000Z",
+    }),
+    /taslak içerikleri uyuşmuyor/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+  assert.equal(store.snapshot.observations.length, 0);
+});
+
+test("toplu final yazma hatasında hiçbir kanıt yazmaz ve bütün taslakları açık bırakır", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+  const before = await store.readSnapshot();
+  store.failPut = (collection, records) =>
+    collection === "settings" &&
+    records.length === 2 &&
+    records.every((record) => typeof record.deletedAt === "string");
+
+  await assert.rejects(
+    finalizeQuickObservationDraftBatch(store, {
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      batchId,
+      observationIds: {
+        [studentAId]: bulkObservationAId,
+        [studentBId]: bulkObservationBId,
+      },
+      observedAt: "2026-09-02T08:05:00.000Z",
+    }),
+    /transaction yazma hatası/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+  assert.equal(store.snapshot.observations.length, 0);
+  assert.equal(
+    store.snapshot.settings.filter(
+      (record) =>
+        record.settingType === "quick-observation-draft" &&
+        typeof record.deletedAt !== "string",
+    ).length,
+    2,
+  );
 });

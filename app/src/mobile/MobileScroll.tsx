@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type PropsWithChildren,
 } from "react";
+import { useMobileDevice } from "./Device";
 import { useKeyboard, useKeyboardInsets } from "./Keyboard";
 
 type MobileScrollProps = PropsWithChildren<{
@@ -47,6 +48,7 @@ type DragSession = {
 };
 
 export function MobileScroll({ className, children }: MobileScrollProps) {
+  const { native } = useMobileDevice();
   const { isKeyboardVisible, keyboardHeight, keyboardDragging } = useKeyboardInsets();
   const { focusedElement } = useKeyboard();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -475,18 +477,19 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
         ref={scrollRef}
         className="mobile-scroll"
         data-testid="mobile-scroll"
-        data-dragging={isDragging ? "true" : "false"}
-        data-overscroll={overscrollY.toFixed(2)}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onClickCapture={suppressClickAfterDrag}
+        data-native-scroll={native ? "true" : "false"}
+        data-dragging={!native && isDragging ? "true" : "false"}
+        data-overscroll={native ? "0.00" : overscrollY.toFixed(2)}
+        onPointerDown={native ? undefined : handlePointerDown}
+        onPointerMove={native ? undefined : handlePointerMove}
+        onPointerUp={native ? undefined : endDrag}
+        onPointerCancel={native ? undefined : endDrag}
+        onClickCapture={native ? undefined : suppressClickAfterDrag}
       >
         <div
           className="mobile-scroll-content"
           data-testid="mobile-scroll-content"
-          style={{ transform: `translateY(${overscrollY}px)` }}
+          style={native ? undefined : { transform: `translateY(${overscrollY}px)` }}
         >
           {children}
         </div>

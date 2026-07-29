@@ -157,6 +157,39 @@ test("tek sınıftaki eski kayıtları atomik ve idempotent biçimde aynı kapsa
   assert.deepEqual(afterSecond, afterFirst);
 });
 
+test("tek sınıfta dahi bilinmeyen UUID öğrenciye bağlı gözlemi tahminle atamaz", async () => {
+  const snapshot = createEmptySnapshot();
+  addClass(snapshot, yearA, classA, "Kurgu A Sınıfı");
+  selectClass(snapshot, yearA, classA);
+  snapshot.students.push({
+    ...base,
+    id: studentA,
+    displayName: "Kurgu A Öğrencisi",
+  });
+  const missingStudentId = "00000000-0000-4000-8000-000000000299";
+  snapshot.observations.push({
+    ...base,
+    id: "00000000-0000-4000-8000-000000000298",
+    studentIds: [missingStudentId],
+    rawText: "İlişkisi kesinleşmeyen kurgu ham gözlem.",
+  });
+  const store = new MemoryStore(snapshot);
+
+  const report = await migrateLegacyClassroomScopes(store, {
+    now: new Date("2026-07-22T07:00:00.000Z"),
+  });
+  const migrated = await store.readSnapshot();
+
+  assert.equal(report.assigned, 1);
+  assert.equal(report.quarantined, 1);
+  assert.equal(
+    migrated.observations[0].legacyAssignmentStatus,
+    "needs-review",
+  );
+  assert.equal(migrated.observations[0].classroomId, undefined);
+  assert.equal(migrated.observations[0].studentIds[0], missingStudentId);
+});
+
 test("çok sınıfta tahmin yapmaz; bağımsız eski veriyi karantinaya alıp kesin öğrenci ilişkisini kullanır", async () => {
   const snapshot = createEmptySnapshot();
   addClass(snapshot, yearA, classA, "Kurgu A Sınıfı");

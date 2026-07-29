@@ -285,10 +285,17 @@ export function migrateLegacyDashboardState(
       UUID_PATTERN.test(student.id) ? student.id : crypto.randomUUID(),
     ]),
   );
+  const migratedStudents = legacyStudents.length > 0
+    ? legacyStudents.map((student) => ({
+        ...student,
+        id: migratedStudentIds.get(student.id)!,
+      }))
+    : fallback.students;
+  const migratedStudentIdSet = new Set(
+    migratedStudents.map((student) => student.id),
+  );
   return {
-    students: legacyStudents.length > 0
-      ? legacyStudents.map((student) => ({ ...student, id: migratedStudentIds.get(student.id)! }))
-      : fallback.students,
+    students: migratedStudents,
     archivedStudents: fallback.archivedStudents ?? [],
     observations: Array.isArray(legacy?.observations)
       ? legacy.observations.filter(
@@ -299,11 +306,16 @@ export function migrateLegacyDashboardState(
             typeof observation?.createdAtUtc === "string",
         ).map((observation) => {
           const mappedStudentId = migratedStudentIds.get(observation.studentId);
-          const relationIsValid = mappedStudentId !== undefined || UUID_PATTERN.test(observation.studentId);
+          const resolvedStudentId =
+            mappedStudentId ??
+            (UUID_PATTERN.test(observation.studentId)
+              ? observation.studentId
+              : crypto.randomUUID());
+          const relationIsValid = migratedStudentIdSet.has(resolvedStudentId);
           return {
             ...observation,
             id: UUID_PATTERN.test(observation.id) ? observation.id : crypto.randomUUID(),
-            studentId: mappedStudentId ?? (relationIsValid ? observation.studentId : crypto.randomUUID()),
+            studentId: resolvedStudentId,
             ...(!relationIsValid
               ? { requiresStudentReview: true, legacyStudentId: observation.studentId }
               : {}),

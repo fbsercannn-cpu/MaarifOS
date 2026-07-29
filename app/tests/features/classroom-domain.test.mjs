@@ -176,8 +176,15 @@ test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek pla
   const dailyPlanId = "00000000-0000-4000-8000-000000000116";
   await store.transaction(
     "readwrite",
-    ["activities", "observations", "plans", "evidenceCurriculumLinks"],
+    ["students", "activities", "observations", "plans", "evidenceCurriculumLinks"],
     async (transaction) => {
+    await transaction.putMany("students", [{
+      ...baseRecord,
+      id: "00000000-0000-4000-8000-000000000115",
+      displayName: "Kurgu Güneş Öğrencisi",
+      academicYearId: "00000000-0000-4000-8000-000000000111",
+      classroomId: "00000000-0000-4000-8000-000000000112",
+    }]);
     await transaction.putMany("activities", [
       {
         ...baseRecord,

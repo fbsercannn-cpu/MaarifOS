@@ -2,6 +2,7 @@ import { type PropsWithChildren, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDrag } from "@use-gesture/react";
 import { AnimatePresence, motion } from "motion/react";
+import { Cross2Icon } from "@radix-ui/react-icons";
 import { useKeyboard, useKeyboardInsets } from "./Keyboard";
 import { useScreenPortal } from "./PhoneFrame";
 import { useMobileDevice } from "./Device";
@@ -22,7 +23,7 @@ export function BottomSheet({
   snap = 0.72,
   children,
 }: BottomSheetProps) {
-  const { device } = useMobileDevice();
+  const { device, native } = useMobileDevice();
   const { screenRef } = useScreenPortal();
   const keyboard = useKeyboard();
   const { keyboardHeight } = useKeyboardInsets();
@@ -65,12 +66,18 @@ export function BottomSheet({
     },
   );
 
-  const sheetHeight = Math.round(device.geometry.screen.height * snap);
-  const effectiveHeight = Math.max(260, sheetHeight - Math.min(keyboardHeight, 180));
+  const fullscreen = snap >= 0.98;
   const sheetBottom =
-    device.platform === "android"
+    native
+      ? keyboardHeight
+      : device.platform === "android"
       ? Math.max(device.geometry.safeArea.bottom, keyboardHeight)
       : keyboardHeight;
+  const sheetHeight = Math.round(device.geometry.screen.height * snap);
+  const effectiveHeight = Math.max(
+    260,
+    Math.min(sheetHeight, device.geometry.screen.height - sheetBottom),
+  );
   const portalContainer = screenRef.current ?? undefined;
 
   return (
@@ -87,22 +94,25 @@ export function BottomSheet({
                   data-testid="sheet-overlay"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                  exit={{ opacity: 0, pointerEvents: "none" }}
                   transition={{ duration: 0.16 }}
                 />
               </Dialog.Overlay>
               <Dialog.Content asChild forceMount>
                 <motion.div
                   className="bottom-sheet"
+                  data-fullscreen={fullscreen ? "true" : "false"}
                   data-testid="bottom-sheet"
                   style={{
                     bottom: sheetBottom,
+                    ...(fullscreen ? { height: effectiveHeight } : {}),
                     maxHeight: effectiveHeight,
                   }}
                   initial={{ y: effectiveHeight + 36 }}
                   animate={{ y: dragY }}
                   exit={{
                     y: effectiveHeight + 36,
+                    pointerEvents: "none",
                     transition: {
                       type: "spring",
                       stiffness: 250,
@@ -121,8 +131,23 @@ export function BottomSheet({
                     <div className="sheet-handle" />
                   </div>
                   <div className="sheet-header">
-                    <Dialog.Title className="sheet-title">{title}</Dialog.Title>
-                    {description ? <Dialog.Description className="sheet-description">{description}</Dialog.Description> : null}
+                    <div className="sheet-heading-copy">
+                      <Dialog.Title className="sheet-title">{title}</Dialog.Title>
+                      {description ? (
+                        <Dialog.Description className="sheet-description">
+                          {description}
+                        </Dialog.Description>
+                      ) : null}
+                    </div>
+                    <Dialog.Close asChild>
+                      <button
+                        className="sheet-close"
+                        type="button"
+                        aria-label={`${title} ekranını kapat`}
+                      >
+                        <Cross2Icon aria-hidden="true" />
+                      </button>
+                    </Dialog.Close>
                   </div>
                   <div className="sheet-content">{children}</div>
                 </motion.div>

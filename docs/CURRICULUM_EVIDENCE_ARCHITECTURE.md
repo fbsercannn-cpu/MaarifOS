@@ -92,6 +92,16 @@ Ham gözlem:
   ayrı saklar.
 - Etkinliğin planlı öğrenci kapsamı dışına yazılamaz.
 
+Seçili çocuklara toplu hızlı gözlem, çok-öğrencili tek kanıt üretmez. Öğretmen
+aynı olayda gerçekten gözlemlediği çocukları açıkça seçip doğrular; sistem tek
+atomik işlemde her çocuk için ayrı UUID'li, tek-öğrencili ve değiştirilemez ham
+gözlem oluşturur. Kayıtlar ortak `batchId` ve
+`captureScope: selected-children` metadata'sıyla işlemsel olarak ilişkilidir.
+Bir çocuk bile sınıf/etkinlik kapsamına uymuyorsa hiçbir kanıt yazılmaz.
+
+Bu işlem “öğrendi/başardı” dağıtımı değildir. Program bağlantısı ve öğretmen
+değerlendirmesi her çocuk kanıtı için ayrıca tamamlanır.
+
 Program bağı:
 
 - Ham gözlemden ayrı ve eklemeli kayıttır.
@@ -146,4 +156,3 @@ tanı, psikolojik etiket veya kanıtsız kesin hüküm üretmez.
 - Eğitim yılı kapanınca yeni plan, atama, gözlem, bağ veya değerlendirme
   yazılamaz.
 - Öğrenci arşivi yalnız seçilen çocuğun çok yıllı kanıtlarını içerir.
-

@@ -49,11 +49,14 @@ body {
 .native-app-runtime {
   position: relative;
   width: min(100%, 760px);
-  height: 100%;
+  height: 100dvh;
+  min-height: 100svh;
   margin: 0 auto;
   overflow: hidden;
   background: #fff;
   box-shadow: 0 0 44px rgba(13, 40, 82, 0.12);
+  --device-safe-area-top: env(safe-area-inset-top, 0px);
+  --device-safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @media (max-width: 760px) {
@@ -351,6 +354,12 @@ button {
   touch-action: none;
   user-select: none;
   transition: bottom 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mobile-scroll[data-native-scroll="true"] {
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .mobile-scroll::-webkit-scrollbar {
@@ -655,14 +664,15 @@ p {
 
 .sheet-overlay {
   position: absolute;
-  z-index: 20;
+  z-index: 60;
   inset: 0;
   background: rgba(0, 0, 0, 0.34);
+  touch-action: none;
 }
 
 .bottom-sheet {
   position: absolute;
-  z-index: 21;
+  z-index: 61;
   right: 0;
   left: 0;
   display: flex;
@@ -672,7 +682,12 @@ p {
   border-radius: 22px 22px 0 0;
   background: #fff;
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.2);
-  touch-action: none;
+  touch-action: pan-y;
+}
+
+.bottom-sheet[data-fullscreen="true"] {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .sheet-handle-zone {
@@ -691,8 +706,16 @@ p {
 
 .sheet-header {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
   padding: 0 18px 14px;
+}
+
+.sheet-heading-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
 }
 
 .sheet-title {
@@ -708,9 +731,41 @@ p {
   line-height: 1.35;
 }
 
+.sheet-close {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  color: #324152;
+  background: #f4f5f6;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sheet-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sheet-close:focus-visible {
+  outline: 3px solid rgba(8, 127, 120, 0.32);
+  outline-offset: 2px;
+}
+
 .sheet-content {
   overflow: auto;
-  padding: 0 18px 24px;
+  min-height: 0;
+  padding: 0 18px max(24px, env(safe-area-inset-bottom, 0px));
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sheet-content::-webkit-scrollbar {
+  display: none;
 }
 
 .keyboard-dock {

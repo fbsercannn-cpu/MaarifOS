@@ -36,6 +36,10 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
   nötr kategoriler, ham metin, bağlam ve çocuğun özgün sözü ise gözlem kaydıyla
   aynı sürümlü checksum kapsamında korunur. Restore öncesinde taslağın
   öğrenci-plan-etkinlik-sınıf ilişkileri doğrulanır.
+- Seçili çocuklara toplu hızlı gözlemde öğrenci başına ayrı taslak ve ayrı
+  gözlem korunur. Ortak `batchId` UUID'si ile `captureScope:
+  selected-children` birlikte bulunmak zorundadır; eksik veya bozuk toplu
+  metadata hedef veritabanına yazılmadan reddedilir.
 - Eğitim yılına bağlı sınıf programı ve kalıcı çalışma düzeni `classrooms`
   koleksiyonunda yedeklenir. Restore öncesinde `academicYearId` bağı doğrulanır;
   kopuk sınıf kaydı hiçbir koleksiyona yazılmadan reddedilir.

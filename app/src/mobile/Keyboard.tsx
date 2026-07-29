@@ -122,7 +122,6 @@ export function KeyboardProvider({ children, native = false }: PropsWithChildren
   const beginNativeFocusSession = useCallback((element: HTMLElement) => {
     if (focusedElementRef.current === null) {
       nativeSessionBaselineRef.current = Math.max(
-        nativeSessionBaselineRef.current,
         window.innerHeight,
         getVisualViewportBottom(),
       );
@@ -136,6 +135,10 @@ export function KeyboardProvider({ children, native = false }: PropsWithChildren
     focusedElementRef.current = null;
     setFocusedElement(null);
     setNativeMetrics({ visible: false, height: 0 });
+    nativeSessionBaselineRef.current = Math.max(
+      window.innerHeight,
+      getVisualViewportBottom(),
+    );
   }, []);
 
   useEffect(() => {
@@ -173,13 +176,25 @@ export function KeyboardProvider({ children, native = false }: PropsWithChildren
       if (focusedElementRef.current) {
         queueNativeMeasurement();
       } else {
-        nativeSessionBaselineRef.current = Math.max(window.innerHeight, getVisualViewportBottom());
+        nativeSessionBaselineRef.current = Math.max(
+          window.innerHeight,
+          getVisualViewportBottom(),
+        );
       }
+    };
+    const handleOrientationChange = () => {
+      nativeSessionBaselineRef.current = Math.max(
+        window.innerHeight,
+        getVisualViewportBottom(),
+      );
+      setNativeMetrics({ visible: false, height: 0 });
+      if (focusedElementRef.current) queueNativeMeasurement();
     };
 
     document.addEventListener("focusin", handleFocusIn);
     document.addEventListener("focusout", handleFocusOut);
     window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("orientationchange", handleOrientationChange);
     window.visualViewport?.addEventListener("resize", handleViewportChange);
     window.visualViewport?.addEventListener("scroll", handleViewportChange);
 
@@ -187,6 +202,7 @@ export function KeyboardProvider({ children, native = false }: PropsWithChildren
       document.removeEventListener("focusin", handleFocusIn);
       document.removeEventListener("focusout", handleFocusOut);
       window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("orientationchange", handleOrientationChange);
       window.visualViewport?.removeEventListener("resize", handleViewportChange);
       window.visualViewport?.removeEventListener("scroll", handleViewportChange);
       if (nativeMeasureFrameRef.current !== null) {

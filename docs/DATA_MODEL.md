@@ -124,11 +124,14 @@ yazılmaz.
 Hızlı Gözlem 2.0 kayıtları ayrıca şu nötr sınıflandırmaları taşır:
 
 - `observationType`: `quick-note | child-quote | anecdotal | systematic`
-- `observationCategories[]`: `language-communication | cognitive |
-  social-emotional-values | physical-health | self-care | art-creativity |
-  play-participation | other`
+- `observationTaxonomyVersion: maarifos-observation-v2`
+- `observationCategories[]`: `language-communication | cognitive-learning |
+  social-emotional | values-dispositions-participation |
+  physical-motor-health | self-care-daily-life | art-creativity |
+  play-participation | interest-attention-curiosity | other`
 - `context?`
 - `childQuote?`
+- toplu işlemde `batchId` ve `captureScope: selected-children`
 
 Bu alanlar öğretmen kanıtını düzenlemek içindir; başarı, tanı veya gelişim hükmü
 üretmez. `rawText`, `context` ve `childQuote` final kayıtta öğretmenin girdiği
@@ -149,11 +152,17 @@ Hızlı gözlem formunun otomatik taslağı `settings` koleksiyonunda
 - `childQuote`
 - `observationType`
 - `categoryIds[]`
+- toplu taslaklarda `batchId` ve `captureScope: selected-children`
 
 Taslaklar öğrenci ve aktif sınıf kapsamına göre birbirinden yalıtılır. Final
 gözlem ile taslağın kapanış kaydı aynı yerel veritabanı işlemi içinde yazılır;
 gözlem kaydı başarısızsa taslak etkin kalır. Kapanan taslak fiziksel olarak
 silinmez, `deletedAt` tombstone'u ile korunur.
+
+Toplu hızlı gözlemde de her çocuk için ayrı taslak tutulur. Bütün çocuk
+taslakları tek işlemde yazılır; finalde öğrenci başına ayrı gözlem ve taslak
+tombstone'ları yine tek işlemde oluşturulur. Böylece toplu kullanıcı eylemi
+kanıt modelini çok-öğrencili hâle getirmez ve kısmi başarı bırakmaz.
 
 ## EvidenceCurriculumLink
 

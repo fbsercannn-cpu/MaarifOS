@@ -101,7 +101,14 @@ function targetForRecord(
   studentsById: ReadonlyMap<string, StoredRecord>,
 ): ActiveClassroomScope | null {
   if (collection === "attendanceRecords" || collection === "observations") {
-    return uniqueRelatedStudentScope(record, studentsById) ?? onlyScope;
+    const hasStudentRelation =
+      typeof record.studentId === "string" ||
+      (Array.isArray(record.studentIds) &&
+        record.studentIds.some((id) => typeof id === "string"));
+    if (hasStudentRelation) {
+      return uniqueRelatedStudentScope(record, studentsById);
+    }
+    return onlyScope;
   }
   return onlyScope;
 }
