@@ -74,6 +74,19 @@ function entityCounts(snapshot: DataSnapshot): Record<CollectionName, number> {
   ) as Record<CollectionName, number>;
 }
 
+export async function assertExternalFeedbackContentHashes(
+  snapshot: DataSnapshot,
+): Promise<void> {
+  for (const feedback of snapshot.externalFeedback) {
+    const expected = await sha256Hex(String(feedback.feedbackText ?? ""));
+    if (expected !== feedback.contentHash) {
+      throw new Error(
+        `Haricî AI geri bildirimi içerik hash doğrulamasını geçemedi: ${feedback.id}`,
+      );
+    }
+  }
+}
+
 function recordsEqual(left: StoredRecord, right: StoredRecord): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
@@ -219,6 +232,7 @@ export class BackupService {
       payload,
     };
     assertBackupEnvelope(envelope);
+    await assertExternalFeedbackContentHashes(envelope.payload);
     const selfCheck = await sha256Hex(canonicalJson(envelope.payload));
     if (selfCheck !== envelope.manifest.payloadChecksum) {
       throw new Error("Yedek oluşturulurken bütünlük doğrulaması başarısız oldu.");
@@ -274,6 +288,7 @@ export class BackupService {
     const upgraded = await upgradeLegacyBackupEnvelope(candidate);
     const normalized = await normalizeLegacyBackupScopes(upgraded);
     assertBackupEnvelope(normalized);
+    await assertExternalFeedbackContentHashes(normalized.payload);
     return canonicalClone(normalized);
   }
 

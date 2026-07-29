@@ -183,7 +183,7 @@ test("uygulama kilidi oturum parolasını saklamadan erişilebilir modal olarak 
   await expect(lockGate).toBeHidden();
 });
 
-test("Belgeler menüsü hazır olmayan çıktıyı belge gibi sunmaz", async ({
+test("Belgeler menüsü öğrenci dosyası akışını gösterir ve sahte PDF üretmez", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
@@ -192,10 +192,15 @@ test("Belgeler menüsü hazır olmayan çıktıyı belge gibi sunmaz", async ({
   const documents = page.getByRole("dialog", { name: "Belgeler" });
   await expect(
     documents.getByRole("heading", {
-      name: "Belge üretimi henüz hazır değil",
+      name: "Öğrenci dosyasını amaca göre hazırlayın",
     }),
   ).toBeVisible();
-  await expect(documents.getByText("Deneysel alan")).toBeVisible();
+  await expect(
+    documents.getByText("Öğretmen denetimli çalışma alanı"),
+  ).toBeVisible();
+  await expect(
+    documents.getByText(/ChatGPT veya Gemini/),
+  ).toBeVisible();
   await expect(
     documents.getByRole("button", { name: /PDF|rapor oluştur/i }),
   ).toHaveCount(0);

@@ -200,3 +200,21 @@
 ## Performans
 - 20 öğrenci, 2.000 gözlem ve 5.000 fotoğraf önizlemesinde temel ekranlar kullanılabilir kalır.
 - Uzun listeler kullanıcı arayüzünü kilitlemez.
+# 2026–2027 takvimi ve öğrenci paylaşım merkezi
+
+- MEB 2026–2027 okul öncesi uyum ve dönem tarihleri kaynak bağlantısıyla
+  takvimde görünür.
+- Öğretmen seçili güne genel not, veli toplantısı, meyve günü, etkinlik veya
+  uyum günü ekleyebilir; kaydı tamamlandı/iptal edildi olarak işaretleyebilir.
+- Eğitim yılı değişikliği eski kapsamın üzerine yazmaz; arşivleme ve öğrenci
+  taşıma tek transaction içinde gerçekleşir.
+- Arşivlenen öğrenci geri alınabilir; kalıcı silme etki özeti ve tam ad
+  doğrulaması olmadan çalışmaz.
+- Öğrenci dosyası alıcı, tarih, kimlik ve içerik kapsamı seçilerek WhatsApp,
+  dosya, ChatGPT veya Gemini için hazırlanabilir.
+- Yapay zekâ hedefinde takma ad varsayılandır; tam kimlik açık kişisel veri
+  onayı gerektirir.
+- Haricî yapay zekâ geri bildirimi gözlemden ayrı, değişmez metin ve içerik
+  özetiyle saklanır; dönem/yıl sonu kapsamı öğretmen tarafından işaretlenir.
+- Takvim ve haricî geri bildirim kayıtları sürümlü yedekle kayıpsız
+  dışa aktarılır ve geri yüklenir.

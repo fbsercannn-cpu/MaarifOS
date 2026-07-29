@@ -24,6 +24,11 @@ import {
   type CurriculumProfileInput,
   type CurriculumProfileSnapshot,
 } from "../evidence/evidence-flow.ts";
+import {
+  STUDENT_ENROLLMENT_VERSION,
+  studentEnrollments,
+  type StudentEnrollment,
+} from "../archive/academic-year-archive.ts";
 import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-observation.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
@@ -86,6 +91,12 @@ export interface SaveClassroomConfigurationInput {
   };
   schedule: ClassroomScheduleInput;
   now?: Date;
+}
+
+export interface TransitionAcademicYearConfigurationInput
+  extends SaveClassroomConfigurationInput {
+  carryStudentIds: readonly string[];
+  closedOn: string;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -462,6 +473,286 @@ export async function saveClassroomConfiguration(
   const context = (await loadTodayWorkspace(store, { now })).classroom;
   if (context.status !== "configured") {
     throw new Error("Sınıf çalışma düzeni kaydedildi ancak yeniden okunamadı.");
+  }
+  return context;
+}
+
+export async function transitionAcademicYearConfiguration(
+  store: LocalDataStore,
+  input: TransitionAcademicYearConfigurationInput,
+): Promise<ClassroomContext> {
+  const now = input.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Geçerli bir eğitim yılı geçiş zamanı gerekli.");
+  }
+  if (
+    !isCivilDate(input.closedOn) ||
+    !isCivilDate(input.academicYear.startDate) ||
+    !isCivilDate(input.academicYear.endDate)
+  ) {
+    throw new Error("Eğitim yılı geçiş tarihleri YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  if (input.academicYear.startDate > input.academicYear.endDate) {
+    throw new Error("Yeni eğitim yılı bitiş tarihi başlangıçtan önce olamaz.");
+  }
+  const nextAcademicYearId = validUuid(input.academicYear.id, "Yeni eğitim yılı");
+  const nextClassroomId = validUuid(input.classroom.id, "Yeni sınıf");
+  const nextAcademicYearName = requiredText(
+    input.academicYear.name,
+    "Yeni eğitim yılı adı",
+  );
+  const nextClassroomName = requiredText(input.classroom.name, "Yeni sınıf adı");
+  const schedule = normalizeClassroomSchedule(input.schedule);
+  const curriculumProfile = input.classroom.curriculumProfile
+    ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
+    : undefined;
+  const carryStudentIds = [...new Set(input.carryStudentIds)];
+  if (
+    carryStudentIds.some((studentId) => !UUID_PATTERN.test(studentId))
+  ) {
+    throw new Error("Yeni eğitim yılına taşınacak öğrenci kimliği geçersiz.");
+  }
+  const timestamp = now.toISOString();
+  const civilDate = civilDateInIstanbul(now);
+
+  await store.transaction(
+    "readwrite",
+    [
+      "academicYears",
+      "classrooms",
+      "students",
+      "settings",
+      "auditLogs",
+    ],
+    async (transaction) => {
+      const [academicYears, classrooms, students, settings] =
+        await Promise.all([
+          transaction.getAll("academicYears"),
+          transaction.getAll("classrooms"),
+          transaction.getAll("students"),
+          transaction.getAll("settings"),
+        ]);
+      const currentScope = resolveActiveClassroomScope({
+        academicYears,
+        classrooms,
+        settings,
+      });
+      if (!currentScope) {
+        throw new Error(
+          "Yeni eğitim yılına geçmek için önce etkin sınıf bulunmalıdır.",
+        );
+      }
+      if (
+        nextAcademicYearId === currentScope.academicYearId ||
+        nextClassroomId === currentScope.classroomId ||
+        academicYears.some((record) => record.id === nextAcademicYearId) ||
+        classrooms.some((record) => record.id === nextClassroomId)
+      ) {
+        throw new Error(
+          "Yeni eğitim yılı ve sınıf kimlikleri önceki yıldan farklı olmalıdır.",
+        );
+      }
+      const currentAcademicYear = academicYears.find(
+        (record) => record.id === currentScope.academicYearId,
+      );
+      const currentClassroom = classrooms.find(
+        (record) => record.id === currentScope.classroomId,
+      );
+      if (!currentAcademicYear || !currentClassroom) {
+        throw new Error("Arşivlenecek etkin eğitim yılı veya sınıf bulunamadı.");
+      }
+      if (
+        typeof currentAcademicYear.startDate !== "string" ||
+        typeof currentAcademicYear.endDate !== "string" ||
+        input.closedOn < currentAcademicYear.startDate ||
+        input.closedOn > currentAcademicYear.endDate
+      ) {
+        throw new Error(
+          "Önceki eğitim yılı kapanış günü kendi tarih aralığında olmalıdır.",
+        );
+      }
+      if (input.academicYear.startDate <= input.closedOn) {
+        throw new Error(
+          "Yeni eğitim yılı başlangıcı önceki yılın kapanışından sonra olmalıdır.",
+        );
+      }
+
+      const currentStudents = students.filter(
+        (record) =>
+          typeof record.deletedAt !== "string" &&
+          recordBelongsToClassroomScope(record, currentScope),
+      );
+      const availableStudentIds = new Set(
+        currentStudents.map((record) => record.id),
+      );
+      if (
+        carryStudentIds.some(
+          (studentId) => !availableStudentIds.has(studentId),
+        )
+      ) {
+        throw new Error(
+          "Yeni eğitim yılına yalnız etkin sınıftaki öğrenciler taşınabilir.",
+        );
+      }
+      const carrySet = new Set(carryStudentIds);
+      const changedStudents = currentStudents.map((student) => {
+        const enrollments = studentEnrollments(student);
+        const currentEnrollment = enrollments.find(
+          (enrollment) =>
+            enrollment.academicYearId === currentScope.academicYearId &&
+            enrollment.classroomId === currentScope.classroomId,
+        );
+        const closedEnrollment: StudentEnrollment = {
+          ...(currentEnrollment ?? {}),
+          id: currentEnrollment?.id ?? crypto.randomUUID(),
+          academicYearId: currentScope.academicYearId,
+          classroomId: currentScope.classroomId,
+          startedOn:
+            currentEnrollment?.startedOn ??
+            (currentAcademicYear.startDate as string),
+          endedOn: input.closedOn,
+          status:
+            student.enrollmentStatus === "left"
+              ? "left"
+              : "completed",
+          schemaVersion: STUDENT_ENROLLMENT_VERSION,
+        };
+        const closedEnrollments = currentEnrollment
+          ? enrollments.map((enrollment) =>
+              enrollment.id === currentEnrollment.id
+                ? closedEnrollment
+                : enrollment,
+            )
+          : [...enrollments, closedEnrollment];
+        if (!carrySet.has(student.id)) {
+          return {
+            ...student,
+            enrollments: closedEnrollments,
+            active: false,
+            enrollmentStatus: closedEnrollment.status,
+            updatedAt: timestamp,
+          };
+        }
+        const nextEnrollment: StudentEnrollment = {
+          id: crypto.randomUUID(),
+          academicYearId: nextAcademicYearId,
+          classroomId: nextClassroomId,
+          startedOn: input.academicYear.startDate,
+          status: "active",
+          schemaVersion: STUDENT_ENROLLMENT_VERSION,
+        };
+        return {
+          ...student,
+          academicYearId: nextAcademicYearId,
+          classroomId: nextClassroomId,
+          enrollments: [...closedEnrollments, nextEnrollment],
+          active: true,
+          enrollmentStatus: "active",
+          deletedAt: null,
+          updatedAt: timestamp,
+        };
+      });
+
+      await transaction.putMany("academicYears", [
+        {
+          ...currentAcademicYear,
+          status: "archived",
+          archivedAt: timestamp,
+          closedOn: input.closedOn,
+          updatedAt: timestamp,
+        },
+        {
+          id: nextAcademicYearId,
+          name: nextAcademicYearName,
+          startDate: input.academicYear.startDate,
+          endDate: input.academicYear.endDate,
+          status: "active",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        },
+      ]);
+      await transaction.putMany("classrooms", [
+        {
+          ...currentClassroom,
+          status: "archived",
+          archiveStatus: "archived",
+          archivedAt: timestamp,
+          updatedAt: timestamp,
+        },
+        {
+          id: nextClassroomId,
+          academicYearId: nextAcademicYearId,
+          name: nextClassroomName,
+          ...(optionalText(input.classroom.ageGroup)
+            ? { ageGroup: optionalText(input.classroom.ageGroup) }
+            : {}),
+          ...(optionalText(input.classroom.curriculumProgram)
+            ? { curriculumProgram: optionalText(input.classroom.curriculumProgram) }
+            : {}),
+          ...(optionalText(input.classroom.curriculumCatalogLabel)
+            ? {
+                curriculumCatalogLabel: optionalText(
+                  input.classroom.curriculumCatalogLabel,
+                ),
+              }
+            : {}),
+          ...(curriculumProfile
+            ? { curriculumProfileSnapshot: curriculumProfile }
+            : {}),
+          schedule,
+          status: "active",
+          archiveStatus: "active",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: CLASSROOM_SCHEMA_VERSION,
+        },
+      ]);
+      if (changedStudents.length > 0) {
+        await transaction.putMany("students", changedStudents);
+      }
+      const existingSelection = settings.find(
+        (record) => record.id === ACTIVE_CLASSROOM_SETTING_ID,
+      );
+      await transaction.putMany("settings", [
+        {
+          ...(existingSelection ?? {}),
+          id: ACTIVE_CLASSROOM_SETTING_ID,
+          settingType: ACTIVE_CLASSROOM_SETTING_TYPE,
+          academicYearId: nextAcademicYearId,
+          classroomId: nextClassroomId,
+          createdAt: existingSelection?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+          civilDate: existingSelection?.civilDate ?? civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        },
+      ]);
+      await transaction.putMany("auditLogs", [
+        {
+          id: crypto.randomUUID(),
+          action: "academic-year-transitioned",
+          entityType: "academicYear",
+          entityId: nextAcademicYearId,
+          classroomCount: 1,
+          studentCount: carrySet.size,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        },
+      ]);
+    },
+  );
+
+  const context = (await loadTodayWorkspace(store, { now })).classroom;
+  if (context.status !== "configured") {
+    throw new Error("Yeni eğitim yılı oluşturuldu ancak etkin sınıf okunamadı.");
   }
   return context;
 }

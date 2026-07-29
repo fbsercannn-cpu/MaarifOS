@@ -82,3 +82,33 @@ Paket oluşturulurken:
 - Fotoğraf var fakat açıklama yoksa
 
 uyarı eklenmelidir.
+# Uygulanan paylaşım akışı (V0.6)
+
+Öğretmen öğrenci profilindeki “Paylaşım ve yapay zekâ merkezi” üzerinden:
+
+1. WhatsApp, ChatGPT, Gemini veya metin dosyası hedefini seçer.
+2. Veli, okul idaresi, rehberlik öğretmeni veya öğretmen çalışma özeti amacını
+   seçer.
+3. Tarih aralığını, tam kimlik/takma ad kipini ve içerilecek veri bölümlerini
+   denetler.
+4. MaarifOS’un oluşturduğu metin paketini paylaşır veya haricî hizmete
+   yapıştırır.
+5. Haricî hizmetten aldığı yanıtı sağlayıcı, amaç, tarih aralığı ve öğretmen
+   notuyla öğrenciye geri kaydeder.
+
+MaarifOS haricî yapay zekâ API’sine otomatik veri göndermez. ChatGPT ve Gemini
+hedefinde varsayılan kimlik kipi takma addır; yakın telefonları dışarıda
+bırakılır. Tam kimlik seçimi ek açık kişisel veri onayı gerektirir.
+
+Kaydedilen haricî yanıt gözlem, öğretmen yorumu veya resmî değerlendirme
+değildir. `externalFeedback` koleksiyonunda değişmez kaynak metin, SHA-256
+içerik özeti ve öğretmenin dönem/yıl sonu kapsam seçimiyle ayrı tutulur.
+
+V0.6 öğrenci dosyası kayıt türü `student_dossier` değeridir. Paket manifesti
+`packageKind`, `destination`, isteğe bağlı `provider`, `audience`, `purpose`,
+`periodStart`, `periodEnd`, `academicYearId` ve `classroomId` alanlarını
+taşır. ChatGPT/Gemini geri bildirimi yalnız aynı öğrenci, sağlayıcı, alıcı,
+dönem, eğitim yılı ve sınıfa ait paketle ilişkilendirilebilir.
+
+Portfolyo seçkisi dahil, gözlemler hariç seçildiğinde kaynak ham gözlem metni
+pakete dolaylı olarak eklenmez.

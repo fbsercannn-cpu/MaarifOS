@@ -38,14 +38,16 @@ import {
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
 export const LEGACY_DATA_SCHEMA_VERSION = 1;
-export const PREVIOUS_DATA_SCHEMA_VERSION = 2;
-export const DATA_SCHEMA_VERSION = 3;
+export const SECOND_PREVIOUS_DATA_SCHEMA_VERSION = 2;
+export const PREVIOUS_DATA_SCHEMA_VERSION = 3;
+export const DATA_SCHEMA_VERSION = 4;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   backupVersion: typeof BACKUP_VERSION;
   dataSchemaVersion:
     | typeof LEGACY_DATA_SCHEMA_VERSION
+    | typeof SECOND_PREVIOUS_DATA_SCHEMA_VERSION
     | typeof PREVIOUS_DATA_SCHEMA_VERSION
     | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
@@ -258,6 +260,19 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "studentIds",
     "targetAssignments",
   ],
+  calendarEntries: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "title",
+    "note",
+    "entryType",
+    "startDate",
+    "endDate",
+    "status",
+    "officialEventId",
+    "sourceUrl",
+    "sourceCheckedOn",
+  ],
   maarifReferences: [
     ...BASE_RECORD_KEYS,
     "sourceVersion",
@@ -333,6 +348,24 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "reviewedAt",
     "generationMode",
     "referenceVerificationStatus",
+  ],
+  externalFeedback: [
+    ...BASE_RECORD_KEYS,
+    ...SCOPE_RECORD_KEYS,
+    "studentId",
+    "provider",
+    "audience",
+    "periodStart",
+    "periodEnd",
+    "receivedAt",
+    "rawTextImmutable",
+    "contentHash",
+    "feedbackText",
+    "teacherNote",
+    "includeInTermSummary",
+    "includeInYearSummary",
+    "linkedExportPackageId",
+    "reviewStatus",
   ],
   exportPackages: [
     ...BASE_RECORD_KEYS,
@@ -528,6 +561,68 @@ function validateCollectionRecordSemantics(
     return;
   }
 
+  if (collection === "calendarEntries") {
+    if (
+      !isNonEmptyText(record.title, 160) ||
+      (record.note !== undefined && !isNonEmptyText(record.note, 5_000)) ||
+      (record.entryType !== "general_note" &&
+        record.entryType !== "parent_meeting" &&
+        record.entryType !== "fruit_day" &&
+        record.entryType !== "activity" &&
+        record.entryType !== "adaptation_day" &&
+        record.entryType !== "official_marker") ||
+      !isValidCivilDate(record.startDate) ||
+      !isValidCivilDate(record.endDate) ||
+      record.startDate > record.endDate ||
+      (record.status !== "planned" &&
+        record.status !== "completed" &&
+        record.status !== "cancelled") ||
+      (record.officialEventId !== undefined &&
+        !isNonEmptyText(record.officialEventId, 120)) ||
+      (record.sourceUrl !== undefined && !isSafeHttpsUrl(record.sourceUrl)) ||
+      (record.sourceCheckedOn !== undefined &&
+        !isValidCivilDate(record.sourceCheckedOn))
+    ) {
+      throw new Error(
+        `calendarEntries/${record.id} eğitim takvimi kaydı sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "externalFeedback") {
+    if (
+      !isUuid(record.studentId) ||
+      (record.provider !== "chatgpt" &&
+        record.provider !== "gemini" &&
+        record.provider !== "other") ||
+      (record.audience !== "parent" &&
+        record.audience !== "administration" &&
+        record.audience !== "guidance" &&
+        record.audience !== "teacher") ||
+      !isValidCivilDate(record.periodStart) ||
+      !isValidCivilDate(record.periodEnd) ||
+      record.periodStart > record.periodEnd ||
+      !isValidUtcIso(record.receivedAt) ||
+      record.rawTextImmutable !== true ||
+      typeof record.contentHash !== "string" ||
+      !SHA256_PATTERN.test(record.contentHash) ||
+      !isNonEmptyText(record.feedbackText, 50_000) ||
+      (record.teacherNote !== undefined &&
+        !isNonEmptyText(record.teacherNote, 5_000)) ||
+      typeof record.includeInTermSummary !== "boolean" ||
+      typeof record.includeInYearSummary !== "boolean" ||
+      (record.linkedExportPackageId !== undefined &&
+        !isUuid(record.linkedExportPackageId)) ||
+      record.reviewStatus !== "teacher-saved"
+    ) {
+      throw new Error(
+        `externalFeedback/${record.id} haricî yapay zekâ geri bildirimi sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
   if (collection === "mediaAssets") {
     const sharingFlags = record.sharingFlags;
     if (
@@ -619,6 +714,7 @@ function validateCollectionRecordSemantics(
   if (collection === "exportPackages") {
     if (
       record.type !== "ai_analysis" &&
+      record.type !== "student_dossier" &&
       record.type !== "student_archive" &&
       record.type !== "class_bulletin_data"
     ) {
@@ -642,6 +738,35 @@ function validateCollectionRecordSemantics(
       throw new Error(
         `exportPackages/${record.id} dışa aktarma paketi sözleşmesine uymuyor.`,
       );
+    }
+    if (record.type === "student_dossier") {
+      const manifest = record.manifest as Record<string, unknown>;
+      const destination = manifest.destination;
+      const audience = manifest.audience;
+      if (
+        manifest.packageKind !== "student_dossier" ||
+        (destination !== "whatsapp" &&
+          destination !== "chatgpt" &&
+          destination !== "gemini" &&
+          destination !== "file") ||
+        (audience !== "parent" &&
+          audience !== "administration" &&
+          audience !== "guidance" &&
+          audience !== "teacher") ||
+        manifest.purpose !== audience ||
+        manifest.periodStart !== record.periodStart ||
+        manifest.periodEnd !== record.periodEnd ||
+        manifest.academicYearId !== record.academicYearId ||
+        manifest.classroomId !== record.classroomId ||
+        ((destination === "chatgpt" || destination === "gemini") &&
+          manifest.provider !== destination) ||
+        ((destination === "whatsapp" || destination === "file") &&
+          manifest.provider !== undefined)
+      ) {
+        throw new Error(
+          `exportPackages/${record.id} öğrenci dosyası provenans sözleşmesine uymuyor.`,
+        );
+      }
     }
     return;
   }
@@ -1164,6 +1289,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   }
   if (
     manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== SECOND_PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
   ) {
@@ -1190,12 +1316,22 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   }
 
   const payloadKeys = Object.keys(value.payload);
-  const expectedCollections =
-    manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
-      ? COLLECTION_NAMES.filter(
-          (collection) => collection !== "evidenceCurriculumLinks",
-        )
-      : [...COLLECTION_NAMES];
+  const expectedCollections = COLLECTION_NAMES.filter((collection) => {
+    if (
+      collection === "evidenceCurriculumLinks" &&
+      manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
+    ) {
+      return false;
+    }
+    if (
+      (collection === "calendarEntries" ||
+        collection === "externalFeedback") &&
+      manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
+    ) {
+      return false;
+    }
+    return true;
+  });
   const unknownCollections = payloadKeys.filter(
     (key) => !expectedCollections.includes(key as CollectionName),
   );
@@ -1215,10 +1351,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
       }.`,
     );
   }
-  const expectedCountKeys =
-    manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
-      ? expectedCollections
-      : COLLECTION_NAMES;
+  const expectedCountKeys = expectedCollections;
   if (
     !hasExactKeys(
       manifest.entityCounts,
@@ -1231,11 +1364,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   let totalRecords = 0;
   for (const collection of COLLECTION_NAMES) {
     const records = value.payload[collection];
-    if (
-      collection === "evidenceCurriculumLinks" &&
-      manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION &&
-      records === undefined
-    ) {
+    if (!expectedCollections.includes(collection) && records === undefined) {
       continue;
     }
     if (!Array.isArray(records)) {
@@ -1301,6 +1430,35 @@ function assertBackupRelationships(
   const classroomsById = new Map(
     payload.classrooms.map((classroom) => [classroom.id, classroom]),
   );
+  const academicYearsById = new Map(
+    payload.academicYears.map((academicYear) => [academicYear.id, academicYear]),
+  );
+  for (const entry of payload.calendarEntries) {
+    const startDate =
+      typeof entry.startDate === "string" ? entry.startDate : "";
+    const endDate =
+      typeof entry.endDate === "string" ? entry.endDate : "";
+    const entryScope = validatedRecordScope(
+      entry,
+      "calendarEntries",
+      classroomsById,
+    );
+    const academicYear = entryScope
+      ? academicYearsById.get(entryScope.academicYearId)
+      : undefined;
+    if (
+      !entryScope ||
+      !academicYear ||
+      typeof academicYear.startDate !== "string" ||
+      typeof academicYear.endDate !== "string" ||
+      startDate < academicYear.startDate ||
+      endDate > academicYear.endDate
+    ) {
+      throw new Error(
+        `calendarEntries/${entry.id} etkin eğitim yılı tarihleriyle uyuşmuyor.`,
+      );
+    }
+  }
   const archivedAcademicYearIds = new Set(
     payload.academicYears
       .filter((academicYear) => academicYear.status === "archived")
@@ -2070,13 +2228,31 @@ function assertBackupRelationships(
     ),
   );
   for (const exportPackage of payload.exportPackages) {
+    const exportScope = validatedRecordScope(
+      exportPackage,
+      "exportPackages",
+      classroomsById,
+    );
+    const exportAcademicYear = exportScope
+      ? academicYearsById.get(exportScope.academicYearId)
+      : undefined;
     if (
+      !exportScope ||
+      !exportAcademicYear ||
+      typeof exportAcademicYear.startDate !== "string" ||
+      typeof exportAcademicYear.endDate !== "string" ||
+      String(exportPackage.periodStart) < exportAcademicYear.startDate ||
+      String(exportPackage.periodEnd) > exportAcademicYear.endDate ||
       (exportPackage.studentIds as string[]).some(
-        (studentId) => !studentIds.has(studentId),
+        (studentId) =>
+          !studentIds.has(studentId) ||
+          !(studentScopes.get(studentId) ?? []).some((studentScope) =>
+            scopesMatch(exportScope, studentScope),
+          ),
       )
     ) {
       throw new Error(
-        `exportPackages/${exportPackage.id} bilinmeyen öğrenciye bağlı.`,
+        `exportPackages/${exportPackage.id} öğrenci, dönem veya sınıf kapsamıyla uyuşmuyor.`,
       );
     }
     const includedGroups = Object.values(
@@ -2091,6 +2267,66 @@ function assertBackupRelationships(
     ) {
       throw new Error(
         `exportPackages/${exportPackage.id} bilinmeyen veya geçersiz kayıt kimliği içeriyor.`,
+      );
+    }
+  }
+
+  for (const feedback of payload.externalFeedback) {
+    const feedbackScope = validatedRecordScope(
+      feedback,
+      "externalFeedback",
+      classroomsById,
+    );
+    const allowedStudentScopes =
+      studentScopes.get(feedback.studentId as string) ?? [];
+    const linkedPackage =
+      typeof feedback.linkedExportPackageId === "string"
+        ? payload.exportPackages.find(
+            (record) => record.id === feedback.linkedExportPackageId,
+          )
+        : undefined;
+    const linkedManifest =
+      linkedPackage && isRecord(linkedPackage.manifest)
+        ? linkedPackage.manifest
+        : undefined;
+    const feedbackAcademicYear = feedbackScope
+      ? academicYearsById.get(feedbackScope.academicYearId)
+      : undefined;
+    if (
+      !feedbackScope ||
+      !feedbackAcademicYear ||
+      typeof feedbackAcademicYear.startDate !== "string" ||
+      typeof feedbackAcademicYear.endDate !== "string" ||
+      String(feedback.periodStart) < feedbackAcademicYear.startDate ||
+      String(feedback.periodEnd) > feedbackAcademicYear.endDate ||
+      !allowedStudentScopes.some((studentScope) =>
+        scopesMatch(feedbackScope, studentScope),
+      ) ||
+      ((feedback.provider === "chatgpt" || feedback.provider === "gemini") &&
+        typeof feedback.linkedExportPackageId !== "string") ||
+      (typeof feedback.linkedExportPackageId === "string" &&
+        (!linkedPackage ||
+          linkedPackage.type !== "student_dossier" ||
+          !Array.isArray(linkedPackage.studentIds) ||
+          !linkedPackage.studentIds.includes(feedback.studentId) ||
+          linkedPackage.academicYearId !== feedback.academicYearId ||
+          linkedPackage.classroomId !== feedback.classroomId ||
+          linkedPackage.periodStart !== feedback.periodStart ||
+          linkedPackage.periodEnd !== feedback.periodEnd ||
+          !linkedManifest ||
+          linkedManifest.packageKind !== "student_dossier" ||
+          linkedManifest.audience !== feedback.audience ||
+          linkedManifest.purpose !== feedback.audience ||
+          linkedManifest.periodStart !== feedback.periodStart ||
+          linkedManifest.periodEnd !== feedback.periodEnd ||
+          linkedManifest.academicYearId !== feedback.academicYearId ||
+          linkedManifest.classroomId !== feedback.classroomId ||
+          (feedback.provider !== "other" &&
+            (linkedManifest.destination !== feedback.provider ||
+              linkedManifest.provider !== feedback.provider))))
+    ) {
+      throw new Error(
+        `externalFeedback/${feedback.id} öğrenci veya dışa aktarım paketi ilişkisi geçersiz.`,
       );
     }
   }
