@@ -7807,7 +7807,7 @@ export default function Prototype() {
                             phone: formatStudentPhone(event.target.value),
                           })
                         }
-                        placeholder="0532 532 32 32"
+                        placeholder="05"
                         autoComplete="tel"
                       />
                     </label>

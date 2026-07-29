@@ -314,6 +314,7 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   await profile.getByRole("button", { name: "Yakınlar", exact: true }).click();
   await profile.getByLabel("Adı ve soyadı").first().fill("Ayşe Kurgu");
   const primaryPhoneInput = profile.getByLabel("Cep telefonu").first();
+  await expect(primaryPhoneInput).toHaveAttribute("placeholder", "05");
   await primaryPhoneInput.fill("+90 532 532 32 32");
   await expect(primaryPhoneInput).toHaveValue("0532 532 32 32");
   await primaryPhoneInput.clear();
