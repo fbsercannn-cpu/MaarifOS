@@ -72,7 +72,7 @@ Hız uğruna atlanmayacak üç kapı:
 
 - React 19, strict TypeScript ve Vite tabanı
 - Windows, Android ve iOS tarayıcılarında gerçek ekran PWA
-- Kurulabilir ve çevrimdışı açılabilen uygulama kabuğu
+- Kurulabilir ve çevrim dışı açılabilen uygulama kabuğu
 - IndexedDB tabanlı 17 koleksiyonlu yerel kasa
 - UTC zaman damgası + `Europe/Istanbul` sivil gün modeli
 - Tarihsel günlük yoklama: `studentId + civilDate`
@@ -293,7 +293,7 @@ Teslimatlar:
 Sprint kapısı — **G0 Hediye:**
 
 - Kurgu veri dışında çocuk verisi yok.
-- Çevrimdışı açılış ve şifreli restore tatbikatı başarılı.
+- Çevrim dışı açılış ve şifreli restore tatbikatı başarılı.
 - Emine yoklama, gözlem ve yedek akışını yardım almadan tamamlar.
 - P0/P1 hata yoktur.
 
@@ -497,7 +497,7 @@ Her boyut 0–4 puanlanır:
 2. Gizlilik ve güvenlik
 3. Pedagojik doğruluk
 4. Görev verimliliği
-5. Çevrimdışı güvenilirlik
+5. Çevrim dışı güvenilirlik
 6. Açıklanabilirlik
 7. Erişilebilirlik
 8. Performans
@@ -539,7 +539,7 @@ Sürüm kapısı:
 
 - Yalnız kurgu veri
 - Reklam, telemetri ve haricî AI yok
-- Çevrimdışı ve restore başarılı
+- Çevrim dışı ve restore başarılı
 - Gerçek ekran Windows/Android/iPhone doğrulanmış
 
 ### G1 — Gerçek veri pilotu

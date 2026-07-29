@@ -8,13 +8,13 @@ küresel ürün örüntüleri, bilgi mimarisi, veri mimarisi ve teslim sırası
 ## 1. Yönetici kararı
 
 Mevcut MaarifOS ekranı satılabilir bir okul öncesi öğretmen ürünü değildir.
-Çalışan veri, yoklama geçmişi, çevrimdışı kullanım, yedekleme, geri yükleme ve
+Çalışan veri, yoklama geçmişi, çevrim dışı kullanım, yedekleme, geri yükleme ve
 otomatik test altyapısı değerlidir; ancak görünen ürün statik etkinliklerle dolu
 bir telefon demosu gibi davranmaktadır.
 
 Bu nedenle:
 
-- Veri, yedek, migration, çevrimdışı çalışma ve test omurgası korunacaktır.
+- Veri, yedek, migration, çevrim dışı çalışma ve test omurgası korunacaktır.
 - Statik günlük etkinlikler, çalışmayan menüler ve geliştirici dili görünür
   üründen kaldırılacaktır.
 - Ürün yüzü profesyonel bir **Okul Öncesi Öğretmen Çalışma Alanı** olarak
@@ -485,7 +485,7 @@ kaydedilecek, eşleme daha sonra öğretmen tarafından onaylanacak.
 ### Storypark, Seesaw ve Kaymbu
 
 Güçleri: öğrenme hikâyesi, multimedya portfolyo ve aile katılımı.<br>
-Sorunları: kısmi/olmayan çevrimdışı destek, ayrı portfolyo işi, medya gizliliği ve
+Sorunları: kısmi/olmayan çevrim dışı destek, ayrı portfolyo işi, medya gizliliği ve
 bazı mobil–masaüstü yetenek farkları.
 
 MaarifOS kararı: portfolyo ayrı içerik girişi olmayacak; mevcut kanıtların öğretmen
@@ -612,7 +612,7 @@ Bu dilim çalıştığında ürünün pedagojik çekirdeği kanıtlanmış olur.
 - EÇE ve TYMM kodları aynı kayıtta karışmaz
 - Katalog sürümü her bağlantıda kayıtlıdır
 - Gözlenen olay ve öğretmen yorumu ayrıdır
-- Kanıt çevrimdışı kaydedilir
+- Kanıt çevrim dışı kaydedilir
 - Yeniden açılışta tüm ilişkiler korunur
 - Rapor cümlesinden kaynak kanıta gidilir
 - Başka çocuk verisi rapora sızmaz
@@ -694,7 +694,7 @@ Bu dilim çalıştığında ürünün pedagojik çekirdeği kanıtlanmış olur.
 ### Veri ve güven
 
 - Test edilen senaryolarda veri kaybı 0
-- Çevrimdışı çekirdek tam
+- Çevrim dışı çekirdek tam
 - Mükerrer kayıt silinmez, incelemeye alınır
 - Bozuk yedek mevcut veriye dokunmaz
 - Başka öğrenci verisi sızıntısı 0

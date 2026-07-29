@@ -1,7 +1,7 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.4.0";
+const WORKER_RELEASE = "0.5.0";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
 const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
 const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";
@@ -219,7 +219,7 @@ async function installAppShell() {
   const indexResponse = await fetch(indexRequest);
 
   if (!canStore(indexResponse)) {
-    throw new Error("MaarifOS çevrimdışı uygulama kabuğu alınamadı.");
+    throw new Error("MaarifOS çevrim dışı uygulama kabuğu alınamadı.");
   }
 
   const html = await indexResponse.clone().text();

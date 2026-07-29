@@ -24,7 +24,7 @@ test("yerel misafir kullanımı internetsiz ve Google hazır değilken de açık
   assert.equal(guest.network, "offline");
 });
 
-test("Google bağlantısı çevrimdışıyken başlamaz ve yerel kullanım kaybolmaz", () => {
+test("Google bağlantısı çevrim dışıyken başlamaz ve yerel kullanım kaybolmaz", () => {
   const guest = reduceAuthState(
     createInitialAuthState({ network: "offline", googleReadiness: "available" }),
     { type: "CONTINUE_OFFLINE" },

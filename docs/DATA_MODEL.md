@@ -50,18 +50,29 @@ tahmini üretmez ve sınıfı `not_configured` olarak açar.
   - startedOn
   - endedOn?
   - status: active | left | completed | transferred
-- displayName
+- firstName
+- lastName
+- displayName (`firstName + lastName` geriye uyumlu birleşik görünümü)
 - optionalCode
 - birthDate? 
 - profileMediaId?
 - active
 - notes?
+- contacts?
+  - name?
+  - relationship
+  - phone (`+905XXXXXXXXX` kanonik saklama; arayüzde `05XX XXX XX XX`)
 
 `Student.id`, çocuğun yıllar boyunca değişmeyen kimliğidir. Sınıftan ayrılma
 veya eğitim yılı kapanışı kök öğrenci kaydını silmez. Yıllık sınıf üyelikleri
 `enrollments` içinde eklemeli geçmiş olarak tutulur. Normal yıl sonu üyeliği
 `completed`, yıl içi ayrılma `left` yapar. Aynı öğrenci yeni yılda aynı `id` ile
 yeni bir `active` üyelik alır.
+
+Eski yalnız `displayName` taşıyan kayıtlar son sözcük soyadı kabul edilerek
+geriye uyumlu okunur; öğretmen profilde adı ve soyadı ayrı alanlarda doğrular.
+Öğrenci araması ad, soyad, birleşik ad ve tercih edilen adda Türkçe
+büyük/küçük harf ile diakritik işaretlerden bağımsız çalışır.
 
 ## AttendanceRecord
 - id
@@ -265,13 +276,32 @@ olarak sunulur; tam resmî katalog olduğu iddia edilmez.
 
 ## PortfolioSelection
 - id
+- classroomId
+- academicYearId
 - studentId
 - periodStart
 - periodEnd
-- itemType
+- itemType: observation
 - itemId
 - order
 - teacherCaption?
+- childReflection?
+- familyContribution?
+- selectedBy: teacher | teacher-child
+- selectedAt
+
+`schemaVersion: 2` portfolyo seçimi, değişmez kaynak gözlemi çoğaltmaz veya
+düzenlemez; yalnız kaynak `itemId` değerine başvurur. Öğretmen yorumu, çocuğun
+seçime ilişkin sözü ve aile katkısı birbirinden ayrı tutulur. Seçkiden kaldırma
+`deletedAt` tombstone'u üretir. Başka çocuk, sınıf veya eğitim yılına ait kaynak
+fail-closed reddedilir.
+
+### Dinamik akademik ay görünümü
+
+Ay klasörü kalıcı kayıt değildir. Aktif eğitim yılının `startDate`–`endDate`
+aralığında ilgili çocuğa bağlı gözlem, medya veya portfolyo seçimi bulunan aylar
+`YYYY-MM` anahtarıyla türetilir. Boş ay üretilmez; takvim yılı geçişi nedeniyle
+`2026-09` ile `2027-01` birbirinden ayrılır.
 
 ## ReportDraft
 - id

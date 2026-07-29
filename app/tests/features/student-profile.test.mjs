@@ -4,10 +4,14 @@ import test from "node:test";
 import {
   STUDENT_PROFILE_SCHEMA_VERSION,
   ageInMonthsOn,
+  composeStudentDisplayName,
+  formatStudentPhone,
   isStudentProfilePhotoDataUrl,
   normalizeStudentContacts,
   normalizeStudentPhone,
   normalizeStudentProfile,
+  normalizeTurkishSearchText,
+  splitStudentDisplayName,
   studentProfileFromRecord,
 } from "../../src/core/domain/student.ts";
 import {
@@ -75,6 +79,8 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
 
   assert.deepEqual(profile, {
     displayName: "Deniz Yılmaz",
+    firstName: "Deniz",
+    lastName: "Yılmaz",
     preferredName: "Deniz",
     birthDate: "2021-04-18",
     optionalCode: "KELEBEK-07",
@@ -144,6 +150,8 @@ test("boş isteğe bağlı alanları saklamaz ve veri-minimum metin sınırları
   );
   assert.deepEqual(profile, {
     displayName: "Deniz Yılmaz",
+    firstName: "Deniz",
+    lastName: "Yılmaz",
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   });
 
@@ -169,11 +177,30 @@ test("yaşı saklamak yerine doğum tarihinden ay olarak üretir", () => {
   assert.equal(ageInMonthsOn("2021-07-29", "2026-07-28"), 59);
 });
 
-test("aile ve yakın telefonlarını uluslararası biçime getirir ve tek öncelikli kişiyi korur", () => {
+test("aile ve yakın telefonlarını 05 standardında doğrular ve tek öncelikli kişiyi korur", () => {
   assert.equal(normalizeStudentPhone("0555 123 45 67"), "+905551234567");
   assert.equal(normalizeStudentPhone("5 551 234 567"), "+905551234567");
-  assert.equal(normalizeStudentPhone("+49 170 1234567"), "+491701234567");
-  assert.throws(() => normalizeStudentPhone("123"), /10–15 rakam/i);
+  assert.equal(normalizeStudentPhone("+90 532 532 32 32"), "+905325323232");
+  assert.equal(formatStudentPhone("+905325323232"), "0532 532 32 32");
+  assert.deepEqual(
+    ["0", "05", "053", "0532", "05325", "0532532", "05325323", "053253232", "0532532323", "05325323232"]
+      .map(formatStudentPhone),
+    [
+      "0",
+      "05",
+      "053",
+      "0532",
+      "0532 5",
+      "0532 532",
+      "0532 532 3",
+      "0532 532 32",
+      "0532 532 32 3",
+      "0532 532 32 32",
+    ],
+  );
+  assert.equal(formatStudentPhone("0532532323299"), "0532 532 32 32");
+  assert.throws(() => normalizeStudentPhone("+49 170 1234567"), /05 ile başlayan/i);
+  assert.throws(() => normalizeStudentPhone("123"), /05 ile başlayan/i);
   assert.throws(() => normalizeStudentPhone("javascript:alert(1)"), /yalnız rakam/i);
 
   const contacts = normalizeStudentContacts([
@@ -258,6 +285,8 @@ test("eski öğrenci kaydını bozmadan güncel profil görünümüne taşır", 
 
   assert.deepEqual(result, {
     displayName: "Sude Ünal",
+    firstName: "Sude",
+    lastName: "Ünal",
     preferredName: "Sude",
     birthDate: "2021-09-03",
     optionalCode: "SINIF-4",
@@ -284,6 +313,8 @@ test("zengin profil alanlarını eski kayıt biçiminden güvenle okur", () => {
 
   assert.deepEqual(result, {
     displayName: "Kurgu Öğrenci",
+    firstName: "Kurgu",
+    lastName: "Öğrenci",
     enrollmentDate: "2025-09-01",
     homeLanguages: "Türkçe",
     interests: "Blok oyunları",
@@ -291,6 +322,47 @@ test("zengin profil alanlarını eski kayıt biçiminden güvenle okur", () => {
     supportPreferences: "Seçenekleri iki adımda sunmak yardımcı oluyor.",
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   });
+});
+
+test("ad ve soyadı ayrı alanlarda birleştirir; Türkçe aramayı harf işaretlerinden bağımsızlaştırır", () => {
+  assert.deepEqual(splitStudentDisplayName("  Nil Su Şimşek  "), {
+    firstName: "Nil Su",
+    lastName: "Şimşek",
+  });
+  assert.equal(composeStudentDisplayName(" Nil Su ", " Şimşek "), "Nil Su Şimşek");
+  assert.equal(normalizeTurkishSearchText("Şule IŞIK"), "sule isik");
+  assert.equal(
+    normalizeTurkishSearchText("Çağrı Öztürk").includes(
+      normalizeTurkishSearchText("cagri"),
+    ),
+    true,
+  );
+});
+
+test("eski yabancı telefonlu yakını sessizce silmeden inceleme için korur", () => {
+  const result = studentProfileFromRecord({
+    id: "00000000-0000-4000-8000-000000000903",
+    displayName: "Kurgu Öğrenci",
+    contacts: [
+      {
+        id: "00000000-0000-4000-8000-000000000904",
+        kind: "other",
+        relationship: "Yakın",
+        name: "Kurgu Yakın",
+        phone: "+491701234567",
+        isPrimary: false,
+      },
+    ],
+    active: true,
+    createdAt: "2026-07-28T06:00:00.000Z",
+    updatedAt: "2026-07-28T06:00:00.000Z",
+    civilDate: "2026-07-28",
+    deletedAt: null,
+    schemaVersion: 4,
+    profileSchemaVersion: 4,
+  });
+
+  assert.equal(result?.contacts?.[0]?.phone, "+491701234567");
 });
 
 test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kalıcı kayıttan temizler", async () => {

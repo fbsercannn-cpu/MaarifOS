@@ -32,6 +32,9 @@ Sıralama:
 6. Hatırlatmalar
 7. Gün sonu tamamla
 
+`Öğrenci ara` eylemi ana ekrandan sınıf aramasını açar. Arama ad veya soyadı
+Türkçe büyük/küçük harf ve diakritik farklarından bağımsız eşleştirir.
+
 ## Yoklama etkileşimi
 
 - Tüm öğrenciler varsayılan geldi.
@@ -56,7 +59,23 @@ Etiketler kayıt sonrası isteğe bağlı tamamlanabilir. Böylece olay anı ka�
 - Az sayıda ana renk
 - Gerçek fotoğrafların önüne geçmeyen arka plan
 - Öğrenci profilinde büyük fotoğraf yerine gizliliği koruyan küçük avatar seçeneği
+- Öğrenci profilinde ad ve soyad için ayrı girişler
+- Gözlem ve portfolyo akışında yalnız kanıt bulunan aylar; aylar aktif eğitim
+  yılına bağlı `YYYY-MM` anahtarı ve “Eylül 2026” gibi açık etiketle gösterilir
 - Başarı veya hata mesajlarında korkutucu dil yok
+
+## Öğrenci portfolyosu
+
+- Portfolyo, çocuk profilinde Akış ile Bilgiler arasında birincil sekmedir.
+- Öğretmen mevcut gözlemi yeniden yazmadan seçkiye ekler.
+- Seçim “Öğretmen seçti” veya “Çocukla birlikte” olarak kaydedilir.
+- Öğretmen notu, çocuğun seçim sözü ve aile katkısı ayrı girişlerdir.
+- Kaynak gözlem kartı seçki notlarının üstünde görünür ve düzenlenemez.
+- Boş ay için klasör veya sıfır sayılı dekoratif kart üretilmez.
+- Seçkiden kaldırma kaynak kanıtı silmez; seçim geçmişi geri alınabilir biçimde
+  korunur.
+- Arayüz puan, yıldızlı başarı, çocuk sıralaması veya otomatik gelişim hükmü
+  göstermez.
 
 ## Tam ekran ve kurulum
 

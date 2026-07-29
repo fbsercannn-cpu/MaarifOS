@@ -3776,7 +3776,7 @@ button {
   z-index: 3;
   top: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   background: rgba(245, 247, 247, 0.96);
@@ -3843,6 +3843,333 @@ button {
   color: var(--maarif-plum);
   background: var(--maarif-plum-soft);
   border-radius: 12px;
+}
+
+.student-observation-month-folders {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.student-observation-month-folders button {
+  display: grid;
+  min-width: 0;
+  min-height: 72px;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 10px 8px 8px;
+  color: var(--maarif-muted);
+  background: var(--maarif-white);
+  border: 1px solid #e3d6c5;
+  border-radius: 11px;
+  text-align: left;
+}
+
+.student-observation-month-folders button > svg {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 3px;
+  color: #c88b25;
+}
+
+.student-observation-month-folders strong,
+.student-observation-month-folders small {
+  overflow: hidden;
+  width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-observation-month-folders strong {
+  color: var(--maarif-navy);
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.student-observation-month-folders small {
+  font-size: 9px;
+}
+
+.student-observation-month-folders button[aria-pressed="true"] {
+  color: var(--maarif-plum);
+  background: var(--maarif-plum-soft);
+  border-color: #b9aad2;
+  box-shadow: inset 0 0 0 1px #b9aad2;
+}
+
+.student-portfolio {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(102, 82, 158, 0.12), transparent 30%),
+    #fffdf9;
+  border: 1px solid #dfd4e8;
+  border-radius: 18px;
+}
+
+.student-portfolio-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.student-portfolio-heading h3,
+.student-portfolio-heading p {
+  margin: 0;
+}
+
+.student-portfolio-heading h3 {
+  margin-top: 3px;
+  color: var(--maarif-navy);
+  font-size: 20px;
+}
+
+.student-portfolio-heading p {
+  margin-top: 4px;
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.student-portfolio-heading > svg {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  padding: 9px;
+  color: #9c6b14;
+  background: var(--maarif-amber-soft);
+  border-radius: 13px;
+}
+
+.student-portfolio-principles {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  color: #315342;
+  background: var(--maarif-green-soft);
+  border-left: 3px solid var(--maarif-green);
+  border-radius: 6px 12px 12px 6px;
+}
+
+.student-portfolio-principles strong {
+  color: #244537;
+  font-size: 12px;
+}
+
+.student-portfolio-principles span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.student-portfolio-error {
+  margin: 0;
+  padding: 9px 10px;
+  color: #8a3328;
+  background: var(--maarif-coral-soft);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.student-portfolio-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.student-portfolio-list > li > article {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--maarif-line);
+  border-radius: 14px;
+}
+
+.student-portfolio-list > li.is-selected > article {
+  border-color: #c7b9dc;
+  box-shadow: inset 3px 0 0 var(--maarif-plum);
+}
+
+.student-portfolio-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.student-portfolio-card-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.student-portfolio-card-heading time {
+  color: var(--maarif-muted);
+  font-size: 10px;
+}
+
+.student-portfolio-card-heading strong {
+  overflow-wrap: anywhere;
+  color: var(--maarif-navy);
+  font-size: 12px;
+}
+
+.student-portfolio-card-heading > span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  color: var(--maarif-plum);
+  background: var(--maarif-plum-soft);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.student-portfolio-list article > p,
+.student-portfolio-list blockquote {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--maarif-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.student-portfolio-list blockquote {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  padding: 9px 10px;
+  color: #57466f;
+  background: var(--maarif-plum-soft);
+  border-radius: 10px;
+}
+
+.student-portfolio-list blockquote svg {
+  width: 17px;
+  height: 17px;
+}
+
+.student-portfolio-reflections {
+  display: grid;
+  gap: 7px;
+}
+
+.student-portfolio-reflections p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 9px;
+  color: var(--maarif-ink);
+  background: #faf8f4;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.student-portfolio-reflections strong {
+  color: var(--maarif-teal-dark);
+  font-size: 10px;
+}
+
+.student-portfolio-select {
+  min-height: 44px;
+  color: var(--maarif-plum);
+  background: var(--maarif-plum-soft);
+  border: 1px solid #cfc3e1;
+  border-radius: 11px;
+  font-weight: 780;
+}
+
+.student-portfolio-editor {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--maarif-line);
+}
+
+.student-portfolio-participation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.student-portfolio-participation button {
+  min-height: 44px;
+  padding: 7px;
+  color: var(--maarif-muted);
+  background: #faf9f7;
+  border: 1px solid var(--maarif-line);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.student-portfolio-participation button[aria-pressed="true"] {
+  color: var(--maarif-teal-dark);
+  background: var(--maarif-teal-soft);
+  border-color: #9ccfc8;
+}
+
+.student-portfolio-editor label {
+  display: grid;
+  gap: 5px;
+  color: var(--maarif-navy);
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.student-portfolio-editor textarea {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 11px;
+  color: var(--maarif-ink);
+  background: #fffdfa;
+  border: 1px solid #bfc8c4;
+  border-radius: 10px;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.student-portfolio-editor-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.student-portfolio-editor-actions button {
+  min-height: 44px;
+  padding: 8px 10px;
+  color: var(--maarif-muted);
+  background: #faf9f7;
+  border: 1px solid var(--maarif-line);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.student-portfolio-editor-actions button:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--maarif-white);
+  background: var(--maarif-teal);
+  border-color: var(--maarif-teal);
+}
+
+.student-portfolio-editor-actions button:last-child:nth-child(3) {
+  grid-column: 1 / -1;
+  color: #8a3328;
+  background: var(--maarif-coral-soft);
+  border-color: #e4bcb4;
 }
 
 .student-observation-filters,
@@ -4810,6 +5137,24 @@ button {
 
   .student-profile-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .student-profile-tabs button {
+    padding-right: 4px;
+    padding-left: 4px;
+    font-size: 10px;
+  }
+
+  .student-observation-month-folders {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-portfolio-editor-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .student-portfolio-editor-actions button:last-child:nth-child(3) {
+    grid-column: auto;
   }
 
   .student-profile-hero {

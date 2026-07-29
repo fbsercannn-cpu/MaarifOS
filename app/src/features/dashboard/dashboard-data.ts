@@ -34,6 +34,8 @@ export type { AttendanceStatus } from "../../core/domain/attendance.ts";
 export type DashboardStudent = {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   status: AttendanceStatus;
   preferredName?: string;
   birthDate?: string;
@@ -74,6 +76,8 @@ const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
   return {
     id: record.id,
     name: profile.displayName,
+    firstName: profile.firstName,
+    ...(profile.lastName ? { lastName: profile.lastName } : {}),
     status: "present",
     ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
     ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
@@ -379,6 +383,8 @@ export async function persistStudentRosterChange(
   const profile = normalizeStudentProfile(
     {
       displayName: options.student.name,
+      firstName: options.student.firstName,
+      lastName: options.student.lastName,
       preferredName: options.student.preferredName,
       birthDate: options.student.birthDate,
       optionalCode: options.student.optionalCode,
@@ -402,6 +408,8 @@ export async function persistStudentRosterChange(
     const preserved: Record<string, unknown> = existing ? { ...existing } : {};
     delete preserved.attendanceStatus;
     delete preserved.legacyAssignmentStatus;
+    delete preserved.firstName;
+    delete preserved.lastName;
     delete preserved.preferredName;
     delete preserved.birthDate;
     delete preserved.optionalCode;
@@ -446,6 +454,8 @@ export async function persistStudentRosterChange(
         ...preserved,
         id: options.student.id,
         displayName: profile.displayName,
+        firstName: profile.firstName,
+        ...(profile.lastName ? { lastName: profile.lastName } : {}),
         ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
         ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
         ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
@@ -605,6 +615,8 @@ export async function persistDashboardState(
       normalizeStudentProfile(
         {
           displayName: student.name,
+          firstName: student.firstName,
+          lastName: student.lastName,
           preferredName: student.preferredName,
           birthDate: student.birthDate,
           optionalCode: student.optionalCode,
@@ -686,6 +698,8 @@ export async function persistDashboardState(
           const profile = studentProfiles.get(student.id)!;
           const preserved: Record<string, unknown> = existing ? { ...existing } : {};
           delete preserved.attendanceStatus;
+          delete preserved.firstName;
+          delete preserved.lastName;
           delete preserved.preferredName;
           delete preserved.birthDate;
           delete preserved.optionalCode;
@@ -701,6 +715,8 @@ export async function persistDashboardState(
             ...preserved,
             id: student.id,
             displayName: profile.displayName,
+            firstName: profile.firstName,
+            ...(profile.lastName ? { lastName: profile.lastName } : {}),
             ...(profile.preferredName
               ? { preferredName: profile.preferredName }
               : {}),

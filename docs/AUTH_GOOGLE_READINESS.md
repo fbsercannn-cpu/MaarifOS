@@ -2,7 +2,7 @@
 
 ## Karar özeti
 
-MaarifOS’un ana çalışma biçimi **hesapsız, yerel ve çevrimdışı** kullanımdır. “İnternetsiz devam et” seçeneği her zaman kullanılabilir kalır. Google hesabı bağlantısı isteğe bağlıdır; bugün gerçek OAuth istemci kimliği, oturum veya token üretilmez.
+MaarifOS’un ana çalışma biçimi **hesapsız, yerel ve çevrim dışı** kullanımdır. “İnternetsiz devam et” seçeneği her zaman kullanılabilir kalır. Google hesabı bağlantısı isteğe bağlıdır; bugün gerçek OAuth istemci kimliği, oturum veya token üretilmez.
 
 Karşılama ekranında ayrım açık olmalıdır:
 
@@ -18,10 +18,10 @@ Bu hazırlık yalnız frontend durum modeli ve ilerideki sunucu adaptörü için
 `app/src/auth/authMachine.ts` saf ve deterministik bir durum makinesidir:
 
 - `welcome`: hesap zorunluluğu olmayan karşılama
-- `local_guest`: çevrimdışı/yerel kullanım
+- `local_guest`: çevrim dışı/yerel kullanım
 - `google_connecting`: yalnız çevrimiçi ve özellik hazır olduğunda geçici durum
 - `google_connected`: yalnız güvenilir adaptörün BFF oturumunu doğrulamasından sonra
-- `google_error`: çevrimdışı, hazır değil, iptal, geçersiz cevap ve sağlayıcı hataları
+- `google_error`: çevrim dışı, hazır değil, iptal, geçersiz cevap ve sağlayıcı hataları
 
 Durum makinesi ağ çağrısı yapmaz. Auth durumu `memory-only` olarak tanımlanmıştır. Uygulamanın IndexedDB verisi auth oturumundan bağımsızdır; Google bağlantısının kesilmesi yerel çocuk verilerini silmez.
 
@@ -97,9 +97,9 @@ Gerçek Google bağlantısı ancak aşağıdakiler tamamlandığında `coming_so
 
 Node testleri gerçek ağ kullanmadan şunları doğrular:
 
-- Çevrimdışı misafir yolunun her zaman açık kalması
+- Çevrim dışı misafir yolunun her zaman açık kalması
 - “Yakında” durumunda Google bağlantısının başlamaması
-- Çevrimdışı başlangıç ve bağlantı sırasında ağ kesilmesi
+- Çevrim dışı başlangıç ve bağlantı sırasında ağ kesilmesi
 - Kullanıcı iptali ve sağlayıcı hatası
 - Bağlantı akışı dışında gelen oturum onayının yok sayılması
 - Geçersiz minimal profil cevabının reddedilmesi

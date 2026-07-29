@@ -94,8 +94,8 @@ function observationBlock(
 ): string {
   const status =
     observation.confirmedCurriculumLinkIds.length > 0
-      ? "Program bağı tamamlandı"
-      : "Program bağı bekliyor";
+      ? "Program bağlantısı tamamlandı"
+      : "Program bağlantısı bekliyor";
   return [
     `${index + 1}. ${formatObservationDateTime(observation.observedAt)}`,
     `Etkinlik: ${observation.activityTitle}`,

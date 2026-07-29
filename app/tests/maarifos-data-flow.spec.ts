@@ -293,7 +293,7 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   const profile = page.getByRole("dialog", { name: `${childName} profili` });
   await expect(profile).toBeVisible();
   await expect(profile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
-  await expect(profile.getByRole("button", { name: /Program bağını tamamla/ })).toBeVisible();
+  await expect(profile.getByRole("button", { name: /Program bağlantısını tamamla/ })).toBeVisible();
   await expect(
     profile.locator('input[type="file"][capture="environment"]'),
   ).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
@@ -313,7 +313,18 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
 
   await profile.getByRole("button", { name: "Yakınlar", exact: true }).click();
   await profile.getByLabel("Adı ve soyadı").first().fill("Ayşe Kurgu");
-  await profile.getByLabel("Cep telefonu").first().fill("0555 123 45 67");
+  const primaryPhoneInput = profile.getByLabel("Cep telefonu").first();
+  await primaryPhoneInput.fill("+90 532 532 32 32");
+  await expect(primaryPhoneInput).toHaveValue("0532 532 32 32");
+  await primaryPhoneInput.clear();
+  await primaryPhoneInput.pressSequentially("0555");
+  await expect(primaryPhoneInput).toHaveValue("0555");
+  await primaryPhoneInput.pressSequentially("123");
+  await expect(primaryPhoneInput).toHaveValue("0555 123");
+  await primaryPhoneInput.pressSequentially("45");
+  await expect(primaryPhoneInput).toHaveValue("0555 123 45");
+  await primaryPhoneInput.pressSequentially("678");
+  await expect(primaryPhoneInput).toHaveValue("0555 123 45 67");
   await profile.getByLabel("Öncelikli iletişim kişisi").first().check();
   await profile.getByRole("button", { name: "Başka bir yakın ekle" }).click();
   await profile.getByLabel("Yakınlığı").fill("Bakıcı");
@@ -352,15 +363,15 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
     reloadedProfile.getByRole("link", { name: /Ayşe Kurgu kişisine WhatsApp/ }),
   ).toHaveAttribute("href", "https://wa.me/905551234567");
   await expect(reloadedProfile.getByLabel("Cep telefonu").last()).toHaveValue(
-    "+905320000000",
+    "0532 000 00 00",
   );
 
   await reloadedProfile
-    .getByRole("button", { name: /Bağ bekleyen/ })
+    .getByRole("button", { name: /Bağlantı bekleyen/ })
     .first()
     .click();
   await reloadedProfile
-    .getByRole("button", { name: /Program bağını tamamla/ })
+    .getByRole("button", { name: /Program bağlantısını tamamla/ })
     .click();
   await expect(page.getByLabel("Program hedefi")).toBeVisible();
 });

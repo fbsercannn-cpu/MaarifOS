@@ -24,8 +24,10 @@ import {
   isQuickObservationType,
 } from "../domain/quick-observation";
 import {
+  composeStudentDisplayName,
   isStudentProfilePhotoDataUrl,
   normalizeStudentContacts,
+  studentContactsFromRecord,
   type StudentContactInput,
 } from "../domain/student";
 import {
@@ -36,13 +38,15 @@ import {
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
 export const LEGACY_DATA_SCHEMA_VERSION = 1;
-export const DATA_SCHEMA_VERSION = 2;
+export const PREVIOUS_DATA_SCHEMA_VERSION = 2;
+export const DATA_SCHEMA_VERSION = 3;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   backupVersion: typeof BACKUP_VERSION;
   dataSchemaVersion:
     | typeof LEGACY_DATA_SCHEMA_VERSION
+    | typeof PREVIOUS_DATA_SCHEMA_VERSION
     | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
   createdAt: string;
@@ -122,6 +126,8 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     ...BASE_RECORD_KEYS,
     ...SCOPE_RECORD_KEYS,
     "displayName",
+    "firstName",
+    "lastName",
     "preferredName",
     "optionalCode",
     "birthDate",
@@ -297,6 +303,10 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "itemId",
     "order",
     "teacherCaption",
+    "childReflection",
+    "familyContribution",
+    "selectedBy",
+    "selectedAt",
   ],
   reportDrafts: [
     ...BASE_RECORD_KEYS,
@@ -581,12 +591,23 @@ function validateCollectionRecordSemantics(
       !isValidCivilDate(record.periodStart) ||
       !isValidCivilDate(record.periodEnd) ||
       record.periodStart > record.periodEnd ||
-      !isNonEmptyText(record.itemType, 80) ||
+      (record.itemType !== "observation" &&
+        record.itemType !== "media" &&
+        record.itemType !== "activity" &&
+        record.itemType !== "plan") ||
       !isUuid(record.itemId) ||
       !Number.isInteger(record.order) ||
       (record.order as number) < 0 ||
       (record.teacherCaption !== undefined &&
-        !isNonEmptyText(record.teacherCaption, 2_000))
+        !isNonEmptyText(record.teacherCaption, 2_000)) ||
+      (record.childReflection !== undefined &&
+        !isNonEmptyText(record.childReflection, 1_000)) ||
+      (record.familyContribution !== undefined &&
+        !isNonEmptyText(record.familyContribution, 2_000)) ||
+      (record.selectedBy !== undefined &&
+        record.selectedBy !== "teacher" &&
+        record.selectedBy !== "teacher-child") ||
+      (record.selectedAt !== undefined && !isValidUtcIso(record.selectedAt))
     ) {
       throw new Error(
         `portfolioSelections/${record.id} portfolyo seçimi sözleşmesine uymuyor.`,
@@ -976,6 +997,20 @@ function validateStudentProfile(
   ) {
     throw new Error(`students/${student.id} çocuk adı eksik veya geçersiz.`);
   }
+  validateOptionalStudentText(student, "firstName", "adı", 80);
+  validateOptionalStudentText(student, "lastName", "soyadı", 80);
+  if (student.profileSchemaVersion === 5) {
+    if (typeof student.firstName !== "string" || !student.firstName.trim()) {
+      throw new Error(`students/${student.id} adı eksik veya geçersiz.`);
+    }
+    const composedName = composeStudentDisplayName(
+      student.firstName,
+      typeof student.lastName === "string" ? student.lastName : "",
+    );
+    if (student.displayName.trim() !== composedName) {
+      throw new Error(`students/${student.id} ad ve soyad alanları tutarsız.`);
+    }
+  }
   if (
     student.preferredName !== undefined &&
     (typeof student.preferredName !== "string" ||
@@ -1039,11 +1074,12 @@ function validateStudentProfile(
       throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
     }
     const sourceContacts = student.contacts;
+    let contactsMatch = false;
     try {
       const normalized = normalizeStudentContacts(
         sourceContacts as StudentContactInput[],
       );
-      const contactsMatch =
+      contactsMatch =
         normalized.length === sourceContacts.length &&
         normalized.every((contact, index) => {
           const source = sourceContacts[index];
@@ -1057,10 +1093,27 @@ function validateStudentProfile(
             source.isPrimary === contact.isPrimary
           );
         });
-      if (!contactsMatch) {
-        throw new Error("Yakın iletişim listesi normalleştirilmemiş.");
-      }
     } catch {
+      contactsMatch = false;
+    }
+    if (!contactsMatch && student.profileSchemaVersion !== 5) {
+      const legacyContacts = studentContactsFromRecord(sourceContacts);
+      contactsMatch =
+        legacyContacts.length === sourceContacts.length &&
+        legacyContacts.every((contact, index) => {
+          const source = sourceContacts[index];
+          return (
+            isRecord(source) &&
+            source.id === contact.id &&
+            source.kind === contact.kind &&
+            source.relationship === contact.relationship &&
+            source.name === contact.name &&
+            source.phone === contact.phone &&
+            source.isPrimary === contact.isPrimary
+          );
+        });
+    }
+    if (!contactsMatch) {
       throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
     }
   }
@@ -1074,7 +1127,8 @@ function validateStudentProfile(
     student.profileSchemaVersion !== undefined &&
     student.profileSchemaVersion !== 2 &&
     student.profileSchemaVersion !== 3 &&
-    student.profileSchemaVersion !== 4
+    student.profileSchemaVersion !== 4 &&
+    student.profileSchemaVersion !== 5
   ) {
     throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
   }
@@ -1110,6 +1164,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
   }
   if (
     manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
   ) {
     throw new Error("Yedek veri şeması bu uygulama sürümüyle uyumlu değil.");
@@ -1640,6 +1695,40 @@ function assertBackupRelationships(
     if (!knownItem) {
       throw new Error(
         `portfolioSelections/${selection.id} portfolyo öğesi bulunamadı.`,
+      );
+    }
+    const selectionScope = validatedRecordScope(
+      selection,
+      "portfolioSelections",
+      classroomsById,
+    );
+    const allowedStudentScopes = studentScopes.get(
+      selection.studentId as string,
+    ) ?? [];
+    const itemScope =
+      selection.itemType === "observation"
+        ? observationScopes.get(itemId) ?? null
+        : selection.itemType === "activity"
+          ? activityScopes.get(itemId) ?? null
+          : selection.itemType === "plan"
+            ? planScopes.get(itemId) ?? null
+            : selection.itemType === "media"
+              ? validatedRecordScope(
+                  mediaById.get(itemId) as StoredRecord,
+                  "mediaAssets",
+                  classroomsById,
+                )
+              : null;
+    if (
+      !selectionScope ||
+      !allowedStudentScopes.some((studentScope) =>
+        scopesMatch(selectionScope, studentScope),
+      ) ||
+      !itemScope ||
+      !scopesMatch(selectionScope, itemScope)
+    ) {
+      throw new Error(
+        `portfolioSelections/${selection.id} sınıf veya eğitim yılı kapsamıyla uyuşmuyor.`,
       );
     }
   }

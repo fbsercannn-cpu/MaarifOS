@@ -63,15 +63,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.4.0",
+  version: "0.5.0",
   releasedOn: "2026-07-29",
-  title: "Öğrenci hafızası ve aile iletişim merkezi",
+  title: "Kanıta dayalı öğrenci portfolyosu",
   notes: Object.freeze([
-    "Her öğrencinin gözlemleri tarih ve saat bandıyla kalıcı bir zaman çizelgesinde açılır.",
-    "Profil fotoğrafı kameradan çekilebilir veya galeriden seçilebilir; görsel cihazda güvenle küçültülür.",
-    "Anne, baba, bakıcı ve diğer yakınlar için doğrudan arama ve WhatsApp işlemleri eklendi.",
-    "Öğrenci ya da sınıf gözlemleri, seçilen tarih aralığıyla ChatGPT uyumlu düz metin olarak aktarılır.",
-    "Gözlem metni karakter sınırı olmadan kaydedilir; bağ bekleyen kayda profilden doğrudan erişilir.",
+    "Çocuğun mevcut gözlemleri, kaynak metin değiştirilmeden öğretmen veya çocukla birlikte portfolyo seçkisine eklenebilir.",
+    "Öğretmen notu, çocuğun seçime ilişkin sözü ve aile katkısı birbirinden ayrı ve geri alınabilir kayıtlar olarak korunur.",
+    "Öğrenci adı ve soyadı ayrı alanlarda yönetilir; Türkçe arama ve 11 rakamlı cep telefonu girişi daha güvenli hâle getirildi.",
+    "Sürümlü yedek şeması, yeni profil ve portfolyo kayıtlarını eski yedeklerden kayıpsız taşıyacak biçimde güncellendi.",
+    "Çevrimdışı güncelleme ve kurtarma akışları yeni sürüm sözleşmesiyle güçlendirildi.",
   ]),
 });
 

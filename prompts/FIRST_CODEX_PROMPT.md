@@ -30,5 +30,5 @@ Sınırlar:
 Çalışma bittikten sonra:
 - Çalıştırma komutlarını ver.
 - Test sonuçlarını özetle.
-- Mobil ve çevrimdışı kontrol listesini paylaş.
+- Mobil ve çevrim dışı kontrol listesini paylaş.
 - Bir sonraki mantıklı görevi öner, fakat kendiliğinden yeni faza geçme.

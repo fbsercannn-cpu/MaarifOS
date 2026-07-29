@@ -1,6 +1,6 @@
 import type { StoredRecord } from "./model.ts";
 
-export const STUDENT_PROFILE_SCHEMA_VERSION = 4 as const;
+export const STUDENT_PROFILE_SCHEMA_VERSION = 5 as const;
 
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NATIONAL_IDENTIFIER_PATTERN = /^\d{10,11}$/;
@@ -32,6 +32,8 @@ export type StudentContact = {
 
 export type StudentProfileInput = {
   displayName: string;
+  firstName?: string;
+  lastName?: string;
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
@@ -47,6 +49,8 @@ export type StudentProfileInput = {
 
 export type StudentProfile = {
   displayName: string;
+  firstName: string;
+  lastName?: string;
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
@@ -63,6 +67,57 @@ export type StudentProfile = {
 function optionalTrimmed(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+export function splitStudentDisplayName(displayName: string): {
+  firstName: string;
+  lastName: string;
+} {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { firstName: parts[0] ?? "", lastName: "" };
+  }
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts.at(-1) ?? "",
+  };
+}
+
+export function composeStudentDisplayName(
+  firstName: string,
+  lastName: string,
+): string {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+}
+
+export function normalizeTurkishSearchText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[çÇ]/g, "c")
+    .replace(/[ğĞ]/g, "g")
+    .replace(/[ıİ]/g, "i")
+    .replace(/[öÖ]/g, "o")
+    .replace(/[şŞ]/g, "s")
+    .replace(/[üÜ]/g, "u")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function formatStudentPhone(value: string): string {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0090")) digits = digits.slice(4);
+  else if (digits.startsWith("90")) digits = digits.slice(2);
+  if (digits.startsWith("5")) digits = `0${digits}`;
+  digits = digits.slice(0, 11);
+  const groups = [
+    digits.slice(0, 4),
+    digits.slice(4, 7),
+    digits.slice(7, 9),
+    digits.slice(9, 11),
+  ].filter(Boolean);
+  return groups.join(" ");
 }
 
 function optionalLimitedText(
@@ -86,16 +141,15 @@ export function normalizeStudentPhone(value: string): string {
     throw new Error("Telefon numarası yalnız rakam ve telefon ayırıcıları içerebilir.");
   }
   let digits = trimmed.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.length === 11 && digits.startsWith("0")) {
-    digits = `90${digits.slice(1)}`;
-  } else if (digits.length === 10 && digits.startsWith("5")) {
-    digits = `90${digits}`;
+  if (digits.startsWith("0090")) digits = digits.slice(4);
+  else if (digits.startsWith("90")) digits = digits.slice(2);
+  if (digits.length === 10 && digits.startsWith("5")) digits = `0${digits}`;
+  if (!/^05\d{9}$/.test(digits)) {
+    throw new Error(
+      "Cep telefonu 05 ile başlayan 11 rakamdan oluşmalıdır (ör. 0532 532 32 32).",
+    );
   }
-  if (digits.length < 10 || digits.length > 15) {
-    throw new Error("Telefon numarası ülke koduyla birlikte 10–15 rakam olmalıdır.");
-  }
-  return `+${digits}`;
+  return `+90${digits.slice(1)}`;
 }
 
 export function normalizeStudentContacts(
@@ -139,6 +193,57 @@ export function normalizeStudentContacts(
   return normalized;
 }
 
+export function studentContactsFromRecord(value: unknown): StudentContact[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  let primaryAssigned = false;
+  const contacts: StudentContact[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const source = item as Partial<StudentContactInput>;
+    if (
+      typeof source.id !== "string" ||
+      !CONTACT_ID_PATTERN.test(source.id) ||
+      ids.has(source.id) ||
+      (source.kind !== "mother" &&
+        source.kind !== "father" &&
+        source.kind !== "other") ||
+      typeof source.relationship !== "string" ||
+      !source.relationship.trim() ||
+      typeof source.phone !== "string" ||
+      !source.phone.trim()
+    ) {
+      continue;
+    }
+    ids.add(source.id);
+    const isPrimary: boolean =
+      source.isPrimary === true && !primaryAssigned;
+    if (isPrimary) primaryAssigned = true;
+    const base: StudentContactInput = {
+      id: source.id,
+      kind: source.kind,
+      relationship: source.relationship,
+      ...(typeof source.name === "string" && source.name.trim()
+        ? { name: source.name }
+        : {}),
+      phone: source.phone,
+      isPrimary,
+    };
+    try {
+      contacts.push(normalizeStudentContacts([base])[0]);
+    } catch {
+      contacts.push({
+        ...base,
+        relationship: source.relationship.trim(),
+        ...(base.name ? { name: base.name.trim() } : {}),
+        phone: source.phone.trim(),
+        isPrimary,
+      });
+    }
+  }
+  return contacts;
+}
+
 export function isStudentProfilePhotoDataUrl(
   value: unknown,
 ): value is string {
@@ -172,7 +277,16 @@ export function normalizeStudentProfile(
   input: StudentProfileInput,
   currentCivilDate: string,
 ): StudentProfile {
-  const displayName = input.displayName.trim();
+  const legacyNameParts = splitStudentDisplayName(input.displayName);
+  const firstName = optionalTrimmed(input.firstName) ?? legacyNameParts.firstName;
+  const lastName = optionalTrimmed(input.lastName) ?? legacyNameParts.lastName;
+  if (!firstName || firstName.length > 80) {
+    throw new Error("Çocuğun adı 1–80 karakter arasında olmalıdır.");
+  }
+  if (lastName.length > 80) {
+    throw new Error("Çocuğun soyadı 80 karakterden uzun olamaz.");
+  }
+  const displayName = composeStudentDisplayName(firstName, lastName);
   if (!displayName || displayName.length > 120) {
     throw new Error("Çocuğun adı 1–120 karakter arasında olmalıdır.");
   }
@@ -240,6 +354,8 @@ export function normalizeStudentProfile(
 
   return {
     displayName,
+    firstName,
+    ...(lastName ? { lastName } : {}),
     ...(preferredName ? { preferredName } : {}),
     ...(birthDate ? { birthDate } : {}),
     ...(optionalCode ? { optionalCode } : {}),
@@ -271,23 +387,25 @@ export function studentProfileFromRecord(
     (!birthDate || record.enrollmentDate >= birthDate)
       ? record.enrollmentDate
       : undefined;
-  let contacts: StudentContact[] = [];
-  if (Array.isArray(record.contacts)) {
-    try {
-      contacts = normalizeStudentContacts(
-        record.contacts as StudentContactInput[],
-      );
-    } catch {
-      contacts = [];
-    }
-  }
+  const contacts = studentContactsFromRecord(record.contacts);
   const profilePhotoDataUrl = isStudentProfilePhotoDataUrl(
     record.profilePhotoDataUrl,
   )
     ? record.profilePhotoDataUrl
     : undefined;
+  const legacyNameParts = splitStudentDisplayName(record.displayName);
+  const firstName =
+    typeof record.firstName === "string" && record.firstName.trim()
+      ? record.firstName.trim()
+      : legacyNameParts.firstName;
+  const lastName =
+    typeof record.lastName === "string" && record.lastName.trim()
+      ? record.lastName.trim()
+      : legacyNameParts.lastName;
   return {
-    displayName: record.displayName.trim(),
+    displayName: composeStudentDisplayName(firstName, lastName),
+    firstName,
+    ...(lastName ? { lastName } : {}),
     ...(typeof record.preferredName === "string" && record.preferredName.trim()
       ? { preferredName: record.preferredName.trim() }
       : {}),

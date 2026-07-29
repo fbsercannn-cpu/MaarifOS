@@ -59,9 +59,13 @@ import {
   assertAppLockAttemptState,
   assertAppLockConfig,
   civilDateInIstanbul,
+  composeStudentDisplayName,
   createAppLockConfig,
+  formatStudentPhone,
   initialAppLockAttemptState,
   isEncryptedBackupEnvelope,
+  normalizeTurkishSearchText,
+  splitStudentDisplayName,
   type AppLockAttemptState,
   type AppLockConfig,
   type BackupEnvelope,
@@ -111,6 +115,13 @@ import {
   type EvidenceObservationSummary,
   type EvidenceWorkspace,
 } from "./features/evidence/evidence-workspace";
+import {
+  emptyStudentPortfolioWorkspace,
+  loadStudentPortfolioWorkspace,
+  savePortfolioSelection,
+  type PortfolioSelectedBy,
+  type StudentPortfolioWorkspace,
+} from "./features/portfolio/student-portfolio";
 import {
   CURRICULUM_ASSESSMENT_LEVELS,
   CURRICULUM_TARGET_KIND_LABELS,
@@ -223,7 +234,8 @@ class PersistenceUnavailableError extends Error {
 }
 
 type StudentProfileFormState = {
-  name: string;
+  firstName: string;
+  lastName: string;
   preferredName: string;
   birthDate: string;
   optionalCode: string;
@@ -234,6 +246,16 @@ type StudentProfileFormState = {
   supportPreferences: string;
   contacts: StudentContact[];
   profilePhotoDataUrl: string;
+};
+
+type StudentObservationMonth = string;
+
+type PortfolioEditorState = {
+  observationId: string;
+  teacherCaption: string;
+  childReflection: string;
+  familyContribution: string;
+  selectedBy: PortfolioSelectedBy;
 };
 
 const currentCivilDate = civilDateInIstanbul(new Date());
@@ -1121,7 +1143,12 @@ function emptyStudentContact(
 }
 
 function studentContactsForForm(student: Student): StudentContact[] {
-  const contacts = (student.contacts ?? []).map((contact) => ({ ...contact }));
+  const contacts = (student.contacts ?? []).map((contact) => ({
+    ...contact,
+    phone: contactActionLinks(contact.phone)
+      ? formatStudentPhone(contact.phone)
+      : contact.phone,
+  }));
   if (!contacts.some((contact) => contact.kind === "mother")) {
     contacts.unshift(emptyStudentContact("mother", "Anne"));
   }
@@ -1821,8 +1848,8 @@ function EvidenceCaptureScreen({
           </button>
           <small>
             {selectionMode === "selected-children"
-              ? "Program bağı her çocuk için ayrı ayrı tamamlanabilir."
-              : "Program bağı daha sonra tamamlanabilir."}
+              ? "Program bağlantısı her çocuk için ayrı ayrı tamamlanabilir."
+              : "Program bağlantısı daha sonra tamamlanabilir."}
           </small>
         </div>
       ) : null}
@@ -2259,7 +2286,8 @@ export default function Prototype() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentProfileForm, setStudentProfileForm] =
     useState<StudentProfileFormState>({
-      name: "",
+      firstName: "",
+      lastName: "",
       preferredName: "",
       birthDate: "",
       optionalCode: "",
@@ -2275,9 +2303,16 @@ export default function Prototype() {
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [studentObservationLimit, setStudentObservationLimit] = useState(20);
   const [studentProfileTab, setStudentProfileTab] =
-    useState<"flow" | "details" | "contacts">("flow");
+    useState<"flow" | "portfolio" | "details" | "contacts">("flow");
   const [studentObservationFilter, setStudentObservationFilter] =
     useState<"all" | "pending">("all");
+  const [studentObservationMonth, setStudentObservationMonth] =
+    useState<StudentObservationMonth>("all");
+  const [studentPortfolioWorkspace, setStudentPortfolioWorkspace] =
+    useState<StudentPortfolioWorkspace>(emptyStudentPortfolioWorkspace);
+  const [portfolioEditor, setPortfolioEditor] =
+    useState<PortfolioEditorState | null>(null);
+  const [portfolioError, setPortfolioError] = useState("");
   const [removedStudentContact, setRemovedStudentContact] =
     useState<StudentContact | null>(null);
   const [removedProfilePhoto, setRemovedProfilePhoto] = useState<string | null>(
@@ -2394,13 +2429,30 @@ export default function Prototype() {
   const selectedStudentPendingLinks = selectedStudentObservations.filter(
     (observation) => observation.confirmedCurriculumLinkIds.length === 0,
   ).length;
+  const selectedStudentMonthObservations =
+    studentObservationMonth === "all"
+      ? selectedStudentObservations
+      : selectedStudentObservations.filter(
+          (observation) =>
+            observation.civilDate.startsWith(studentObservationMonth),
+        );
   const visibleSelectedStudentObservations =
     studentObservationFilter === "pending"
-      ? selectedStudentObservations.filter(
+      ? selectedStudentMonthObservations.filter(
           (observation) =>
             observation.confirmedCurriculumLinkIds.length === 0,
         )
-      : selectedStudentObservations;
+      : selectedStudentMonthObservations;
+  const portfolioSelectionByObservationId = useMemo(
+    () =>
+      new Map(
+        studentPortfolioWorkspace.selections.map((selection) => [
+          selection.itemId,
+          selection,
+        ]),
+      ),
+    [studentPortfolioWorkspace.selections],
+  );
   const observationCountByStudent = useMemo(() => {
     const countsByStudent = new Map<string, number>();
     for (const observation of allEvidenceObservations) {
@@ -2411,7 +2463,7 @@ export default function Prototype() {
     }
     return countsByStudent;
   }, [allEvidenceObservations]);
-  const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("tr-TR");
+  const normalizedStudentSearch = normalizeTurkishSearchText(studentSearch);
   const visibleStudents = useMemo(
     () =>
       [...students]
@@ -2423,8 +2475,13 @@ export default function Prototype() {
         )
         .filter((student) => {
           if (!normalizedStudentSearch) return true;
-          return [student.name, student.preferredName ?? ""].some((value) =>
-            value.toLocaleLowerCase("tr-TR").includes(normalizedStudentSearch),
+          return [
+            student.firstName ?? "",
+            student.lastName ?? "",
+            student.name,
+            student.preferredName ?? "",
+          ].some((value) =>
+            normalizeTurkishSearchText(value).includes(normalizedStudentSearch),
           );
         }),
     [normalizedStudentSearch, students],
@@ -3504,7 +3561,14 @@ export default function Prototype() {
   const addStudent = async () => {
     const name = newStudentName.trim();
     if (!name) return;
-    const student: Student = { id: crypto.randomUUID(), name, status: "present" };
+    const nameParts = splitStudentDisplayName(name);
+    const student: Student = {
+      id: crypto.randomUUID(),
+      name: composeStudentDisplayName(nameParts.firstName, nameParts.lastName),
+      firstName: nameParts.firstName,
+      ...(nameParts.lastName ? { lastName: nameParts.lastName } : {}),
+      status: "present",
+    };
     setDataBusy(true);
     try {
       await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: false }));
@@ -3520,6 +3584,19 @@ export default function Prototype() {
     }
   };
 
+  const refreshStudentPortfolio = async (studentId: string) => {
+    try {
+      const workspace = await loadStudentPortfolioWorkspace(store, studentId);
+      setStudentPortfolioWorkspace(workspace);
+      return workspace;
+    } catch {
+      setPortfolioError(
+        "Portfolyo verileri açılamadı; mevcut kanıtlar değiştirilmedi.",
+      );
+      return null;
+    }
+  };
+
   const openStudentProfile = (studentId: string) => {
     const student =
       students.find((item) => item.id === studentId) ??
@@ -3529,9 +3606,16 @@ export default function Prototype() {
       return;
     }
     keyboard.hide();
+    const nameParts = {
+      firstName:
+        student.firstName ?? splitStudentDisplayName(student.name).firstName,
+      lastName:
+        student.lastName ?? splitStudentDisplayName(student.name).lastName,
+    };
     setSelectedStudentId(student.id);
     setStudentProfileForm({
-      name: student.name,
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
       preferredName: student.preferredName ?? "",
       birthDate: student.birthDate ?? "",
       optionalCode: student.optionalCode ?? "",
@@ -3547,16 +3631,102 @@ export default function Prototype() {
     setStudentObservationLimit(20);
     setStudentProfileTab("flow");
     setStudentObservationFilter("all");
+    setStudentObservationMonth("all");
+    setStudentPortfolioWorkspace(emptyStudentPortfolioWorkspace);
+    setPortfolioEditor(null);
+    setPortfolioError("");
     setRemovedStudentContact(null);
     setRemovedProfilePhoto(null);
     setStudentActionsOpenId(null);
     setChildrenOpen(false);
     setStudentProfileOpen(true);
     setAnnouncement(`${student.name} profili açıldı.`);
+    void refreshStudentPortfolio(student.id);
+  };
+
+  const openPortfolioEditor = (observation: EvidenceObservationSummary) => {
+    const existing = portfolioSelectionByObservationId.get(observation.id);
+    setPortfolioEditor({
+      observationId: observation.id,
+      teacherCaption: existing?.teacherCaption ?? "",
+      childReflection: existing?.childReflection ?? observation.childQuote ?? "",
+      familyContribution: existing?.familyContribution ?? "",
+      selectedBy: existing?.selectedBy ?? "teacher-child",
+    });
+    setPortfolioError("");
+  };
+
+  const persistPortfolioEditor = async () => {
+    if (!selectedProfileStudent || !portfolioEditor || dataBusy) return;
+    const draft = portfolioEditor;
+    setDataBusy(true);
+    setPortfolioError("");
+    try {
+      await enqueuePersistence(() =>
+        savePortfolioSelection(store, {
+          studentId: selectedProfileStudent.id,
+          observationId: draft.observationId,
+          selected: true,
+          teacherCaption: draft.teacherCaption,
+          childReflection: draft.childReflection,
+          familyContribution: draft.familyContribution,
+          selectedBy: draft.selectedBy,
+        }),
+      );
+      await refreshStudentPortfolio(selectedProfileStudent.id);
+      keyboard.hide();
+      setPortfolioEditor(null);
+      setAnnouncement("Kanıt portfolyo seçkisine kaydedildi.");
+    } catch (reason) {
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : "Portfolyo seçimi kaydedilemedi.";
+      setPortfolioError(message);
+      setAnnouncement("Portfolyo seçimi kaydedilemedi; kaynak kanıt korundu.");
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const removePortfolioSelection = async (observationId: string) => {
+    if (!selectedProfileStudent || dataBusy) return;
+    setDataBusy(true);
+    setPortfolioError("");
+    try {
+      await enqueuePersistence(() =>
+        savePortfolioSelection(store, {
+          studentId: selectedProfileStudent.id,
+          observationId,
+          selected: false,
+        }),
+      );
+      await refreshStudentPortfolio(selectedProfileStudent.id);
+      keyboard.hide();
+      setPortfolioEditor(null);
+      setAnnouncement(
+        "Kanıt seçkiden kaldırıldı; kaynak gözlem ve seçim geçmişi korundu.",
+      );
+    } catch (reason) {
+      setPortfolioError(
+        reason instanceof Error
+          ? reason.message
+          : "Portfolyo seçimi kaldırılamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
   };
 
   const saveStudentProfile = async () => {
     if (!selectedProfileStudent || dataBusy) return;
+    if (
+      !studentProfileForm.firstName.trim() ||
+      !studentProfileForm.lastName.trim()
+    ) {
+      setStudentProfileError("Çocuğun adı ve soyadı ayrı ayrı girilmelidir.");
+      return;
+    }
     const contactsWithDetails = studentProfileForm.contacts.filter(
       (contact) =>
         contact.phone.trim() ||
@@ -3583,7 +3753,12 @@ export default function Prototype() {
     }));
     const updatedStudent: Student = {
       ...selectedProfileStudent,
-      name: studentProfileForm.name,
+      name: composeStudentDisplayName(
+        studentProfileForm.firstName,
+        studentProfileForm.lastName,
+      ),
+      firstName: studentProfileForm.firstName,
+      lastName: studentProfileForm.lastName,
       ...(studentProfileForm.preferredName.trim()
         ? { preferredName: studentProfileForm.preferredName }
         : {}),
@@ -3770,7 +3945,7 @@ export default function Prototype() {
     return {
       text: buildStudentObservationExport(
         selectedProfileStudent,
-        allEvidenceObservations,
+        visibleSelectedStudentObservations,
       ),
       fileName: studentObservationExportFileName(
         selectedProfileStudent,
@@ -3783,7 +3958,7 @@ export default function Prototype() {
     const payload = currentStudentObservationExport();
     if (!payload) return;
     downloadText(payload.fileName, payload.text);
-    setAnnouncement("Çocuğun gözlem arşivi metin dosyası olarak indirildi.");
+    setAnnouncement("Görüntülenen gözlem arşivi metin dosyası olarak indirildi.");
   };
 
   const copyCurrentStudentObservations = async () => {
@@ -4659,18 +4834,18 @@ export default function Prototype() {
             }
           : offlineReadiness === "ready"
             ? {
-                label: "Kaydedildi · Çevrimdışı hazır",
+                label: "Kaydedildi · Çevrim dışı hazır",
                 className: "is-ready",
                 icon: <CheckCircledIcon aria-hidden="true" />,
               }
             : offlineReadiness === "unavailable"
               ? {
-                  label: "Kaydedildi · Çevrimdışı kullanım desteklenmiyor",
+                  label: "Kaydedildi · Çevrim dışı kullanım desteklenmiyor",
                   className: "is-warning",
                   icon: <CheckCircledIcon aria-hidden="true" />,
                 }
               : {
-                  label: "Kaydedildi · Çevrimdışı hazırlık denetleniyor",
+                  label: "Kaydedildi · Çevrim dışı hazırlık denetleniyor",
                   className: "is-checking",
                   icon: <ClockIcon aria-hidden="true" />,
                 };
@@ -4766,7 +4941,7 @@ export default function Prototype() {
               else setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
             }}>
               <ClockIcon aria-hidden="true" />
-              <span><small>Program bağı</small><strong>{todayWorkspace.pendingEvidenceLinks} gözlem bekliyor</strong></span>
+              <span><small>Program bağlantısı</small><strong>{todayWorkspace.pendingEvidenceLinks} gözlem bekliyor</strong></span>
             </button>
           </section>
 
@@ -4780,11 +4955,12 @@ export default function Prototype() {
                 type="button"
                 onClick={() => {
                   setChildrenOpen(true);
-                  setAnnouncement("Sınıfım bölümü açıldı.");
+                  setStudentSearch("");
+                  setAnnouncement("Öğrenci arama açıldı.");
                 }}
               >
-                Tümünü gör
-                <ChevronRightIcon aria-hidden="true" />
+                <MagnifyingGlassIcon aria-hidden="true" />
+                Öğrenci ara
               </button>
             </div>
             {students.length > 0 ? (
@@ -5260,11 +5436,11 @@ export default function Prototype() {
         <div className="roster-toolbar">
           <div className="roster-search">
             <MagnifyingGlassIcon aria-hidden="true" />
-            <KeyboardInput
-              aria-label="Çocuk ara"
+              <KeyboardInput
+              aria-label="Öğrenci ara"
               value={studentSearch}
               onChange={(event) => setStudentSearch(event.target.value)}
-              placeholder="Çocuk ara"
+              placeholder="Ad veya soyad ile ara"
               autoComplete="off"
             />
             {studentSearch ? (
@@ -5710,6 +5886,7 @@ export default function Prototype() {
                 onClick={() => {
                   setStudentProfileTab("flow");
                   setStudentObservationFilter("all");
+                  setStudentObservationMonth("all");
                   setStudentObservationLimit(20);
                 }}
               >
@@ -5721,10 +5898,11 @@ export default function Prototype() {
                 onClick={() => {
                   setStudentProfileTab("flow");
                   setStudentObservationFilter("pending");
+                  setStudentObservationMonth("all");
                   setStudentObservationLimit(20);
                 }}
               >
-                <small>Bağ bekleyen</small>
+                <small>Bağlantı bekleyen</small>
                 <strong>{selectedStudentPendingLinks}</strong>
               </button>
             </section>
@@ -5736,6 +5914,19 @@ export default function Prototype() {
                 onClick={() => setStudentProfileTab("flow")}
               >
                 Akış
+              </button>
+              <button
+                type="button"
+                aria-current={studentProfileTab === "portfolio" ? "page" : undefined}
+                onClick={() => {
+                  setStudentProfileTab("portfolio");
+                  setStudentObservationFilter("all");
+                  setStudentObservationMonth("all");
+                  setStudentObservationLimit(20);
+                  void refreshStudentPortfolio(selectedProfileStudent.id);
+                }}
+              >
+                Portfolyo
               </button>
               <button
                 type="button"
@@ -5785,6 +5976,36 @@ export default function Prototype() {
                 </div>
                 <ArchiveIcon aria-hidden="true" />
               </div>
+              {studentPortfolioWorkspace.monthFolders.length > 0 ? (
+                <div
+                  className="student-observation-month-folders"
+                  role="group"
+                  aria-label="Kanıt bulunan aylar"
+                >
+                  {studentPortfolioWorkspace.monthFolders.map((folder) => (
+                    <button
+                      type="button"
+                      key={folder.key}
+                      aria-pressed={studentObservationMonth === folder.key}
+                      onClick={() => {
+                        setStudentObservationMonth((current) =>
+                          current === folder.key ? "all" : folder.key,
+                        );
+                        setStudentObservationLimit(20);
+                      }}
+                    >
+                      <ArchiveIcon aria-hidden="true" />
+                      <strong>{folder.label}</strong>
+                      <small>
+                        {folder.totalCount} kanıt
+                        {folder.selectionCount > 0
+                          ? ` · ${folder.selectionCount} seçki`
+                          : ""}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="student-observation-filters" role="group" aria-label="Gözlem filtresi">
                 <button
                   type="button"
@@ -5804,7 +6025,7 @@ export default function Prototype() {
                     setStudentObservationLimit(20);
                   }}
                 >
-                  Bağ bekleyen · {selectedStudentPendingLinks}
+                  Bağlantı bekleyen · {selectedStudentPendingLinks}
                 </button>
               </div>
               <div className="student-observation-export-actions">
@@ -5822,8 +6043,8 @@ export default function Prototype() {
                 </button>
               </div>
               <p className="student-observation-export-note">
-                ChatGPT veya başka bir uygulamayla paylaşmaya uygun düz metin
-                üretilir. Telefonlar ve fotoğraf dışa aktarılmaz.
+                Görüntülenen ay ve filtreye uygun düz metin üretilir. Telefonlar
+                ve fotoğraf dışa aktarılmaz.
               </p>
               {visibleSelectedStudentObservations.length > 0 ? (
                 <ol className="student-observation-timeline">
@@ -5867,7 +6088,7 @@ export default function Prototype() {
                               onClick={() => openPendingObservation(observation)}
                             >
                               <Link2Icon aria-hidden="true" />
-                              Program bağını tamamla
+                              Program bağlantısını tamamla
                             </button>
                           ) : null}
                         </article>
@@ -5897,7 +6118,314 @@ export default function Prototype() {
               </>
             ) : null}
 
-            {studentProfileTab !== "flow" ? (
+            {studentProfileTab === "portfolio" ? (
+              <section
+                className="student-portfolio"
+                aria-labelledby="student-portfolio-heading"
+              >
+                <header className="student-portfolio-heading">
+                  <div>
+                    <span className="d1-kicker">Gelişim yolculuğu</span>
+                    <h3 id="student-portfolio-heading">Portfolyo seçkisi</h3>
+                    <p>
+                      {studentPortfolioWorkspace.selections.length} seçili kanıt ·
+                      kaynak gözlemler değiştirilmez
+                    </p>
+                  </div>
+                </header>
+
+                <div className="student-portfolio-principles">
+                  <strong>Birlikte seç, kaynağı koru.</strong>
+                  <span>
+                    Öğretmen yorumu, çocuğun sesi ve aile katkısı kaynak kanıttan
+                    ayrı saklanır. Puanlama, sıralama veya tanı üretilmez.
+                  </span>
+                </div>
+
+                {studentPortfolioWorkspace.monthFolders.length > 0 ? (
+                  <div
+                    className="student-observation-month-folders"
+                    role="group"
+                    aria-label="Portfolyo için kanıt bulunan aylar"
+                  >
+                    {studentPortfolioWorkspace.monthFolders.map((folder) => (
+                      <button
+                        type="button"
+                        key={folder.key}
+                        aria-pressed={studentObservationMonth === folder.key}
+                        onClick={() => {
+                          setStudentObservationMonth((current) =>
+                            current === folder.key ? "all" : folder.key,
+                          );
+                          setPortfolioEditor(null);
+                        }}
+                      >
+                        <ArchiveIcon aria-hidden="true" />
+                        <strong>{folder.label}</strong>
+                        <small>
+                          {folder.totalCount} kanıt
+                          {folder.selectionCount > 0
+                            ? ` · ${folder.selectionCount} seçki`
+                            : ""}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {portfolioError ? (
+                  <p className="student-portfolio-error" role="alert">
+                    {portfolioError}
+                  </p>
+                ) : null}
+
+                {selectedStudentMonthObservations.length > 0 ? (
+                  <ol className="student-portfolio-list">
+                    {[...selectedStudentMonthObservations]
+                      .sort((left, right) => {
+                        const leftSelected = portfolioSelectionByObservationId.has(
+                          left.id,
+                        );
+                        const rightSelected = portfolioSelectionByObservationId.has(
+                          right.id,
+                        );
+                        return (
+                          Number(rightSelected) - Number(leftSelected) ||
+                          right.observedAt.localeCompare(left.observedAt)
+                        );
+                      })
+                      .map((observation) => {
+                        const selection =
+                          portfolioSelectionByObservationId.get(observation.id);
+                        const editing =
+                          portfolioEditor?.observationId === observation.id;
+                        return (
+                          <li
+                            key={observation.id}
+                            className={selection ? "is-selected" : undefined}
+                          >
+                            <article>
+                              <div className="student-portfolio-card-heading">
+                                <div>
+                                  <time dateTime={observation.observedAt}>
+                                    {formatObservationDateTime(
+                                      observation.observedAt,
+                                    )}
+                                  </time>
+                                  <strong>{observation.activityTitle}</strong>
+                                </div>
+                                <span>
+                                  {selection ? "Seçkide" : "Kanıt"}
+                                </span>
+                              </div>
+                              <p>{observation.rawText}</p>
+                              {observation.childQuote ? (
+                                <blockquote>
+                                  <QuoteIcon aria-hidden="true" />
+                                  <span>{observation.childQuote}</span>
+                                </blockquote>
+                              ) : null}
+                              {selection && !editing ? (
+                                <div className="student-portfolio-reflections">
+                                  {selection.teacherCaption ? (
+                                    <p>
+                                      <strong>Öğretmen notu</strong>
+                                      {selection.teacherCaption}
+                                    </p>
+                                  ) : null}
+                                  {selection.childReflection ? (
+                                    <p>
+                                      <strong>Çocuğun seçim sözü</strong>
+                                      {selection.childReflection}
+                                    </p>
+                                  ) : null}
+                                  {selection.familyContribution ? (
+                                    <p>
+                                      <strong>Aile katkısı</strong>
+                                      {selection.familyContribution}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                              {editing && portfolioEditor ? (
+                                <div className="student-portfolio-editor">
+                                  <div
+                                    className="student-portfolio-participation"
+                                    role="group"
+                                    aria-label="Seçime katılanlar"
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-pressed={
+                                        portfolioEditor.selectedBy === "teacher"
+                                      }
+                                      onClick={() =>
+                                        setPortfolioEditor((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                selectedBy: "teacher",
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    >
+                                      Öğretmen seçti
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-pressed={
+                                        portfolioEditor.selectedBy ===
+                                        "teacher-child"
+                                      }
+                                      onClick={() =>
+                                        setPortfolioEditor((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                selectedBy: "teacher-child",
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    >
+                                      Çocukla birlikte
+                                    </button>
+                                  </div>
+                                  <label>
+                                    Öğretmenin kanıta bağlı notu
+                                    <KeyboardTextarea
+                                      value={portfolioEditor.teacherCaption}
+                                      maxLength={2000}
+                                      onChange={(event) =>
+                                        setPortfolioEditor((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                teacherCaption:
+                                                  event.target.value,
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Çocuğun bu seçime ilişkin sözü
+                                    <KeyboardTextarea
+                                      value={portfolioEditor.childReflection}
+                                      maxLength={1000}
+                                      onChange={(event) =>
+                                        setPortfolioEditor((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                childReflection:
+                                                  event.target.value,
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Aile katkısı
+                                    <KeyboardTextarea
+                                      value={portfolioEditor.familyContribution}
+                                      maxLength={2000}
+                                      onChange={(event) =>
+                                        setPortfolioEditor((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                familyContribution:
+                                                  event.target.value,
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <div className="student-portfolio-editor-actions">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void persistPortfolioEditor()
+                                      }
+                                      disabled={dataBusy}
+                                    >
+                                      <CheckCircledIcon aria-hidden="true" />
+                                      {dataBusy
+                                        ? "Kaydediliyor…"
+                                        : "Seçkiyi kaydet"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        keyboard.hide();
+                                        setPortfolioEditor(null);
+                                      }}
+                                      disabled={dataBusy}
+                                    >
+                                      Vazgeç
+                                    </button>
+                                    {selection ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void removePortfolioSelection(
+                                            observation.id,
+                                          )
+                                        }
+                                        disabled={dataBusy}
+                                      >
+                                        Seçkiden kaldır
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  className="student-portfolio-select"
+                                  type="button"
+                                  onClick={() => openPortfolioEditor(observation)}
+                                  disabled={
+                                    dataBusy ||
+                                    archivedStudents.some(
+                                      (student) =>
+                                        student.id === selectedProfileStudent.id,
+                                    )
+                                  }
+                                >
+                                  {selection
+                                    ? "Seçim notlarını düzenle"
+                                    : "Seçkiye ekle"}
+                                </button>
+                              )}
+                            </article>
+                          </li>
+                        );
+                      })}
+                  </ol>
+                ) : (
+                  <div className="student-observation-empty">
+                    <ReaderIcon aria-hidden="true" />
+                    <strong>
+                      {studentObservationMonth === "all"
+                        ? "Henüz portfolyo kanıtı yok"
+                        : "Bu ayda kullanılabilir kanıt yok"}
+                    </strong>
+                    <span>
+                      Gözlem kaydedildiğinde kaynak metin değişmeden seçkiye
+                      eklenebilir.
+                    </span>
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {studentProfileTab === "details" ||
+            studentProfileTab === "contacts" ? (
             <form
               className="student-profile-form"
               onSubmit={(event) => {
@@ -5915,18 +6443,36 @@ export default function Prototype() {
                 <CalendarIcon aria-hidden="true" />
               </div>
 
-              <label htmlFor="student-profile-name">Adı ve soyadı</label>
-              <KeyboardInput
-                id="student-profile-name"
-                value={studentProfileForm.name}
-                onChange={(event) =>
-                  setStudentProfileForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                autoComplete="off"
-              />
+              <div className="student-profile-form-grid">
+                <label htmlFor="student-profile-first-name">
+                  Adı
+                  <KeyboardInput
+                    id="student-profile-first-name"
+                    value={studentProfileForm.firstName}
+                    onChange={(event) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        firstName: event.target.value.slice(0, 80),
+                      }))
+                    }
+                    autoComplete="given-name"
+                  />
+                </label>
+                <label htmlFor="student-profile-last-name">
+                  Soyadı
+                  <KeyboardInput
+                    id="student-profile-last-name"
+                    value={studentProfileForm.lastName}
+                    onChange={(event) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        lastName: event.target.value.slice(0, 80),
+                      }))
+                    }
+                    autoComplete="family-name"
+                  />
+                </label>
+              </div>
 
               <label htmlFor="student-profile-preferred-name">
                 Tercih edilen ad
@@ -6180,10 +6726,10 @@ export default function Prototype() {
                         value={contact.phone}
                         onChange={(event) =>
                           updateStudentContact(contact.id, {
-                            phone: event.target.value,
+                            phone: formatStudentPhone(event.target.value),
                           })
                         }
-                        placeholder="05xx xxx xx xx"
+                        placeholder="0532 532 32 32"
                         autoComplete="tel"
                       />
                     </label>
@@ -6288,7 +6834,11 @@ export default function Prototype() {
               <button
                 className="student-profile-save"
                 type="submit"
-                disabled={!studentProfileForm.name.trim() || dataBusy}
+                disabled={
+                  !studentProfileForm.firstName.trim() ||
+                  !studentProfileForm.lastName.trim() ||
+                  dataBusy
+                }
               >
                 <CheckCircledIcon aria-hidden="true" />
                 {dataBusy ? "Kaydediliyor…" : "Profili kaydet"}
@@ -6689,8 +7239,8 @@ export default function Prototype() {
                       </p>
                     ) : null}
                     <p>
-                      İşlemden önce cihaz içinde kalıcı ve checksum doğrulamalı
-                      kurtarma noktası oluşturulur. İndirme tek güvence
+                      İşlemden önce cihaz içinde kalıcı ve bütünlüğü doğrulanmış
+                      bir kurtarma noktası oluşturulur. İndirme tek güvence
                       değildir.
                     </p>
                     <div className="restore-actions">

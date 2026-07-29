@@ -11,7 +11,7 @@ type PwaWindow = Window & {
   };
 };
 
-test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", async ({ context, page }) => {
+test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar", async ({ context, page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("phone-frame")).toHaveCount(0);
@@ -79,7 +79,7 @@ test("üretim PWA gerçek ekranla açılır ve çevrimdışı yeniden başlar", 
     const registration = await navigator.serviceWorker.ready;
     return registration.active?.scriptURL ?? "";
   });
-  expect(serviceWorkerScript).toContain("/sw.js?v=0.4.0");
+  expect(serviceWorkerScript).toContain("/sw.js?v=0.5.0");
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),

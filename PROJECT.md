@@ -3,7 +3,7 @@
 
 **Proje sahibi:** Sercan Topaloğlu  
 **İlk kullanıcı ve ürün danışmanı:** Emine Topaloğlu  
-**Hedef ortam:** Android/iOS telefonlarda tam ekran çalışan, kurulabilir, çevrimdışı kullanılabilir mobil öncelikli PWA  
+**Hedef ortam:** Android/iOS telefonlarda tam ekran çalışan, kurulabilir, çevrim dışı kullanılabilir mobil öncelikli PWA
 **Temel ilke:** **Bir bilgi yalnızca bir kez girilir; planlama, portfolyo, rapor, veli bilgilendirmesi ve dönem değerlendirmelerinde tekrar tekrar kullanılır.**
 
 ---
@@ -209,15 +209,23 @@ Plan; etkinlik, öğrenci gözlemi, fotoğraf ve öğrenme kanıtlarıyla ilişk
 
 ## 5.8 Portfolyo oluşturucu
 
-Öğretmen öğrenci ve dönem seçer. Sistem aşağıdakileri önerir:
-- Tarih sırasına göre güçlü kanıtlar
-- Çeşitli gelişim alanlarından dengeli örnekler
-- Öğretmenin “portfolyo adayı” olarak işaretledikleri
-- Aynı etkinliğin tekrar eden fotoğraflarından en uygun seçki
-- Çocuğun özgün cümleleri
-- Öğretmen notları
+Portfolyo ayrı bir içerik girişi değil; öğretmenin daha önce kaydettiği değişmez
+kanıtların çocukla birlikte oluşturulan görünümüdür. Öğrenci profilinde yalnız
+kanıt bulunan akademik aylar `YYYY-MM` anahtarıyla gösterilir; boş ay klasörü
+oluşturulmaz.
 
-Öğretmen önerileri kabul eder, kaldırır, sıralar ve açıklama ekler. Sonuç:
+Her seçki öğesinde katmanlar ayrıdır:
+
+- Kaynak gözlem, çocuk ürünü veya medya
+- Öğretmenin kanıta bağlı açıklaması
+- Çocuğun bu ürünü neden seçtiğine ilişkin sözü
+- Ailenin ayrı katkısı
+- Seçimin öğretmen tarafından mı çocukla birlikte mi yapıldığı
+
+Sistem kanıtı “güçlü”, “zayıf” veya “en iyi” diye puanlamaz; çocukları
+sıralamaz, tanı ve kesin gelişim hükmü üretmez. Öğretmen seçer, kaldırır, sıralar
+ve açıklama ekler. Seçkiden kaldırma kaynak kanıtı silmez; seçim geçmişi
+tombstone ile korunur. Sonuç:
 - Fotoğraflı PDF
 - Yazdırılabilir portfolyo sayfası
 - Medya klasörü + indeks
@@ -538,7 +546,7 @@ MVP’ye dahil değil:
 - Tarihler `Europe/Istanbul` kullanıcı deneyimine göre gösterilmeli, depolamada standart zaman formatı kullanılmalı.
 - Büyük medya dosyaları için küçük önizleme üretilmeli.
 - Uygulama kapanması sırasında veri kaybı olmamalı.
-- Her modül çevrimdışı koşulda test edilmeli.
+- Her modül çevrim dışı koşulda test edilmeli.
 - Testlerde gerçek çocuk adı veya fotoğrafı kullanılmamalı.
 
 ---
@@ -555,7 +563,7 @@ MVP’ye dahil değil:
 ### Faz 1 — PWA çekirdeği
 - Proje iskeleti
 - Tam ekran kurulum
-- Çevrimdışı app shell
+- Çevrim dışı app shell
 - Yerel veritabanı
 - Tema ve gezinme
 - Otomatik taslak kaydı

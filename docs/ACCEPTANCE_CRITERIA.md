@@ -21,10 +21,20 @@
   sunar.
 - Sınıftan ayrılan çocuklar silinmez; daraltılabilir arşiv bölümünde geçmişleri
   korunarak geri alınabilir.
+- Bugün ekranındaki `Öğrenci ara` eylemi ad veya soyadla eşleşir; Türkçe
+  büyük/küçük harf ve diakritik farkları sonucu değiştirmez.
 
 ## Öğrenci
 - Yeni öğrenci 30 saniyeden kısa sürede eklenir.
 - Öğrenci arşivlenebilir, geçmişi kaybolmaz.
+- Öğrenci profilinde adı ve soyadı ayrı alanlarda düzenlenir; birleşik görünüm
+  geriye uyumlu korunur.
+- Yakın cep telefonu yalnız `05` ile başlayan 11 hane olarak kabul edilir ve
+  `0532 532 32 32` biçiminde gösterilir.
+- Öğrenci profilinde yalnız gözlem, medya veya portfolyo seçimi bulunan aylar
+  `YYYY-MM` anahtarıyla oluşturulur; boş ay klasörü gösterilmez.
+- Akademik yıl takvim yılı sınırını geçtiğinde `2026-09` ile `2027-01` ayrı
+  klasörlerdir ve başka eğitim yılına ait kanıt sayaçlara girmez.
 
 ## Sınıf ve çalışma düzeni
 - Eğitim yılı, sınıf, yaş grubu, uygulanan program ve çalışma düzeni ilk kurulumda kaydedilir.
@@ -109,8 +119,26 @@
 - Bir çocuk bile başka sınıfta, pasif veya etkinliğe atanmamışsa bütün toplu
   yazım atomik olarak reddedilir; açık taslaklar korunur.
 - Toplu gözlem program hedefini veya “öğrendi/başardı” hükmünü otomatik
-  dağıtmaz; program bağı her çocuk için ayrı öğretmen onayı ister.
+  dağıtmaz; program bağlantısı her çocuk için ayrı öğretmen onayı ister.
 - Kısmi program kataloğu arayüzde tam resmî katalog gibi sunulmaz.
+
+## Portfolyo
+
+- Portfolyo ayrı içerik girişi değildir; mevcut gözlem ve kanıtların kaynak
+  kimlikleri korunarak oluşturulan seçkidir.
+- Öğretmen kanıtı tek dokunuşla seçkiye ekleyebilir; seçimin öğretmen tarafından
+  mı yoksa çocukla birlikte mi yapıldığı ayrı kaydedilir.
+- Öğretmen notu, çocuğun seçime ilişkin sözü ve aile katkısı birbirinden ve
+  kaynak gözlemden ayrı alanlarda tutulur.
+- Kaynak gözlemin metni, tarihi, çocuk ilişkisi veya etkinlik ilişkisi portfolyo
+  ekranından değiştirilemez.
+- Başka çocuk, sınıf veya eğitim yılına ait kanıt seçkiye eklenemez.
+- Seçkiden kaldırma fiziksel silme yapmaz; zaman damgalı kaldırma kaydıyla geri
+  alınabilir geçmiş korunur.
+- Portfolyo puan, sıralama, otomatik başarı hükmü, tıbbi veya psikolojik tanı
+  üretmez.
+- Seçkiler çevrim dışı kaydedilir; yeniden açılışta ve JSON yedek/geri
+  yüklemede ayrı yansıtma alanlarıyla birlikte korunur.
 
 ## Program değerlendirmesi
 
@@ -154,7 +182,8 @@
   reddedilir.
 - Eski kapsamsız yedek tek sınıfta deterministik atanır; çok sınıfta belirsiz
   kayıtlar ham içerikleri korunarak karantinaya alınır.
-- V1 yedek doğrulandıktan sonra V2'ye yükseltilir; D1 program-onay kayıtları ve
+- V1/V2 yedek doğrulandıktan sonra V3'e yükseltilir; D1 program-onay kayıtları,
+  ayrı ad-soyad görünümü ve
   çok yıllı öğrenci üyelikleri eksiksiz geri yüklenir.
 - D1 yedeğinde değerlendirme atıfları gözlem kimlikleriyle birebir değilse,
   atıf bağlantısı yanlış gözleme aitse, gözlem değerlendirme dönemi dışındaysa
@@ -162,7 +191,7 @@
 
 ## Hesap ve kimlik
 
-- Öğretmen Google hesabı olmadan yerel ve çevrimdışı kullanıma devam edebilir.
+- Öğretmen Google hesabı olmadan yerel ve çevrim dışı kullanıma devam edebilir.
 - Gerçek OAuth yapılandırması yokken arayüz sahte oturum veya sahte kullanıcı üretmez.
 - OAuth erişim/yenileme belirteçleri localStorage, sessionStorage, IndexedDB veya
   MaarifOS yedeğine yazılmaz.

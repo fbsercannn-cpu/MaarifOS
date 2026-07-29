@@ -18,6 +18,10 @@ import {
   verifyRecoverySnapshotRecord,
 } from "../repository/recovery-snapshot";
 import { resolveAttendanceRecords } from "../domain/attendance";
+import {
+  composeStudentDisplayName,
+  splitStudentDisplayName,
+} from "../domain/student";
 import { migrateLegacyClassroomScopes } from "../migrations/classroom-scope-migration";
 import { canonicalClone, canonicalJson } from "./canonical-json";
 import { sha256Hex } from "./crypto";
@@ -137,13 +141,34 @@ async function normalizeLegacyBackupScopes(
 async function upgradeLegacyBackupEnvelope(
   envelope: BackupEnvelope,
 ): Promise<BackupEnvelope> {
-  if (envelope.manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION) {
+  if (envelope.manifest.dataSchemaVersion === DATA_SCHEMA_VERSION) {
     return canonicalClone(envelope);
   }
+  const legacyPayload = canonicalClone(envelope.payload);
   const payload: DataSnapshot = {
     ...createEmptySnapshot(),
-    ...canonicalClone(envelope.payload),
-    evidenceCurriculumLinks: [],
+    ...legacyPayload,
+    ...(envelope.manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
+      ? { evidenceCurriculumLinks: [] }
+      : {}),
+    students: legacyPayload.students.map((student) => {
+      if (typeof student.displayName !== "string") return student;
+      const derived = splitStudentDisplayName(student.displayName);
+      const firstName =
+        typeof student.firstName === "string" && student.firstName.trim()
+          ? student.firstName.trim()
+          : derived.firstName;
+      const lastName =
+        typeof student.lastName === "string" && student.lastName.trim()
+          ? student.lastName.trim()
+          : derived.lastName;
+      return {
+        ...student,
+        displayName: composeStudentDisplayName(firstName, lastName),
+        firstName,
+        ...(lastName ? { lastName } : {}),
+      };
+    }),
   };
   return {
     manifest: {

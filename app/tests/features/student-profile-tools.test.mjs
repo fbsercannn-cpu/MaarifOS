@@ -86,8 +86,8 @@ test("gözlem dışa aktarımı UTC zamanı İstanbul bandında sıralar ve aile
   assert.ok(text.indexOf("İlk gözlem") < text.indexOf("İkinci gözlem"));
   assert.doesNotMatch(text, /Başka çocuk gözlemi/);
   assert.doesNotMatch(text, /0555|profilePhotoDataUrl|data:image/);
-  assert.match(text, /Program bağı bekliyor/);
-  assert.match(text, /Program bağı tamamlandı/);
+  assert.match(text, /Program bağlantısı bekliyor/);
+  assert.match(text, /Program bağlantısı tamamlandı/);
   assert.equal(
     formatObservationDateTime("2026-07-29T09:30:00.000Z"),
     "29 Temmuz 2026 12:30",

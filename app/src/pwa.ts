@@ -49,7 +49,7 @@ let currentStatus: PwaRuntimeStatus = Object.freeze({
   version: CURRENT_RELEASE.version,
   activeVersion: null,
   updateVersion: null,
-  message: "Çevrimdışı çalışma hazırlanıyor.",
+  message: "Çevrim dışı çalışma hazırlanıyor.",
 });
 let currentRegistration: ServiceWorkerRegistration | null = null;
 let announcedWaitingWorker: ServiceWorker | null = null;
@@ -143,7 +143,7 @@ async function verifyOfflineReadiness(
       version: CURRENT_RELEASE.version,
       activeVersion: null,
       updateVersion: currentStatus.updateVersion,
-      message: "Çevrimdışı uygulama kabuğu etkinleştirilemedi.",
+      message: "Çevrim dışı uygulama kabuğu etkinleştirilemedi.",
       errorCode: "registration",
     });
     throw new Error("Etkin service worker bulunamadı.");
@@ -157,7 +157,7 @@ async function verifyOfflineReadiness(
       version: CURRENT_RELEASE.version,
       activeVersion: null,
       updateVersion: currentStatus.updateVersion,
-      message: "Çevrimdışı uygulama bu sekmeyi henüz denetlemiyor.",
+      message: "Çevrim dışı uygulama bu sekmeyi henüz denetlemiyor.",
       errorCode: "controller",
     });
     throw new Error("Service worker controller oluşmadı.");
@@ -171,7 +171,7 @@ async function verifyOfflineReadiness(
       version: CURRENT_RELEASE.version,
       activeVersion: health.version,
       updateVersion: currentStatus.updateVersion,
-      message: "Çevrimdışı uygulama dosyaları doğrulanamadı.",
+      message: "Çevrim dışı uygulama dosyaları doğrulanamadı.",
       errorCode: "cache",
     });
     throw new Error("Service worker app-shell cache doğrulaması başarısız.");
@@ -183,7 +183,7 @@ async function verifyOfflineReadiness(
     version: CURRENT_RELEASE.version,
     activeVersion: health.version,
     updateVersion: null,
-    message: "Çevrimdışı uygulama hazır.",
+    message: "Çevrim dışı uygulama hazır.",
   });
   return health;
 }
@@ -239,8 +239,8 @@ function observeInstallingWorker(
     ...currentStatus,
     phase: "installing",
     message: currentStatus.offlineReady
-      ? "Yeni çevrimdışı sürüm hazırlanıyor."
-      : "Çevrimdışı uygulama dosyaları hazırlanıyor.",
+      ? "Yeni çevrim dışı sürüm hazırlanıyor."
+      : "Çevrim dışı uygulama dosyaları hazırlanıyor.",
   });
 
   worker.addEventListener("statechange", () => {
@@ -260,7 +260,7 @@ function observeInstallingWorker(
         version: CURRENT_RELEASE.version,
         activeVersion: null,
         updateVersion: null,
-        message: "Çevrimdışı uygulama kurulamadı.",
+        message: "Çevrim dışı uygulama kurulamadı.",
         errorCode: "registration",
       });
     }
@@ -291,7 +291,7 @@ export async function activateWaitingServiceWorker(): Promise<boolean> {
     publishStatus({
       ...currentStatus,
       phase: "error",
-      message: "Etkinleştirilecek yeni çevrimdışı sürüm bulunamadı.",
+      message: "Etkinleştirilecek yeni çevrim dışı sürüm bulunamadı.",
       errorCode: "activation",
     });
     return false;
@@ -351,7 +351,7 @@ async function installServiceWorker(): Promise<void> {
     version: CURRENT_RELEASE.version,
     activeVersion: null,
     updateVersion: null,
-    message: "Çevrimdışı uygulama hazırlanıyor.",
+    message: "Çevrim dışı uygulama hazırlanıyor.",
   });
 
   try {
@@ -377,10 +377,10 @@ async function installServiceWorker(): Promise<void> {
       version: CURRENT_RELEASE.version,
       activeVersion: null,
       updateVersion: null,
-      message: "Çevrimdışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
+      message: "Çevrim dışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
       errorCode: "registration",
     });
-    console.warn("MaarifOS çevrimdışı desteği başlatılamadı.", error);
+    console.warn("MaarifOS çevrim dışı desteği başlatılamadı.", error);
   }
 }
 
@@ -392,7 +392,7 @@ export function registerServiceWorker(): void {
       version: CURRENT_RELEASE.version,
       activeVersion: null,
       updateVersion: null,
-      message: "Çevrimdışı çalışma üretim derlemesinde etkinleşir.",
+      message: "Çevrim dışı çalışma üretim derlemesinde etkinleşir.",
     });
     return;
   }
@@ -403,7 +403,7 @@ export function registerServiceWorker(): void {
       version: CURRENT_RELEASE.version,
       activeVersion: null,
       updateVersion: null,
-      message: "Bu tarayıcı çevrimdışı uygulama desteğini sunmuyor.",
+      message: "Bu tarayıcı çevrim dışı uygulama desteğini sunmuyor.",
       errorCode: "unsupported",
     });
     return;

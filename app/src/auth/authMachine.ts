@@ -246,7 +246,7 @@ export const deriveWelcomeViewModel = (state: AuthState): WelcomeViewModel => {
   const statusText = !googleAvailable
     ? "Henüz bağlı değil · Google ile giriş yakında"
     : state.network === "offline"
-      ? "Çevrimdışısınız · Google bağlantısı için internet gerekir"
+      ? "Çevrim dışısınız · Google bağlantısı için internet gerekir"
       : state.googleConnection === "connected"
         ? "Google hesabı bağlı"
         : "Henüz bağlı değil · İsteğe bağlı bağlantı";

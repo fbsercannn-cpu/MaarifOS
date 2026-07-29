@@ -18,7 +18,7 @@ Bu nedenle aşağıdakiler yapılmış iş sayılmaz:
 - Domain modelleri ve Zod şemaları
 - Dexie/IndexedDB katmanı
 - Günüm, yoklama ve hızlı gözlem ekranları
-- PWA çevrimdışı çalışma ve Playwright testleri
+- PWA çevrim dışı çalışma ve Playwright testleri
 - JSON dışa aktarma ve geri yükleme
 
 Çalışma alanında kurtarma anında yalnız başlangıç paketi belgeleri vardı; uygulama kaynak kodu yoktu.
@@ -26,7 +26,7 @@ Bu nedenle aşağıdakiler yapılmış iş sayılmaz:
 ## Korunan kararlar
 
 - Ürün Emine Öğretmen için geliştirilecek mobil öncelikli MaarifOS ekosistemidir.
-- Uygulama yerel öncelikli ve çevrimdışı çalışabilen bir PWA olacaktır.
+- Uygulama yerel öncelikli ve çevrim dışı çalışabilen bir PWA olacaktır.
 - Başlangıç teknoloji yönü React + TypeScript + Vite + IndexedDB'dir.
 - Uygulama çalışma zamanına üretken yapay zekâ veya yüz tanıma eklenmeyecektir.
 - Geliştirme, tekrar tekrar onay beklemeden; gerçek dosya, diff ve test kanıtlarıyla yürütülecektir.

@@ -42,6 +42,14 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
       core.canonicalJson(legacyV1.payload),
     );
     const upgradedLegacy = await service.parseAndVerifyBackup(legacyV1);
+    const legacyV2 = structuredClone(backup);
+    legacyV2.manifest.dataSchemaVersion = 2;
+    delete legacyV2.payload.students[0].firstName;
+    delete legacyV2.payload.students[0].lastName;
+    legacyV2.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(legacyV2.payload),
+    );
+    const upgradedV2 = await service.parseAndVerifyBackup(legacyV2);
     const corrupted = structuredClone(backup);
     corrupted.payload.students[0].displayName = "Değiştirilmiş Kayıt";
     let corruptionError = "";
@@ -56,20 +64,26 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
       studentCount: verified.payload.students.length,
       upgradedLegacyVersion: upgradedLegacy.manifest.dataSchemaVersion,
       upgradedLegacyLinkCount: upgradedLegacy.payload.evidenceCurriculumLinks.length,
+      upgradedV2Version: upgradedV2.manifest.dataSchemaVersion,
+      upgradedV2FirstName: upgradedV2.payload.students[0].firstName,
+      upgradedV2LastName: upgradedV2.payload.students[0].lastName,
       corruptionError,
     };
   });
 
   expect(result.manifest.format).toBe("maarifos-json");
   expect(result.manifest.backupVersion).toBe(1);
-  expect(result.manifest.dataSchemaVersion).toBe(2);
+  expect(result.manifest.dataSchemaVersion).toBe(3);
   expect(result.manifest.createdAt).toBe("2026-07-22T09:30:00.000Z");
   expect(result.manifest.civilDate).toBe("2026-07-22");
   expect(result.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
   expect(result.manifest.entityCounts.students).toBe(1);
   expect(result.studentCount).toBe(1);
-  expect(result.upgradedLegacyVersion).toBe(2);
+  expect(result.upgradedLegacyVersion).toBe(3);
   expect(result.upgradedLegacyLinkCount).toBe(0);
+  expect(result.upgradedV2Version).toBe(3);
+  expect(result.upgradedV2FirstName).toBe("Test Kaydı");
+  expect(result.upgradedV2LastName).toBe("A");
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
 });
 
@@ -758,7 +772,7 @@ test("çapraz sınıf yoklama ve gözlem ilişkilerini restore öncesi reddedip 
   });
 });
 
-test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri yükler", async ({
+test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V3 yedekle birebir geri yükler", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -992,7 +1006,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(2);
+  expect(result.dataSchemaVersion).toBe(3);
   expect(result.rawText).toBe("  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ");
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
