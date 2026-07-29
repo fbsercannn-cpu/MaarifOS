@@ -18,7 +18,7 @@
 
 ## Etkileşim ve erişilebilirlik
 
-- `Kanıt ekle` gerçek kayıt sayfasını açıyor; çocuk seçimi, nesnel gözlem metni ve çevrimdışı kalıcı kayıt akışı çalışıyor.
+- `Kanıt ekle` gerçek kayıt sayfasını açıyor; çocuk seçimi, nesnel gözlem metni ve çevrim dışı kalıcı kayıt akışı çalışıyor.
 - Sınıf kurulumu eğitim yılı, yaş grubu, program ve kalıcı çalışma düzenini kaydediyor.
 - Bugün, Sınıfım, Kayıt Ekle, Planlar, Belgeler ve Ayarlar kontrollerinin erişilebilir adları var.
 - 44 piksel sınıfındaki birincil dokunma hedefleri, odak halkaları ve Türkçe geri bildirimler korunuyor.

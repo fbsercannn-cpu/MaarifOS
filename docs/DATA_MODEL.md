@@ -50,18 +50,29 @@ tahmini üretmez ve sınıfı `not_configured` olarak açar.
   - startedOn
   - endedOn?
   - status: active | left | completed | transferred
-- displayName
+- firstName
+- lastName
+- displayName (`firstName + lastName` geriye uyumlu birleşik görünümü)
 - optionalCode
 - birthDate? 
 - profileMediaId?
 - active
 - notes?
+- contacts?
+  - name?
+  - relationship
+  - phone (`+905XXXXXXXXX` kanonik saklama; arayüzde `05XX XXX XX XX`)
 
 `Student.id`, çocuğun yıllar boyunca değişmeyen kimliğidir. Sınıftan ayrılma
 veya eğitim yılı kapanışı kök öğrenci kaydını silmez. Yıllık sınıf üyelikleri
 `enrollments` içinde eklemeli geçmiş olarak tutulur. Normal yıl sonu üyeliği
 `completed`, yıl içi ayrılma `left` yapar. Aynı öğrenci yeni yılda aynı `id` ile
 yeni bir `active` üyelik alır.
+
+Eski yalnız `displayName` taşıyan kayıtlar son sözcük soyadı kabul edilerek
+geriye uyumlu okunur; öğretmen profilde adı ve soyadı ayrı alanlarda doğrular.
+Öğrenci araması ad, soyad, birleşik ad ve tercih edilen adda Türkçe
+büyük/küçük harf ile diakritik işaretlerden bağımsız çalışır.
 
 ## AttendanceRecord
 - id
@@ -121,6 +132,49 @@ tek `studentId`, `planId` ve `activityId` zorunludur. Boşluklar dâhil ham meti
 aynen korunur; program bağlantısı veya değerlendirme metni gözlem kaydının içine
 yazılmaz.
 
+Hızlı Gözlem 2.0 kayıtları ayrıca şu nötr sınıflandırmaları taşır:
+
+- `observationType`: `quick-note | child-quote | anecdotal | systematic`
+- `observationTaxonomyVersion: maarifos-observation-v2`
+- `observationCategories[]`: `language-communication | cognitive-learning |
+  social-emotional | values-dispositions-participation |
+  physical-motor-health | self-care-daily-life | art-creativity |
+  play-participation | interest-attention-curiosity | other`
+- `context?`
+- `childQuote?`
+- toplu işlemde `batchId` ve `captureScope: selected-children`
+
+Bu alanlar öğretmen kanıtını düzenlemek içindir; başarı, tanı veya gelişim hükmü
+üretmez. `rawText`, `context` ve `childQuote` final kayıtta öğretmenin girdiği
+biçimiyle korunur.
+
+## QuickObservationDraft
+
+Hızlı gözlem formunun otomatik taslağı `settings` koleksiyonunda
+`settingType: quick-observation-draft` ve `schemaVersion: 1` ile tutulur:
+
+- `studentId`
+- `classroomId`
+- `academicYearId`
+- `planId`
+- `activityId`
+- `rawText`
+- `context`
+- `childQuote`
+- `observationType`
+- `categoryIds[]`
+- toplu taslaklarda `batchId` ve `captureScope: selected-children`
+
+Taslaklar öğrenci ve aktif sınıf kapsamına göre birbirinden yalıtılır. Final
+gözlem ile taslağın kapanış kaydı aynı yerel veritabanı işlemi içinde yazılır;
+gözlem kaydı başarısızsa taslak etkin kalır. Kapanan taslak fiziksel olarak
+silinmez, `deletedAt` tombstone'u ile korunur.
+
+Toplu hızlı gözlemde de her çocuk için ayrı taslak tutulur. Bütün çocuk
+taslakları tek işlemde yazılır; finalde öğrenci başına ayrı gözlem ve taslak
+tombstone'ları yine tek işlemde oluşturulur. Böylece toplu kullanıcı eylemi
+kanıt modelini çok-öğrencili hâle getirmez ve kısmi başarı bırakmaz.
+
 ## EvidenceCurriculumLink
 
 - id
@@ -158,6 +212,19 @@ eklemeli kayıt olarak oluşur.
 - studentIds[]
 - mediaIds[]
 - maarifRefs[]
+- curriculumTargets[]
+- assignmentMode: whole-class | selected-students
+- assignmentSnapshotAt
+- coverageStatus: planned
+- targetAssignments[]
+  - studentId
+  - targetId
+  - referenceCode
+  - status: planned
+  - assignedAt
+
+`whole-class`, işlem anındaki etkin sınıf üyelerinin sabit UUID snapshot'ıdır.
+Toplu dağıtım başarı/öğrenme hükmü oluşturmaz; yalnız planlı takip açar.
 
 ## MediaAsset
 - id
@@ -198,16 +265,43 @@ eklemeli kayıt olarak oluşur.
 - title
 - description?
 - parentId?
+- framework: tymm | meb_2024
+- catalogId
+- sourceUrl
+- sourceCheckedOn
+- catalogCompleteness: partial | complete
+
+TYMM ve MEB 2024 türleri ayrı ontolojilerdir. Başlangıç kataloğu `partial`
+olarak sunulur; tam resmî katalog olduğu iddia edilmez.
 
 ## PortfolioSelection
 - id
+- classroomId
+- academicYearId
 - studentId
 - periodStart
 - periodEnd
-- itemType
+- itemType: observation
 - itemId
 - order
 - teacherCaption?
+- childReflection?
+- familyContribution?
+- selectedBy: teacher | teacher-child
+- selectedAt
+
+`schemaVersion: 2` portfolyo seçimi, değişmez kaynak gözlemi çoğaltmaz veya
+düzenlemez; yalnız kaynak `itemId` değerine başvurur. Öğretmen yorumu, çocuğun
+seçime ilişkin sözü ve aile katkısı birbirinden ayrı tutulur. Seçkiden kaldırma
+`deletedAt` tombstone'u üretir. Başka çocuk, sınıf veya eğitim yılına ait kaynak
+fail-closed reddedilir.
+
+### Dinamik akademik ay görünümü
+
+Ay klasörü kalıcı kayıt değildir. Aktif eğitim yılının `startDate`–`endDate`
+aralığında ilgili çocuğa bağlı gözlem, medya veya portfolyo seçimi bulunan aylar
+`YYYY-MM` anahtarıyla türetilir. Boş ay üretilmez; takvim yılı geçişi nedeniyle
+`2026-09` ile `2027-01` birbirinden ayrılır.
 
 ## ReportDraft
 - id
@@ -225,6 +319,13 @@ eklemeli kayıt olarak oluşur.
 öğretmen onaylı program bağlantısına dayanır. D1 aşamasında metin öğretmen
 tarafından yazılır; `authoredBy: teacher`, `teacherReviewRequired: true` ve
 `reviewStatus: pending` değişmezleridir.
+
+Kanıt düzeyi `not_assessed | not_yet | with_frequent_support |
+mostly_independent | independent` değerlerinden biridir. `not_assessed`
+resmî dört düzeyden ayrı teknik durumdur; ele alınmayan hedefi başarısız
+saymaz. Dönem ve yıl sonu kesinleşmiş hükümleri sonraki dilimde ayrı
+`AssessmentJudgment` kayıtları olarak, eski dönem snapshot'larını ezmeden
+tutulacaktır. Ayrıntı: `CURRICULUM_EVIDENCE_ARCHITECTURE.md`.
 
 ## Eğitim yılı arşivi
 

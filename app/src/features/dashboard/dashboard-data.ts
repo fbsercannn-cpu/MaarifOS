@@ -11,6 +11,11 @@ import {
 } from "../../core/domain/attendance.ts";
 import type { StoredRecord } from "../../core/domain/model.ts";
 import {
+  normalizeStudentProfile,
+  studentProfileFromRecord,
+  type StudentContact,
+} from "../../core/domain/student.ts";
+import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   recordBelongsToClassroomScope,
   resolveActiveClassroomScope,
@@ -29,7 +34,19 @@ export type { AttendanceStatus } from "../../core/domain/attendance.ts";
 export type DashboardStudent = {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   status: AttendanceStatus;
+  preferredName?: string;
+  birthDate?: string;
+  optionalCode?: string;
+  enrollmentDate?: string;
+  homeLanguages?: string;
+  interests?: string;
+  strengths?: string;
+  supportPreferences?: string;
+  contacts?: StudentContact[];
+  profilePhotoDataUrl?: string;
 };
 
 export type DashboardObservation = {
@@ -54,8 +71,33 @@ export const LEGACY_STORAGE_KEY = "maarifos-akis-pusulasi-v1";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
-  if (typeof record.displayName !== "string") return null;
-  return { id: record.id, name: record.displayName, status: "present" };
+  const profile = studentProfileFromRecord(record);
+  if (!profile) return null;
+  return {
+    id: record.id,
+    name: profile.displayName,
+    firstName: profile.firstName,
+    ...(profile.lastName ? { lastName: profile.lastName } : {}),
+    status: "present",
+    ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
+    ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+    ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
+    ...(profile.enrollmentDate
+      ? { enrollmentDate: profile.enrollmentDate }
+      : {}),
+    ...(profile.homeLanguages
+      ? { homeLanguages: profile.homeLanguages }
+      : {}),
+    ...(profile.interests ? { interests: profile.interests } : {}),
+    ...(profile.strengths ? { strengths: profile.strengths } : {}),
+    ...(profile.supportPreferences
+      ? { supportPreferences: profile.supportPreferences }
+      : {}),
+    ...(profile.contacts ? { contacts: profile.contacts } : {}),
+    ...(profile.profilePhotoDataUrl
+      ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
+      : {}),
+  };
 };
 
 const observationFromRecord = (record: StoredRecord): DashboardObservation | null => {
@@ -254,10 +296,17 @@ export function migrateLegacyDashboardState(
       UUID_PATTERN.test(student.id) ? student.id : crypto.randomUUID(),
     ]),
   );
+  const migratedStudents = legacyStudents.length > 0
+    ? legacyStudents.map((student) => ({
+        ...student,
+        id: migratedStudentIds.get(student.id)!,
+      }))
+    : fallback.students;
+  const migratedStudentIdSet = new Set(
+    migratedStudents.map((student) => student.id),
+  );
   return {
-    students: legacyStudents.length > 0
-      ? legacyStudents.map((student) => ({ ...student, id: migratedStudentIds.get(student.id)! }))
-      : fallback.students,
+    students: migratedStudents,
     archivedStudents: fallback.archivedStudents ?? [],
     observations: Array.isArray(legacy?.observations)
       ? legacy.observations.filter(
@@ -268,11 +317,16 @@ export function migrateLegacyDashboardState(
             typeof observation?.createdAtUtc === "string",
         ).map((observation) => {
           const mappedStudentId = migratedStudentIds.get(observation.studentId);
-          const relationIsValid = mappedStudentId !== undefined || UUID_PATTERN.test(observation.studentId);
+          const resolvedStudentId =
+            mappedStudentId ??
+            (UUID_PATTERN.test(observation.studentId)
+              ? observation.studentId
+              : crypto.randomUUID());
+          const relationIsValid = migratedStudentIdSet.has(resolvedStudentId);
           return {
             ...observation,
             id: UUID_PATTERN.test(observation.id) ? observation.id : crypto.randomUUID(),
-            studentId: mappedStudentId ?? (relationIsValid ? observation.studentId : crypto.randomUUID()),
+            studentId: resolvedStudentId,
             ...(!relationIsValid
               ? { requiresStudentReview: true, legacyStudentId: observation.studentId }
               : {}),
@@ -326,6 +380,24 @@ export async function persistStudentRosterChange(
   const now = new Date();
   const updatedAt = now.toISOString();
   const scope = requireActiveClassroomScope(await store.readSnapshot());
+  const profile = normalizeStudentProfile(
+    {
+      displayName: options.student.name,
+      firstName: options.student.firstName,
+      lastName: options.student.lastName,
+      preferredName: options.student.preferredName,
+      birthDate: options.student.birthDate,
+      optionalCode: options.student.optionalCode,
+      enrollmentDate: options.student.enrollmentDate,
+      homeLanguages: options.student.homeLanguages,
+      interests: options.student.interests,
+      strengths: options.student.strengths,
+      supportPreferences: options.student.supportPreferences,
+      contacts: options.student.contacts,
+      profilePhotoDataUrl: options.student.profilePhotoDataUrl,
+    },
+    civilDateInIstanbul(now),
+  );
   await store.transaction("readwrite", ["students"], async (transaction) => {
     const existing = (await transaction.getAll("students")).find(
       (record) => record.id === options.student.id,
@@ -336,6 +408,19 @@ export async function persistStudentRosterChange(
     const preserved: Record<string, unknown> = existing ? { ...existing } : {};
     delete preserved.attendanceStatus;
     delete preserved.legacyAssignmentStatus;
+    delete preserved.firstName;
+    delete preserved.lastName;
+    delete preserved.preferredName;
+    delete preserved.birthDate;
+    delete preserved.optionalCode;
+    delete preserved.enrollmentDate;
+    delete preserved.homeLanguages;
+    delete preserved.interests;
+    delete preserved.strengths;
+    delete preserved.supportPreferences;
+    delete preserved.contacts;
+    delete preserved.profilePhotoDataUrl;
+    delete preserved.profileSchemaVersion;
     const enrollments = existing ? studentEnrollments(existing) : [];
     const matchingEnrollment = enrollments.find(
       (enrollment) =>
@@ -368,7 +453,28 @@ export async function persistStudentRosterChange(
       {
         ...preserved,
         id: options.student.id,
-        displayName: options.student.name,
+        displayName: profile.displayName,
+        firstName: profile.firstName,
+        ...(profile.lastName ? { lastName: profile.lastName } : {}),
+        ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
+        ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+        ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
+        ...(profile.enrollmentDate
+          ? { enrollmentDate: profile.enrollmentDate }
+          : {}),
+        ...(profile.homeLanguages
+          ? { homeLanguages: profile.homeLanguages }
+          : {}),
+        ...(profile.interests ? { interests: profile.interests } : {}),
+        ...(profile.strengths ? { strengths: profile.strengths } : {}),
+        ...(profile.supportPreferences
+          ? { supportPreferences: profile.supportPreferences }
+          : {}),
+        ...(profile.contacts ? { contacts: profile.contacts } : {}),
+        ...(profile.profilePhotoDataUrl
+          ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
+          : {}),
+        profileSchemaVersion: profile.profileSchemaVersion,
         active: !options.archived,
         enrollmentStatus: enrollment.status,
         enrollments: nextEnrollments,
@@ -379,7 +485,10 @@ export async function persistStudentRosterChange(
           ? { legacyRosterDeletedAt: existing.deletedAt }
           : {}),
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: Math.max(
+          typeof existing?.schemaVersion === "number" ? existing.schemaVersion : 1,
+          profile.profileSchemaVersion,
+        ),
         ...scopeFields(scope),
       },
     ]);
@@ -500,6 +609,29 @@ export async function persistDashboardState(
   const updatedAt = now.toISOString();
   const civilDate = state.attendanceCivilDate;
   const scope = resolveActiveClassroomScope(await store.readSnapshot());
+  const studentProfiles = new Map(
+    state.students.map((student) => [
+      student.id,
+      normalizeStudentProfile(
+        {
+          displayName: student.name,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          preferredName: student.preferredName,
+          birthDate: student.birthDate,
+          optionalCode: student.optionalCode,
+          enrollmentDate: student.enrollmentDate,
+          homeLanguages: student.homeLanguages,
+          interests: student.interests,
+          strengths: student.strengths,
+          supportPreferences: student.supportPreferences,
+          contacts: student.contacts,
+          profilePhotoDataUrl: student.profilePhotoDataUrl,
+        },
+        civilDateInIstanbul(now),
+      ),
+    ]),
+  );
   await store.transaction(
     "readwrite",
     ["students", "attendanceRecords", "observations", "settings"],
@@ -563,17 +695,61 @@ export async function persistDashboardState(
         "students",
         state.students.map((student) => {
           const existing = studentsById.get(student.id);
+          const profile = studentProfiles.get(student.id)!;
           const preserved: Record<string, unknown> = existing ? { ...existing } : {};
           delete preserved.attendanceStatus;
+          delete preserved.firstName;
+          delete preserved.lastName;
+          delete preserved.preferredName;
+          delete preserved.birthDate;
+          delete preserved.optionalCode;
+          delete preserved.enrollmentDate;
+          delete preserved.homeLanguages;
+          delete preserved.interests;
+          delete preserved.strengths;
+          delete preserved.supportPreferences;
+          delete preserved.contacts;
+          delete preserved.profilePhotoDataUrl;
+          delete preserved.profileSchemaVersion;
           return {
             ...preserved,
             id: student.id,
-            displayName: student.name,
+            displayName: profile.displayName,
+            firstName: profile.firstName,
+            ...(profile.lastName ? { lastName: profile.lastName } : {}),
+            ...(profile.preferredName
+              ? { preferredName: profile.preferredName }
+              : {}),
+            ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
+            ...(profile.optionalCode
+              ? { optionalCode: profile.optionalCode }
+              : {}),
+            ...(profile.enrollmentDate
+              ? { enrollmentDate: profile.enrollmentDate }
+              : {}),
+            ...(profile.homeLanguages
+              ? { homeLanguages: profile.homeLanguages }
+              : {}),
+            ...(profile.interests ? { interests: profile.interests } : {}),
+            ...(profile.strengths ? { strengths: profile.strengths } : {}),
+            ...(profile.supportPreferences
+              ? { supportPreferences: profile.supportPreferences }
+              : {}),
+            ...(profile.contacts ? { contacts: profile.contacts } : {}),
+            ...(profile.profilePhotoDataUrl
+              ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
+              : {}),
+            profileSchemaVersion: profile.profileSchemaVersion,
             createdAt: existing?.createdAt ?? updatedAt,
             updatedAt,
             civilDate: existing?.civilDate ?? civilDate,
             deletedAt: null,
-            schemaVersion: 1,
+            schemaVersion: Math.max(
+              typeof existing?.schemaVersion === "number"
+                ? existing.schemaVersion
+                : 1,
+              profile.profileSchemaVersion,
+            ),
             ...scopeFields(scope),
           };
         }),

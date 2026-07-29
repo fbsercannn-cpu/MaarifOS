@@ -2,7 +2,7 @@
 
 ## 1. Mimari yaklaşım
 
-MaarifOS yerel öncelikli, çevrimdışı çalışabilen bir PWA olarak başlatılır. Sunucu veya hesap zorunluluğu yoktur. Bu yaklaşım pilot süresini kısaltır, düşük bağlantıda güvenilirliği artırır ve verilerin varsayılan olarak cihazda kalmasını sağlar.
+MaarifOS yerel öncelikli, çevrim dışı çalışabilen bir PWA olarak başlatılır. Sunucu veya hesap zorunluluğu yoktur. Bu yaklaşım pilot süresini kısaltır, düşük bağlantıda güvenilirliği artırır ve verilerin varsayılan olarak cihazda kalmasını sağlar.
 
 ## 2. Önerilen depo yapısı
 
@@ -66,7 +66,7 @@ UI -> Use Case -> Domain Validation -> Repository -> IndexedDB
                                       -> Export Engine
 ```
 
-## 5. Çevrimdışı çalışma
+## 5. Çevrim dışı çalışma
 
 - App shell ön belleğe alınır.
 - CRUD işlemleri internet gerektirmez.
@@ -87,7 +87,7 @@ UI -> Use Case -> Domain Validation -> Repository -> IndexedDB
 Yerel repository arayüzleri senkronizasyona uygun tasarlanır. Ancak MVP’de ağ eşitlemesi uygulanmaz. İleride Outbox/Inbox, sürüm numarası ve çatışma çözümü eklenebilir.
 
 Google hesabı bu gelecek senkronizasyon katmanının isteğe bağlı kimlik sağlayıcısı
-olabilir; yerel veritabanının açılması veya çevrimdışı kullanım için zorunlu
+olabilir; yerel veritabanının açılması veya çevrim dışı kullanım için zorunlu
 değildir. OAuth belirteçleri uygulama verileriyle, JSON yedekle veya Web Storage
 içinde saklanmaz. Gerçek bağlantı aşamasında yetkilendirme kodu + PKCE ve sunucu
 taraflı/BFF oturum modeli ayrıca uygulanıp tehdit modelinden geçirilir.

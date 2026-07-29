@@ -9,6 +9,8 @@
 - Until a real OAuth backend/BFF and Google client configuration exist, the UI must not create a fake authenticated session, persist OAuth tokens, or imply that child data is uploaded to Google.
 - Teacher-facing use is phone-first, portrait, and full-screen. Normal use must not show a simulator/device frame; desktop may center the same real app surface without changing its information architecture.
 - Morning, afternoon, full-day, or custom working hours are persistent classroom settings tied to the academic year. They are configured during classroom setup and changed only from settings; the Today screen shows them as read-only context, never as a daily selector.
+- Student month folders are derived views, never pre-created records. Show only months that contain an observation, evidence asset, or portfolio item for that student inside the selected academic year; key each month by full `YYYY-MM` and hide empty months.
+- The student portfolio is a child-and-teacher-curated view over existing immutable evidence, not a second evidence-entry flow. Keep source evidence, teacher interpretation, child reflection, and family contribution separate; do not score, rank, diagnose, or silently choose a child's “best” work.
 
 ## Prototype Instructions
 

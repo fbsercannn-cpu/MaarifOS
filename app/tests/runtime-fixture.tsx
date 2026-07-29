@@ -5,8 +5,11 @@ import {
   Carousel,
   FlowStack,
   KeyboardInput,
+  KeyboardProvider,
+  MobileDeviceProvider,
   MobileRuntime,
   MobileScroll,
+  useKeyboard,
   type FlowScreen,
 } from "../src/mobile";
 import "../src/styles.css";
@@ -79,6 +82,47 @@ function KeyboardFixture() {
   );
 }
 
+function NativeKeyboardStatus() {
+  const keyboard = useKeyboard();
+
+  return (
+    <output
+      data-testid="native-keyboard-status"
+      data-visible={keyboard.visible ? "true" : "false"}
+      data-height={keyboard.height}
+      data-focused={keyboard.focusedElement?.getAttribute("aria-label") ?? ""}
+    />
+  );
+}
+
+function NativeKeyboardFixture() {
+  return (
+    <MobileDeviceProvider native>
+      <KeyboardProvider native>
+        <div className="native-runtime-fixture">
+          <MobileScroll className="fixture-screen">
+            <main className="fixture-content native-keyboard-content">
+              <button type="button">Non-text control</button>
+              <div className="native-keyboard-spacer">Native keyboard fixture</div>
+              <KeyboardInput aria-label="Native message" placeholder="Message" />
+              <div
+                aria-label="Native editable"
+                className="native-editable"
+                contentEditable
+                suppressContentEditableWarning
+              >
+                Editable note
+              </div>
+              <div className="native-keyboard-tail" />
+            </main>
+          </MobileScroll>
+          <NativeKeyboardStatus />
+        </div>
+      </KeyboardProvider>
+    </MobileDeviceProvider>
+  );
+}
+
 function stackedScreen(level: number): FlowScreen {
   return {
     id: `flow-level-${level}`,
@@ -143,6 +187,8 @@ const fixture = new URLSearchParams(window.location.search).get("fixture");
 const fixtureElement =
   fixture === "keyboard"
     ? <KeyboardFixture />
+    : fixture === "native-keyboard"
+      ? <NativeKeyboardFixture />
     : fixture === "flow"
       ? <FlowFixture />
       : <CarouselFixture />;

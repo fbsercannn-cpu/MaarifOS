@@ -3,6 +3,22 @@ import { access } from "node:fs/promises";
 import test from "node:test";
 import worker from "../worker/index.js";
 
+const assertSecurityHeaders = (response) => {
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
+  assert.match(response.headers.get("permissions-policy") ?? "", /microphone=\(\)/);
+
+  const contentSecurityPolicy = response.headers.get("content-security-policy") ?? "";
+  assert.match(contentSecurityPolicy, /default-src 'self'/);
+  assert.match(contentSecurityPolicy, /script-src 'self'/);
+  assert.match(contentSecurityPolicy, /object-src 'none'/);
+  assert.match(contentSecurityPolicy, /frame-ancestors 'none'/);
+  assert.match(contentSecurityPolicy, /connect-src 'self'/);
+  assert.match(contentSecurityPolicy, /upgrade-insecure-requests/);
+};
+
 test("serves existing static assets without a fallback", async () => {
   const calls = [];
   const response = await worker.fetch(new Request("https://example.test/assets/app.js"), {
@@ -16,6 +32,7 @@ test("serves existing static assets without a fallback", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(calls, ["/assets/app.js"]);
+  assertSecurityHeaders(response);
 });
 
 test("falls back to index.html for an unknown app route", async () => {
@@ -39,6 +56,7 @@ test("falls back to index.html for an unknown app route", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(calls, ["/flow/step-two?source=share", "/index.html"]);
+  assertSecurityHeaders(response);
 });
 
 test("does not turn missing API or write requests into the app shell", async () => {
@@ -58,6 +76,7 @@ test("does not turn missing API or write requests into the app shell", async () 
 
     assert.equal(response.status, 404);
     assert.equal(calls, 1);
+    assertSecurityHeaders(response);
   }
 });
 

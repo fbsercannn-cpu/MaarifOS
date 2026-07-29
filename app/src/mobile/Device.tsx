@@ -45,6 +45,7 @@ export const mobileDevices: Record<MobileDeviceId, MobileDevicePreset> = {
 type MobileDeviceContextValue = {
   device: MobileDevicePreset;
   deviceId: MobileDeviceId;
+  native: boolean;
   setDeviceId: (deviceId: MobileDeviceId) => void;
 };
 
@@ -82,8 +83,8 @@ export function MobileDeviceProvider({ children, native = false }: MobileDeviceP
   }, [deviceId, native, viewport]);
 
   const value = useMemo(
-    () => ({ device, deviceId, setDeviceId }),
-    [device, deviceId],
+    () => ({ device, deviceId, native, setDeviceId }),
+    [device, deviceId, native],
   );
 
   return <MobileDeviceContext.Provider value={value}>{children}</MobileDeviceContext.Provider>;

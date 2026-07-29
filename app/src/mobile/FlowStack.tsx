@@ -55,7 +55,7 @@ function FlowProvider({ value, children }: PropsWithChildren<{ value: FlowContro
 }
 
 export function FlowStack({ initial }: { initial: FlowScreen }) {
-  const { device } = useMobileDevice();
+  const { device, native } = useMobileDevice();
   const keyboard = useKeyboard();
   const { bottomInset, keyboardDragging } = useKeyboardInsets();
   const dismissKeyboardDrag = useKeyboardDismissDrag();
@@ -151,8 +151,14 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
   const parkedX = -screenWidth * 0.28;
   const header = controls.current.header?.(controls);
   const headerHeight = controls.current.headerHeight ?? 0;
-  const headerSafeArea = header ? device.geometry.safeArea.top : 0;
-  const totalHeaderHeight = header ? headerSafeArea + headerHeight : 0;
+  const headerSafeArea = header
+    ? native
+      ? "env(safe-area-inset-top, 0px)"
+      : `${device.geometry.safeArea.top}px`
+    : "0px";
+  const totalHeaderHeight = header
+    ? `calc(${headerSafeArea} + ${headerHeight}px)`
+    : "0px";
   const footer = controls.current.footer?.(controls);
   const footerHeight = controls.current.footerHeight ?? 0;
 
@@ -175,9 +181,9 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
         data-keyboard-dragging={keyboardDragging ? "true" : "false"}
         style={
           {
-            "--flow-header-height": `${totalHeaderHeight}px`,
+            "--flow-header-height": totalHeaderHeight,
             "--flow-header-content-height": `${headerHeight}px`,
-            "--flow-header-safe-area": `${headerSafeArea}px`,
+            "--flow-header-safe-area": headerSafeArea,
             "--flow-footer-height": `${footer ? footerHeight : 0}px`,
             "--keyboard-height": `${bottomInset}px`,
           } as CSSProperties

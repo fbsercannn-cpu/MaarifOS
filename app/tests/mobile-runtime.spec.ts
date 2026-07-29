@@ -1,10 +1,17 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-async function drag(page: Page, locator: Locator, deltaX: number, deltaY: number, steps = 8) {
+async function drag(
+  page: Page,
+  locator: Locator,
+  deltaX: number,
+  deltaY: number,
+  steps = 8,
+  startOffset?: { x: number; y: number },
+) {
   const box = await locator.boundingBox();
   if (!box) throw new Error("Drag target has no bounding box");
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
+  const startX = box.x + (startOffset?.x ?? box.width / 2);
+  const startY = box.y + (startOffset?.y ?? box.height / 2);
 
   await page.mouse.move(startX, startY);
   await page.mouse.down();
@@ -18,8 +25,259 @@ async function drag(page: Page, locator: Locator, deltaX: number, deltaY: number
   await page.mouse.up();
 }
 
+async function installVisualViewportMock(page: Page) {
+  await page.addInitScript(() => {
+    const listeners = new Map<string, Set<EventListener>>();
+    const state = {
+      height: window.innerHeight,
+      offsetTop: 0,
+      width: window.innerWidth,
+    };
+    const visualViewport = {
+      get height() {
+        return state.height;
+      },
+      get offsetTop() {
+        return state.offsetTop;
+      },
+      get width() {
+        return state.width;
+      },
+      addEventListener(type: string, listener: EventListener) {
+        const registered = listeners.get(type) ?? new Set<EventListener>();
+        registered.add(listener);
+        listeners.set(type, registered);
+      },
+      removeEventListener(type: string, listener: EventListener) {
+        listeners.get(type)?.delete(listener);
+      },
+    };
+
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+    Object.defineProperty(window, "__setVisualViewportForTest", {
+      configurable: true,
+      value: (next: { height: number; offsetTop?: number; innerHeight?: number }) => {
+        state.height = next.height;
+        state.offsetTop = next.offsetTop ?? 0;
+        if (next.innerHeight !== undefined) {
+          Object.defineProperty(window, "innerHeight", {
+            configurable: true,
+            value: next.innerHeight,
+          });
+        }
+        for (const type of ["resize", "scroll"]) {
+          for (const listener of listeners.get(type) ?? []) {
+            listener(new Event(type));
+          }
+        }
+        window.dispatchEvent(new Event("resize"));
+      },
+    });
+  });
+}
+
+async function setVisualViewport(
+  page: Page,
+  next: { height: number; offsetTop?: number; innerHeight?: number },
+) {
+  await page.evaluate((viewport) => {
+    (
+      window as unknown as {
+        __setVisualViewportForTest: (value: typeof viewport) => void;
+      }
+    ).__setVisualViewportForTest(viewport);
+  }, next);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/tests/runtime-fixture.html");
+});
+
+test("native keyboard measures VisualViewport overlap and keeps the focused field visible", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const input = page.getByLabel("Native message");
+  const scroll = page.getByTestId("mobile-scroll");
+  await scroll.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 520, offsetTop: 20 });
+
+  await expect(page.getByTestId("native-keyboard-status")).toHaveAttribute("data-visible", "true");
+  await expect(page.getByTestId("native-keyboard-status")).toHaveAttribute("data-height", "304");
+  await expect(page.locator(".mobile-page")).toHaveCSS("--keyboard-height", "304px");
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  const placement = await page.evaluate(() => {
+    const field = document.querySelector<HTMLElement>('[aria-label="Native message"]')!;
+    const owner = field.closest<HTMLElement>(".mobile-scroll")!;
+    return {
+      fieldBottom: field.getBoundingClientRect().bottom,
+      scrollBottom: owner.getBoundingClientRect().bottom,
+      scrollTop: owner.scrollTop,
+    };
+  });
+  expect(placement.fieldBottom).toBeLessThanOrEqual(placement.scrollBottom - 15);
+});
+
+test("native keyboard ignores viewport noise and non-text focus", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const status = page.getByTestId("native-keyboard-status");
+  await page.getByLabel("Native message").evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 800 });
+  await expect(status).toHaveAttribute("data-visible", "false");
+  await expect(status).toHaveAttribute("data-height", "0");
+
+  await page.getByRole("button", { name: "Non-text control" }).focus();
+  await setVisualViewport(page, { height: 520 });
+  await expect(status).toHaveAttribute("data-visible", "false");
+  await expect(status).toHaveAttribute("data-focused", "");
+});
+
+test("native keyboard avoids a second inset when the layout viewport already resized", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const input = page.getByLabel("Native message");
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 520, innerHeight: 520 });
+
+  await expect(page.getByTestId("native-keyboard-status")).toHaveAttribute("data-visible", "true");
+  await expect(page.getByTestId("native-keyboard-status")).toHaveAttribute("data-height", "0");
+  await expect(page.locator(".mobile-page")).toHaveCSS("--keyboard-height", "0px");
+});
+
+test("native keyboard preserves the focus session across fields and cleans up on blur", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const status = page.getByTestId("native-keyboard-status");
+  await page.getByLabel("Native message").evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 520 });
+  await expect(status).toHaveAttribute("data-focused", "Native message");
+
+  await page.getByLabel("Native editable").evaluate((element: HTMLElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await expect(status).toHaveAttribute("data-visible", "true");
+  await expect(status).toHaveAttribute("data-focused", "Native editable");
+
+  await page.getByRole("button", { name: "Non-text control" }).focus();
+  await expect(status).toHaveAttribute("data-visible", "false");
+  await expect(status).toHaveAttribute("data-height", "0");
+  await expect(status).toHaveAttribute("data-focused", "");
+});
+
+test("native keyboard resets its viewport baseline after orientation changes", async ({ page }) => {
+  await installVisualViewportMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const status = page.getByTestId("native-keyboard-status");
+  const input = page.getByLabel("Native message");
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 520, innerHeight: 844 });
+  await expect(status).toHaveAttribute("data-visible", "true");
+
+  await page.getByRole("button", { name: "Non-text control" }).focus();
+  await setVisualViewport(page, { height: 390, innerHeight: 390 });
+  await page.evaluate(() => window.dispatchEvent(new Event("orientationchange")));
+  await input.evaluate((element: HTMLInputElement) => {
+    element.focus({ preventScroll: true });
+  });
+  await setVisualViewport(page, { height: 390, innerHeight: 390 });
+
+  await expect(status).toHaveAttribute("data-visible", "false");
+  await expect(status).toHaveAttribute("data-height", "0");
+});
+
+test("native MobileScroll delegates vertical gestures and click handling to the browser", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/runtime-fixture.html?fixture=native-keyboard");
+
+  const scroll = page.getByTestId("mobile-scroll");
+  await expect(scroll).toHaveAttribute("data-native-scroll", "true");
+  await expect(scroll).toHaveCSS("touch-action", "pan-y");
+  await expect(scroll).toHaveCSS("overscroll-behavior-y", "contain");
+
+  const result = await scroll.evaluate((element) => {
+    const target = element.querySelector<HTMLButtonElement>("button");
+    if (!target) throw new Error("Native scroll fixture button is missing");
+
+    let clickCount = 0;
+    target.addEventListener("click", () => {
+      clickCount += 1;
+    });
+
+    const pointerEvents = [
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 320,
+      }),
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 160,
+      }),
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 71,
+        pointerType: "touch",
+        isPrimary: true,
+        clientY: 160,
+      }),
+    ];
+
+    const pointerDefaultPrevented = pointerEvents.map((event) => {
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    target.dispatchEvent(click);
+
+    return {
+      pointerDefaultPrevented,
+      clickDefaultPrevented: click.defaultPrevented,
+      clickCount,
+      dragging: element.getAttribute("data-dragging"),
+      overscroll: element.getAttribute("data-overscroll"),
+    };
+  });
+
+  expect(result.pointerDefaultPrevented).toEqual([false, false, false]);
+  expect(result.clickDefaultPrevented).toBe(false);
+  expect(result.clickCount).toBe(1);
+  expect(result.dragging).toBe("false");
+  expect(result.overscroll).toBe("0.00");
 });
 
 test("horizontal intent stays in Carousel and cannot create parent momentum", async ({ page }) => {
@@ -105,7 +363,7 @@ test("keyboard and its attached footer dismiss on the same transition", async ({
 
   await input.click();
   await expect(keyboard).toHaveAttribute("data-visible", "true");
-  await drag(page, footer, 0, 120, 5);
+  await drag(page, footer, 0, 120, 5, { x: 8, y: 42 });
   await expect(keyboard).toHaveAttribute("data-visible", "false");
 
   await page.waitForTimeout(100);

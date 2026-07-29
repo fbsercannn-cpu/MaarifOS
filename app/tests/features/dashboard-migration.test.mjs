@@ -56,6 +56,31 @@ test("ilişkisiz legacy ham gözlemi silmez; inceleme bayrağıyla karantinaya a
   assert.equal(result.observations[0].rawText, "İlişkisi eksik olsa da korunacak kurgu gözlem.");
 });
 
+test("UUID biçimli fakat bulunmayan legacy öğrenci ilişkisini de karantinaya alır", () => {
+  const missingStudentId = "00000000-0000-4000-8000-000000000099";
+  const result = migrateLegacyDashboardState(
+    {
+      students: [{
+        id: "00000000-0000-4000-8000-000000000098",
+        name: "Kurgu Mevcut Öğrenci",
+        status: "present",
+      }],
+      observations: [{
+        id: "00000000-0000-4000-8000-000000000097",
+        studentId: missingStudentId,
+        rawText: "UUID biçimi geçerli olsa da ilişkisi eksik kurgu gözlem.",
+        createdAtUtc: "2026-07-22T07:20:00.000Z",
+      }],
+    },
+    { students: [], observations: [], attendanceCompleted: false },
+  );
+
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0].studentId, missingStudentId);
+  assert.equal(result.observations[0].requiresStudentReview, true);
+  assert.equal(result.observations[0].legacyStudentId, missingStudentId);
+});
+
 test("öğrenci üstündeki eski yoklamayı kendi tarihine atomik taşıyıp sonra temizler", async () => {
   const snapshot = createEmptySnapshot();
   const studentId = "00000000-0000-4000-8000-000000000051";

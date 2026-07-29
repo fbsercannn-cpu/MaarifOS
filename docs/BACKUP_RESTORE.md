@@ -32,6 +32,14 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
   doğrulanır; bilinmeyen öğrenciye bağlı yoklama restore edilmeden reddedilir.
 - Günlük yoklama geçmişi ve tarihe bağlı tamamlanma ayarı diğer koleksiyonlarla
   birlikte aynı checksum ve atomik restore kapsamındadır.
+- Öğrenciye özel hızlı gözlem taslakları `settings` koleksiyonunda; gözlem türü,
+  nötr kategoriler, ham metin, bağlam ve çocuğun özgün sözü ise gözlem kaydıyla
+  aynı sürümlü checksum kapsamında korunur. Restore öncesinde taslağın
+  öğrenci-plan-etkinlik-sınıf ilişkileri doğrulanır.
+- Seçili çocuklara toplu hızlı gözlemde öğrenci başına ayrı taslak ve ayrı
+  gözlem korunur. Ortak `batchId` UUID'si ile `captureScope:
+  selected-children` birlikte bulunmak zorundadır; eksik veya bozuk toplu
+  metadata hedef veritabanına yazılmadan reddedilir.
 - Eğitim yılına bağlı sınıf programı ve kalıcı çalışma düzeni `classrooms`
   koleksiyonunda yedeklenir. Restore öncesinde `academicYearId` bağı doğrulanır;
   kopuk sınıf kaydı hiçbir koleksiyona yazılmadan reddedilir.
@@ -42,9 +50,10 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
 - Öğrenci-sınıf, yoklama-öğrenci-sınıf ve gözlem-öğrenci-sınıf ilişkileri ile
   etkinlik, plan ve günlük yoklama ayarlarının sınıf/eğitim yılı kapsamı birlikte
   doğrulanır. Çapraz sınıf bağı geri yükleme başlamadan reddedilir.
-- Veri şeması V2; `evidenceCurriculumLinks`, çok yıllı öğrenci üyelikleri ve D1
+- Veri şeması V3; `evidenceCurriculumLinks`, çok yıllı öğrenci üyelikleri, ayrı
+  ad-soyad görünümü ve D1
   kanıt grafını taşır. V1 yedeğin özgün checksum'u önce doğrulanır, eksik yeni
-  koleksiyon bellekte eklenir ve yalnız ardından V2 ilişkileri doğrulanır.
+  koleksiyon bellekte eklenir ve yalnız ardından V3 ilişkileri doğrulanır.
 - Plan → etkinlik → değiştirilemez ham gözlem → ayrı öğretmen onayı → kaynaklı
   değerlendirme taslağı zinciri restore başlamadan bütün olarak doğrulanır.
 - Arşivlenmiş yılda etkin öğrenci üyeliği veya canlı aktif-sınıf ayarı bulunamaz.
@@ -113,6 +122,9 @@ maarifos-backup-YYYY-MM-DD.zip
 17. Tek sınıflı eski yedeğin kapsam ataması sonrasında ham içeriği koruması
 18. Çok sınıflı eski yedekte belirsiz kayıtların silinmeden karantinaya alınması
 19. Öğrencisiyle sınıf kapsamı uyuşmayan yoklama ve gözlemin hedefi değiştirmeden reddedilmesi
-20. V1 JSON yedeğin özgün checksum sonrasında V2'ye güvenli yükseltilmesi
+20. V1/V2 JSON yedeğin özgün bütünlük özeti doğrulandıktan sonra V3'e güvenli yükseltilmesi
 21. D1 kanıt grafının kimlik, ham metin, öğretmen onayı ve pending taslakla round-trip yapması
 22. Arşivlenmiş yıl + yeni yıl üyeliklerinin tek kalıcı öğrenci kimliğiyle round-trip yapması
+23. Canlı öğrenci taslağı ile tamamlanmış hızlı gözlemin ham metin, bağlam,
+    çocuk sözü, tür ve kategorilerle round-trip yapması
+24. Final gözlem yazımı başarısız olduğunda ilgili öğrenci taslağının etkin kalması

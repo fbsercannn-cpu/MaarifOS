@@ -42,6 +42,14 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
       core.canonicalJson(legacyV1.payload),
     );
     const upgradedLegacy = await service.parseAndVerifyBackup(legacyV1);
+    const legacyV2 = structuredClone(backup);
+    legacyV2.manifest.dataSchemaVersion = 2;
+    delete legacyV2.payload.students[0].firstName;
+    delete legacyV2.payload.students[0].lastName;
+    legacyV2.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(legacyV2.payload),
+    );
+    const upgradedV2 = await service.parseAndVerifyBackup(legacyV2);
     const corrupted = structuredClone(backup);
     corrupted.payload.students[0].displayName = "Değiştirilmiş Kayıt";
     let corruptionError = "";
@@ -56,21 +64,130 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
       studentCount: verified.payload.students.length,
       upgradedLegacyVersion: upgradedLegacy.manifest.dataSchemaVersion,
       upgradedLegacyLinkCount: upgradedLegacy.payload.evidenceCurriculumLinks.length,
+      upgradedV2Version: upgradedV2.manifest.dataSchemaVersion,
+      upgradedV2FirstName: upgradedV2.payload.students[0].firstName,
+      upgradedV2LastName: upgradedV2.payload.students[0].lastName,
       corruptionError,
     };
   });
 
   expect(result.manifest.format).toBe("maarifos-json");
   expect(result.manifest.backupVersion).toBe(1);
-  expect(result.manifest.dataSchemaVersion).toBe(2);
+  expect(result.manifest.dataSchemaVersion).toBe(3);
   expect(result.manifest.createdAt).toBe("2026-07-22T09:30:00.000Z");
   expect(result.manifest.civilDate).toBe("2026-07-22");
   expect(result.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
   expect(result.manifest.entityCounts.students).toBe(1);
   expect(result.studentCount).toBe(1);
-  expect(result.upgradedLegacyVersion).toBe(2);
+  expect(result.upgradedLegacyVersion).toBe(3);
   expect(result.upgradedLegacyLinkCount).toBe(0);
+  expect(result.upgradedV2Version).toBe(3);
+  expect(result.upgradedV2FirstName).toBe("Test Kaydı");
+  expect(result.upgradedV2LastName).toBe("A");
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
+});
+
+test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ page }) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-profile-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-profile-target-${crypto.randomUUID()}`,
+    });
+    const profile = {
+      id: "00000000-0000-4000-8000-000000000031",
+      createdAt: "2026-09-01T06:00:00.000Z",
+      updatedAt: "2026-09-01T06:00:00.000Z",
+      civilDate: "2026-09-01",
+      deletedAt: null,
+      schemaVersion: 2,
+      displayName: "Kurgu Profil Öğrencisi",
+      preferredName: "Kurgu",
+      birthDate: "2021-03-14",
+      optionalCode: "OKUL-MAVI-42",
+      enrollmentDate: "2025-09-01",
+      homeLanguages: "Türkçe, Almanca",
+      interests: "Doğa incelemeleri ve blok oyunları",
+      strengths: "Akranlarıyla iş birliği kuruyor",
+      supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
+      profileSchemaVersion: 3,
+    };
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [profile]),
+    );
+
+    const sourceService = new core.BackupService(source, {
+      appVersion: "student-profile-test",
+      clock: () => new Date("2026-09-01T09:00:00.000Z"),
+      civilDateProvider: () => "2026-09-01",
+    });
+    const backup = await sourceService.exportBackup();
+    const verified = await sourceService.parseAndVerifyBackup(
+      sourceService.serializeBackup(backup),
+    );
+    const invalidEnrollment = structuredClone(backup);
+    invalidEnrollment.payload.students[0].enrollmentDate = "2026-09-02";
+    invalidEnrollment.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidEnrollment.payload),
+    );
+    let invalidEnrollmentError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidEnrollment);
+    } catch (error) {
+      invalidEnrollmentError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidSupport = structuredClone(backup);
+    invalidSupport.payload.students[0].supportPreferences = "d".repeat(1_001);
+    invalidSupport.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidSupport.payload),
+    );
+    let invalidSupportError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidSupport);
+    } catch (error) {
+      invalidSupportError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const restoreReport = await new core.BackupService(target, {
+      appVersion: "student-profile-test",
+    }).restoreBackup(verified, { mode: "replace" });
+    const restored = await target.readSnapshot();
+    source.close();
+    target.close();
+    return {
+      backupStudent: verified.payload.students[0],
+      restoredStudent: restored.students[0],
+      studentCount: verified.manifest.entityCounts.students,
+      inserted: restoreReport.inserted,
+      invalidEnrollmentError,
+      invalidSupportError,
+    };
+  });
+
+  const expectedProfile = {
+    displayName: "Kurgu Profil Öğrencisi",
+    preferredName: "Kurgu",
+    birthDate: "2021-03-14",
+    optionalCode: "OKUL-MAVI-42",
+    enrollmentDate: "2025-09-01",
+    homeLanguages: "Türkçe, Almanca",
+    interests: "Doğa incelemeleri ve blok oyunları",
+    strengths: "Akranlarıyla iş birliği kuruyor",
+    supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
+    profileSchemaVersion: 3,
+  };
+  expect(result.studentCount).toBe(1);
+  expect(result.inserted).toBe(1);
+  expect(result.backupStudent).toMatchObject(expectedProfile);
+  expect(result.restoredStudent).toMatchObject(expectedProfile);
+  expect(result.invalidEnrollmentError).toContain("kayıt tarihi geçersiz");
+  expect(result.invalidSupportError).toContain(
+    "öğretmen desteği notu geçersiz",
+  );
 });
 
 test("iki günlük yoklama geçmişini JSON yedekle geri yükler", async ({ page }) => {
@@ -655,13 +772,16 @@ test("çapraz sınıf yoklama ve gözlem ilişkilerini restore öncesi reddedip 
   });
 });
 
-test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri yükler", async ({
+test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V3 yedekle birebir geri yükler", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
   const result = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
     const evidence = await import("/src/features/evidence/evidence-flow.ts");
+    const curriculum = await import(
+      "/src/features/curriculum/curriculum-catalog.ts"
+    );
     const source = new core.IndexedDbDataStore({
       databaseName: `maarifos-test-d1-source-${crypto.randomUUID()}`,
     });
@@ -700,6 +820,14 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
           academicYearId: yearId,
           name: "Kurgu D1 Sınıfı",
           schemaVersion: 2,
+          curriculumProfileSnapshot: {
+            framework: "tymm",
+            programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
+            catalogId: "tymm-2024-okul-oncesi-v1",
+            sourceVersion: "2024.1",
+            referenceOrigin: "teacher-declared",
+            officialCatalogVerified: false,
+          },
         }]);
         await transaction.putMany("students", [{
           ...base,
@@ -717,6 +845,18 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
         }]);
       },
     );
+    const curriculumProfile = {
+      framework: "tymm" as const,
+      programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
+      catalogId: "tymm-2024-okul-oncesi-v1",
+      sourceVersion: "2024.1",
+      referenceOrigin: "teacher-declared" as const,
+      officialCatalogVerified: false,
+    };
+    const curriculumTarget = curriculum
+      .curriculumTargetsForProfile(curriculumProfile)
+      .find((item) => item.referenceCode === "FAB.1");
+    if (!curriculumTarget) throw new Error("Kurgu program hedefi bulunamadı.");
     await evidence.createPlanWithActivity(source, {
       civilDate: "2026-09-01",
       planId,
@@ -724,12 +864,10 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       activityId,
       activityTitle: "Kurgu D1 etkinliği",
       startTime: "09:00",
-      curriculumProfile: {
-        framework: "tymm",
-        programLabel: evidence.CURRICULUM_PROGRAM_LABELS.tymm,
-        catalogId: "tymm-2024-okul-oncesi-v1",
-        sourceVersion: "2024.1",
-      },
+      curriculumProfile,
+      curriculumTargets: [curriculumTarget],
+      assignmentMode: "whole-class",
+      studentIds: [studentId],
       now: new Date("2026-09-01T06:10:00.000Z"),
     });
     const rawText = "  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ";
@@ -749,7 +887,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       sourceVersion: "2024.1",
       referenceCode: "TYMM-OÖ-KURGU-01",
       referenceTitle: "Kurgu doğrulanmış referans",
-      approvedByUserId: "local-teacher",
+      approvedByUserId: "00000000-0000-4000-9000-000000000178",
       now: new Date("2026-09-01T08:00:00.000Z"),
     });
     await evidence.createCitedAssessmentDraft(source, {
@@ -766,6 +904,85 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       appVersion: "d1-test",
       clock: () => new Date("2026-10-01T09:00:00.000Z"),
     }).exportBackup();
+    const verificationService = new core.BackupService(source, {
+      appVersion: "d1-test",
+    });
+    const integrityErrors: Record<string, string> = {};
+    const mutations: Array<[
+      string,
+      (value: typeof backup) => void,
+    ]> = [
+      ["emptyTeacherAssessment", (value) => {
+        value.payload.reportDrafts[0].teacherAssessmentText = "   ";
+      }],
+      ["invalidPeriod", (value) => {
+        value.payload.reportDrafts[0].periodStart = "2026-02-30";
+      }],
+      ["observationOutsidePeriod", (value) => {
+        value.payload.reportDrafts[0].periodStart = "2026-09-02";
+      }],
+      ["citationObservationMismatch", (value) => {
+        value.payload.reportDrafts[0].evidenceCitations[0].observationId =
+          "00000000-0000-4000-8000-000000000179";
+      }],
+      ["citationLinkMismatch", (value) => {
+        value.payload.reportDrafts[0].evidenceCitations[0]
+          .confirmedCurriculumLinkIds = [
+            "00000000-0000-4000-8000-000000000179",
+          ];
+      }],
+      ["generationMode", (value) => {
+        value.payload.reportDrafts[0].generationMode = "automatic-summary";
+      }],
+      ["reviewStatus", (value) => {
+        value.payload.reportDrafts[0].status = "approved";
+      }],
+      ["verificationStatus", (value) => {
+        value.payload.reportDrafts[0].referenceVerificationStatus =
+          "official-catalog-verified";
+      }],
+      ["provenance", (value) => {
+        value.payload.evidenceCurriculumLinks[0].officialCatalogVerified = true;
+      }],
+      ["sourceVersion", (value) => {
+        value.payload.evidenceCurriculumLinks[0].sourceVersion = "2024.2";
+      }],
+      ["assignmentStudent", (value) => {
+        value.payload.activities[0].targetAssignments[0].studentId =
+          "00000000-0000-4000-8000-000000000199";
+      }],
+    ];
+    for (const [name, mutate] of mutations) {
+      const invalid = structuredClone(backup);
+      mutate(invalid);
+      invalid.manifest.payloadChecksum = await core.sha256Hex(
+        core.canonicalJson(invalid.payload),
+      );
+      try {
+        await verificationService.parseAndVerifyBackup(invalid);
+      } catch (error) {
+        integrityErrors[name] =
+          error instanceof Error ? error.message : String(error);
+      }
+    }
+    const legacyProvenance = structuredClone(backup);
+    delete legacyProvenance.payload.classrooms[0].curriculumProfileSnapshot
+      .referenceOrigin;
+    delete legacyProvenance.payload.classrooms[0].curriculumProfileSnapshot
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.plans[0].curriculumProfileSnapshot
+      .referenceOrigin;
+    delete legacyProvenance.payload.plans[0].curriculumProfileSnapshot
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.evidenceCurriculumLinks[0].referenceOrigin;
+    delete legacyProvenance.payload.evidenceCurriculumLinks[0]
+      .officialCatalogVerified;
+    delete legacyProvenance.payload.reportDrafts[0].referenceVerificationStatus;
+    legacyProvenance.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(legacyProvenance.payload),
+    );
+    const legacyVerified =
+      await verificationService.parseAndVerifyBackup(legacyProvenance);
     await new core.BackupService(target, { appVersion: "d1-test" }).restoreBackup(
       backup,
       { mode: "replace" },
@@ -780,19 +997,57 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V2 yedekle birebir geri
       link: restored.evidenceCurriculumLinks[0],
       draft: restored.reportDrafts[0],
       expectedLinkId: link.id,
+      integrityErrors,
+      legacyVerified: {
+        planCount: legacyVerified.payload.plans.length,
+        linkCount: legacyVerified.payload.evidenceCurriculumLinks.length,
+        draftCount: legacyVerified.payload.reportDrafts.length,
+      },
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(2);
+  expect(result.dataSchemaVersion).toBe(3);
   expect(result.rawText).toBe("  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ");
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
   expect(result.link.confirmationMethod).toBe("teacher-confirmed");
+  expect(result.link).toMatchObject({
+    referenceOrigin: "teacher-declared",
+    officialCatalogVerified: false,
+  });
   expect(result.draft).toMatchObject({
     reviewStatus: "pending",
     authoredBy: "teacher",
     teacherReviewRequired: true,
     observationIds: ["00000000-0000-4000-8000-000000000176"],
+    generationMode: "teacher-authored-cited-draft",
+    referenceVerificationStatus: "teacher-declared-unverified",
+  });
+  expect(result.draft.evidenceCitations).toEqual([{
+    observationId: "00000000-0000-4000-8000-000000000176",
+    observedAt: "2026-09-01T07:00:00.000Z",
+    confirmedCurriculumLinkIds: [result.expectedLinkId],
+  }]);
+  expect(Object.keys(result.integrityErrors).sort()).toEqual([
+    "assignmentStudent",
+    "citationLinkMismatch",
+    "citationObservationMismatch",
+    "emptyTeacherAssessment",
+    "generationMode",
+    "invalidPeriod",
+    "observationOutsidePeriod",
+    "provenance",
+    "reviewStatus",
+    "sourceVersion",
+    "verificationStatus",
+  ]);
+  for (const error of Object.values(result.integrityErrors)) {
+    expect(error).toMatch(/geçersiz|uymuyor/);
+  }
+  expect(result.legacyVerified).toEqual({
+    planCount: 1,
+    linkCount: 1,
+    draftCount: 1,
   });
 });
 
@@ -933,4 +1188,790 @@ test("arşivlenmiş yılı ve aynı öğrencinin yeni yıl üyeliğini tek kimli
   expect(result.oldYear.status).toBe("archived");
   expect(result.observation.rawText).toBe("Eski yıldan korunacak kurgu ham gözlem.");
   expect(result.archiveEnrollmentCount).toBe(2);
+});
+
+test("öğrenciye özel hızlı gözlem taslağı ve tamamlanan ham alanlar yedekle geri gelir", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const quick = await import("/src/features/evidence/quick-observation.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-o1-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-o1-target-${crypto.randomUUID()}`,
+    });
+    const base = {
+      createdAt: "2026-09-02T06:00:00.000Z",
+      updatedAt: "2026-09-02T06:00:00.000Z",
+      civilDate: "2026-09-02",
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    const yearId = "00000000-0000-4000-8000-000000000711";
+    const classroomId = "00000000-0000-4000-8000-000000000712";
+    const studentAId = "00000000-0000-4000-8000-000000000713";
+    const studentBId = "00000000-0000-4000-8000-000000000714";
+    const planId = "00000000-0000-4000-8000-000000000715";
+    const activityId = "00000000-0000-4000-8000-000000000716";
+    const observationId = "00000000-0000-4000-8000-000000000717";
+    const batchId = "00000000-0000-4000-8000-000000000718";
+    await source.transaction(
+      "readwrite",
+      [
+        "academicYears",
+        "classrooms",
+        "students",
+        "settings",
+        "plans",
+        "activities",
+      ],
+      async (transaction) => {
+        await transaction.putMany("academicYears", [{
+          ...base,
+          id: yearId,
+          name: "2026-2027 Eğitim Yılı",
+          startDate: "2026-09-01",
+          endDate: "2027-06-30",
+          status: "active",
+        }]);
+        await transaction.putMany("classrooms", [{
+          ...base,
+          id: classroomId,
+          academicYearId: yearId,
+          name: "Kurgu O1 Sınıfı",
+          schemaVersion: 2,
+        }]);
+        await transaction.putMany("students", [
+          {
+            ...base,
+            id: studentAId,
+            displayName: "Kurgu O1 Öğrencisi A",
+            academicYearId: yearId,
+            classroomId,
+            enrollmentStatus: "active",
+          },
+          {
+            ...base,
+            id: studentBId,
+            displayName: "Kurgu O1 Öğrencisi B",
+            academicYearId: yearId,
+            classroomId,
+            enrollmentStatus: "active",
+          },
+        ]);
+        await transaction.putMany("settings", [{
+          ...base,
+          id: core.ACTIVE_CLASSROOM_SETTING_ID,
+          settingType: core.ACTIVE_CLASSROOM_SETTING_TYPE,
+          academicYearId: yearId,
+          classroomId,
+        }]);
+        await transaction.putMany("plans", [{
+          ...base,
+          id: planId,
+          title: "Kurgu O1 planı",
+          academicYearId: yearId,
+          classroomId,
+        }]);
+        await transaction.putMany("activities", [{
+          ...base,
+          id: activityId,
+          planId,
+          title: "Kurgu O1 etkinliği",
+          studentIds: [studentAId, studentBId],
+          academicYearId: yearId,
+          classroomId,
+        }]);
+      },
+    );
+    const exactRawText = "  Boşluklarıyla korunacak kurgu gözlem.  ";
+    const exactContext = "  Serbest oyun sırasında  ";
+    const exactChildQuote = "  “Aynı olanları buraya koydum.”  ";
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentAId,
+      planId,
+      activityId,
+      rawText: exactRawText,
+      context: exactContext,
+      childQuote: exactChildQuote,
+      observationType: "child-quote",
+      categoryIds: ["cognitive", "language-communication"],
+      now: new Date("2026-09-02T07:00:00.000Z"),
+    });
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentBId,
+      planId,
+      activityId,
+      rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+      observationType: "systematic",
+      categoryIds: ["physical-health", "self-care"],
+      now: new Date("2026-09-02T07:01:00.000Z"),
+    });
+    await quick.finalizeQuickObservationDraft(source, {
+      studentId: studentAId,
+      observationId,
+      observedAt: "2026-09-02T07:05:00.000Z",
+      now: new Date("2026-09-02T07:06:00.000Z"),
+    });
+    await quick.persistQuickObservationDraftBatch(source, {
+      batchId,
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      rawText: "İki çocuk ortak yapıya sırayla birer parça ekledi.",
+      context: "Blok oyunu sırasında",
+      observationType: "anecdotal",
+      categoryIds: ["play-participation"],
+      now: new Date("2026-09-02T07:10:00.000Z"),
+    });
+    await quick.finalizeQuickObservationDraftBatch(source, {
+      batchId,
+      studentIds: [studentAId, studentBId],
+      planId,
+      activityId,
+      observedAt: "2026-09-02T07:11:00.000Z",
+      now: new Date("2026-09-02T07:12:00.000Z"),
+    });
+    await quick.persistQuickObservationDraft(source, {
+      studentId: studentBId,
+      planId,
+      activityId,
+      rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+      observationType: "systematic",
+      categoryIds: ["physical-health", "self-care"],
+      now: new Date("2026-09-02T07:13:00.000Z"),
+    });
+
+    const sourceBackupService = new core.BackupService(source, {
+      appVersion: "o1-test",
+      clock: () => new Date("2026-09-02T08:00:00.000Z"),
+    });
+    const backup = await sourceBackupService.exportBackup();
+    const invalidBatch = structuredClone(backup);
+    const invalidBatchObservation = invalidBatch.payload.observations.find(
+      (record) => record.batchId === batchId,
+    );
+    invalidBatchObservation.batchId = "geçersiz-toplu-kimlik";
+    invalidBatch.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidBatch.payload),
+    );
+    let invalidBatchError = "";
+    try {
+      await sourceBackupService.parseAndVerifyBackup(invalidBatch);
+    } catch (error) {
+      invalidBatchError = error instanceof Error ? error.message : String(error);
+    }
+    await new core.BackupService(target, { appVersion: "o1-test" }).restoreBackup(
+      backup,
+      { mode: "replace" },
+    );
+    const restored = await target.readSnapshot();
+    const restoredDraft = await quick.loadQuickObservationDraft(target, {
+      studentId: studentBId,
+    });
+    source.close();
+    target.close();
+    return {
+      observation: restored.observations[0],
+      batchObservations: restored.observations.filter(
+        (record) => record.batchId === batchId,
+      ),
+      draft: restoredDraft,
+      settingsCount: backup.manifest.entityCounts.settings,
+      invalidBatchError,
+    };
+  });
+
+  expect(result.observation).toMatchObject({
+    rawText: "  Boşluklarıyla korunacak kurgu gözlem.  ",
+    context: "  Serbest oyun sırasında  ",
+    childQuote: "  “Aynı olanları buraya koydum.”  ",
+    observationType: "child-quote",
+    observationCategories: ["cognitive", "language-communication"],
+  });
+  expect(result.draft).toMatchObject({
+    studentId: "00000000-0000-4000-8000-000000000714",
+    rawText: "Yedekten dönecek öğrenciye özel canlı taslak.",
+    observationType: "systematic",
+    categoryIds: ["physical-health", "self-care"],
+  });
+  expect(result.batchObservations).toHaveLength(2);
+  expect(result.batchObservations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        batchId: "00000000-0000-4000-8000-000000000718",
+        captureScope: "selected-children",
+        rawText: "İki çocuk ortak yapıya sırayla birer parça ekledi.",
+        rawTextImmutable: true,
+      }),
+    ]),
+  );
+  expect(result.invalidBatchError).toContain("hızlı gözlem alanları geçersiz");
+  expect(result.settingsCount).toBe(5);
+});
+
+test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kurcalama reddedilir", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-encrypted-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        id: "00000000-0000-4000-8000-000000000901",
+        createdAt: "2026-09-10T06:00:00.000Z",
+        updatedAt: "2026-09-10T06:00:00.000Z",
+        civilDate: "2026-09-10",
+        deletedAt: null,
+        schemaVersion: 1,
+        displayName: "Kurgu Şifreli Yedek Öğrencisi",
+      }]),
+    );
+    const service = new core.BackupService(store, {
+      appVersion: "encrypted-test",
+      clock: () => new Date("2026-09-10T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-10",
+    });
+    const password = "ÇokGüçlü-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(password);
+    const serialized = service.serializeEncryptedBackup(encrypted);
+    const decrypted = await service.parseAndDecryptBackup(serialized, password);
+
+    let wrongPasswordError = "";
+    try {
+      await service.parseAndDecryptBackup(serialized, "Yanlış-Parola-2026!");
+    } catch (error) {
+      wrongPasswordError = error instanceof Error ? error.message : String(error);
+    }
+
+    const tamperedCiphertext = structuredClone(encrypted);
+    const replacement = tamperedCiphertext.ciphertext[12] === "A" ? "B" : "A";
+    tamperedCiphertext.ciphertext =
+      tamperedCiphertext.ciphertext.slice(0, 12) +
+      replacement +
+      tamperedCiphertext.ciphertext.slice(13);
+    let tamperError = "";
+    try {
+      await service.parseAndDecryptBackup(tamperedCiphertext, password);
+    } catch (error) {
+      tamperError = error instanceof Error ? error.message : String(error);
+    }
+
+    const tamperedHeader = structuredClone(encrypted);
+    tamperedHeader.encryption.createdAt = "2026-09-10T08:00:01.000Z";
+    let headerTamperError = "";
+    try {
+      await service.parseAndDecryptBackup(tamperedHeader, password);
+    } catch (error) {
+      headerTamperError =
+        error instanceof Error ? error.message : String(error);
+    }
+    store.close();
+    return {
+      format: encrypted.encryption.format,
+      iterations: encrypted.encryption.iterations,
+      studentName: decrypted.payload.students[0].displayName,
+      serializedContainsPassword: serialized.includes(password),
+      wrongPasswordError,
+      tamperError,
+      headerTamperError,
+    };
+  });
+
+  expect(result.format).toBe("maarifos-encrypted-json");
+  expect(result.iterations).toBeGreaterThanOrEqual(600_000);
+  expect(result.studentName).toBe("Kurgu Şifreli Yedek Öğrencisi");
+  expect(result.serializedContainsPassword).toBe(false);
+  expect(result.wrongPasswordError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+  expect(result.tamperError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+  expect(result.headerTamperError).toContain(
+    "parola yanlış veya dosya değiştirilmiş",
+  );
+});
+
+test("30 küçültülmüş profil fotoğrafı şifreli yedekten temiz veritabanına kayıpsız döner", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-photo-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-photo-target-${crypto.randomUUID()}`,
+    });
+    const photo = `data:image/jpeg;base64,${"A".repeat(300_000)}`;
+    const createdAt = "2026-09-10T06:00:00.000Z";
+    const students = Array.from({ length: 30 }, (_, index) => ({
+      id: crypto.randomUUID(),
+      createdAt,
+      updatedAt: createdAt,
+      civilDate: "2026-09-10",
+      deletedAt: null,
+      schemaVersion: 4,
+      displayName: `Fotoğraflı Çocuk ${index + 1}`,
+      profilePhotoDataUrl: photo,
+      profileSchemaVersion: 4,
+      contacts: [
+        {
+          id: crypto.randomUUID(),
+          kind: index % 2 === 0 ? "mother" : "father",
+          relationship: index % 2 === 0 ? "Anne" : "Baba",
+          phone: `+90555${String(10_000_000 + index).slice(-8)}`,
+          isPrimary: true,
+        },
+      ],
+    }));
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", students),
+    );
+    const service = new core.BackupService(source, {
+      appVersion: "photo-capacity-test",
+      clock: () => new Date("2026-09-10T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-10",
+    });
+    const password = "Foto-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(password);
+    const serialized = service.serializeEncryptedBackup(encrypted);
+    const verified = await service.parseAndDecryptBackup(serialized, password);
+    const report = await new core.BackupService(target, {
+      appVersion: "photo-capacity-test",
+    }).restoreBackup(verified, { mode: "replace" });
+    const restored = await target.readSnapshot();
+    source.close();
+    target.close();
+    return {
+      serializedLength: serialized.length,
+      inserted: report.inserted,
+      studentCount: restored.students.length,
+      photosMatch: restored.students.every(
+        (student) => student.profilePhotoDataUrl === photo,
+      ),
+      contactsMatch: restored.students.every(
+        (student) =>
+          Array.isArray(student.contacts) &&
+          student.contacts.length === 1,
+      ),
+    };
+  });
+
+  expect(result.serializedLength).toBeLessThan(32 * 1024 * 1024);
+  expect(result.inserted).toBe(30);
+  expect(result.studentCount).toBe(30);
+  expect(result.photosMatch).toBe(true);
+  expect(result.contactsMatch).toBe(true);
+});
+
+test("replace öncesi recovery snapshot doğrulanır; kesintide veri ve snapshot korunur", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-recovery-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-recovery-target-${crypto.randomUUID()}`,
+    });
+    const base = {
+      createdAt: "2026-09-11T06:00:00.000Z",
+      updatedAt: "2026-09-11T06:00:00.000Z",
+      civilDate: "2026-09-11",
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        ...base,
+        id: "00000000-0000-4000-8000-000000000911",
+        displayName: "Kurgu Yeni Öğrenci",
+      }]),
+    );
+    await target.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        ...base,
+        id: "00000000-0000-4000-8000-000000000912",
+        displayName: "Kurgu Korunacak Öğrenci",
+      }]),
+    );
+    const backup = await new core.BackupService(source, {
+      appVersion: "recovery-test",
+    }).exportBackup();
+    const service = new core.BackupService(target, {
+      appVersion: "recovery-test",
+      recoveryRetentionLimit: 3,
+    });
+
+    const originalTransaction = target.transaction.bind(target);
+    let interruptRestore = true;
+    target.transaction = (mode, collections, task) =>
+      originalTransaction(mode, collections, async (transaction) =>
+        task({
+          getAll: (collection) => transaction.getAll(collection),
+          putMany: (collection, records) =>
+            transaction.putMany(collection, records),
+          clear: async (collection) => {
+            await transaction.clear(collection);
+            if (interruptRestore && collection === "students") {
+              throw new Error("Test amaçlı restore kesintisi.");
+            }
+          },
+        }),
+      );
+
+    let restoreError = "";
+    try {
+      await service.restoreBackup(backup, { mode: "replace" });
+    } catch (error) {
+      restoreError = error instanceof Error ? error.message : String(error);
+    }
+    interruptRestore = false;
+    const afterFailure = await target.readSnapshot();
+    const recoveryAfterFailure = await service.listRecoverySnapshots();
+    const savedSnapshot = await target.getRecoverySnapshot(
+      recoveryAfterFailure[0].id,
+    );
+
+    await service.restoreBackup(backup, { mode: "replace" });
+    const afterSuccess = await target.readSnapshot();
+    const recoveryAfterSuccess = await service.listRecoverySnapshots();
+    await service.restoreRecoverySnapshot(recoveryAfterFailure[0].id, {
+      createRecoverySnapshot: false,
+    });
+    const recovered = await target.readSnapshot();
+    for (let index = 0; index < 4; index += 1) {
+      await service.createRecoverySnapshot("manual");
+    }
+    const retainedSnapshots = await service.listRecoverySnapshots();
+    source.close();
+    target.close();
+    return {
+      restoreError,
+      afterFailureName: afterFailure.students[0].displayName,
+      snapshotName: savedSnapshot?.envelope.payload.students[0].displayName,
+      afterSuccessName: afterSuccess.students[0].displayName,
+      recoveredName: recovered.students[0].displayName,
+      countAfterFailure: recoveryAfterFailure.length,
+      countAfterSuccess: recoveryAfterSuccess.length,
+      retainedSnapshotCount: retainedSnapshots.length,
+      retainedChecksums: retainedSnapshots.map(
+        (snapshot) => snapshot.snapshotChecksum,
+      ),
+    };
+  });
+
+  expect(result.restoreError).toContain("restore kesintisi");
+  expect(result.afterFailureName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.snapshotName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.afterSuccessName).toBe("Kurgu Yeni Öğrenci");
+  expect(result.recoveredName).toBe("Kurgu Korunacak Öğrenci");
+  expect(result.countAfterFailure).toBe(1);
+  expect(result.countAfterSuccess).toBe(2);
+  expect(result.retainedSnapshotCount).toBe(3);
+  expect(
+    result.retainedChecksums.every((checksum) => /^[0-9a-f]{64}$/.test(checksum)),
+  ).toBe(true);
+});
+
+test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini uygular", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const pin = "739251";
+    const config = await core.createAppLockConfig(pin, {
+      now: new Date("2026-09-12T08:00:00.000Z"),
+    });
+    const failed = await core.verifyAppLockSecret(
+      "000000",
+      config,
+      core.initialAppLockAttemptState(),
+      { now: new Date("2026-09-12T08:01:00.000Z") },
+    );
+    const blocked = await core.verifyAppLockSecret(
+      pin,
+      config,
+      failed.attemptState,
+      { now: new Date("2026-09-12T08:01:00.500Z") },
+    );
+    const session = new core.AppLockSession(config, failed.attemptState);
+    const unlocked = await session.unlock(pin, {
+      now: new Date("2026-09-12T08:01:01.000Z"),
+    });
+    const openState = session.getState();
+    session.lock();
+    const closedState = session.getState();
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-app-lock-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["settings"], (transaction) =>
+      transaction.putMany("settings", [{
+        id: "7aab50df-a47d-4dcb-8ac0-d8589a34b950",
+        settingType: "app-lock-config-v1",
+        config,
+        attemptState: failed.attemptState,
+        createdAt: config.createdAt,
+        updatedAt: "2026-09-12T08:01:00.000Z",
+        civilDate: "2026-09-12",
+        schemaVersion: core.DATA_SCHEMA_VERSION,
+      }]),
+    );
+    const backup = await new core.BackupService(store, {
+      appVersion: "app-lock-test",
+      clock: () => new Date("2026-09-12T08:02:00.000Z"),
+      civilDateProvider: () => "2026-09-12",
+    }).exportBackup();
+    store.close();
+    return {
+      configContainsPin: JSON.stringify(config).includes(pin),
+      iterations: config.iterations,
+      failed,
+      blocked,
+      unlocked,
+      openState,
+      closedState,
+      backedUpSettingType: backup.payload.settings[0].settingType,
+    };
+  });
+
+  expect(result.configContainsPin).toBe(false);
+  expect(result.iterations).toBeGreaterThanOrEqual(600_000);
+  expect(result.failed.status).toBe("invalid");
+  expect(result.failed.retryAfterMs).toBe(1_000);
+  expect(result.blocked.status).toBe("locked");
+  expect(result.blocked.retryAfterMs).toBe(500);
+  expect(result.unlocked.status).toBe("verified");
+  expect(result.openState.unlocked).toBe(true);
+  expect(result.closedState.unlocked).toBe(false);
+  expect(result.backedUpSettingType).toBe("app-lock-config-v1");
+});
+
+test("IndexedDB N-2 ve N-1 verisini v3'e kayıpsız taşır ve dar indeks sorgularını açar", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const classroomId = "00000000-0000-4000-8000-000000000921";
+    const createLegacy = async (version: number) => {
+      const databaseName =
+        `maarifos-test-migration-v${version}-${crypto.randomUUID()}`;
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(databaseName, version);
+        request.addEventListener("upgradeneeded", () => {
+          const database = request.result;
+          const students = database.createObjectStore("students", {
+            keyPath: "id",
+          });
+          students.put({
+            id:
+              version === 1
+                ? "00000000-0000-4000-8000-000000000922"
+                : "00000000-0000-4000-8000-000000000923",
+            createdAt: "2026-09-13T06:00:00.000Z",
+            updatedAt: "2026-09-13T06:00:00.000Z",
+            civilDate: "2026-09-13",
+            deletedAt: null,
+            schemaVersion: 1,
+            displayName: `Kurgu v${version} Öğrencisi`,
+            classroomId,
+          });
+          if (version === 2) {
+            for (const collection of core.COLLECTION_NAMES) {
+              if (!database.objectStoreNames.contains(collection)) {
+                database.createObjectStore(collection, { keyPath: "id" });
+              }
+            }
+          }
+        });
+        request.addEventListener("success", () => {
+          request.result.close();
+          resolve();
+        });
+        request.addEventListener("error", () => reject(request.error));
+      });
+      const statuses = [];
+      const store = new core.IndexedDbDataStore({
+        databaseName,
+        onStatusChange: (status) => statuses.push(status.status),
+      });
+      const snapshot = await store.readSnapshot();
+      const queried = await store.listStudentsByClassroom(classroomId);
+      const recovery = await store.listRecoverySnapshots();
+      store.close();
+      return {
+        name: snapshot.students[0].displayName,
+        queried: queried.length,
+        recovery: recovery.length,
+        statuses,
+      };
+    };
+    return Promise.all([createLegacy(1), createLegacy(2)]);
+  });
+
+  expect(result.map((item) => item.name)).toEqual([
+    "Kurgu v1 Öğrencisi",
+    "Kurgu v2 Öğrencisi",
+  ]);
+  expect(result.every((item) => item.queried === 1)).toBe(true);
+  expect(result.every((item) => item.recovery === 0)).toBe(true);
+  expect(result.every((item) => item.statuses.includes("ready"))).toBe(true);
+});
+
+test("yedek şeması tanımsız, semantik bozuk ve eksik koleksiyon kayıtlarını fail-closed reddeder", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-strict-schema-${crypto.randomUUID()}`,
+    });
+    await store.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        id: "00000000-0000-4000-8000-000000000931",
+        createdAt: "2026-09-14T06:00:00.000Z",
+        updatedAt: "2026-09-14T06:00:00.000Z",
+        civilDate: "2026-09-14",
+        deletedAt: null,
+        schemaVersion: 1,
+        displayName: "Kurgu Şema Öğrencisi",
+      }]),
+    );
+    const service = new core.BackupService(store, {
+      appVersion: "strict-schema-test",
+      clock: () => new Date("2026-09-14T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-14",
+    });
+    const backup = await service.exportBackup();
+    const verifyError = async (candidate) => {
+      candidate.manifest.payloadChecksum = await core.sha256Hex(
+        core.canonicalJson(candidate.payload),
+      );
+      try {
+        await service.parseAndVerifyBackup(candidate);
+        return "";
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    };
+
+    const unknownField = structuredClone(backup);
+    unknownField.payload.students[0].sessionToken = "yedekte-olmaması-gerekir";
+    const unknownFieldError = await verifyError(unknownField);
+
+    const impossibleDate = structuredClone(backup);
+    impossibleDate.payload.students[0].civilDate = "2026-02-30";
+    const impossibleDateError = await verifyError(impossibleDate);
+
+    const malformedMedia = structuredClone(backup);
+    malformedMedia.payload.mediaAssets.push({
+      id: "00000000-0000-4000-8000-000000000932",
+      createdAt: "2026-09-14T06:00:00.000Z",
+      updatedAt: "2026-09-14T06:00:00.000Z",
+      civilDate: "2026-09-14",
+      deletedAt: null,
+      schemaVersion: 1,
+      blobKey: "blob-only",
+    });
+    malformedMedia.manifest.entityCounts.mediaAssets = 1;
+    const malformedMediaError = await verifyError(malformedMedia);
+
+    const unknownManifestField = structuredClone(backup);
+    unknownManifestField.manifest.debug = true;
+    let unknownManifestError = "";
+    try {
+      await service.parseAndVerifyBackup(unknownManifestField);
+    } catch (error) {
+      unknownManifestError =
+        error instanceof Error ? error.message : String(error);
+    }
+    store.close();
+    return {
+      unknownFieldError,
+      impossibleDateError,
+      malformedMediaError,
+      unknownManifestError,
+    };
+  });
+
+  expect(result.unknownFieldError).toContain("tanımsız alan");
+  expect(result.impossibleDateError).toContain("civilDate");
+  expect(result.malformedMediaError).toContain("medya sözleşmesine");
+  expect(result.unknownManifestError).toContain("manifestinde tanımsız");
+});
+
+test("IndexedDB blocked ve versionchange olaylarını görünür kılar; eski bağlantıda veri kaybetmez", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const databaseName = `maarifos-test-lifecycle-${crypto.randomUUID()}`;
+    const oldConnection = await new Promise((resolve, reject) => {
+      const request = indexedDB.open(databaseName, 2);
+      request.addEventListener("upgradeneeded", () => {
+        for (const collection of core.COLLECTION_NAMES) {
+          request.result.createObjectStore(collection, { keyPath: "id" });
+        }
+        request.transaction.objectStore("students").put({
+          id: "00000000-0000-4000-8000-000000000941",
+          createdAt: "2026-09-15T06:00:00.000Z",
+          updatedAt: "2026-09-15T06:00:00.000Z",
+          civilDate: "2026-09-15",
+          deletedAt: null,
+          schemaVersion: 1,
+          displayName: "Kurgu Yaşam Döngüsü Öğrencisi",
+        });
+      });
+      request.addEventListener("success", () => resolve(request.result));
+      request.addEventListener("error", () => reject(request.error));
+    });
+    const statuses = [];
+    const store = new core.IndexedDbDataStore({
+      databaseName,
+      onStatusChange: (event) => statuses.push(event.status),
+    });
+    let blockedError = "";
+    try {
+      await store.readSnapshot();
+    } catch (error) {
+      blockedError = error instanceof Error ? error.message : String(error);
+    }
+    oldConnection.close();
+    const snapshot = await store.readSnapshot();
+
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open(databaseName, 4);
+      request.addEventListener("success", () => {
+        request.result.close();
+        resolve(undefined);
+      });
+      request.addEventListener("error", () => reject(request.error));
+    });
+    return {
+      blockedError,
+      statuses,
+      studentName: snapshot.students[0].displayName,
+    };
+  });
+
+  expect(result.blockedError).toContain("başka bir sekme");
+  expect(result.statuses).toContain("blocked");
+  expect(result.statuses).toContain("ready");
+  expect(result.statuses).toContain("versionchange");
+  expect(result.studentName).toBe("Kurgu Yaşam Döngüsü Öğrencisi");
 });

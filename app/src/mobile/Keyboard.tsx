@@ -5,7 +5,9 @@ import {
   type PropsWithChildren,
   type Ref,
   type TextareaHTMLAttributes,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -34,16 +36,219 @@ type KeyboardInputProps = InputHTMLAttributes<HTMLInputElement> & {
 
 const KeyboardContext = createContext<KeyboardContextValue | null>(null);
 
+const nativeKeyboardMinimumShrink = 80;
+const nativeTextInputTypes = new Set([
+  "email",
+  "number",
+  "password",
+  "search",
+  "tel",
+  "text",
+  "url",
+]);
+
+function resolveTextEntryElement(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
+
+  const candidate = target.closest<HTMLElement>("input, textarea, [contenteditable]");
+  if (!candidate) return null;
+
+  if (candidate instanceof HTMLInputElement) {
+    return !candidate.disabled &&
+      !candidate.readOnly &&
+      nativeTextInputTypes.has(candidate.type)
+      ? candidate
+      : null;
+  }
+
+  if (candidate instanceof HTMLTextAreaElement) {
+    return !candidate.disabled && !candidate.readOnly ? candidate : null;
+  }
+
+  return candidate.isContentEditable ? candidate : null;
+}
+
+function getVisualViewportBottom() {
+  const viewport = window.visualViewport;
+  return viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+}
+
 export function KeyboardProvider({ children, native = false }: PropsWithChildren<{ native?: boolean }>) {
   const { device } = useMobileDevice();
-  const [visible, setVisible] = useState(false);
+  const [simulatedVisible, setSimulatedVisible] = useState(false);
+  const [nativeMetrics, setNativeMetrics] = useState({ visible: false, height: 0 });
   const [dragOffset, setRawDragOffset] = useState(0);
   const [isDragging, setDragging] = useState(false);
   const [focusedElement, setFocusedElement] = useState<HTMLElement | null>(null);
-  const fullHeight = native ? 0 : device.geometry.keyboard.height;
+  const focusedElementRef = useRef<HTMLElement | null>(null);
+  const nativeSessionBaselineRef = useRef(0);
+  const nativeMeasureFrameRef = useRef<number | null>(null);
+  const nativeBlurTimerRef = useRef<number | null>(null);
+  const visible = native ? nativeMetrics.visible : simulatedVisible;
+  const fullHeight = native ? nativeMetrics.height : device.geometry.keyboard.height;
+
+  const measureNativeKeyboard = useCallback(() => {
+    if (!native) return;
+
+    const currentFocus = resolveTextEntryElement(document.activeElement);
+    if (!currentFocus || currentFocus !== focusedElementRef.current) {
+      setNativeMetrics({ visible: false, height: 0 });
+      return;
+    }
+
+    const visualBottom = getVisualViewportBottom();
+    const baseline = nativeSessionBaselineRef.current;
+    const shrink = Math.max(0, baseline - visualBottom);
+    const overlapsLayoutViewport = Math.max(0, window.innerHeight - visualBottom);
+    const isVisible = shrink >= nativeKeyboardMinimumShrink;
+
+    setNativeMetrics({
+      visible: isVisible,
+      height: isVisible ? Math.round(overlapsLayoutViewport) : 0,
+    });
+  }, [native]);
+
+  const queueNativeMeasurement = useCallback(() => {
+    if (!native) return;
+    if (nativeMeasureFrameRef.current !== null) {
+      window.cancelAnimationFrame(nativeMeasureFrameRef.current);
+    }
+    nativeMeasureFrameRef.current = window.requestAnimationFrame(() => {
+      nativeMeasureFrameRef.current = null;
+      measureNativeKeyboard();
+    });
+  }, [measureNativeKeyboard, native]);
+
+  const beginNativeFocusSession = useCallback((element: HTMLElement) => {
+    if (focusedElementRef.current === null) {
+      nativeSessionBaselineRef.current = Math.max(
+        window.innerHeight,
+        getVisualViewportBottom(),
+      );
+    }
+    focusedElementRef.current = element;
+    setFocusedElement(element);
+    queueNativeMeasurement();
+  }, [queueNativeMeasurement]);
+
+  const clearNativeFocusSession = useCallback(() => {
+    focusedElementRef.current = null;
+    setFocusedElement(null);
+    setNativeMetrics({ visible: false, height: 0 });
+    nativeSessionBaselineRef.current = Math.max(
+      window.innerHeight,
+      getVisualViewportBottom(),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!native) return;
+
+    nativeSessionBaselineRef.current = Math.max(window.innerHeight, getVisualViewportBottom());
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const element = resolveTextEntryElement(event.target);
+      if (element) {
+        if (nativeBlurTimerRef.current !== null) {
+          window.clearTimeout(nativeBlurTimerRef.current);
+          nativeBlurTimerRef.current = null;
+        }
+        beginNativeFocusSession(element);
+        return;
+      }
+      clearNativeFocusSession();
+    };
+    const handleFocusOut = () => {
+      if (nativeBlurTimerRef.current !== null) {
+        window.clearTimeout(nativeBlurTimerRef.current);
+      }
+      nativeBlurTimerRef.current = window.setTimeout(() => {
+        nativeBlurTimerRef.current = null;
+        const nextElement = resolveTextEntryElement(document.activeElement);
+        if (nextElement) {
+          beginNativeFocusSession(nextElement);
+        } else {
+          clearNativeFocusSession();
+        }
+      }, 0);
+    };
+    const handleViewportChange = () => {
+      if (focusedElementRef.current) {
+        queueNativeMeasurement();
+      } else {
+        nativeSessionBaselineRef.current = Math.max(
+          window.innerHeight,
+          getVisualViewportBottom(),
+        );
+      }
+    };
+    const handleOrientationChange = () => {
+      nativeSessionBaselineRef.current = Math.max(
+        window.innerHeight,
+        getVisualViewportBottom(),
+      );
+      setNativeMetrics({ visible: false, height: 0 });
+      if (focusedElementRef.current) queueNativeMeasurement();
+    };
+
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("focusout", handleFocusOut);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("orientationchange", handleOrientationChange);
+    window.visualViewport?.addEventListener("resize", handleViewportChange);
+    window.visualViewport?.addEventListener("scroll", handleViewportChange);
+
+    return () => {
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("focusout", handleFocusOut);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      window.visualViewport?.removeEventListener("resize", handleViewportChange);
+      window.visualViewport?.removeEventListener("scroll", handleViewportChange);
+      if (nativeMeasureFrameRef.current !== null) {
+        window.cancelAnimationFrame(nativeMeasureFrameRef.current);
+      }
+      if (nativeBlurTimerRef.current !== null) {
+        window.clearTimeout(nativeBlurTimerRef.current);
+      }
+    };
+  }, [
+    beginNativeFocusSession,
+    clearNativeFocusSession,
+    native,
+    queueNativeMeasurement,
+  ]);
+
   const setDragOffset = (offset: number) => {
     setRawDragOffset(Math.max(0, Math.min(fullHeight, offset)));
   };
+
+  const show = useCallback((element?: HTMLElement | null) => {
+    setRawDragOffset(0);
+    setDragging(false);
+    const nextElement = element ?? null;
+    if (native) {
+      if (nextElement && resolveTextEntryElement(nextElement)) {
+        beginNativeFocusSession(nextElement);
+      }
+      return;
+    }
+    focusedElementRef.current = nextElement;
+    setFocusedElement(nextElement);
+    setSimulatedVisible(true);
+  }, [beginNativeFocusSession, native]);
+
+  const hide = useCallback(() => {
+    focusedElementRef.current?.blur();
+    setDragging(false);
+    if (native) {
+      clearNativeFocusSession();
+      return;
+    }
+    focusedElementRef.current = null;
+    setFocusedElement(null);
+    setSimulatedVisible(false);
+  }, [clearNativeFocusSession, native]);
 
   const value = useMemo<KeyboardContextValue>(
     () => ({
@@ -56,20 +261,10 @@ export function KeyboardProvider({ children, native = false }: PropsWithChildren
       focusedElement,
       setDragOffset,
       setDragging,
-      show: (element) => {
-        setRawDragOffset(0);
-        setDragging(false);
-        setFocusedElement(element ?? null);
-        setVisible(!native);
-      },
-      hide: () => {
-        focusedElement?.blur();
-        setDragging(false);
-        setFocusedElement(null);
-        setVisible(false);
-      },
+      show,
+      hide,
     }),
-    [dragOffset, focusedElement, fullHeight, isDragging, native, visible],
+    [dragOffset, focusedElement, fullHeight, hide, isDragging, show, visible],
   );
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>;

@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "check:runtime": "node scripts/check-mobile-runtime.mjs",
@@ -13,7 +13,7 @@
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:pwa": "node --test tests/pwa-contract.test.mjs",
     "test:pwa:production": "node scripts/run-pwa-tests.mjs",
-    "test:quality": "npm run check:runtime && npm run test:auth && npm run test:migration && npm run test:runtime && npm run test:sites && npm run test:pwa && npm run build && npm run test:pwa:production",
+    "test:quality": "npm run check:runtime && npm run test:auth && npm run test:migration && npm run test:runtime && npm run test:pwa && npm run build && npm run test:sites && npm run test:pwa:production",
     "predev": "npm run check:runtime",
     "dev": "vite",
     "prebuild": "npm run check:runtime",
@@ -34,6 +34,7 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
+    "postcss": "8.5.24",
     "typescript": "7.0.2",
     "vite": "8.1.3"
   }

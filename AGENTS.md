@@ -16,7 +16,7 @@ Codex bu depoda çalışırken önce `PROJECT.md` ve `docs/` klasöründeki belg
 
 ## Ana hedef
 
-Telefonlarda tam ekran çalışan, çevrimdışı kullanılabilen, yerel öncelikli bir okul öncesi öğretmen PWA’sı geliştir. Uygulama içine üretken yapay zekâ gömme. Bunun yerine yapılandırılmış analiz paketleri üret.
+Telefonlarda tam ekran çalışan, çevrim dışı kullanılabilen, yerel öncelikli bir okul öncesi öğretmen PWA’sı geliştir. Uygulama içine üretken yapay zekâ gömme. Bunun yerine yapılandırılmış analiz paketleri üret.
 
 ## Değişmez ürün ilkeleri
 
@@ -24,7 +24,7 @@ Telefonlarda tam ekran çalışan, çevrimdışı kullanılabilen, yerel önceli
 2. Öğretmenin ham gözlemi ayrı ve değişmeden saklanır.
 3. Gözlem, yorum ve yapay zekâ çıktısı birbirine karıştırılmaz.
 4. Çocuk verileri varsayılan olarak cihazda kalır.
-5. Uygulama çevrimdışı çalışmalıdır.
+5. Uygulama çevrim dışı çalışmalıdır.
 6. Yedekleme ve geri yükleme temel özellik, sonradan eklenecek yardımcı özellik değildir.
 7. MVP’de yüz tanıma yoktur.
 8. MVP’de uygulama içine ChatGPT/OpenAI API entegrasyonu yoktur.
@@ -67,7 +67,7 @@ Her görevde:
 3. Değiştirilecek dosyaları belirt.
 4. Kodu uygula.
 5. Testleri yaz ve çalıştır.
-6. Çevrimdışı davranışı kontrol et.
+6. Çevrim dışı davranışı kontrol et.
 7. Mobil görünümü kontrol et.
 8. Yapılan işi ve kalan riskleri özetle.
 
@@ -90,7 +90,7 @@ Her görevde:
 
 Bir özellik ancak aşağıdakilerin tamamı sağlanırsa bitmiş sayılır:
 - Mobil ekranda kullanılabilir
-- İnternetsiz çalışır veya çevrimdışı sınırı açıkça gösterilir
+- İnternetsiz çalışır veya çevrim dışı sınırı açıkça gösterilir
 - Veri kaybı senaryosu test edilmiştir
 - Testleri geçer
 - Türkçe hata mesajları vardır
