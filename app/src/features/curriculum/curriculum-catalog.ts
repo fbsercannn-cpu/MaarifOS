@@ -2,6 +2,16 @@ import type {
   CurriculumFramework,
   CurriculumProfileSnapshot,
 } from "../evidence/evidence-flow.ts";
+import {
+  TYMM_2024_AGE_BANDS,
+  TYMM_2024_CATALOG_METADATA,
+  TYMM_2024_LEARNING_OUTCOMES,
+  type Tymm2024AgeBand,
+} from "./tymm-2024-catalog.ts";
+
+export type CurriculumAgeBand = Tymm2024AgeBand;
+
+export const CURRICULUM_AGE_BANDS = TYMM_2024_AGE_BANDS;
 
 export type CurriculumTargetKind =
   | "learning-outcome"
@@ -34,6 +44,8 @@ export interface CurriculumTargetDefinition {
   referenceTitle: string;
   kind: CurriculumTargetKind;
   domain: string;
+  ageBands?: readonly CurriculumAgeBand[];
+  sourcePage?: number;
   parentCode?: string;
   sourceUrl: string;
   sourceLabel: string;
@@ -44,7 +56,8 @@ export interface CurriculumTargetDefinition {
     | "teacher-declared-unverified";
 }
 
-export interface CurriculumTargetSnapshot extends CurriculumTargetDefinition {
+export interface CurriculumTargetSnapshot
+  extends Omit<CurriculumTargetDefinition, "ageBands" | "sourcePage"> {
   catalogId: string;
   sourceVersion: string;
   referenceOrigin: CurriculumProfileSnapshot["referenceOrigin"];
@@ -61,8 +74,8 @@ export interface PlannedCurriculumAssignment {
 
 export const OFFICIAL_STARTER_CATALOG_PROFILES = {
   tymm: {
-    catalogId: "meb-tymm-okul-oncesi-2024-partial",
-    sourceVersion: "2024",
+    catalogId: TYMM_2024_CATALOG_METADATA.catalogId,
+    sourceVersion: TYMM_2024_CATALOG_METADATA.sourceVersion,
   },
   meb_2024: {
     catalogId: "meb-okul-oncesi-egitim-programi-2024-partial",
@@ -119,11 +132,10 @@ export const CURRICULUM_ASSESSMENT_LEVELS: ReadonlyArray<{
   },
 ];
 
-const TYMM_SOURCE =
-  "https://tymm.meb.gov.tr/okul-oncesi/unite/479";
+const TYMM_SOURCE = TYMM_2024_CATALOG_METADATA.sourceUrl;
 const MEB_2024_SOURCE =
   "https://tegm.meb.gov.tr/dosya/okuloncesi/guncellenenokuloncesiegitimprogrami.pdf";
-const SOURCE_CHECKED_ON = "2026-07-27";
+const SOURCE_CHECKED_ON = TYMM_2024_CATALOG_METADATA.sourceCheckedOn;
 
 /**
  * Bu liste tam resmî katalog değildir. İlk güvenli dikey akışta seçme, sınıfa
@@ -358,25 +370,94 @@ const STARTER_CURRICULUM_TARGET_DEFINITIONS: readonly Omit<
   },
 ];
 
-export const STARTER_CURRICULUM_TARGETS: readonly CurriculumTargetDefinition[] =
-  STARTER_CURRICULUM_TARGET_DEFINITIONS.map((target) => ({
-    ...target,
-    catalogCompleteness: "partial",
+const TYMM_2024_CURRICULUM_TARGETS: readonly CurriculumTargetDefinition[] =
+  TYMM_2024_LEARNING_OUTCOMES.map((outcome) => ({
+    id: `tymm-2024-${outcome.ageBand}-${outcome.code
+      .toLocaleLowerCase("tr-TR")
+      .replaceAll(".", "-")
+      .replaceAll("ç", "c")}`,
+    framework: "tymm",
+    referenceCode: outcome.code,
+    referenceTitle: outcome.title,
+    kind: "learning-outcome",
+    domain: outcome.domain,
+    ageBands: [outcome.ageBand],
+    sourcePage: outcome.sourcePage,
+    sourceUrl: TYMM_2024_CATALOG_METADATA.sourceUrl,
+    sourceLabel: `${TYMM_2024_CATALOG_METADATA.sourceDocumentTitle} · Ek 1 Alan Matrisi · s. ${outcome.sourcePage}`,
+    sourceCheckedOn: TYMM_2024_CATALOG_METADATA.sourceCheckedOn,
+    catalogCompleteness: "complete",
     verificationStatus: "official-source-checked",
   }));
 
+const MEB_2024_PARTIAL_CURRICULUM_TARGETS =
+  STARTER_CURRICULUM_TARGET_DEFINITIONS.filter(
+    (target) => target.framework === "meb_2024",
+  ).map((target) => ({
+    ...target,
+    catalogCompleteness: "partial" as const,
+    verificationStatus: "official-source-checked" as const,
+  }));
+
+export const STARTER_CURRICULUM_TARGETS: readonly CurriculumTargetDefinition[] =
+  [
+    ...TYMM_2024_CURRICULUM_TARGETS,
+    ...MEB_2024_PARTIAL_CURRICULUM_TARGETS,
+  ];
+
+export function curriculumAgeBandFromLabel(
+  value: string | null | undefined,
+): CurriculumAgeBand | null {
+  if (!value) return null;
+  const normalized = value
+    .replaceAll("–", "-")
+    .replaceAll("—", "-")
+    .replace(/\s+/g, "")
+    .toLocaleLowerCase("tr-TR");
+  return (
+    CURRICULUM_AGE_BANDS.find(
+      (ageBand) =>
+        normalized === ageBand ||
+        normalized === `${ageBand}ay`,
+    ) ?? null
+  );
+}
+
+export function curriculumTargetsForAgeBand(
+  targets: readonly CurriculumTargetDefinition[],
+  ageBand: CurriculumAgeBand,
+): CurriculumTargetDefinition[] {
+  return targets.filter(
+    (target) =>
+      target.ageBands === undefined || target.ageBands.includes(ageBand),
+  );
+}
+
 export function curriculumTargetsForProfile(
   profile: CurriculumProfileSnapshot,
+  ageBand?: CurriculumAgeBand,
 ): CurriculumTargetSnapshot[] {
-  return STARTER_CURRICULUM_TARGETS
-    .filter((target) => target.framework === profile.framework)
-    .map((target) => ({
-      ...target,
+  const frameworkTargets = STARTER_CURRICULUM_TARGETS.filter(
+    (target) => target.framework === profile.framework,
+  );
+  const targets = ageBand
+    ? curriculumTargetsForAgeBand(frameworkTargets, ageBand)
+    : frameworkTargets;
+
+  return targets.map((target) => {
+    const {
+      ageBands: _ageBands,
+      sourcePage: _sourcePage,
+      ...snapshotTarget
+    } = target;
+    return {
+      ...snapshotTarget,
       catalogId: profile.catalogId,
       sourceVersion: profile.sourceVersion,
       referenceOrigin: profile.referenceOrigin,
       officialCatalogVerified: profile.officialCatalogVerified,
-    }));
+    };
+  });
 }
 
 export function isCurriculumAssessmentLevel(

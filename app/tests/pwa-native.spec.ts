@@ -20,9 +20,14 @@ async function configureNativeClassroom(page: Page) {
 
 async function createPortfolioObservation(page: Page, text: string) {
   await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
+  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
   const activityTitle = page.getByLabel("Etkinlik adı");
   if (await activityTitle.isVisible().catch(() => false)) {
     await activityTitle.fill("Kurgu portfolyo etkinliği");
+    await page
+      .getByRole("region", { name: "Program alanları" })
+      .getByRole("button", { name: "Fen", exact: true })
+      .click();
     await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
     await page
       .getByRole("button", { name: "Planı kaydet ve etkinliği başlat" })
@@ -49,7 +54,7 @@ test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerl
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(page.getByText("Günün akışı", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Bugünkü devam/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Program bağlantısı/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sınıf takvimi/ })).toBeVisible();
   await expect(page.locator(".today-header")).toHaveCSS("border-radius", "22px");
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();

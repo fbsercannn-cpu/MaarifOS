@@ -234,7 +234,6 @@ function buildAiInstruction(
     "Yalnız verilen tarihli kanıtlara dayan; gözlem ile yorumu açıkça ayır.",
     "Tanı, teşhis, kesin gelişim hükmü veya çocuklar arası karşılaştırma üretme.",
     "Her önemli ifadeyi tarihli kanıtla ilişkilendir; veri yetersizse açıkça belirt.",
-    "Kişisel iletişim bilgilerini yanıtında tekrar etme.",
     "Yanıtı öğretmenin son incelemesine uygun, doğal ve mesleki Türkçe ile yaz.",
     "",
   ];

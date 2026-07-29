@@ -63,16 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.6.0",
+  version: "0.7.0",
   releasedOn: "2026-07-29",
-  title: "2026–2027 takvimi ve öğrenci paylaşım merkezi",
+  title: "Sade kayıt akışı ve tam TYMM öğrenme çıktıları",
   notes: Object.freeze([
-    "MEB 2026–2027 çalışma takvimi, 7–11 Eylül okul öncesi uyum günleri ve dönem tarihleriyle sınıf takvimine eklendi.",
-    "Veli toplantısı, meyve günü, etkinlik ve genel sınıf notları takvimde gün gün işaretlenebilir.",
-    "Yeni eğitim yılına geçiş eski yılı arşivler, öğrencileri yeni kapsama taşır ve önceki kanıtları kendi yılında korur.",
-    "Arşivlenen öğrenci geri alınabilir veya ad doğrulaması ve etki özetiyle kalıcı olarak silinebilir.",
-    "Öğrenci dosyası WhatsApp, okul idaresi, rehberlik, ChatGPT veya Gemini amacına göre hazırlanabilir; haricî yapay zekâ geri bildirimi dönem ve yıl sonu için öğrenciye kaydedilebilir.",
-    "Takvim ve haricî geri bildirim kayıtları V4 yedekleme, geri yükleme ve IndexedDB geçiş kapsamına alındı.",
+    "Kayıt Ekle artık gözlem, yoklama, etkinlik planı ve takvim notunu tek dokunuşla seçtiren sade menüyü açar.",
+    "Hızlı gözlem ana akışı öğrenci seç, yaz ve kaydet olarak kısaltıldı; tür, alan, bağlam ve çocuk sözü isteğe bağlı ayrıntıya taşındı.",
+    "TYMM 2024 okul öncesi alan matrislerindeki 210 öğrenme çıktısı, yedi alan ve üç yaş bandında kaynak digest’iyle sürümlendi.",
+    "Plan hedefleri sınıfın 36–48, 48–60 veya 60–72 ay yaş grubuna göre filtrelenir ve alan seçimiyle hızlıca daraltılır.",
+    "Öğrenci dosyası tam kimlik ve iletişim bilgileriyle hazırlanır; ChatGPT veya Gemini metni uygulama içindeki düzenlenebilir yazma alanına yerleştirilir.",
+    "Arşivleme, öğrenci kalıcı silme ve cihazdaki bütün verileri doğrulamalı biçimde kalıcı silme yolları görünür hâle getirildi.",
   ]),
 });
 

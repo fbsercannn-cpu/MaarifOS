@@ -5862,3 +5862,106 @@ button {
     flex-wrap: wrap;
   }
 }
+.capture-choice-grid {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.25rem 0 1.5rem;
+}
+
+.capture-choice-grid > button {
+  align-items: center;
+  background: var(--surface, #fff);
+  border: 1px solid color-mix(in srgb, var(--ink, #17342d) 13%, transparent);
+  border-radius: 1rem;
+  color: inherit;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  min-height: 4.5rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.capture-choice-grid > button > svg:first-child {
+  color: var(--brand, #1d7567);
+  height: 1.45rem;
+  width: 1.45rem;
+}
+
+.capture-choice-grid span {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.capture-choice-grid small {
+  color: var(--muted, #62726d);
+}
+
+.plan-optional-details,
+.student-share-options {
+  margin-top: 0.75rem;
+}
+
+.quick-detail-label {
+  color: var(--muted, #62726d);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.quick-details-fields .quick-type-grid,
+.quick-details-fields .quick-category-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quick-details-fields .quick-type-grid button,
+.quick-details-fields .quick-category-track button {
+  min-height: 2.75rem;
+}
+
+.ai-workspace-section textarea {
+  min-height: 15rem;
+}
+
+.ai-workspace-actions {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-workspace-actions button {
+  align-items: center;
+  border-radius: 0.85rem;
+  display: flex;
+  font-weight: 700;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 3rem;
+}
+
+.security-danger-zone {
+  border-color: color-mix(in srgb, #b42318 30%, transparent);
+}
+
+.security-danger-zone > summary {
+  align-items: center;
+  color: #8f1d16;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  list-style: none;
+}
+
+.security-danger-zone > summary span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+@media (max-width: 360px) {
+  .ai-workspace-actions {
+    grid-template-columns: 1fr;
+  }
+}

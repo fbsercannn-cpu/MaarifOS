@@ -53,12 +53,12 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.6.0");
+  await expect(updateDialog).toContainText("Sürüm 0.7.0");
   await expect(updateDialog).toContainText("29 Temmuz 2026");
   await expect(updateDialog).toContainText(
-    "2026–2027 takvimi ve öğrenci paylaşım merkezi",
+    "Sade kayıt akışı ve tam TYMM öğrenme çıktıları",
   );
-  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.6.0");
+  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.7.0");
   await expect(updateDialog).toContainText("Kayıtlarınız korundu");
   await updateDialog.getByRole("button", {
     name: "Harika, başlayalım",
@@ -74,13 +74,13 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.6.0");
+  await expect(settings).toContainText("MaarifOS 0.7.0");
   await expect(settings).toContainText("29 Temmuz 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "MEB 2026–2027 çalışma takvimi",
+    "Kayıt Ekle artık gözlem, yoklama, etkinlik planı",
   );
 });
 
@@ -99,8 +99,8 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", as
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.6.0");
-  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.6.0");
+  await expect(updateDialog).toContainText("Sürüm 0.7.0");
+  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.7.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({

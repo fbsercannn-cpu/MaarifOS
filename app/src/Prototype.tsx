@@ -129,6 +129,7 @@ import {
   CURRICULUM_ASSESSMENT_LEVELS,
   CURRICULUM_TARGET_KIND_LABELS,
   OFFICIAL_STARTER_CATALOG_PROFILES,
+  curriculumAgeBandFromLabel,
   curriculumTargetsForProfile,
   type CurriculumAssessmentLevel,
   type CurriculumAssignmentMode,
@@ -181,6 +182,7 @@ import {
   inspectCurrentRelease,
   PWA_UPDATE_READY_EVENT,
 } from "./release";
+import { COLLECTION_NAMES } from "./core/domain/model";
 
 const initialStudents: Student[] = [];
 
@@ -449,7 +451,7 @@ function curriculumCatalogDisplayLabel(label: string | undefined): string {
   if (!label) return "Katalog belirtilmedi";
   const normalized = label.toLocaleLowerCase("tr-TR");
   if (normalized.includes("meb-tymm-okul-oncesi-2024")) {
-    return "2024 Maarif Modeli başlangıç kataloğu";
+    return "TYMM 2024 · tam öğrenme çıktıları";
   }
   if (normalized.includes("meb-okul-oncesi-egitim-programi-2024")) {
     return "EÇE · 2024 başlangıç kataloğu";
@@ -693,6 +695,7 @@ function PlanCreationScreen({
   civilDate,
   defaultStartTime,
   defaultEndTime,
+  ageGroup,
   curriculumProfile,
   students,
   onCreate,
@@ -700,6 +703,7 @@ function PlanCreationScreen({
   civilDate: string;
   defaultStartTime: string;
   defaultEndTime: string;
+  ageGroup: string;
   curriculumProfile: CurriculumProfileSnapshot;
   students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
@@ -714,32 +718,50 @@ function PlanCreationScreen({
   const [endTime, setEndTime] = useState(defaultEndTime);
   const [suggestionArea, setSuggestionArea] =
     useState<PreschoolActivityArea>("all");
+  const curriculumAgeBand = curriculumAgeBandFromLabel(ageGroup);
   const availableTargets = useMemo(
-    () => curriculumTargetsForProfile(curriculumProfile),
-    [curriculumProfile],
+    () =>
+      curriculumTargetsForProfile(
+        curriculumProfile,
+        curriculumAgeBand ?? undefined,
+      ),
+    [curriculumAgeBand, curriculumProfile],
   );
   const [targetQuery, setTargetQuery] = useState("");
+  const [targetDomain, setTargetDomain] = useState("");
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [assignmentMode, setAssignmentMode] =
     useState<CurriculumAssignmentMode>("whole-class");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const targetDomains = useMemo(
+    () => Array.from(new Set(availableTargets.map((target) => target.domain))),
+    [availableTargets],
+  );
   const visibleTargets = useMemo(() => {
     const query = targetQuery.trim().toLocaleLowerCase("tr-TR");
-    if (!query) return availableTargets;
-    return availableTargets.filter((target) =>
-      [
-        target.referenceCode,
-        target.referenceTitle,
-        target.domain,
-        CURRICULUM_TARGET_KIND_LABELS[target.kind],
-      ]
-        .join(" ")
-        .toLocaleLowerCase("tr-TR")
-        .includes(query),
-    );
-  }, [availableTargets, targetQuery]);
+    if (!query && !targetDomain) return [];
+    return availableTargets
+      .filter(
+        (target) =>
+          !targetDomain || target.domain === targetDomain,
+      )
+      .filter(
+        (target) =>
+          !query ||
+          [
+            target.referenceCode,
+            target.referenceTitle,
+            target.domain,
+            CURRICULUM_TARGET_KIND_LABELS[target.kind],
+          ]
+            .join(" ")
+            .toLocaleLowerCase("tr-TR")
+            .includes(query),
+      )
+      .slice(0, 16);
+  }, [availableTargets, targetDomain, targetQuery]);
   const selectedTargets = availableTargets.filter((target) =>
     selectedTargetIds.includes(target.id),
   );
@@ -790,18 +812,17 @@ function PlanCreationScreen({
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">Bugünün uygulama kaydı</span>
-          <h1>Planı sınıfta kullanacağınız kadar açık yazın.</h1>
-          <p>Etkinlik kaydedildiğinde başlayacak; gözlem notları doğrudan bu etkinliğe bağlanacak.</p>
+          <h1>Bir etkinlik ve bir program hedefi seçin.</h1>
+          <p>İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz.</p>
         </div>
 
         <section className="d1-context-card" aria-label="Plan bağlamı">
           <span>{formatTurkishCivilDate(civilDate)}</span>
           <strong>{curriculumDisplayLabel(curriculumProfile)}</strong>
-          <small>{curriculumProfile.catalogId} · {curriculumProfile.sourceVersion}</small>
           <em>
             {curriculumProfile.officialCatalogVerified
-              ? "Resmî MEB kaynaklarıyla eşleşen kısmi başlangıç kataloğu"
-              : "Hedef başlıkları resmî kaynaktan; sınıf katalog kimliği öğretmen beyanı"}
+              ? "Resmî MEB kaynağıyla doğrulanmış program"
+              : "Sınıf için seçilen program"}
           </em>
         </section>
 
@@ -811,11 +832,10 @@ function PlanCreationScreen({
               <span className="d1-kicker">Oyun temelli fikir havuzu</span>
               <h2 id="plan-ideas-title">Bugün neyi keşfedelim?</h2>
             </div>
-            <strong>{PRESCHOOL_ACTIVITY_SUGGESTIONS.length} fikir</strong>
+            <strong>Birini seçin</strong>
           </div>
           <p>
-            Bir başlangıç seçin; etkinlik adını dolduralım. Program hedefini
-            aşağıdan öğretmen olarak siz belirlersiniz.
+            Alanı seçin, ardından bir etkinliğe dokunun.
           </p>
           <Carousel
             className="plan-area-carousel"
@@ -838,7 +858,7 @@ function PlanCreationScreen({
             contentClassName="plan-suggestion-track"
             ariaLabel="Etkinlik fikirleri"
           >
-            {visibleActivitySuggestions.map((suggestion) => (
+            {visibleActivitySuggestions.slice(0, 8).map((suggestion) => (
               <button
                 type="button"
                 className="plan-suggestion"
@@ -861,14 +881,6 @@ function PlanCreationScreen({
         </section>
 
         <div className="d1-form">
-          <label htmlFor="d1-plan-title">Plan başlığı</label>
-          <KeyboardInput
-            id="d1-plan-title"
-            value={planTitle}
-            onChange={(event) => setPlanTitle(event.target.value)}
-            autoComplete="off"
-          />
-
           <label htmlFor="d1-activity-title">Etkinlik adı</label>
           <KeyboardInput
             id="d1-activity-title"
@@ -879,24 +891,43 @@ function PlanCreationScreen({
             autoFocus
           />
 
-          <div className="d1-form-grid">
-            <label htmlFor="d1-start-time">Başlangıç
-              <input
-                id="d1-start-time"
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
+          <details className="quick-details plan-optional-details">
+            <summary>
+              <span>
+                <ClockIcon aria-hidden="true" />
+                <strong>Başlık ve saati değiştir</strong>
+                <small>İsteğe bağlı</small>
+              </span>
+              <ChevronDownIcon aria-hidden="true" />
+            </summary>
+            <div className="quick-details-fields">
+              <label htmlFor="d1-plan-title">Plan başlığı</label>
+              <KeyboardInput
+                id="d1-plan-title"
+                value={planTitle}
+                onChange={(event) => setPlanTitle(event.target.value)}
+                autoComplete="off"
               />
-            </label>
-            <label htmlFor="d1-end-time">Bitiş
-              <input
-                id="d1-end-time"
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-              />
-            </label>
-          </div>
+              <div className="d1-form-grid">
+                <label htmlFor="d1-start-time">Başlangıç
+                  <input
+                    id="d1-start-time"
+                    type="time"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="d1-end-time">Bitiş
+                  <input
+                    id="d1-end-time"
+                    type="time"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
         </div>
 
         <section className="curriculum-picker" aria-labelledby="curriculum-picker-title">
@@ -913,6 +944,22 @@ function PlanCreationScreen({
             placeholder="Kod, başlık veya alan ara"
             aria-label="Program hedeflerinde ara"
           />
+          <Carousel
+            className="plan-area-carousel"
+            contentClassName="plan-area-track"
+            ariaLabel="Program alanları"
+          >
+            {targetDomains.map((domain) => (
+              <button
+                type="button"
+                key={domain}
+                aria-pressed={targetDomain === domain}
+                onClick={() => setTargetDomain(domain)}
+              >
+                {domain}
+              </button>
+            ))}
+          </Carousel>
           <div className="curriculum-target-list" role="group" aria-label="Program hedefleri">
             {visibleTargets.map((target) => {
               const selected = selectedTargetIds.includes(target.id);
@@ -941,18 +988,22 @@ function PlanCreationScreen({
             })}
           </div>
           <p className="catalog-scope-note">
-            Bu aşamada görünen liste tam resmî katalog değildir. Her öğenin kaynağı
-            kayıtla birlikte saklanır; katalog genişledikçe eski planlar değişmez.
+            {targetDomain || targetQuery.trim()
+              ? "İlk 16 eşleşme gösterilir; arayarak daha da daraltabilirsiniz."
+              : "Önce bir program alanına dokunun veya hedef kodunu arayın."}
           </p>
         </section>
 
-        <section className="curriculum-picker" aria-labelledby="assignment-title">
-          <div className="curriculum-section-heading">
-            <div>
-              <span className="d1-kicker">Takip kapsamı</span>
-              <h2 id="assignment-title">Kimler için planlansın?</h2>
-            </div>
-          </div>
+        <details className="quick-details plan-optional-details">
+          <summary>
+            <span>
+              <PersonIcon aria-hidden="true" />
+              <strong>Çocuk kapsamı</strong>
+              <small>{assignmentMode === "whole-class" ? "Tüm sınıf" : `${assignedStudentIds.length} çocuk`}</small>
+            </span>
+            <ChevronDownIcon aria-hidden="true" />
+          </summary>
+          <div className="quick-details-fields">
           <div className="assignment-mode" role="radiogroup" aria-label="Öğrenci kapsamı">
             <label>
               <input
@@ -996,9 +1047,9 @@ function PlanCreationScreen({
           <div className="assignment-summary" aria-live="polite">
             <strong>{selectedTargets.length} hedef × {assignedStudentIds.length} çocuk</strong>
             <span>{assignmentCount} planlı takip kaydı açılacak.</span>
-            <small>Bu işlem “öğrendi” veya “başardı” kaydı oluşturmaz.</small>
           </div>
-        </section>
+          </div>
+        </details>
 
         {error ? <p className="d1-error" role="alert">{error}</p> : null}
         <button
@@ -1024,6 +1075,7 @@ function PlanCreationFlow({
   civilDate,
   defaultStartTime,
   defaultEndTime,
+  ageGroup,
   curriculumProfile,
   students,
   onCreate,
@@ -1032,6 +1084,7 @@ function PlanCreationFlow({
   civilDate: string;
   defaultStartTime: string;
   defaultEndTime: string;
+  ageGroup: string;
   curriculumProfile: CurriculumProfileSnapshot;
   students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
@@ -1048,6 +1101,7 @@ function PlanCreationFlow({
           civilDate={civilDate}
           defaultStartTime={defaultStartTime}
           defaultEndTime={defaultEndTime}
+          ageGroup={ageGroup}
           curriculumProfile={curriculumProfile}
           students={students}
           onCreate={onCreate}
@@ -1056,6 +1110,7 @@ function PlanCreationFlow({
     }),
     [
       civilDate,
+      ageGroup,
       curriculumProfile,
       defaultEndTime,
       defaultStartTime,
@@ -1710,7 +1765,8 @@ function EvidenceCaptureScreen({
             <section className="quick-student-section" aria-labelledby="quick-student-heading">
               <div className="quick-section-heading">
                 <div>
-                  <h1 id="quick-student-heading">Gözlem kapsamı</h1>
+                  <span className="d1-kicker">1 · Öğrenciyi seç</span>
+                  <h1 id="quick-student-heading">Kimin için yazıyorsunuz?</h1>
                 </div>
                 {selectedStudentCount > 0 ? (
                   <strong>
@@ -1722,40 +1778,6 @@ function EvidenceCaptureScreen({
                   <small>Zorunlu</small>
                 )}
               </div>
-              <div className="quick-scope-switch" role="group" aria-label="Gözlem kapsamı">
-                <button
-                  type="button"
-                  aria-pressed={selectionMode === "single"}
-                  onClick={() => void chooseSingleMode()}
-                  disabled={busy}
-                >
-                  Bir çocuk
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={selectionMode === "selected-children"}
-                  onClick={() => void chooseGroupMode()}
-                  disabled={busy}
-                >
-                  Seçili çocuklar
-                </button>
-              </div>
-              {selectionMode === "selected-children" ? (
-                <div className="quick-group-toolbar">
-                  <p>
-                    Aynı olayı birlikte gözlemlediğiniz çocukları işaretleyin.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void toggleWholeClass()}
-                    disabled={busy}
-                  >
-                    {allEligibleStudentsSelected
-                      ? "Seçimi temizle"
-                      : "Tüm sınıfı seç"}
-                  </button>
-                </div>
-              ) : null}
               <Carousel
                 className="quick-student-strip"
                 contentClassName="quick-student-track"
@@ -1788,40 +1810,19 @@ function EvidenceCaptureScreen({
                   );
                 })}
               </Carousel>
-              {selectionMode === "selected-children" ? (
-                <section className="quick-group-safety" aria-label="Toplu gözlem doğrulaması">
-                  <div>
-                    <CheckCircledIcon aria-hidden="true" />
-                    <span>
-                      <strong>Toplu işlem, ayrı çocuk kanıtları</strong>
-                      <small>
-                        Not her çocuğun zaman çizelgesine ayrı ve değiştirilemez
-                        ham gözlem olarak kaydedilir.
-                      </small>
-                    </span>
-                  </div>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={groupConfirmed}
-                      onChange={(event) => setGroupConfirmed(event.target.checked)}
-                      disabled={groupStudentIds.length < 2 || busy}
-                    />
-                    Seçtiğim çocukların her birini bu olay sırasında gözlemledim.
-                  </label>
-                </section>
-              ) : null}
             </section>
 
             <section className="quick-note-card">
               <div className="quick-note-label-row">
                 <div>
-                  <label id="quick-note-heading" htmlFor="d1-observation-text">Ne oldu?</label>
+                  <span className="d1-kicker">2 · Yaz</span>
+                  <label id="quick-note-heading" htmlFor="d1-observation-text">Ne yaptı veya ne söyledi?</label>
                 </div>
                 <small>{rawText.length.toLocaleString("tr-TR")} karakter</small>
               </div>
               <KeyboardTextarea
                 id="d1-observation-text"
+                aria-label="Ne oldu?"
                 value={rawText}
                 onChange={(event) => setRawText(event.target.value)}
                 placeholder="… sırasında … yaptı / söyledi."
@@ -1842,95 +1843,46 @@ function EvidenceCaptureScreen({
                   </button>
                 ))}
               </Carousel>
-              <Carousel
-                className="quick-type-carousel"
-                contentClassName="quick-type-grid"
-                ariaLabel="Gözlem türleri"
-              >
-                {quickObservationTypes.map(({ id, label, icon: Icon }) => (
-                  <button
-                    type="button"
-                    key={id}
-                    onClick={() => setObservationType(id)}
-                    aria-pressed={observationType === id}
-                  >
-                    <Icon aria-hidden="true" />
-                    {label}
-                  </button>
-                ))}
-              </Carousel>
-            </section>
-
-            <section className="quick-choice-section" aria-labelledby="quick-category-heading">
-              <div className="quick-section-heading quick-section-heading--plain">
-                <h2 id="quick-category-heading">Gözlem alanı</h2>
-                <small>Birden çok seçilebilir</small>
-              </div>
-              <Carousel
-                className="quick-category-list"
-                contentClassName="quick-category-track"
-                ariaLabel="Gözlem alanları"
-              >
-                {quickObservationCategories.map(({ id, label, tone }) => (
-                  <button
-                    className={`quick-category-chip quick-category-chip--${tone}`}
-                    type="button"
-                    key={id}
-                    onClick={() => toggleCategory(id)}
-                    aria-pressed={categories.includes(id)}
-                  >
-                    <ChatBubbleIcon aria-hidden="true" />
-                    {label}
-                  </button>
-                ))}
-              </Carousel>
-            </section>
-
-            <section className="quick-guide-section" aria-labelledby="quick-guide-heading">
-              <div className="quick-section-heading quick-section-heading--plain">
-                <div>
-                  <span className="d1-kicker">Nötr gözlem istemleri</span>
-                  <h2 id="quick-guide-heading">
-                    {selectionMode === "selected-children"
-                      ? "Seçili çocuklar için neye bakabilirim?"
-                      : selectedStudent
-                      ? `${selectedStudent.preferredName ?? selectedStudent.name} için neye bakabilirim?`
-                      : "Neye bakabilirim?"}
-                  </h2>
-                </div>
-                <small>Olgu cümlesi üretmez</small>
-              </div>
-              <div className="quick-guide-grid">
-                {visibleObservationGuides.map((guide) => (
-                  <button
-                    type="button"
-                    key={guide}
-                    aria-pressed={observationGuide === guide}
-                    onClick={() => setObservationGuide(guide)}
-                  >
-                    <MagicWandIcon aria-hidden="true" />
-                    <span>{guide}</span>
-                  </button>
-                ))}
-              </div>
-              {observationGuide ? (
-                <p className="quick-guide-focus" role="status">
-                  <TargetIcon aria-hidden="true" />
-                  Bakış odağı: <strong>{observationGuide}</strong>
-                </p>
-              ) : null}
             </section>
 
             <details className="quick-details">
               <summary>
                 <span>
                   <ReaderIcon aria-hidden="true" />
-                  <strong>Ayrıntı ekle</strong>
-                  <small>Bağlam ve çocuğun sözü</small>
+                  <strong>İstersen ayrıntı ekle</strong>
+                  <small>Tür, alan, bağlam ve çocuk sözü</small>
                 </span>
                 <ChevronDownIcon aria-hidden="true" />
               </summary>
               <div className="quick-details-fields">
+                <span className="quick-detail-label">Gözlem türü</span>
+                <div className="quick-type-grid" role="group" aria-label="Gözlem türleri">
+                  {quickObservationTypes.map(({ id, label, icon: Icon }) => (
+                    <button
+                      type="button"
+                      key={id}
+                      onClick={() => setObservationType(id)}
+                      aria-pressed={observationType === id}
+                    >
+                      <Icon aria-hidden="true" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="quick-detail-label">Gözlem alanı</span>
+                <div className="quick-category-track" role="group" aria-label="Gözlem alanları">
+                  {quickObservationCategories.map(({ id, label, tone }) => (
+                    <button
+                      className={`quick-category-chip quick-category-chip--${tone}`}
+                      type="button"
+                      key={id}
+                      onClick={() => toggleCategory(id)}
+                      aria-pressed={categories.includes(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <label htmlFor="d1-observation-context">Bağlam / ne sırasında?</label>
                 <KeyboardInput
                   id="d1-observation-context"
@@ -2008,9 +1960,7 @@ function EvidenceLinkScreen({
   observation: EvidenceObservationSummary;
   actions: EvidenceFlowActions;
 }) {
-  const [selectedTargetId, setSelectedTargetId] = useState(
-    observation.plannedCurriculumTargets[0]?.id ?? "",
-  );
+  const [selectedTargetId, setSelectedTargetId] = useState("");
   const [legacyReferenceCode, setLegacyReferenceCode] = useState("");
   const [legacyReferenceTitle, setLegacyReferenceTitle] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -2080,6 +2030,7 @@ function EvidenceLinkScreen({
                 value={selectedTargetId}
                 onChange={(event) => setSelectedTargetId(event.target.value)}
               >
+                <option value="">Bir hedef seçin</option>
                 {observation.plannedCurriculumTargets.map((target) => (
                   <option value={target.id} key={target.id}>
                     {target.referenceCode} · {target.referenceTitle}
@@ -2475,6 +2426,7 @@ export default function Prototype() {
   const [academicYearTransitionConfirmed, setAcademicYearTransitionConfirmed] =
     useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentAddOpen, setStudentAddOpen] = useState(false);
@@ -2519,7 +2471,7 @@ export default function Prototype() {
       includeObservations: true,
       includePortfolio: true,
       includeExternalFeedback: true,
-      personalDataApprovedForAi: false,
+      personalDataApprovedForAi: true,
     });
   const [externalFeedbackForm, setExternalFeedbackForm] =
     useState<ExternalFeedbackFormState>({
@@ -2537,6 +2489,7 @@ export default function Prototype() {
     useState<ExternalAiFeedback[]>([]);
   const [lastExportPackageId, setLastExportPackageId] =
     useState<string | null>(null);
+  const [aiWorkspacePrompt, setAiWorkspacePrompt] = useState("");
   const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
   const [recoverySnapshots, setRecoverySnapshots] = useState<
     RecoverySnapshotMetadata[]
@@ -2552,6 +2505,7 @@ export default function Prototype() {
   const [backupPasswordConfirm, setBackupPasswordConfirm] = useState("");
   const [restorePassword, setRestorePassword] = useState("");
   const [secureBackupError, setSecureBackupError] = useState("");
+  const [wipeConfirmation, setWipeConfirmation] = useState("");
   const [dataBusy, setDataBusy] = useState(false);
   const [dataStatus, setDataStatus] = useState("Bu cihazdaki veriler hazırlanıyor.");
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -3425,6 +3379,35 @@ export default function Prototype() {
     } finally {
       setBackupPassword("");
       setBackupPasswordConfirm("");
+      setDataBusy(false);
+    }
+  };
+
+  const wipeAllLocalData = async () => {
+    if (wipeConfirmation !== "TÜM VERİLERİ SİL" || dataBusy) return;
+    setDataBusy(true);
+    setSecureBackupError("");
+    try {
+      await flushPendingWrites();
+      await store.transaction("readwrite", COLLECTION_NAMES, async (transaction) => {
+        for (const collection of COLLECTION_NAMES) {
+          await transaction.clear(collection);
+        }
+      });
+      const snapshots = await store.listRecoverySnapshots();
+      for (const snapshot of snapshots) {
+        await store.deleteRecoverySnapshot(snapshot.id);
+      }
+      setWipeConfirmation("");
+      setAnnouncement("Bu cihazdaki tüm MaarifOS verileri kalıcı olarak silindi.");
+      store.close();
+      window.location.reload();
+    } catch (reason) {
+      setSecureBackupError(
+        reason instanceof Error
+          ? reason.message
+          : "Cihaz verileri kalıcı olarak silinemedi.",
+      );
       setDataBusy(false);
     }
   };
@@ -4496,8 +4479,11 @@ export default function Prototype() {
       ...current,
       periodStart: configuredClassroom.academicYearStart,
       periodEnd: configuredClassroom.academicYearEnd,
-      personalDataApprovedForAi: false,
+      identityMode: "full",
+      includeContacts: true,
+      personalDataApprovedForAi: true,
     }));
+    setAiWorkspacePrompt("");
     setExternalFeedbackForm((current) => ({
       ...current,
       periodStart: configuredClassroom.academicYearStart,
@@ -4524,19 +4510,6 @@ export default function Prototype() {
 
   const prepareStudentDossier = async () => {
     if (!selectedProfileStudent || studentShareBusy) return;
-    const isAiDestination =
-      studentShareForm.destination === "chatgpt" ||
-      studentShareForm.destination === "gemini";
-    if (
-      isAiDestination &&
-      studentShareForm.identityMode === "full" &&
-      !studentShareForm.personalDataApprovedForAi
-    ) {
-      setStudentShareError(
-        "Yapay zekâya tam kimlikle göndermek için kişisel veri onayını açıkça işaretleyin veya takma ad kullanın.",
-      );
-      return;
-    }
     setStudentShareBusy(true);
     setStudentShareError("");
     try {
@@ -4583,14 +4556,18 @@ export default function Prototype() {
         studentShareForm.destination === "chatgpt" ||
         studentShareForm.destination === "gemini"
       ) {
-        await navigator.clipboard.writeText(result.dossier.text);
-        const url =
-          studentShareForm.destination === "chatgpt"
-            ? "https://chatgpt.com/"
-            : "https://gemini.google.com/app";
-        window.open(url, "_blank", "noopener,noreferrer");
+        const aiProvider: ExternalFeedbackFormState["provider"] =
+          studentShareForm.destination;
+        setAiWorkspacePrompt(result.dossier.text);
+        setExternalFeedbackForm((current) => ({
+          ...current,
+          provider: aiProvider,
+          audience: studentShareForm.audience,
+          periodStart: studentShareForm.periodStart,
+          periodEnd: studentShareForm.periodEnd,
+        }));
         setAnnouncement(
-          `Dosya panoya kopyalandı; ${studentShareForm.destination === "chatgpt" ? "ChatGPT" : "Gemini"} ekranına yapıştırın.`,
+          `${studentShareForm.destination === "chatgpt" ? "ChatGPT" : "Gemini"} için metin uygulama içindeki yazma alanına yerleştirildi.`,
         );
       } else {
         downloadText(result.dossier.fileName, result.dossier.text);
@@ -4654,6 +4631,29 @@ export default function Prototype() {
     } finally {
       setStudentShareBusy(false);
     }
+  };
+
+  const copyAiWorkspacePrompt = async () => {
+    if (!aiWorkspacePrompt.trim()) return;
+    try {
+      await navigator.clipboard.writeText(aiWorkspacePrompt);
+      setAnnouncement("Yapay zekâ yazma alanındaki metin panoya kopyalandı.");
+    } catch {
+      setStudentShareError("Metin panoya kopyalanamadı; yazma alanından elle seçebilirsiniz.");
+    }
+  };
+
+  const openSelectedAiProvider = () => {
+    const destination =
+      studentShareForm.destination === "gemini" ? "gemini" : "chatgpt";
+    const url =
+      destination === "chatgpt"
+        ? "https://chatgpt.com/"
+        : "https://gemini.google.com/app";
+    window.open(url, "_blank", "noopener,noreferrer");
+    setAnnouncement(
+      `${destination === "chatgpt" ? "ChatGPT" : "Gemini"} açıldı. Hazır metni tek dokunuşla kopyalayabilirsiniz.`,
+    );
   };
 
   const applyOfficialAcademicCalendar = () => {
@@ -5160,14 +5160,8 @@ export default function Prototype() {
   };
 
   const openCaptureEntry = () => {
-    const active =
-      evidenceWorkspace.activities.find((item) => item.status === "in_progress") ??
-      evidenceWorkspace.activities.find((item) => item.status === "planned");
-    if (active) {
-      void openActivityEvidence(active.id);
-      return;
-    }
-    openPlanFlow();
+    setCaptureMenuOpen(true);
+    setAnnouncement("Ne eklemek istediğinizi seçin.");
   };
 
   const openPendingObservation = (
@@ -5591,12 +5585,16 @@ export default function Prototype() {
               <PersonIcon aria-hidden="true" />
               <span><small>Bugünkü devam</small><strong>{counts.present + counts.late}/{students.length} çocuk</strong></span>
             </button>
-            <button className="summary-action summary-action--pending" type="button" onClick={() => {
-              if (todayWorkspace.pendingEvidenceLinks > 0) openPendingObservation();
-              else setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
-            }}>
-              <ClockIcon aria-hidden="true" />
-              <span><small>Program bağlantısı</small><strong>{todayWorkspace.pendingEvidenceLinks} gözlem bekliyor</strong></span>
+            <button
+              className="summary-action"
+              type="button"
+              onClick={() => void openAcademicCalendar()}
+            >
+              <CalendarIcon aria-hidden="true" />
+              <span>
+                <small>Sınıf takvimi</small>
+                <strong>Takvimi aç</strong>
+              </span>
             </button>
           </section>
 
@@ -5744,10 +5742,10 @@ export default function Prototype() {
                 ))}
               </div>
             ) : null}
-            {todayWorkspace.pendingEvidenceLinks > 0 ? (
+            {evidenceWorkspace.pendingObservations.length > 0 ? (
               <button className="pending-link" type="button" onClick={() => openPendingObservation()}>
                 <ClockIcon aria-hidden="true" />
-                <span>Program bağlantısı bekleyen {todayWorkspace.pendingEvidenceLinks} gözlem</span>
+                <span>Program bağlantısı bekleyen {evidenceWorkspace.pendingObservations.length} gözlem</span>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
             ) : null}
@@ -5778,6 +5776,80 @@ export default function Prototype() {
           <ArchiveIcon aria-hidden="true" /><span>Belgeler</span>
         </button>
       </nav>
+
+      <BottomSheet
+        open={captureMenuOpen}
+        onOpenChange={setCaptureMenuOpen}
+        title="Ne ekleyelim?"
+        description="Bir işlem seçin; yalnız gerekli alanlar açılır."
+        snap={0.58}
+      >
+        <div className="capture-choice-grid">
+          <button
+            type="button"
+            onClick={() => {
+              setCaptureMenuOpen(false);
+              if (students.length === 1) {
+                void openStudentObservation(students[0].id);
+              } else {
+                setChildrenOpen(true);
+                setAnnouncement("Gözlem yazacağınız öğrenciyi seçin.");
+              }
+            }}
+          >
+            <Pencil1Icon aria-hidden="true" />
+            <span>
+              <strong>Gözlem yaz</strong>
+              <small>Öğrenci seç → yaz → kaydet</small>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCaptureMenuOpen(false);
+              changeAttendanceOpen(true);
+            }}
+          >
+            <CheckCircledIcon aria-hidden="true" />
+            <span>
+              <strong>Yoklama al</strong>
+              <small>Çocuklara dokunarak işaretle</small>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              d1ReturnFocusRef.current =
+                document.querySelector<HTMLElement>(".nav-add");
+              setCaptureMenuOpen(false);
+              openPlanFlow();
+            }}
+          >
+            <ReaderIcon aria-hidden="true" />
+            <span>
+              <strong>Etkinlik planla</strong>
+              <small>Fikir seç → hedef seç → başlat</small>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCaptureMenuOpen(false);
+              void openAcademicCalendar();
+            }}
+          >
+            <CalendarIcon aria-hidden="true" />
+            <span>
+              <strong>Takvime not ekle</strong>
+              <small>Toplantı, meyve günü veya etkinlik</small>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet
         open={classroomOpen}
@@ -5943,9 +6015,10 @@ export default function Prototype() {
             </label>
           </div>
           <p className="classroom-provenance-note">
-            Programı siz seçtiğinizde resmî MEB başlangıç kataloğu önerilir.
-            Kimlik veya sürümü değiştirirseniz kayıt öğretmen beyanı olarak
-            işaretlenir; seçim yapılmadan planlama açılmaz.
+            TYMM seçiminde resmî okul öncesi alan matrislerindeki tam öğrenme
+            çıktıları; EÇE/2024 seçiminde başlangıç kataloğu önerilir. Kimlik
+            veya sürümü değiştirirseniz kayıt öğretmen beyanı olarak
+            işaretlenir.
           </p>
 
           <div className="settings-grid">
@@ -6366,6 +6439,20 @@ export default function Prototype() {
               </button>
             ))}
           </div>
+          {students.length + archivedStudents.length === 0 ? (
+            <button
+              className="sheet-primary"
+              type="button"
+              onClick={() => {
+                setDocumentsOpen(false);
+                setChildrenOpen(true);
+                setStudentAddOpen(true);
+              }}
+            >
+              <PlusIcon aria-hidden="true" />
+              İlk öğrenciyi ekle
+            </button>
+          ) : null}
         </section>
       </BottomSheet>
 
@@ -6712,7 +6799,7 @@ export default function Prototype() {
                           disabled={dataBusy}
                           aria-label={`${student.name} çocuğunu sınıftan ayır`}
                         >
-                          Sınıftan ayır
+                          Arşivle
                         </button>
                       </div>
                     ) : null}
@@ -6732,7 +6819,7 @@ export default function Prototype() {
         {archivedStudents.length > 0 ? (
           <details className="roster-archive">
             <summary>
-              <span>Sınıftan ayrılanlar</span>
+              <span>Sınıftan ayrılanlar / arşivlenenler · geri al veya kalıcı sil</span>
               <strong>{archivedStudents.length}</strong>
               <ChevronDownIcon aria-hidden="true" />
             </summary>
@@ -7946,13 +8033,12 @@ export default function Prototype() {
         {selectedProfileStudent ? (
           <div className="student-share-sheet">
             <section className="student-share-privacy">
-              <LockClosedIcon aria-hidden="true" />
+              <CheckCircledIcon aria-hidden="true" />
               <div>
-                <strong>Paylaşmadan önce kapsamı denetleyin</strong>
+                <strong>Tam öğrenci dosyası hazırlanır</strong>
                 <p>
-                  WhatsApp ve tam kimlikli dosya; ad, okul numarası ve
-                  seçerseniz yakın telefonlarını içerir. Yapay zekâ için takma
-                  ad önerilir.
+                  Ad soyad, okul numarası, yakın bilgileri ve seçili eğitim
+                  kayıtları maskelenmeden kullanılır.
                 </p>
               </div>
             </section>
@@ -7973,13 +8059,9 @@ export default function Prototype() {
                         setStudentShareForm((current) => ({
                           ...current,
                           destination,
-                          ...(destination === "chatgpt" ||
-                          destination === "gemini"
-                            ? {
-                                identityMode: "alias" as const,
-                                includeContacts: false,
-                              }
-                            : {}),
+                          identityMode: "full",
+                          includeContacts: true,
+                          personalDataApprovedForAi: true,
                         }))
                       }
                     >
@@ -8043,102 +8125,45 @@ export default function Prototype() {
             <section className="student-share-section">
               <div className="student-share-section-heading">
                 <span className="d1-kicker">2 · Kimlik ve içerik</span>
-                <h3>Dosyada neler yer alacak?</h3>
+                <h3>Tam kimlik ve kayıtlar</h3>
               </div>
-              <fieldset className="student-share-identity">
-                <legend>Öğrenci kimliği</legend>
-                <label>
-                  <input
-                    type="radio"
-                    name="student-share-identity"
-                    checked={studentShareForm.identityMode === "full"}
-                    onChange={() =>
-                      setStudentShareForm((current) => ({
-                        ...current,
-                        identityMode: "full",
-                      }))
-                    }
-                  />
-                  Tam ad ve profil bilgileri
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="student-share-identity"
-                    checked={studentShareForm.identityMode === "alias"}
-                    onChange={() =>
-                      setStudentShareForm((current) => ({
-                        ...current,
-                        identityMode: "alias",
-                        includeContacts: false,
-                      }))
-                    }
-                  />
-                  Takma adla gizle
-                </label>
-              </fieldset>
-              {studentShareForm.identityMode === "alias" ? (
-                <label>
-                  Takma ad
-                  <KeyboardInput
-                    value={studentShareForm.alias}
-                    maxLength={80}
-                    onChange={(event) =>
-                      setStudentShareForm((current) => ({
-                        ...current,
-                        alias: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-              ) : null}
-              <div className="student-share-inclusions">
-                {([
-                  ["includeContacts", "Yakınlar ve telefonlar"],
-                  ["includeAttendance", "Devam özeti"],
-                  ["includeObservations", "Tarihli gözlemler"],
-                  ["includePortfolio", "Portfolyo seçkileri"],
-                  ["includeExternalFeedback", "Kayıtlı AI geri bildirimleri"],
-                ] as const).map(([field, label]) => (
-                  <label key={field}>
-                    <input
-                      type="checkbox"
-                      checked={studentShareForm[field]}
-                      disabled={
-                        field === "includeContacts" &&
-                        studentShareForm.identityMode === "alias"
-                      }
-                      onChange={(event) =>
-                        setStudentShareForm((current) => ({
-                          ...current,
-                          [field]: event.target.checked,
-                        }))
-                      }
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-              {(studentShareForm.destination === "chatgpt" ||
-                studentShareForm.destination === "gemini") &&
-              studentShareForm.identityMode === "full" ? (
-                <label className="student-share-ai-consent">
-                  <input
-                    type="checkbox"
-                    checked={studentShareForm.personalDataApprovedForAi}
-                    onChange={(event) =>
-                      setStudentShareForm((current) => ({
-                        ...current,
-                        personalDataApprovedForAi: event.target.checked,
-                      }))
-                    }
-                  />
+              <p>
+                Varsayılan dosya; öğrenci kimliği, yakınlar, telefonlar, devam,
+                gözlem, portfolyo ve kayıtlı geri bildirimleri içerir.
+              </p>
+              <details className="quick-details student-share-options">
+                <summary>
                   <span>
-                    Tam kimlik ve seçili kişisel verileri haricî yapay zekâ
-                    hizmetine göndereceğimi anladım.
+                    <GearIcon aria-hidden="true" />
+                    <strong>İçeriği özelleştir</strong>
+                    <small>İsteğe bağlı</small>
                   </span>
-                </label>
-              ) : null}
+                  <ChevronDownIcon aria-hidden="true" />
+                </summary>
+                <div className="student-share-inclusions">
+                  {([
+                    ["includeContacts", "Yakınlar ve telefonlar"],
+                    ["includeAttendance", "Devam özeti"],
+                    ["includeObservations", "Tarihli gözlemler"],
+                    ["includePortfolio", "Portfolyo seçkileri"],
+                    ["includeExternalFeedback", "Kayıtlı AI geri bildirimleri"],
+                  ] as const).map(([field, label]) => (
+                    <label key={field}>
+                      <input
+                        type="checkbox"
+                        checked={studentShareForm[field]}
+                        onChange={(event) =>
+                          setStudentShareForm((current) => ({
+                            ...current,
+                            [field]: event.target.checked,
+                          }))
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </details>
               <button
                 className="sheet-primary"
                 type="button"
@@ -8158,6 +8183,50 @@ export default function Prototype() {
               ) : null}
             </section>
 
+            {aiWorkspacePrompt ? (
+              <section className="student-share-section ai-workspace-section">
+                <div className="student-share-section-heading">
+                  <span className="d1-kicker">Uygulama içi yazma alanı</span>
+                  <h3>
+                    {studentShareForm.destination === "gemini"
+                      ? "Gemini"
+                      : "ChatGPT"}{" "}
+                    için metin hazır
+                  </h3>
+                  <p>
+                    Metin doğrudan bu alana yerleştirildi. Düzenleyebilir,
+                    kopyalayabilir veya sağlayıcıyı açabilirsiniz.
+                  </p>
+                </div>
+                <KeyboardTextarea
+                  value={aiWorkspacePrompt}
+                  maxLength={100_000}
+                  rows={10}
+                  onChange={(event) => setAiWorkspacePrompt(event.target.value)}
+                  aria-label="Yapay zekâ yazma metni"
+                />
+                <div className="ai-workspace-actions">
+                  <button
+                    type="button"
+                    onClick={() => void copyAiWorkspacePrompt()}
+                  >
+                    <CopyIcon aria-hidden="true" />
+                    Metni kopyala
+                  </button>
+                  <button type="button" onClick={openSelectedAiProvider}>
+                    <MagicWandIcon aria-hidden="true" />
+                    {studentShareForm.destination === "gemini"
+                      ? "Gemini’yi aç"
+                      : "ChatGPT’yi aç"}
+                  </button>
+                </div>
+                <small>
+                  Sağlayıcı hesabı ve gizli anahtar bu çevrim dışı uygulamanın
+                  içine gömülmez.
+                </small>
+              </section>
+            ) : null}
+
             <section className="student-share-section student-feedback-section">
               <div className="student-share-section-heading">
                 <span className="d1-kicker">3 · Geri dönüşü kaydet</span>
@@ -8168,6 +8237,16 @@ export default function Prototype() {
                   edilmeyeceğini siz seçersiniz.
                 </p>
               </div>
+              <details className="quick-details student-share-options">
+                <summary>
+                  <span>
+                    <GearIcon aria-hidden="true" />
+                    <strong>Kaynak ve dönem</strong>
+                    <small>İsteğe bağlı</small>
+                  </span>
+                  <ChevronDownIcon aria-hidden="true" />
+                </summary>
+                <div className="quick-details-fields">
               <div className="student-share-date-grid">
                 <label>
                   Kaynak
@@ -8237,6 +8316,8 @@ export default function Prototype() {
                   />
                 </label>
               </div>
+                </div>
+              </details>
               <label>
                 Yapay zekâ geri bildirimi
                 <KeyboardTextarea
@@ -8252,6 +8333,16 @@ export default function Prototype() {
                   placeholder="ChatGPT veya Gemini yanıtını buraya yapıştırın"
                 />
               </label>
+              <details className="quick-details student-share-options">
+                <summary>
+                  <span>
+                    <ReaderIcon aria-hidden="true" />
+                    <strong>Öğretmen notu ve rapor kapsamı</strong>
+                    <small>İsteğe bağlı</small>
+                  </span>
+                  <ChevronDownIcon aria-hidden="true" />
+                </summary>
+                <div className="quick-details-fields">
               <label>
                 Öğretmen notu
                 <KeyboardTextarea
@@ -8295,6 +8386,8 @@ export default function Prototype() {
                   Yıl sonu çalışmasına dâhil et
                 </label>
               </div>
+                </div>
+              </details>
               <button
                 className="sheet-primary"
                 type="button"
@@ -8411,6 +8504,7 @@ export default function Prototype() {
             setRestorePassword("");
             setPendingRestore(null);
             setSecureBackupError("");
+            setWipeConfirmation("");
           }
           setProfileOpen(open);
         }}
@@ -8775,6 +8869,39 @@ export default function Prototype() {
                 : "İlk geri yüklemeden önce kalıcı kurtarma noktası otomatik oluşturulacak."}
             </small>
           </section>
+          <details className="security-section security-danger-zone">
+            <summary>
+              <TrashIcon aria-hidden="true" />
+              <span>
+                <strong>Tüm cihaz verilerini sil</strong>
+                <small>Öğrenciler, kayıtlar, ayarlar ve kurtarma noktaları</small>
+              </span>
+              <ChevronDownIcon aria-hidden="true" />
+            </summary>
+            <div className="secure-secret-form">
+              <p>
+                Bu işlem geri alınamaz. Varsa önce şifreli yedek oluşturun.
+                Onaylamak için <strong>TÜM VERİLERİ SİL</strong> yazın.
+              </p>
+              <KeyboardInput
+                value={wipeConfirmation}
+                onChange={(event) => setWipeConfirmation(event.target.value)}
+                autoComplete="off"
+                aria-label="Tüm verileri silme onayı"
+              />
+              <button
+                className="student-delete-confirm"
+                type="button"
+                disabled={
+                  dataBusy || wipeConfirmation !== "TÜM VERİLERİ SİL"
+                }
+                onClick={() => void wipeAllLocalData()}
+              >
+                <TrashIcon aria-hidden="true" />
+                Bu cihazdaki tüm verileri kalıcı sil
+              </button>
+            </div>
+          </details>
         </div>
       </BottomSheet>
 
@@ -8843,6 +8970,7 @@ export default function Prototype() {
               civilDate={todayWorkspace.civilDate}
               defaultStartTime={configuredClassroom.schedule.startTime}
               defaultEndTime={configuredClassroom.schedule.endTime}
+              ageGroup={configuredClassroom.ageGroup ?? ""}
               curriculumProfile={configuredClassroom.curriculumProfile}
               students={students}
               onCreate={createPlanAndStart}
