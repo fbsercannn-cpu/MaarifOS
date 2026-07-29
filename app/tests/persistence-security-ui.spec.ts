@@ -118,7 +118,12 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
     exact: true,
   });
   await captureTrigger.click();
+  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
   await page.getByLabel("Etkinlik adı").fill("Taslak güvenliği etkinliği");
+  await page
+    .getByRole("region", { name: "Program alanları" })
+    .getByRole("button", { name: "Fen", exact: true })
+    .click();
   await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
   await page
     .getByRole("button", { name: "Planı kaydet ve etkinliği başlat" })
@@ -146,6 +151,10 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
   await expect(captureTrigger).toBeFocused();
 
   await captureTrigger.click();
+  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
+  await page
+    .getByRole("button", { name: `${firstChild} için hızlı gözlem` })
+    .click();
   await studentRegion
     .getByRole("button", { name: new RegExp(firstChild) })
     .click();

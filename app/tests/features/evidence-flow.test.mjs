@@ -441,7 +441,7 @@ test("tüm sınıfa dağıtım etkin çocukların sabit planlı takip fotoğraf�
     curriculumTargets: [
       starterTarget,
       curriculumTargetsForProfile(curriculumProfile).find(
-        (target) => target.referenceCode === "FAB.1.b",
+        (target) => target.referenceCode === "FAB.2",
       ),
     ].filter(Boolean),
     assignmentMode: "whole-class",
@@ -512,9 +512,10 @@ test("gözlem ve resmî hedef bağı etkinlikte planlanan öğrenci-hedef kapsam
   assert.equal((await store.readSnapshot()).evidenceCurriculumLinks.length, 0);
 });
 
-test("başlangıç katalog seti framework içinde tekil ve açıkça sınırlıdır", () => {
+test("başlangıç katalog seti yaş bandında tekildir; TYMM complete, MEB 2024 partial kalır", () => {
   const keys = STARTER_CURRICULUM_TARGETS.map(
-    (target) => `${target.framework}\u0000${target.referenceCode}`,
+    (target) =>
+      `${target.framework}\u0000${target.ageBands?.join(",") ?? "all"}\u0000${target.referenceCode}`,
   );
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(
@@ -522,7 +523,14 @@ test("başlangıç katalog seti framework içinde tekil ve açıkça sınırlıd
       (target) =>
         target.sourceUrl.startsWith("https://") &&
         /^\d{4}-\d{2}-\d{2}$/.test(target.sourceCheckedOn) &&
-        target.catalogCompleteness === "partial" &&
+        (target.framework === "tymm"
+          ? target.catalogCompleteness === "complete" &&
+            target.kind === "learning-outcome" &&
+            target.ageBands?.length === 1 &&
+            Number.isInteger(target.sourcePage)
+          : target.catalogCompleteness === "partial" &&
+            target.ageBands === undefined &&
+            target.sourcePage === undefined) &&
         target.verificationStatus === "official-source-checked",
     ),
   );

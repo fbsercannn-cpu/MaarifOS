@@ -146,7 +146,7 @@ export function normalizeStudentPhone(value: string): string {
   if (digits.length === 10 && digits.startsWith("5")) digits = `0${digits}`;
   if (!/^05\d{9}$/.test(digits)) {
     throw new Error(
-      "Cep telefonu 05 ile başlayan 11 rakamdan oluşmalıdır (ör. 0532 532 32 32).",
+      "Cep telefonu 05 ile başlayan toplam 11 rakamdan oluşmalıdır.",
     );
   }
   return `+90${digits.slice(1)}`;
