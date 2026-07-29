@@ -167,3 +167,73 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
     page.getByRole("button", { name: "Sınıfım ekranını kapat" }),
   ).toBeVisible();
 });
+
+test("öğrenci profili tüm telefon genişliklerinde taşmadan ve erişilebilir hedeflerle çalışır", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await configureNativeClassroom(page);
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByLabel("Çocuğun adı").fill("Görsel QA Çocuğu");
+  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Görsel QA Çocuğu profilini aç" })
+    .click();
+
+  const dialog = page.getByRole("dialog", {
+    name: "Görsel QA Çocuğu profili",
+  });
+
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ]) {
+    await page.setViewportSize(viewport);
+
+    for (const tab of ["Akış", "Bilgiler", "Yakınlar"]) {
+      await dialog.getByRole("button", { name: tab, exact: true }).click();
+      const layout = await dialog.evaluate((sheet) => {
+        const content = sheet.querySelector<HTMLElement>(".sheet-content");
+        const profile = sheet.querySelector<HTMLElement>(".student-profile-sheet");
+        const targets = [
+          ...sheet.querySelectorAll<HTMLElement>(
+            ".student-profile-tabs button, .student-photo-actions label, .student-profile-observe, .student-observation-export-actions button, .student-contact-actions a, .student-profile-save",
+          ),
+        ].filter((target) => {
+          const rect = target.getBoundingClientRect();
+          return getComputedStyle(target).display !== "none" && rect.width > 0 && rect.height > 0;
+        });
+        const rect = (sheet as HTMLElement).getBoundingClientRect();
+        return {
+          left: rect.left,
+          right: rect.right,
+          contentScrollWidth: content?.scrollWidth ?? 0,
+          contentClientWidth: content?.clientWidth ?? 0,
+          profileScrollWidth: profile?.scrollWidth ?? 0,
+          profileClientWidth: profile?.clientWidth ?? 0,
+          undersizedTargets: targets
+            .map((target) => {
+              const targetRect = target.getBoundingClientRect();
+              return {
+                label: target.getAttribute("aria-label") ?? target.textContent,
+                width: targetRect.width,
+                height: targetRect.height,
+              };
+            })
+            .filter((target) => target.width < 44 || target.height < 44),
+        };
+      });
+
+      expect(layout.left).toBeGreaterThanOrEqual(-0.5);
+      expect(layout.right).toBeLessThanOrEqual(viewport.width + 0.5);
+      expect(layout.contentScrollWidth).toBeLessThanOrEqual(layout.contentClientWidth);
+      expect(layout.profileScrollWidth).toBeLessThanOrEqual(layout.profileClientWidth);
+      expect(layout.undersizedTargets).toEqual([]);
+    }
+  }
+
+  await expect(dialog.getByText("Görsel QA Çocuğu", { exact: true })).toBeVisible();
+});

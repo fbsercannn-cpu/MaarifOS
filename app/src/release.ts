@@ -63,14 +63,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.3.1",
+  version: "0.4.0",
   releasedOn: "2026-07-29",
-  title: "Premium mobil deneyim ve kararlı geri akışı",
+  title: "Öğrenci hafızası ve aile iletişim merkezi",
   notes: Object.freeze([
-    "Telefonun geri işlemi artık profilden öğrenci listesine, ardından bugüne güvenle döner.",
-    "Tıklama ve kaydırma sahipliği ayrıştırılarak dokunmatik kullanım daha kararlı hâle getirildi.",
-    "Alt menü, açılır paneller ve güvenli ekran boşlukları küçük telefonlarda çakışmadan çalışır.",
-    "Öğrenci listesi arama, durum özeti ve hızlı işlemlerle profesyonel bir çalışma alanına dönüştürüldü.",
+    "Her öğrencinin gözlemleri tarih ve saat bandıyla kalıcı bir zaman çizelgesinde açılır.",
+    "Profil fotoğrafı kameradan çekilebilir veya galeriden seçilebilir; görsel cihazda güvenle küçültülür.",
+    "Anne, baba, bakıcı ve diğer yakınlar için doğrudan arama ve WhatsApp işlemleri eklendi.",
+    "Öğrenci ya da sınıf gözlemleri, seçilen tarih aralığıyla ChatGPT uyumlu düz metin olarak aktarılır.",
+    "Gözlem metni karakter sınırı olmadan kaydedilir; bağ bekleyen kayda profilden doğrudan erişilir.",
   ]),
 });
 

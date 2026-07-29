@@ -24,6 +24,11 @@ import {
   isQuickObservationType,
 } from "../domain/quick-observation";
 import {
+  isStudentProfilePhotoDataUrl,
+  normalizeStudentContacts,
+  type StudentContactInput,
+} from "../domain/student";
+import {
   assertAppLockAttemptState,
   assertAppLockConfig,
 } from "../security/app-lock";
@@ -125,6 +130,8 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "interests",
     "strengths",
     "supportPreferences",
+    "contacts",
+    "profilePhotoDataUrl",
     "profileSchemaVersion",
     "profileMediaId",
     "active",
@@ -1027,10 +1034,47 @@ function validateStudentProfile(
     "öğretmen desteği notu",
     1_000,
   );
+  if (student.contacts !== undefined) {
+    if (!Array.isArray(student.contacts)) {
+      throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
+    }
+    const sourceContacts = student.contacts;
+    try {
+      const normalized = normalizeStudentContacts(
+        sourceContacts as StudentContactInput[],
+      );
+      const contactsMatch =
+        normalized.length === sourceContacts.length &&
+        normalized.every((contact, index) => {
+          const source = sourceContacts[index];
+          return (
+            isRecord(source) &&
+            source.id === contact.id &&
+            source.kind === contact.kind &&
+            source.relationship === contact.relationship &&
+            source.name === contact.name &&
+            source.phone === contact.phone &&
+            source.isPrimary === contact.isPrimary
+          );
+        });
+      if (!contactsMatch) {
+        throw new Error("Yakın iletişim listesi normalleştirilmemiş.");
+      }
+    } catch {
+      throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
+    }
+  }
+  if (
+    student.profilePhotoDataUrl !== undefined &&
+    !isStudentProfilePhotoDataUrl(student.profilePhotoDataUrl)
+  ) {
+    throw new Error(`students/${student.id} profil fotoğrafı geçersiz.`);
+  }
   if (
     student.profileSchemaVersion !== undefined &&
     student.profileSchemaVersion !== 2 &&
-    student.profileSchemaVersion !== 3
+    student.profileSchemaVersion !== 3 &&
+    student.profileSchemaVersion !== 4
   ) {
     throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
   }

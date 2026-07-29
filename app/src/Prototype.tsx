@@ -10,12 +10,14 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArchiveIcon,
   CalendarIcon,
+  CameraIcon,
   CheckCircledIcon,
   ChatBubbleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ClockIcon,
   Cross2Icon,
+  CopyIcon,
   DownloadIcon,
   GearIcon,
   HomeIcon,
@@ -31,6 +33,7 @@ import {
   ReaderIcon,
   StarIcon,
   TargetIcon,
+  TrashIcon,
   UploadIcon,
 } from "@radix-ui/react-icons";
 import {
@@ -64,6 +67,7 @@ import {
   type BackupEnvelope,
   type RecoverySnapshotMetadata,
   type RestoreMode,
+  type StudentContact,
   type StoredRecord,
 } from "./core";
 import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type AuthState } from "./auth";
@@ -124,6 +128,16 @@ import {
   type TodayWorkspace,
 } from "./features/today/today-data";
 import type { ClassroomScheduleKind } from "./core/domain/classroom";
+import {
+  buildClassObservationExport,
+  buildStudentObservationExport,
+  classroomObservationExportFileName,
+  contactActionLinks,
+  contactDisplayLabel,
+  formatObservationDateTime,
+  prepareStudentProfilePhoto,
+  studentObservationExportFileName,
+} from "./features/students/student-profile-tools";
 import {
   acknowledgeCurrentRelease,
   CURRENT_RELEASE,
@@ -218,6 +232,8 @@ type StudentProfileFormState = {
   interests: string;
   strengths: string;
   supportPreferences: string;
+  contacts: StudentContact[];
+  profilePhotoDataUrl: string;
 };
 
 const currentCivilDate = civilDateInIstanbul(new Date());
@@ -409,6 +425,17 @@ function isStandaloneApp() {
 
 function downloadJson(fileName: string, contents: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadText(fileName: string, contents: string) {
+  const url = URL.createObjectURL(
+    new Blob(["\uFEFF", contents], { type: "text/plain;charset=utf-8" }),
+  );
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = fileName;
@@ -1080,6 +1107,62 @@ function studentInitials(name: string): string {
     .join("");
 }
 
+function emptyStudentContact(
+  kind: StudentContact["kind"],
+  relationship: string,
+): StudentContact {
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    relationship,
+    phone: "",
+    isPrimary: false,
+  };
+}
+
+function studentContactsForForm(student: Student): StudentContact[] {
+  const contacts = (student.contacts ?? []).map((contact) => ({ ...contact }));
+  if (!contacts.some((contact) => contact.kind === "mother")) {
+    contacts.unshift(emptyStudentContact("mother", "Anne"));
+  }
+  if (!contacts.some((contact) => contact.kind === "father")) {
+    const motherIndex = contacts.findIndex((contact) => contact.kind === "mother");
+    contacts.splice(
+      motherIndex < 0 ? 0 : motherIndex + 1,
+      0,
+      emptyStudentContact("father", "Baba"),
+    );
+  }
+  return contacts;
+}
+
+function StudentAvatar({
+  student,
+  className = "student-avatar",
+  photoDataUrl,
+}: {
+  student: Student;
+  className?: string;
+  photoDataUrl?: string | null;
+}) {
+  const resolvedPhoto =
+    photoDataUrl === undefined
+      ? student.profilePhotoDataUrl
+      : photoDataUrl || undefined;
+  return (
+    <span className={className}>
+      {resolvedPhoto ? (
+        <img
+          src={resolvedPhoto}
+          alt={`${student.preferredName ?? student.name} profil fotoğrafı`}
+        />
+      ) : (
+        <span aria-hidden="true">{studentInitials(student.name)}</span>
+      )}
+    </span>
+  );
+}
+
 function EvidenceCaptureScreen({
   activity,
   initialStudentId,
@@ -1566,12 +1649,12 @@ function EvidenceCaptureScreen({
                 <div>
                   <label id="quick-note-heading" htmlFor="d1-observation-text">Ne oldu?</label>
                 </div>
-                <small>{rawText.length} / 500</small>
+                <small>{rawText.length.toLocaleString("tr-TR")} karakter</small>
               </div>
               <KeyboardTextarea
                 id="d1-observation-text"
                 value={rawText}
-                onChange={(event) => setRawText(event.target.value.slice(0, 500))}
+                onChange={(event) => setRawText(event.target.value)}
                 placeholder="… sırasında … yaptı / söyledi."
                 rows={6}
                 aria-describedby="quick-observation-guidance"
@@ -2185,8 +2268,21 @@ export default function Prototype() {
       interests: "",
       strengths: "",
       supportPreferences: "",
+      contacts: [],
+      profilePhotoDataUrl: "",
     });
   const [studentProfileError, setStudentProfileError] = useState("");
+  const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
+  const [studentObservationLimit, setStudentObservationLimit] = useState(20);
+  const [studentProfileTab, setStudentProfileTab] =
+    useState<"flow" | "details" | "contacts">("flow");
+  const [studentObservationFilter, setStudentObservationFilter] =
+    useState<"all" | "pending">("all");
+  const [removedStudentContact, setRemovedStudentContact] =
+    useState<StudentContact | null>(null);
+  const [removedProfilePhoto, setRemovedProfilePhoto] = useState<string | null>(
+    null,
+  );
   const [profileOpen, setProfileOpen] = useState(false);
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
@@ -2196,6 +2292,14 @@ export default function Prototype() {
   const [studentAddOpen, setStudentAddOpen] = useState(false);
   const [studentActionsOpenId, setStudentActionsOpenId] =
     useState<string | null>(null);
+  const [classExportPreviewOpen, setClassExportPreviewOpen] = useState(false);
+  const [classExportStartDate, setClassExportStartDate] = useState("");
+  const [classExportEndDate, setClassExportEndDate] = useState("");
+  const [classExportStudentIds, setClassExportStudentIds] = useState<string[]>(
+    [],
+  );
+  const [classExportNameMode, setClassExportNameMode] =
+    useState<"preferred" | "registered">("preferred");
   const [todayWorkspace, setTodayWorkspace] = useState<TodayWorkspace>(emptyTodayWorkspace);
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
@@ -2267,31 +2371,46 @@ export default function Prototype() {
     students.find((student) => student.id === selectedStudentId) ??
     archivedStudents.find((student) => student.id === selectedStudentId) ??
     null;
-  const selectedStudentObservations = selectedStudentId
-    ? [
+  const allEvidenceObservations = useMemo(
+    () =>
+      [
         ...evidenceWorkspace.pendingObservations,
         ...evidenceWorkspace.linkedObservations,
-      ].filter((observation) => observation.studentId === selectedStudentId)
+      ].sort(
+        (left, right) =>
+          right.observedAt.localeCompare(left.observedAt) ||
+          right.id.localeCompare(left.id),
+      ),
+    [
+      evidenceWorkspace.linkedObservations,
+      evidenceWorkspace.pendingObservations,
+    ],
+  );
+  const selectedStudentObservations = selectedStudentId
+    ? allEvidenceObservations.filter(
+        (observation) => observation.studentId === selectedStudentId,
+      )
     : [];
   const selectedStudentPendingLinks = selectedStudentObservations.filter(
     (observation) => observation.confirmedCurriculumLinkIds.length === 0,
   ).length;
+  const visibleSelectedStudentObservations =
+    studentObservationFilter === "pending"
+      ? selectedStudentObservations.filter(
+          (observation) =>
+            observation.confirmedCurriculumLinkIds.length === 0,
+        )
+      : selectedStudentObservations;
   const observationCountByStudent = useMemo(() => {
     const countsByStudent = new Map<string, number>();
-    for (const observation of [
-      ...evidenceWorkspace.pendingObservations,
-      ...evidenceWorkspace.linkedObservations,
-    ]) {
+    for (const observation of allEvidenceObservations) {
       countsByStudent.set(
         observation.studentId,
         (countsByStudent.get(observation.studentId) ?? 0) + 1,
       );
     }
     return countsByStudent;
-  }, [
-    evidenceWorkspace.linkedObservations,
-    evidenceWorkspace.pendingObservations,
-  ]);
+  }, [allEvidenceObservations]);
   const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("tr-TR");
   const visibleStudents = useMemo(
     () =>
@@ -2313,6 +2432,16 @@ export default function Prototype() {
   const observedStudentCount = students.filter(
     (student) => (observationCountByStudent.get(student.id) ?? 0) > 0,
   ).length;
+  const classExportStudents = [...students, ...archivedStudents].filter(
+    (student) => classExportStudentIds.includes(student.id),
+  );
+  const classExportObservations = allEvidenceObservations.filter(
+    (observation) =>
+      classExportStudentIds.includes(observation.studentId) &&
+      (!classExportStartDate ||
+        observation.civilDate >= classExportStartDate) &&
+      (!classExportEndDate || observation.civilDate <= classExportEndDate),
+  );
   const activeSurface: AppSurface | null = evidenceFlowRequest
     ? "evidence-flow"
     : planFlowOpen
@@ -3411,8 +3540,15 @@ export default function Prototype() {
       interests: student.interests ?? "",
       strengths: student.strengths ?? "",
       supportPreferences: student.supportPreferences ?? "",
+      contacts: studentContactsForForm(student),
+      profilePhotoDataUrl: student.profilePhotoDataUrl ?? "",
     });
     setStudentProfileError("");
+    setStudentObservationLimit(20);
+    setStudentProfileTab("flow");
+    setStudentObservationFilter("all");
+    setRemovedStudentContact(null);
+    setRemovedProfilePhoto(null);
     setStudentActionsOpenId(null);
     setChildrenOpen(false);
     setStudentProfileOpen(true);
@@ -3421,6 +3557,30 @@ export default function Prototype() {
 
   const saveStudentProfile = async () => {
     if (!selectedProfileStudent || dataBusy) return;
+    const contactsWithDetails = studentProfileForm.contacts.filter(
+      (contact) =>
+        contact.phone.trim() ||
+        contact.name?.trim() ||
+        (contact.kind === "other" && contact.relationship.trim()),
+    );
+    const incompleteContact = contactsWithDetails.find(
+      (contact) => !contact.phone.trim(),
+    );
+    if (incompleteContact) {
+      setStudentProfileError(
+        `${incompleteContact.relationship || "Yakın"} için telefon numarası girin veya kaydı kaldırın.`,
+      );
+      return;
+    }
+    const contacts = contactsWithDetails.map((contact) => ({
+      ...contact,
+      relationship:
+        contact.kind === "mother"
+          ? "Anne"
+          : contact.kind === "father"
+            ? "Baba"
+            : contact.relationship,
+    }));
     const updatedStudent: Student = {
       ...selectedProfileStudent,
       name: studentProfileForm.name,
@@ -3448,6 +3608,10 @@ export default function Prototype() {
       ...(studentProfileForm.supportPreferences.trim()
         ? { supportPreferences: studentProfileForm.supportPreferences }
         : {}),
+      ...(contacts.length > 0 ? { contacts } : {}),
+      ...(studentProfileForm.profilePhotoDataUrl
+        ? { profilePhotoDataUrl: studentProfileForm.profilePhotoDataUrl }
+        : {}),
     };
     if (!studentProfileForm.preferredName.trim()) {
       delete updatedStudent.preferredName;
@@ -3460,6 +3624,10 @@ export default function Prototype() {
     if (!studentProfileForm.strengths.trim()) delete updatedStudent.strengths;
     if (!studentProfileForm.supportPreferences.trim()) {
       delete updatedStudent.supportPreferences;
+    }
+    if (contacts.length === 0) delete updatedStudent.contacts;
+    if (!studentProfileForm.profilePhotoDataUrl) {
+      delete updatedStudent.profilePhotoDataUrl;
     }
 
     setDataBusy(true);
@@ -3484,6 +3652,8 @@ export default function Prototype() {
         ),
       );
       keyboard.hide();
+      setRemovedStudentContact(null);
+      setRemovedProfilePhoto(null);
       setStudentProfileOpen(false);
       setAnnouncement(`${updatedStudent.name} profili kaydedildi.`);
     } catch (reason) {
@@ -3496,6 +3666,195 @@ export default function Prototype() {
     } finally {
       setDataBusy(false);
     }
+  };
+
+  const updateStudentContact = (
+    contactId: string,
+    update: Partial<StudentContact>,
+  ) => {
+    setStudentProfileForm((current) => ({
+      ...current,
+      contacts: current.contacts.map((contact) =>
+        contact.id === contactId ? { ...contact, ...update } : contact,
+      ),
+    }));
+  };
+
+  const setPrimaryStudentContact = (contactId: string, selected: boolean) => {
+    setStudentProfileForm((current) => ({
+      ...current,
+      contacts: current.contacts.map((contact) => ({
+        ...contact,
+        isPrimary: selected ? contact.id === contactId : false,
+      })),
+    }));
+  };
+
+  const addStudentContact = () => {
+    setStudentProfileForm((current) => ({
+      ...current,
+      contacts: [
+        ...current.contacts,
+        emptyStudentContact("other", ""),
+      ],
+    }));
+  };
+
+  const removeStudentContact = (contactId: string) => {
+    setStudentProfileForm((current) => {
+      const removed = current.contacts.find(
+        (contact) => contact.id === contactId,
+      );
+      if (removed) setRemovedStudentContact(removed);
+      return {
+        ...current,
+        contacts: current.contacts.filter(
+          (contact) => contact.id !== contactId,
+        ),
+      };
+    });
+  };
+
+  const undoRemoveStudentContact = () => {
+    if (!removedStudentContact) return;
+    setStudentProfileForm((current) => ({
+      ...current,
+      contacts: [...current.contacts, removedStudentContact],
+    }));
+    setRemovedStudentContact(null);
+  };
+
+  const removeStudentProfilePhoto = () => {
+    if (!studentProfileForm.profilePhotoDataUrl) return;
+    setRemovedProfilePhoto(studentProfileForm.profilePhotoDataUrl);
+    setStudentProfileForm((current) => ({
+      ...current,
+      profilePhotoDataUrl: "",
+    }));
+  };
+
+  const undoRemoveStudentProfilePhoto = () => {
+    if (!removedProfilePhoto) return;
+    setStudentProfileForm((current) => ({
+      ...current,
+      profilePhotoDataUrl: removedProfilePhoto,
+    }));
+    setRemovedProfilePhoto(null);
+  };
+
+  const selectStudentProfilePhoto = async (file: File | undefined) => {
+    if (!file || profilePhotoBusy) return;
+    setProfilePhotoBusy(true);
+    setStudentProfileError("");
+    try {
+      const profilePhotoDataUrl = await prepareStudentProfilePhoto(file);
+      setStudentProfileForm((current) => ({
+        ...current,
+        profilePhotoDataUrl,
+      }));
+      setRemovedProfilePhoto(null);
+      setAnnouncement("Profil fotoğrafı hazırlandı. Profili kaydederek tamamlayın.");
+    } catch (reason) {
+      setStudentProfileError(
+        reason instanceof Error
+          ? reason.message
+          : "Profil fotoğrafı hazırlanamadı.",
+      );
+    } finally {
+      setProfilePhotoBusy(false);
+    }
+  };
+
+  const currentStudentObservationExport = () => {
+    if (!selectedProfileStudent) return null;
+    return {
+      text: buildStudentObservationExport(
+        selectedProfileStudent,
+        allEvidenceObservations,
+      ),
+      fileName: studentObservationExportFileName(
+        selectedProfileStudent,
+        attendanceCivilDate,
+      ),
+    };
+  };
+
+  const downloadCurrentStudentObservations = () => {
+    const payload = currentStudentObservationExport();
+    if (!payload) return;
+    downloadText(payload.fileName, payload.text);
+    setAnnouncement("Çocuğun gözlem arşivi metin dosyası olarak indirildi.");
+  };
+
+  const copyCurrentStudentObservations = async () => {
+    const payload = currentStudentObservationExport();
+    if (!payload) return;
+    try {
+      await navigator.clipboard.writeText(payload.text);
+      setAnnouncement("Gözlem arşivi panoya kopyalandı.");
+    } catch {
+      setStudentProfileError(
+        "Pano erişimi kullanılamadı. Metin dosyası olarak indirmeyi deneyin.",
+      );
+    }
+  };
+
+  const shareCurrentStudentObservations = async () => {
+    const payload = currentStudentObservationExport();
+    if (!payload || !navigator.share) {
+      downloadCurrentStudentObservations();
+      return;
+    }
+    try {
+      const file = new File([payload.text], payload.fileName, {
+        type: "text/plain;charset=utf-8",
+      });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: `${selectedProfileStudent?.name ?? "Çocuk"} gözlem arşivi`,
+          text: "MaarifOS gözlem arşivi",
+          files: [file],
+        });
+      } else {
+        downloadText(payload.fileName, payload.text);
+        setAnnouncement(
+          "Telefon uzun metin dosyası paylaşımını desteklemedi; arşiv indirildi.",
+        );
+        return;
+      }
+      setAnnouncement("Gözlem arşivi paylaşım ekranına gönderildi.");
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setStudentProfileError("Paylaşım açılamadı. Metin dosyası indirmeyi deneyin.");
+    }
+  };
+
+  const downloadClassObservations = () => {
+    if (classExportStartDate && classExportEndDate) {
+      if (classExportStartDate > classExportEndDate) {
+        setAnnouncement("Dışa aktarım başlangıç tarihi bitiş tarihinden sonra olamaz.");
+        return;
+      }
+    }
+    if (classExportStudents.length === 0) {
+      setAnnouncement("Dışa aktarım için en az bir çocuk seçin.");
+      return;
+    }
+    const text = buildClassObservationExport(
+      classExportStudents.map((student) => ({
+        id: student.id,
+        name:
+          classExportNameMode === "preferred"
+            ? student.preferredName ?? student.name
+            : student.name,
+      })),
+      classExportObservations,
+    );
+    downloadText(
+      classroomObservationExportFileName(attendanceCivilDate),
+      text,
+    );
+    setAnnouncement("Sınıf gözlem arşivi çocuklara göre gruplanmış metin olarak indirildi.");
   };
 
   const archiveStudent = async (studentId: string) => {
@@ -3981,8 +4340,12 @@ export default function Prototype() {
     openPlanFlow();
   };
 
-  const openPendingObservation = () => {
-    const pending = evidenceWorkspace.pendingObservations[0];
+  const openPendingObservation = (
+    requestedObservation?: EvidenceObservationSummary,
+  ) => {
+    const pending =
+      requestedObservation ??
+      evidenceWorkspace.pendingObservations[0];
     if (!pending) {
       setAnnouncement("Program bağlantısı bekleyen gözlem notu yok.");
       return;
@@ -4005,6 +4368,7 @@ export default function Prototype() {
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    setStudentProfileOpen(false);
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
 
@@ -4440,9 +4804,10 @@ export default function Prototype() {
                       onClick={() => openStudentProfile(student.id)}
                       aria-label={`${student.name} profilini aç`}
                     >
-                      <span className="home-child-avatar" aria-hidden="true">
-                        {studentInitials(student.name)}
-                      </span>
+                      <StudentAvatar
+                        student={student}
+                        className="home-child-avatar"
+                      />
                       <span className="home-child-copy">
                         <strong>{student.preferredName ?? student.name}</strong>
                         {student.preferredName ? <small>{student.name}</small> : null}
@@ -4549,7 +4914,7 @@ export default function Prototype() {
               </div>
             ) : null}
             {todayWorkspace.pendingEvidenceLinks > 0 ? (
-              <button className="pending-link" type="button" onClick={openPendingObservation}>
+              <button className="pending-link" type="button" onClick={() => openPendingObservation()}>
                 <ClockIcon aria-hidden="true" />
                 <span>Program bağlantısı bekleyen {todayWorkspace.pendingEvidenceLinks} gözlem</span>
                 <ChevronRightIcon aria-hidden="true" />
@@ -4867,6 +5232,7 @@ export default function Prototype() {
             setStudentActionsOpenId(null);
             setStudentAddOpen(false);
             setStudentSearch("");
+            setClassExportPreviewOpen(false);
           }
           setChildrenOpen(open);
         }}
@@ -4924,7 +5290,166 @@ export default function Prototype() {
             <PlusIcon aria-hidden="true" />
             Çocuk ekle
           </button>
+          <button
+            className="roster-export-trigger"
+            type="button"
+            onClick={() => {
+              setClassExportPreviewOpen((current) => {
+                const next = !current;
+                if (next && classExportStudentIds.length === 0) {
+                  setClassExportStudentIds(
+                    [...students, ...archivedStudents].map(
+                      (student) => student.id,
+                    ),
+                  );
+                }
+                return next;
+              });
+            }}
+            aria-label="Sınıfın tüm gözlemlerini metin olarak dışa aktar"
+            aria-expanded={classExportPreviewOpen}
+            aria-controls="class-observation-export-preview"
+          >
+            <DownloadIcon aria-hidden="true" />
+            Gözlem dökümü
+          </button>
         </div>
+
+        {classExportPreviewOpen ? (
+          <section
+            className="roster-export-preview"
+            id="class-observation-export-preview"
+            aria-labelledby="class-observation-export-heading"
+          >
+            <div className="roster-export-preview-heading">
+              <div>
+                <span className="d1-kicker">Paylaşmadan önce denetle</span>
+                <h3 id="class-observation-export-heading">
+                  Sınıf gözlem dökümü
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClassExportPreviewOpen(false)}
+                aria-label="Dışa aktarım önizlemesini kapat"
+              >
+                <Cross2Icon aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="roster-export-date-grid">
+              <label>
+                Başlangıç
+                <KeyboardInput
+                  type="date"
+                  value={classExportStartDate}
+                  max={classExportEndDate || attendanceCivilDate}
+                  onChange={(event) =>
+                    setClassExportStartDate(event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                Bitiş
+                <KeyboardInput
+                  type="date"
+                  value={classExportEndDate}
+                  min={classExportStartDate || undefined}
+                  max={attendanceCivilDate}
+                  onChange={(event) =>
+                    setClassExportEndDate(event.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            <fieldset className="roster-export-name-mode">
+              <legend>Metinde kullanılacak ad</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="class-export-name-mode"
+                  checked={classExportNameMode === "preferred"}
+                  onChange={() => setClassExportNameMode("preferred")}
+                />
+                Tercih edilen ad
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="class-export-name-mode"
+                  checked={classExportNameMode === "registered"}
+                  onChange={() => setClassExportNameMode("registered")}
+                />
+                Kayıtlı tam ad
+              </label>
+            </fieldset>
+
+            <details className="roster-export-students">
+              <summary>
+                Çocuk kapsamı
+                <strong>
+                  {classExportStudentIds.length}/
+                  {students.length + archivedStudents.length}
+                </strong>
+              </summary>
+              <div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setClassExportStudentIds(
+                      [...students, ...archivedStudents].map(
+                        (student) => student.id,
+                      ),
+                    )
+                  }
+                >
+                  Tümünü seç
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassExportStudentIds([])}
+                >
+                  Temizle
+                </button>
+              </div>
+              {[...students, ...archivedStudents].map((student) => (
+                <label key={student.id}>
+                  <input
+                    type="checkbox"
+                    checked={classExportStudentIds.includes(student.id)}
+                    onChange={(event) =>
+                      setClassExportStudentIds((current) =>
+                        event.target.checked
+                          ? [...current, student.id]
+                          : current.filter((id) => id !== student.id),
+                      )
+                    }
+                  />
+                  {student.preferredName ?? student.name}
+                </label>
+              ))}
+            </details>
+
+            <div className="roster-export-summary">
+              <strong>{classExportObservations.length} gözlem</strong>
+              <span>
+                {classExportStudents.length} çocuk · Telefon ve fotoğraf dahil
+                edilmeyecek
+              </span>
+            </div>
+
+            <button
+              className="roster-export-download"
+              type="button"
+              onClick={downloadClassObservations}
+              disabled={classExportStudents.length === 0}
+            >
+              <DownloadIcon aria-hidden="true" />
+              Düz metin dosyasını indir
+            </button>
+          </section>
+        ) : null}
 
         {studentAddOpen ? (
           <form
@@ -4978,9 +5503,7 @@ export default function Prototype() {
                         onClick={() => openStudentProfile(student.id)}
                         aria-label={`${student.name} profilini aç`}
                       >
-                        <span className="student-avatar" aria-hidden="true">
-                          {studentInitials(student.name)}
-                        </span>
+                        <StudentAvatar student={student} />
                         <span className="student-name">
                           <strong>{student.preferredName ?? student.name}</strong>
                           <small>
@@ -5071,9 +5594,7 @@ export default function Prototype() {
             <ul className="children-list roster-archive-list">
               {archivedStudents.map((student) => (
                 <li className="children-row children-row--archived" key={student.id}>
-                  <span className="student-avatar" aria-hidden="true">
-                    {studentInitials(student.name)}
-                  </span>
+                  <StudentAvatar student={student} />
                   <span className="student-name">
                     <strong>{student.name}</strong>
                     <small>Geçmiş kayıtları korunuyor</small>
@@ -5106,9 +5627,11 @@ export default function Prototype() {
         {selectedProfileStudent ? (
           <div className="student-profile-sheet">
             <section className="student-profile-hero" aria-label="Çocuk profil özeti">
-              <span className="student-profile-avatar" aria-hidden="true">
-                {studentInitials(selectedProfileStudent.name)}
-              </span>
+              <StudentAvatar
+                student={selectedProfileStudent}
+                className="student-profile-avatar"
+                photoDataUrl={studentProfileForm.profilePhotoDataUrl}
+              />
               <div>
                 <span className="section-eyebrow">Bireysel gelişim izi</span>
                 <h3>
@@ -5127,21 +5650,111 @@ export default function Prototype() {
               </div>
             </section>
 
+            <section className="student-photo-actions" aria-label="Profil fotoğrafı işlemleri">
+              <label>
+                <CameraIcon aria-hidden="true" />
+                <span>{profilePhotoBusy ? "Hazırlanıyor…" : "Fotoğraf çek"}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  disabled={profilePhotoBusy || dataBusy}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    void selectStudentProfilePhoto(file);
+                  }}
+                />
+              </label>
+              <label>
+                <UploadIcon aria-hidden="true" />
+                <span>Galeriden seç</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={profilePhotoBusy || dataBusy}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    void selectStudentProfilePhoto(file);
+                  }}
+                />
+              </label>
+              {studentProfileForm.profilePhotoDataUrl ? (
+                <button
+                  type="button"
+                  onClick={removeStudentProfilePhoto}
+                  disabled={profilePhotoBusy || dataBusy}
+                >
+                  <TrashIcon aria-hidden="true" />
+                  Kaldır
+                </button>
+              ) : null}
+            </section>
+            {removedProfilePhoto ? (
+              <div className="student-profile-undo" role="status">
+                <span>Fotoğraf kaldırıldı; profil kaydedilene kadar geri alınabilir.</span>
+                <button type="button" onClick={undoRemoveStudentProfilePhoto}>
+                  Geri al
+                </button>
+              </div>
+            ) : null}
+
             <section className="student-profile-metrics" aria-label="Profil göstergeleri">
               <div>
                 <small>Bugünkü devam</small>
                 <strong>{statusLabels[selectedProfileStudent.status]}</strong>
               </div>
-              <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setStudentProfileTab("flow");
+                  setStudentObservationFilter("all");
+                  setStudentObservationLimit(20);
+                }}
+              >
                 <small>Toplam gözlem</small>
                 <strong>{selectedStudentObservations.length}</strong>
-              </div>
-              <div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStudentProfileTab("flow");
+                  setStudentObservationFilter("pending");
+                  setStudentObservationLimit(20);
+                }}
+              >
                 <small>Bağ bekleyen</small>
                 <strong>{selectedStudentPendingLinks}</strong>
-              </div>
+              </button>
             </section>
 
+            <nav className="student-profile-tabs" aria-label="Çocuk profili bölümleri">
+              <button
+                type="button"
+                aria-current={studentProfileTab === "flow" ? "page" : undefined}
+                onClick={() => setStudentProfileTab("flow")}
+              >
+                Akış
+              </button>
+              <button
+                type="button"
+                aria-current={studentProfileTab === "details" ? "page" : undefined}
+                onClick={() => setStudentProfileTab("details")}
+              >
+                Bilgiler
+              </button>
+              <button
+                type="button"
+                aria-current={studentProfileTab === "contacts" ? "page" : undefined}
+                onClick={() => setStudentProfileTab("contacts")}
+              >
+                Yakınlar
+              </button>
+            </nav>
+
+            {studentProfileTab === "flow" ? (
+              <>
             <button
               className="student-profile-observe"
               type="button"
@@ -5155,6 +5768,136 @@ export default function Prototype() {
                 selectedProfileStudent.name} için hızlı gözlem
             </button>
 
+            <section
+              className="student-observation-archive"
+              aria-labelledby="student-observation-archive-heading"
+            >
+              <div className="student-observation-archive-heading">
+                <div>
+                  <span className="d1-kicker">Zaman çizelgesi</span>
+                  <h3 id="student-observation-archive-heading">
+                    Gözlem arşivi
+                  </h3>
+                  <p>
+                    {selectedStudentObservations.length} değiştirilemez kayıt ·
+                    tarih ve saat sırasıyla
+                  </p>
+                </div>
+                <ArchiveIcon aria-hidden="true" />
+              </div>
+              <div className="student-observation-filters" role="group" aria-label="Gözlem filtresi">
+                <button
+                  type="button"
+                  aria-pressed={studentObservationFilter === "all"}
+                  onClick={() => {
+                    setStudentObservationFilter("all");
+                    setStudentObservationLimit(20);
+                  }}
+                >
+                  Tümü · {selectedStudentObservations.length}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={studentObservationFilter === "pending"}
+                  onClick={() => {
+                    setStudentObservationFilter("pending");
+                    setStudentObservationLimit(20);
+                  }}
+                >
+                  Bağ bekleyen · {selectedStudentPendingLinks}
+                </button>
+              </div>
+              <div className="student-observation-export-actions">
+                <button type="button" onClick={downloadCurrentStudentObservations}>
+                  <DownloadIcon aria-hidden="true" />
+                  Metin indir
+                </button>
+                <button type="button" onClick={() => void copyCurrentStudentObservations()}>
+                  <CopyIcon aria-hidden="true" />
+                  Kopyala
+                </button>
+                <button type="button" onClick={() => void shareCurrentStudentObservations()}>
+                  <UploadIcon aria-hidden="true" />
+                  Paylaş
+                </button>
+              </div>
+              <p className="student-observation-export-note">
+                ChatGPT veya başka bir uygulamayla paylaşmaya uygun düz metin
+                üretilir. Telefonlar ve fotoğraf dışa aktarılmaz.
+              </p>
+              {visibleSelectedStudentObservations.length > 0 ? (
+                <ol className="student-observation-timeline">
+                  {visibleSelectedStudentObservations
+                    .slice(0, studentObservationLimit)
+                    .map((observation) => {
+                    const pending =
+                      observation.confirmedCurriculumLinkIds.length === 0;
+                    return (
+                      <li key={observation.id}>
+                        <span className="student-observation-time-dot" aria-hidden="true" />
+                        <article>
+                          <div>
+                            <time dateTime={observation.observedAt}>
+                              {formatObservationDateTime(observation.observedAt)}
+                            </time>
+                            <span
+                              className={
+                                pending
+                                  ? "observation-link-state observation-link-state--pending"
+                                  : "observation-link-state observation-link-state--linked"
+                              }
+                            >
+                              {pending ? "Bağ bekliyor" : "Bağ tamam"}
+                            </span>
+                          </div>
+                          <small>{observation.activityTitle}</small>
+                          <p>{observation.rawText}</p>
+                          {observation.context ? (
+                            <details>
+                              <summary>Bağlam ve ayrıntı</summary>
+                              <p>{observation.context}</p>
+                              {observation.childQuote ? (
+                                <blockquote>{observation.childQuote}</blockquote>
+                              ) : null}
+                            </details>
+                          ) : null}
+                          {pending ? (
+                            <button
+                              type="button"
+                              onClick={() => openPendingObservation(observation)}
+                            >
+                              <Link2Icon aria-hidden="true" />
+                              Program bağını tamamla
+                            </button>
+                          ) : null}
+                        </article>
+                      </li>
+                    );
+                    })}
+                </ol>
+              ) : (
+                <div className="student-observation-empty">
+                  <ReaderIcon aria-hidden="true" />
+                  <strong>Henüz gözlem yok</strong>
+                  <span>İlk not kaydedildiğinde tarih ve saatiyle burada görünür.</span>
+                </div>
+              )}
+              {visibleSelectedStudentObservations.length > studentObservationLimit ? (
+                <button
+                  className="student-observation-more"
+                  type="button"
+                  onClick={() =>
+                    setStudentObservationLimit((current) => current + 20)
+                  }
+                >
+                  Sonraki 20 kaydı göster
+                </button>
+              ) : null}
+            </section>
+              </>
+            ) : null}
+
+            {studentProfileTab !== "flow" ? (
             <form
               className="student-profile-form"
               onSubmit={(event) => {
@@ -5162,6 +5905,8 @@ export default function Prototype() {
                 void saveStudentProfile();
               }}
             >
+              {studentProfileTab === "details" ? (
+                <>
               <div className="student-profile-section-heading">
                 <div>
                   <span className="d1-kicker">Temel bilgiler</span>
@@ -5351,6 +6096,162 @@ export default function Prototype() {
                 placeholder="Örn. geçişten önce kısa haber vermek; seçimleri görsel olarak sunmak"
                 rows={4}
               />
+                </>
+              ) : null}
+
+              {studentProfileTab === "contacts" ? (
+                <>
+              <div className="student-profile-section-heading student-profile-section-heading--secondary">
+                <div>
+                  <span className="d1-kicker">Aile ve yakınlar</span>
+                  <h3>İletişim merkezi</h3>
+                </div>
+                <ChatBubbleIcon aria-hidden="true" />
+              </div>
+
+              <p className="student-contact-intro">
+                Anne, baba, dede, amca, bakıcı veya başka bir yakını ekleyin.
+                Arama ve WhatsApp işlemleri doğrudan telefon uygulamalarına geçer.
+              </p>
+
+              <div className="student-contact-editor">
+                {studentProfileForm.contacts.map((contact) => {
+                  const contactLinks = contactActionLinks(contact.phone);
+                  return (
+                  <section className="student-contact-card" key={contact.id}>
+                    <div className="student-contact-card-heading">
+                      <strong>
+                        {contact.kind === "mother"
+                          ? "Anne"
+                          : contact.kind === "father"
+                            ? "Baba"
+                            : contact.relationship || "Diğer yakın"}
+                      </strong>
+                      {contact.isPrimary ? <span>Öncelikli</span> : null}
+                      {contact.kind === "other" ? (
+                        <button
+                          type="button"
+                          onClick={() => removeStudentContact(contact.id)}
+                          aria-label={`${contact.relationship || "Yakın"} iletişim kaydını kaldır`}
+                        >
+                          <TrashIcon aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {contact.kind === "other" ? (
+                      <label htmlFor={`student-contact-relationship-${contact.id}`}>
+                        Yakınlığı
+                        <KeyboardInput
+                          id={`student-contact-relationship-${contact.id}`}
+                          value={contact.relationship}
+                          onChange={(event) =>
+                            updateStudentContact(contact.id, {
+                              relationship: event.target.value.slice(0, 60),
+                            })
+                          }
+                          placeholder="Örn. Dede, amca, bakıcı"
+                          autoComplete="off"
+                        />
+                      </label>
+                    ) : null}
+
+                    <label htmlFor={`student-contact-name-${contact.id}`}>
+                      Adı ve soyadı
+                      <KeyboardInput
+                        id={`student-contact-name-${contact.id}`}
+                        value={contact.name ?? ""}
+                        onChange={(event) =>
+                          updateStudentContact(contact.id, {
+                            name: event.target.value.slice(0, 120),
+                          })
+                        }
+                        placeholder="İsteğe bağlı"
+                        autoComplete="name"
+                      />
+                    </label>
+
+                    <label htmlFor={`student-contact-phone-${contact.id}`}>
+                      Cep telefonu
+                      <KeyboardInput
+                        id={`student-contact-phone-${contact.id}`}
+                        type="tel"
+                        inputMode="tel"
+                        value={contact.phone}
+                        onChange={(event) =>
+                          updateStudentContact(contact.id, {
+                            phone: event.target.value,
+                          })
+                        }
+                        placeholder="05xx xxx xx xx"
+                        autoComplete="tel"
+                      />
+                    </label>
+
+                    <label className="student-contact-primary">
+                      <input
+                        type="checkbox"
+                        checked={contact.isPrimary}
+                        onChange={(event) =>
+                          setPrimaryStudentContact(
+                            contact.id,
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      Öncelikli iletişim kişisi
+                    </label>
+
+                    {contactLinks ? (
+                      <div className="student-contact-actions">
+                        <a
+                          href={contactLinks.tel}
+                          aria-label={`${contactDisplayLabel(contact)} kişisini ara`}
+                        >
+                          <PersonIcon aria-hidden="true" />
+                          Ara
+                        </a>
+                        <a
+                          href={contactLinks.whatsapp}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`${contactDisplayLabel(contact)} kişisine WhatsApp mesajı gönder`}
+                        >
+                          <ChatBubbleIcon aria-hidden="true" />
+                          WhatsApp
+                        </a>
+                      </div>
+                    ) : contact.phone.trim() ? (
+                      <p className="student-contact-invalid" role="status">
+                        Arama ve WhatsApp için geçerli bir cep telefonu girin.
+                      </p>
+                    ) : null}
+                  </section>
+                  );
+                })}
+              </div>
+
+              <button
+                className="student-contact-add"
+                type="button"
+                onClick={addStudentContact}
+              >
+                <PlusIcon aria-hidden="true" />
+                Başka bir yakın ekle
+              </button>
+              {removedStudentContact ? (
+                <div className="student-profile-undo" role="status">
+                  <span>
+                    {removedStudentContact.relationship} iletişim kaydı kaldırıldı;
+                    profil kaydedilene kadar geri alınabilir.
+                  </span>
+                  <button type="button" onClick={undoRemoveStudentContact}>
+                    Geri al
+                  </button>
+                </div>
+              ) : null}
+                </>
+              ) : null}
 
               <section className="student-profile-context" aria-label="Sınıf ve program bağlamı">
                 <div>
@@ -5377,8 +6278,9 @@ export default function Prototype() {
 
               <p className="student-profile-privacy">
                 <LockClosedIcon aria-hidden="true" />
-                Profil bu cihazda saklanır ve doğrulanmış MaarifOS yedeğine
-                dâhildir. Kimlik numarası bu alanda tutulmaz.
+                Profil, fotoğraf ve iletişim bilgileri bu cihazda saklanır ve
+                doğrulanmış MaarifOS yedeğine dâhildir. Gözlem metni dışa
+                aktarımında telefon ve fotoğraf kendiliğinden paylaşılmaz.
               </p>
               {studentProfileError ? (
                 <p className="d1-error" role="alert">{studentProfileError}</p>
@@ -5392,6 +6294,7 @@ export default function Prototype() {
                 {dataBusy ? "Kaydediliyor…" : "Profili kaydet"}
               </button>
             </form>
+            ) : null}
           </div>
         ) : null}
       </BottomSheet>
@@ -5416,7 +6319,7 @@ export default function Prototype() {
                 dataBusy
               }
             >
-              <span className="student-avatar" aria-hidden="true">{student.name.split(" ").map((part) => part[0]).join("")}</span>
+              <StudentAvatar student={student} />
               <span className="student-name">{student.name}</span>
               <span className={`status-pill status-pill--${student.status}`}>{statusLabels[student.status]}</span>
             </button>

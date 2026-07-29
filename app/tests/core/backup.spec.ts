@@ -1485,6 +1485,80 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
   );
 });
 
+test("30 küçültülmüş profil fotoğrafı şifreli yedekten temiz veritabanına kayıpsız döner", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-photo-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-photo-target-${crypto.randomUUID()}`,
+    });
+    const photo = `data:image/jpeg;base64,${"A".repeat(300_000)}`;
+    const createdAt = "2026-09-10T06:00:00.000Z";
+    const students = Array.from({ length: 30 }, (_, index) => ({
+      id: crypto.randomUUID(),
+      createdAt,
+      updatedAt: createdAt,
+      civilDate: "2026-09-10",
+      deletedAt: null,
+      schemaVersion: 4,
+      displayName: `Fotoğraflı Çocuk ${index + 1}`,
+      profilePhotoDataUrl: photo,
+      profileSchemaVersion: 4,
+      contacts: [
+        {
+          id: crypto.randomUUID(),
+          kind: index % 2 === 0 ? "mother" : "father",
+          relationship: index % 2 === 0 ? "Anne" : "Baba",
+          phone: `+90555${String(10_000_000 + index).slice(-8)}`,
+          isPrimary: true,
+        },
+      ],
+    }));
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", students),
+    );
+    const service = new core.BackupService(source, {
+      appVersion: "photo-capacity-test",
+      clock: () => new Date("2026-09-10T08:00:00.000Z"),
+      civilDateProvider: () => "2026-09-10",
+    });
+    const password = "Foto-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(password);
+    const serialized = service.serializeEncryptedBackup(encrypted);
+    const verified = await service.parseAndDecryptBackup(serialized, password);
+    const report = await new core.BackupService(target, {
+      appVersion: "photo-capacity-test",
+    }).restoreBackup(verified, { mode: "replace" });
+    const restored = await target.readSnapshot();
+    source.close();
+    target.close();
+    return {
+      serializedLength: serialized.length,
+      inserted: report.inserted,
+      studentCount: restored.students.length,
+      photosMatch: restored.students.every(
+        (student) => student.profilePhotoDataUrl === photo,
+      ),
+      contactsMatch: restored.students.every(
+        (student) =>
+          Array.isArray(student.contacts) &&
+          student.contacts.length === 1,
+      ),
+    };
+  });
+
+  expect(result.serializedLength).toBeLessThan(32 * 1024 * 1024);
+  expect(result.inserted).toBe(30);
+  expect(result.studentCount).toBe(30);
+  expect(result.photosMatch).toBe(true);
+  expect(result.contactsMatch).toBe(true);
+});
+
 test("replace öncesi recovery snapshot doğrulanır; kesintide veri ve snapshot korunur", async ({
   page,
 }) => {

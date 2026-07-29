@@ -90,7 +90,7 @@ test("service worker kontrollü güncelleme, sağlık penceresi ve rollback cach
   assert.match(worker, /maarifos-icon-512\.png/);
   assert.match(worker, /maarifos-icon-maskable-512\.png/);
   assert.match(worker, /apple-touch-icon-180\.png/);
-  assert.match(worker, /const WORKER_RELEASE = "0\.3\.1"/);
+  assert.match(worker, /const WORKER_RELEASE = "0\.4\.0"/);
   assert.match(worker, /shell-\$\{CACHE_VERSION\}/);
   assert.match(worker, /assets-\$\{CACHE_VERSION\}/);
   assert.match(worker, /const CACHE_HEALTH_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
@@ -192,7 +192,7 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
   await Promise.all(updateInstallPromises);
   assert.equal(clientLookupCount, 1);
   assert.equal(JSON.stringify(clientMessages), JSON.stringify([
-    { type: "maarifos:update-ready", version: "0.3.1" },
+    { type: "maarifos:update-ready", version: "0.4.0" },
   ]));
 
   const messagePromises = [];
@@ -203,10 +203,10 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
       waitUntil: (promise) => messagePromises.push(promise),
     });
   dispatchMessage({ type: "maarifos:skip-waiting", version: "0.2.0" });
-  dispatchMessage({ type: "unrelated", version: "0.3.1" });
+  dispatchMessage({ type: "unrelated", version: "0.4.0" });
   assert.equal(skipWaitingCount, 0);
 
-  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.3.1" });
+  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.4.0" });
   await Promise.all(messagePromises);
   assert.equal(skipWaitingCount, 1);
 });

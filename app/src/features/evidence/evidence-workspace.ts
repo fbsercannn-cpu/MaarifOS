@@ -187,15 +187,12 @@ export function resolveEvidenceWorkspace(
     .map((record) => activitySummary(record, plansById))
     .filter((record): record is EvidenceActivitySummary => record !== null);
   const activitiesById = new Map(allActivities.map((record) => [record.id, record]));
-  const activeStudents = snapshot.students.filter(
+  const scopedStudents = snapshot.students.filter(
     (record) =>
       typeof record.deletedAt !== "string" &&
-      record.enrollmentStatus !== "left" &&
-      record.enrollmentStatus !== "completed" &&
-      record.enrollmentStatus !== "transferred" &&
       recordBelongsToClassroomScope(record, scope),
   );
-  const studentsById = new Map(activeStudents.map((record) => [record.id, record]));
+  const studentsById = new Map(scopedStudents.map((record) => [record.id, record]));
   const scopedLinks = snapshot.evidenceCurriculumLinks.filter(
     (record) =>
       typeof record.deletedAt !== "string" &&

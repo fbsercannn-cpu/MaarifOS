@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   STUDENT_PROFILE_SCHEMA_VERSION,
   ageInMonthsOn,
+  isStudentProfilePhotoDataUrl,
+  normalizeStudentContacts,
+  normalizeStudentPhone,
   normalizeStudentProfile,
   studentProfileFromRecord,
 } from "../../src/core/domain/student.ts";
@@ -164,6 +167,78 @@ test("boş isteğe bağlı alanları saklamaz ve veri-minimum metin sınırları
 test("yaşı saklamak yerine doğum tarihinden ay olarak üretir", () => {
   assert.equal(ageInMonthsOn("2021-04-18", "2026-07-28"), 63);
   assert.equal(ageInMonthsOn("2021-07-29", "2026-07-28"), 59);
+});
+
+test("aile ve yakın telefonlarını uluslararası biçime getirir ve tek öncelikli kişiyi korur", () => {
+  assert.equal(normalizeStudentPhone("0555 123 45 67"), "+905551234567");
+  assert.equal(normalizeStudentPhone("5 551 234 567"), "+905551234567");
+  assert.equal(normalizeStudentPhone("+49 170 1234567"), "+491701234567");
+  assert.throws(() => normalizeStudentPhone("123"), /10–15 rakam/i);
+  assert.throws(() => normalizeStudentPhone("javascript:alert(1)"), /yalnız rakam/i);
+
+  const contacts = normalizeStudentContacts([
+    {
+      id: "00000000-0000-4000-8000-000000000971",
+      kind: "mother",
+      relationship: " Anne ",
+      name: " Ayşe Kurgu ",
+      phone: "0555 123 45 67",
+      isPrimary: true,
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000972",
+      kind: "other",
+      relationship: " Bakıcı ",
+      phone: "+90 532 000 00 00",
+    },
+  ]);
+
+  assert.deepEqual(contacts, [
+    {
+      id: "00000000-0000-4000-8000-000000000971",
+      kind: "mother",
+      relationship: "Anne",
+      name: "Ayşe Kurgu",
+      phone: "+905551234567",
+      isPrimary: true,
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000972",
+      kind: "other",
+      relationship: "Bakıcı",
+      phone: "+905320000000",
+      isPrimary: false,
+    },
+  ]);
+
+  assert.throws(
+    () =>
+      normalizeStudentContacts(
+        contacts.map((contact) => ({ ...contact, isPrimary: true })),
+      ),
+    /Yalnız bir kişi/i,
+  );
+});
+
+test("profil fotoğrafı yalnız küçük yerel JPEG, PNG veya WebP veri URL'sidir", () => {
+  assert.equal(
+    isStudentProfilePhotoDataUrl("data:image/jpeg;base64,AA=="),
+    true,
+  );
+  assert.equal(
+    isStudentProfilePhotoDataUrl("data:image/svg+xml;base64,PHN2Zz4="),
+    false,
+  );
+  assert.equal(
+    isStudentProfilePhotoDataUrl("https://example.test/student.jpg"),
+    false,
+  );
+  assert.equal(
+    isStudentProfilePhotoDataUrl(
+      `data:image/jpeg;base64,${"A".repeat(400_001)}`,
+    ),
+    false,
+  );
 });
 
 test("eski öğrenci kaydını bozmadan güncel profil görünümüne taşır", () => {

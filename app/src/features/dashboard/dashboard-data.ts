@@ -13,6 +13,7 @@ import type { StoredRecord } from "../../core/domain/model.ts";
 import {
   normalizeStudentProfile,
   studentProfileFromRecord,
+  type StudentContact,
 } from "../../core/domain/student.ts";
 import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
@@ -42,6 +43,8 @@ export type DashboardStudent = {
   interests?: string;
   strengths?: string;
   supportPreferences?: string;
+  contacts?: StudentContact[];
+  profilePhotoDataUrl?: string;
 };
 
 export type DashboardObservation = {
@@ -85,6 +88,10 @@ const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
     ...(profile.strengths ? { strengths: profile.strengths } : {}),
     ...(profile.supportPreferences
       ? { supportPreferences: profile.supportPreferences }
+      : {}),
+    ...(profile.contacts ? { contacts: profile.contacts } : {}),
+    ...(profile.profilePhotoDataUrl
+      ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
       : {}),
   };
 };
@@ -380,6 +387,8 @@ export async function persistStudentRosterChange(
       interests: options.student.interests,
       strengths: options.student.strengths,
       supportPreferences: options.student.supportPreferences,
+      contacts: options.student.contacts,
+      profilePhotoDataUrl: options.student.profilePhotoDataUrl,
     },
     civilDateInIstanbul(now),
   );
@@ -401,6 +410,8 @@ export async function persistStudentRosterChange(
     delete preserved.interests;
     delete preserved.strengths;
     delete preserved.supportPreferences;
+    delete preserved.contacts;
+    delete preserved.profilePhotoDataUrl;
     delete preserved.profileSchemaVersion;
     const enrollments = existing ? studentEnrollments(existing) : [];
     const matchingEnrollment = enrollments.find(
@@ -448,6 +459,10 @@ export async function persistStudentRosterChange(
         ...(profile.strengths ? { strengths: profile.strengths } : {}),
         ...(profile.supportPreferences
           ? { supportPreferences: profile.supportPreferences }
+          : {}),
+        ...(profile.contacts ? { contacts: profile.contacts } : {}),
+        ...(profile.profilePhotoDataUrl
+          ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
           : {}),
         profileSchemaVersion: profile.profileSchemaVersion,
         active: !options.archived,
@@ -598,6 +613,8 @@ export async function persistDashboardState(
           interests: student.interests,
           strengths: student.strengths,
           supportPreferences: student.supportPreferences,
+          contacts: student.contacts,
+          profilePhotoDataUrl: student.profilePhotoDataUrl,
         },
         civilDateInIstanbul(now),
       ),
@@ -677,6 +694,8 @@ export async function persistDashboardState(
           delete preserved.interests;
           delete preserved.strengths;
           delete preserved.supportPreferences;
+          delete preserved.contacts;
+          delete preserved.profilePhotoDataUrl;
           delete preserved.profileSchemaVersion;
           return {
             ...preserved,
@@ -699,6 +718,10 @@ export async function persistDashboardState(
             ...(profile.strengths ? { strengths: profile.strengths } : {}),
             ...(profile.supportPreferences
               ? { supportPreferences: profile.supportPreferences }
+              : {}),
+            ...(profile.contacts ? { contacts: profile.contacts } : {}),
+            ...(profile.profilePhotoDataUrl
+              ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
               : {}),
             profileSchemaVersion: profile.profileSchemaVersion,
             createdAt: existing?.createdAt ?? updatedAt,

@@ -219,6 +219,7 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
 
   const profileDialog = page.getByRole("dialog", { name: /çocuk profili|profili/i });
   await expect(profileDialog).toBeVisible();
+  await profileDialog.getByRole("button", { name: "Bilgiler", exact: true }).click();
   await profileDialog.getByLabel(/Tercih edilen ad/i).fill(preferredName);
   await profileDialog.getByLabel(/Doğum tarihi/i).fill(birthDate);
   await profileDialog.getByLabel(/İsteğe bağlı kod|Sınıf içi kod/i).fill(optionalCode);
@@ -237,6 +238,9 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
     .click();
 
   const reloadedProfileDialog = page.getByRole("dialog", { name: /çocuk profili|profili/i });
+  await reloadedProfileDialog
+    .getByRole("button", { name: "Bilgiler", exact: true })
+    .click();
   await expect(reloadedProfileDialog.getByLabel(/Tercih edilen ad/i)).toHaveValue(preferredName);
   await expect(reloadedProfileDialog.getByLabel(/Doğum tarihi/i)).toHaveValue(birthDate);
   await expect(
@@ -269,6 +273,96 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
 
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(page.getByText("1 gözlem bekliyor")).toBeVisible();
+});
+
+test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güvenli metin aktarımı birlikte çalışır", async ({
+  page,
+}, testInfo) => {
+  const childName = `Arşiv İletişim ${testInfo.workerIndex + 1}`;
+  const longObservation = `Uzun gözlem başlangıcı. ${"Ayrıntılı ve kesilmemiş gözlem cümlesi. ".repeat(90)}Uzun gözlem sonu.`;
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  await addChild(page, childName);
+  await createD1Observation(page, longObservation);
+
+  await page
+    .getByRole("region", { name: /Çocuklarım/i })
+    .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
+    .click();
+  const profile = page.getByRole("dialog", { name: `${childName} profili` });
+  await expect(profile).toBeVisible();
+  await expect(profile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
+  await expect(profile.getByRole("button", { name: /Program bağını tamamla/ })).toBeVisible();
+  await expect(
+    profile.locator('input[type="file"][capture="environment"]'),
+  ).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
+  await expect(
+    profile.locator('input[type="file"]:not([capture])'),
+  ).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
+
+  await profile.locator('input[type="file"]:not([capture])').setInputFiles({
+    name: "profil.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZJ+QAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await expect(profile.getByAltText(`${childName} profil fotoğrafı`)).toBeVisible();
+
+  await profile.getByRole("button", { name: "Yakınlar", exact: true }).click();
+  await profile.getByLabel("Adı ve soyadı").first().fill("Ayşe Kurgu");
+  await profile.getByLabel("Cep telefonu").first().fill("0555 123 45 67");
+  await profile.getByLabel("Öncelikli iletişim kişisi").first().check();
+  await profile.getByRole("button", { name: "Başka bir yakın ekle" }).click();
+  await profile.getByLabel("Yakınlığı").fill("Bakıcı");
+  await profile.getByLabel("Adı ve soyadı").last().fill("Melek Kurgu");
+  await profile.getByLabel("Cep telefonu").last().fill("0532 000 00 00");
+  await profile.getByRole("button", { name: "Profili kaydet" }).click();
+  await expect(profile).toBeHidden();
+
+  await page.reload({ waitUntil: "networkidle" });
+  await ensureClassroomConfigured(page);
+  await page
+    .getByRole("region", { name: /Çocuklarım/i })
+    .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
+    .click();
+  const reloadedProfile = page.getByRole("dialog", { name: `${childName} profili` });
+  await expect(reloadedProfile.getByAltText(`${childName} profil fotoğrafı`)).toBeVisible();
+  await expect(reloadedProfile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
+
+  const exportDownload = page.waitForEvent("download");
+  await reloadedProfile.getByRole("button", { name: "Metin indir" }).click();
+  const exported = await exportDownload;
+  const exportPath = await exported.path();
+  if (!exportPath) throw new Error("Gözlem metni indirme yolu üretilemedi.");
+  const exportedText = await readFile(exportPath, "utf8");
+  expect(exportedText).toContain("Uzun gözlem başlangıcı.");
+  expect(exportedText).toContain("Uzun gözlem sonu.");
+  expect(exportedText).not.toContain("0555");
+  expect(exportedText).not.toContain("Ayşe Kurgu");
+  expect(exportedText).not.toContain("data:image");
+
+  await reloadedProfile.getByRole("button", { name: "Yakınlar", exact: true }).click();
+  await expect(
+    reloadedProfile.getByRole("link", { name: /Ayşe Kurgu kişisini ara/ }),
+  ).toHaveAttribute("href", "tel:+905551234567");
+  await expect(
+    reloadedProfile.getByRole("link", { name: /Ayşe Kurgu kişisine WhatsApp/ }),
+  ).toHaveAttribute("href", "https://wa.me/905551234567");
+  await expect(reloadedProfile.getByLabel("Cep telefonu").last()).toHaveValue(
+    "+905320000000",
+  );
+
+  await reloadedProfile
+    .getByRole("button", { name: /Bağ bekleyen/ })
+    .first()
+    .click();
+  await reloadedProfile
+    .getByRole("button", { name: /Program bağını tamamla/ })
+    .click();
+  await expect(page.getByLabel("Program hedefi")).toBeVisible();
 });
 
 test("seçili çocuklara toplu hızlı gözlem ayrı kaydedilir ve yeniden açılışta korunur", async ({

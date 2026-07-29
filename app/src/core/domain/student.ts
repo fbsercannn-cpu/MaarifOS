@@ -1,9 +1,34 @@
 import type { StoredRecord } from "./model.ts";
 
-export const STUDENT_PROFILE_SCHEMA_VERSION = 3 as const;
+export const STUDENT_PROFILE_SCHEMA_VERSION = 4 as const;
 
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NATIONAL_IDENTIFIER_PATTERN = /^\d{10,11}$/;
+const CONTACT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROFILE_PHOTO_PATTERN =
+  /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const MAX_PROFILE_PHOTO_DATA_URL_LENGTH = 400_000;
+
+export type StudentContactKind = "mother" | "father" | "other";
+
+export type StudentContactInput = {
+  id: string;
+  kind: StudentContactKind;
+  relationship: string;
+  name?: string;
+  phone: string;
+  isPrimary?: boolean;
+};
+
+export type StudentContact = {
+  id: string;
+  kind: StudentContactKind;
+  relationship: string;
+  name?: string;
+  phone: string;
+  isPrimary: boolean;
+};
 
 export type StudentProfileInput = {
   displayName: string;
@@ -16,6 +41,8 @@ export type StudentProfileInput = {
   strengths?: string;
   /** Öğretmenin sunduğu desteği betimler; tanı veya gelişim hükmü değildir. */
   supportPreferences?: string;
+  contacts?: readonly StudentContactInput[];
+  profilePhotoDataUrl?: string;
 };
 
 export type StudentProfile = {
@@ -28,6 +55,8 @@ export type StudentProfile = {
   interests?: string;
   strengths?: string;
   supportPreferences?: string;
+  contacts?: StudentContact[];
+  profilePhotoDataUrl?: string;
   profileSchemaVersion: typeof STUDENT_PROFILE_SCHEMA_VERSION;
 };
 
@@ -46,6 +75,78 @@ function optionalLimitedText(
     throw new Error(`${fieldLabel} ${maximumLength} karakterden uzun olamaz.`);
   }
   return trimmed;
+}
+
+export function normalizeStudentPhone(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error("Telefon numarası boş bırakılamaz.");
+  }
+  if (!/^[+()\d\s.-]+$/.test(trimmed)) {
+    throw new Error("Telefon numarası yalnız rakam ve telefon ayırıcıları içerebilir.");
+  }
+  let digits = trimmed.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = `90${digits.slice(1)}`;
+  } else if (digits.length === 10 && digits.startsWith("5")) {
+    digits = `90${digits}`;
+  }
+  if (digits.length < 10 || digits.length > 15) {
+    throw new Error("Telefon numarası ülke koduyla birlikte 10–15 rakam olmalıdır.");
+  }
+  return `+${digits}`;
+}
+
+export function normalizeStudentContacts(
+  contacts: readonly StudentContactInput[] | undefined,
+): StudentContact[] {
+  if (!contacts) return [];
+  const ids = new Set<string>();
+  const normalized = contacts.map((contact) => {
+    if (!CONTACT_ID_PATTERN.test(contact.id) || ids.has(contact.id)) {
+      throw new Error("Yakın iletişim kaydı kimliği geçersiz veya mükerrer.");
+    }
+    ids.add(contact.id);
+    if (
+      contact.kind !== "mother" &&
+      contact.kind !== "father" &&
+      contact.kind !== "other"
+    ) {
+      throw new Error("Yakın iletişim türü geçersiz.");
+    }
+    const relationship = optionalLimitedText(
+      contact.relationship,
+      "Yakınlık",
+      60,
+    );
+    if (!relationship) {
+      throw new Error("Yakınlık bilgisi boş bırakılamaz.");
+    }
+    const name = optionalLimitedText(contact.name, "Yakın adı", 120);
+    return {
+      id: contact.id,
+      kind: contact.kind,
+      relationship,
+      ...(name ? { name } : {}),
+      phone: normalizeStudentPhone(contact.phone),
+      isPrimary: contact.isPrimary === true,
+    };
+  });
+  if (normalized.filter((contact) => contact.isPrimary).length > 1) {
+    throw new Error("Yalnız bir kişi öncelikli iletişim olarak seçilebilir.");
+  }
+  return normalized;
+}
+
+export function isStudentProfilePhotoDataUrl(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_PROFILE_PHOTO_DATA_URL_LENGTH &&
+    PROFILE_PHOTO_PATTERN.test(value)
+  );
 }
 
 function isCivilDateValue(value: string): boolean {
@@ -128,6 +229,14 @@ export function normalizeStudentProfile(
     "Öğretmen desteği notu",
     1_000,
   );
+  const contacts = normalizeStudentContacts(input.contacts);
+  const profilePhotoDataUrl = optionalTrimmed(input.profilePhotoDataUrl);
+  if (
+    profilePhotoDataUrl !== undefined &&
+    !isStudentProfilePhotoDataUrl(profilePhotoDataUrl)
+  ) {
+    throw new Error("Profil fotoğrafı desteklenmeyen veya çok büyük bir görsel içeriyor.");
+  }
 
   return {
     displayName,
@@ -139,6 +248,8 @@ export function normalizeStudentProfile(
     ...(interests ? { interests } : {}),
     ...(strengths ? { strengths } : {}),
     ...(supportPreferences ? { supportPreferences } : {}),
+    ...(contacts.length > 0 ? { contacts } : {}),
+    ...(profilePhotoDataUrl ? { profilePhotoDataUrl } : {}),
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   };
 }
@@ -160,6 +271,21 @@ export function studentProfileFromRecord(
     (!birthDate || record.enrollmentDate >= birthDate)
       ? record.enrollmentDate
       : undefined;
+  let contacts: StudentContact[] = [];
+  if (Array.isArray(record.contacts)) {
+    try {
+      contacts = normalizeStudentContacts(
+        record.contacts as StudentContactInput[],
+      );
+    } catch {
+      contacts = [];
+    }
+  }
+  const profilePhotoDataUrl = isStudentProfilePhotoDataUrl(
+    record.profilePhotoDataUrl,
+  )
+    ? record.profilePhotoDataUrl
+    : undefined;
   return {
     displayName: record.displayName.trim(),
     ...(typeof record.preferredName === "string" && record.preferredName.trim()
@@ -184,6 +310,8 @@ export function studentProfileFromRecord(
     record.supportPreferences.trim()
       ? { supportPreferences: record.supportPreferences.trim() }
       : {}),
+    ...(contacts.length > 0 ? { contacts } : {}),
+    ...(profilePhotoDataUrl ? { profilePhotoDataUrl } : {}),
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   };
 }
