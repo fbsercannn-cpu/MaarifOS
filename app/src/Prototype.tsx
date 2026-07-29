@@ -69,6 +69,9 @@ import {
   type AppLockAttemptState,
   type AppLockConfig,
   type BackupEnvelope,
+  type CalendarEntry,
+  type CalendarEntryStatus,
+  type CalendarEntryType,
   type RecoverySnapshotMetadata,
   type RestoreMode,
   type StudentContact,
@@ -135,6 +138,7 @@ import {
   loadTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
+  transitionAcademicYearConfiguration,
   type TodayActivityStatus,
   type TodayWorkspace,
 } from "./features/today/today-data";
@@ -149,6 +153,28 @@ import {
   prepareStudentProfilePhoto,
   studentObservationExportFileName,
 } from "./features/students/student-profile-tools";
+import {
+  OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+  loadAcademicCalendar,
+  officialEventsOnDate,
+  removeCalendarEntry,
+  saveCalendarEntry,
+  type AcademicCalendarWorkspace,
+} from "./features/calendar/academic-calendar";
+import {
+  permanentlyDeleteArchivedStudent,
+  previewPermanentStudentDeletion,
+  type StudentDeletionImpact,
+} from "./features/students/student-lifecycle";
+import {
+  createStudentDossier,
+  listExternalAiFeedback,
+  saveExternalAiFeedback,
+  type DossierAudience,
+  type DossierDestination,
+  type DossierIdentityMode,
+  type ExternalAiFeedback,
+} from "./features/reports/student-dossier";
 import {
   acknowledgeCurrentRelease,
   CURRENT_RELEASE,
@@ -258,15 +284,48 @@ type PortfolioEditorState = {
   selectedBy: PortfolioSelectedBy;
 };
 
+type CalendarEntryFormState = {
+  entryType: CalendarEntryType;
+  title: string;
+  note: string;
+  status: CalendarEntryStatus;
+};
+
+type StudentShareFormState = {
+  destination: DossierDestination;
+  audience: DossierAudience;
+  identityMode: DossierIdentityMode;
+  alias: string;
+  periodStart: string;
+  periodEnd: string;
+  includeContacts: boolean;
+  includeAttendance: boolean;
+  includeObservations: boolean;
+  includePortfolio: boolean;
+  includeExternalFeedback: boolean;
+  personalDataApprovedForAi: boolean;
+};
+
+type ExternalFeedbackFormState = {
+  provider: "chatgpt" | "gemini" | "other";
+  audience: DossierAudience;
+  periodStart: string;
+  periodEnd: string;
+  feedbackText: string;
+  teacherNote: string;
+  includeInTermSummary: boolean;
+  includeInYearSummary: boolean;
+};
+
 const currentCivilDate = civilDateInIstanbul(new Date());
 const currentCivilYear = Number(currentCivilDate.slice(0, 4));
 const currentCivilMonth = Number(currentCivilDate.slice(5, 7));
 const currentAcademicStartYear =
   currentCivilMonth >= 9 ? currentCivilYear : currentCivilYear - 1;
-
 const initialClassroomForm: ClassroomFormState = {
   classroomName: "",
-  academicYearName: `${currentAcademicStartYear}–${currentAcademicStartYear + 1} Eğitim Yılı`,
+  academicYearName:
+    `${currentAcademicStartYear}–${currentAcademicStartYear + 1} Eğitim Yılı`,
   academicYearStart: `${currentAcademicStartYear}-09-01`,
   academicYearEnd: `${currentAcademicStartYear + 1}-08-31`,
   ageGroup: "",
@@ -279,11 +338,88 @@ const initialClassroomForm: ClassroomFormState = {
   endTime: "",
 };
 
+const emptyAcademicCalendar: AcademicCalendarWorkspace = {
+  academicYearId: null,
+  classroomId: null,
+  officialEvents: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events,
+  entries: [],
+};
+
+const initialCalendarEntryForm: CalendarEntryFormState = {
+  entryType: "general_note",
+  title: "",
+  note: "",
+  status: "planned",
+};
+
 const schedulePresets: Record<Exclude<ClassroomScheduleKind, "custom">, Pick<ClassroomFormState, "startTime" | "endTime">> = {
   morning: { startTime: "08:30", endTime: "12:30" },
   afternoon: { startTime: "13:00", endTime: "17:00" },
   full_day: { startTime: "08:30", endTime: "16:30" },
 };
+
+const calendarEntryTypeLabels: Record<CalendarEntryType, string> = {
+  general_note: "Genel not",
+  parent_meeting: "Veli toplantısı",
+  fruit_day: "Meyve günü",
+  activity: "Etkinlik",
+  adaptation_day: "Uyum günü",
+  official_marker: "Resmî takvim işareti",
+};
+
+const calendarEntryStatusLabels: Record<CalendarEntryStatus, string> = {
+  planned: "Planlandı",
+  completed: "Tamamlandı",
+  cancelled: "İptal edildi",
+};
+
+const dossierDestinationLabels: Record<DossierDestination, string> = {
+  whatsapp: "WhatsApp / paylaş",
+  chatgpt: "ChatGPT",
+  gemini: "Gemini",
+  file: "Metin dosyası",
+};
+
+const dossierAudienceLabels: Record<DossierAudience, string> = {
+  parent: "Veli",
+  administration: "Okul idaresi",
+  guidance: "Rehberlik öğretmeni",
+  teacher: "Öğretmen çalışma özeti",
+};
+
+function shiftCalendarMonth(month: string, delta: number): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + delta, 1));
+  return shifted.toISOString().slice(0, 7);
+}
+
+function calendarMonthDays(month: string): {
+  civilDate: string;
+  day: number;
+  inMonth: boolean;
+}[] {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const mondayOffset = (first.getUTCDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(
+      Date.UTC(year, monthNumber - 1, index - mondayOffset + 1),
+    );
+    return {
+      civilDate: date.toISOString().slice(0, 10),
+      day: date.getUTCDate(),
+      inMonth: date.getUTCMonth() === monthNumber - 1,
+    };
+  });
+}
+
+function formatCalendarMonth(month: string): string {
+  return new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${month}-01T12:00:00.000Z`));
+}
 
 const supportedCurriculumPrograms = [
   "Türkiye Yüzyılı Maarif Modeli",
@@ -398,9 +534,12 @@ type AppSurface =
   | "attendance"
   | "children"
   | "student-profile"
+  | "student-share"
+  | "student-delete"
   | "settings"
   | "classroom"
   | "plans"
+  | "calendar"
   | "documents"
   | "release-notes"
   | "plan-flow"
@@ -414,9 +553,12 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
   return candidate === "attendance" ||
     candidate === "children" ||
     candidate === "student-profile" ||
+    candidate === "student-share" ||
+    candidate === "student-delete" ||
     candidate === "settings" ||
     candidate === "classroom" ||
     candidate === "plans" ||
+    candidate === "calendar" ||
     candidate === "documents" ||
     candidate === "release-notes" ||
     candidate === "plan-flow" ||
@@ -2321,6 +2463,17 @@ export default function Prototype() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [academicCalendar, setAcademicCalendar] =
+    useState<AcademicCalendarWorkspace>(emptyAcademicCalendar);
+  const [calendarMonth, setCalendarMonth] = useState("2026-09");
+  const [calendarSelectedDate, setCalendarSelectedDate] =
+    useState("2026-09-07");
+  const [calendarEntryForm, setCalendarEntryForm] =
+    useState<CalendarEntryFormState>(initialCalendarEntryForm);
+  const [calendarError, setCalendarError] = useState("");
+  const [academicYearTransitionConfirmed, setAcademicYearTransitionConfirmed] =
+    useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
@@ -2343,6 +2496,47 @@ export default function Prototype() {
     useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
   const [classroomError, setClassroomError] = useState("");
+  const [studentDeletionCandidate, setStudentDeletionCandidate] =
+    useState<Student | null>(null);
+  const [studentDeletionImpact, setStudentDeletionImpact] =
+    useState<StudentDeletionImpact | null>(null);
+  const [studentDeletionConfirmation, setStudentDeletionConfirmation] =
+    useState("");
+  const [studentShareOpen, setStudentShareOpen] = useState(false);
+  const [studentShareError, setStudentShareError] = useState("");
+  const [studentShareBusy, setStudentShareBusy] = useState(false);
+  const [studentShareForm, setStudentShareForm] =
+    useState<StudentShareFormState>({
+      destination: "whatsapp",
+      audience: "administration",
+      identityMode: "full",
+      alias: "Öğrenci A",
+      periodStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+      periodEnd:
+        OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalEndDate,
+      includeContacts: true,
+      includeAttendance: true,
+      includeObservations: true,
+      includePortfolio: true,
+      includeExternalFeedback: true,
+      personalDataApprovedForAi: false,
+    });
+  const [externalFeedbackForm, setExternalFeedbackForm] =
+    useState<ExternalFeedbackFormState>({
+      provider: "chatgpt",
+      audience: "parent",
+      periodStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+      periodEnd:
+        OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalEndDate,
+      feedbackText: "",
+      teacherNote: "",
+      includeInTermSummary: true,
+      includeInYearSummary: true,
+    });
+  const [externalFeedback, setExternalFeedback] =
+    useState<ExternalAiFeedback[]>([]);
+  const [lastExportPackageId, setLastExportPackageId] =
+    useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
   const [recoverySnapshots, setRecoverySnapshots] = useState<
     RecoverySnapshotMetadata[]
@@ -2397,6 +2591,35 @@ export default function Prototype() {
   const configuredClassroom = todayWorkspace.classroom.status === "configured"
     ? todayWorkspace.classroom
     : null;
+  const academicYearTransitionRequired =
+    configuredClassroom !== null &&
+    (classroomForm.academicYearName.trim() !==
+      configuredClassroom.academicYearName ||
+      classroomForm.academicYearStart !==
+        configuredClassroom.academicYearStart ||
+      classroomForm.academicYearEnd !==
+        configuredClassroom.academicYearEnd);
+  const visibleCalendarDays = useMemo(
+    () => calendarMonthDays(calendarMonth),
+    [calendarMonth],
+  );
+  const selectedOfficialCalendarEvents = useMemo(
+    () =>
+      officialEventsOnDate(
+        academicCalendar.officialEvents,
+        calendarSelectedDate,
+      ),
+    [academicCalendar.officialEvents, calendarSelectedDate],
+  );
+  const selectedTeacherCalendarEntries = useMemo(
+    () =>
+      academicCalendar.entries.filter(
+        (entry) =>
+          entry.startDate <= calendarSelectedDate &&
+          entry.endDate >= calendarSelectedDate,
+      ),
+    [academicCalendar.entries, calendarSelectedDate],
+  );
   const currentActivity = todayWorkspace.currentActivity;
   const focusActivity = currentActivity
     ?? todayWorkspace.planItems.find((item) => item.status === "planned")
@@ -2503,6 +2726,10 @@ export default function Prototype() {
     ? "evidence-flow"
     : planFlowOpen
       ? "plan-flow"
+      : studentShareOpen
+        ? "student-share"
+        : studentDeletionCandidate
+          ? "student-delete"
       : studentProfileOpen
         ? "student-profile"
         : attendanceOpen
@@ -2513,6 +2740,8 @@ export default function Prototype() {
               ? "classroom"
               : plansOpen
                 ? "plans"
+                : calendarOpen
+                  ? "calendar"
                 : documentsOpen
                   ? "documents"
                   : profileOpen
@@ -2649,13 +2878,15 @@ export default function Prototype() {
   }, []);
 
   const refreshD1Workspaces = async () => {
-    const [today, evidence] = await Promise.all([
+    const [today, evidence, calendar] = await Promise.all([
       loadTodayWorkspace(store),
       loadEvidenceWorkspace(store),
+      loadAcademicCalendar(store),
     ]);
     setTodayWorkspace(today);
     setEvidenceWorkspace(evidence);
-    return { today, evidence };
+    setAcademicCalendar(calendar);
+    return { today, evidence, calendar };
   };
 
   useEffect(() => {
@@ -2672,10 +2903,11 @@ export default function Prototype() {
       loadDashboardState(store, fallbackDashboardState),
       loadTodayWorkspace(store),
       loadEvidenceWorkspace(store),
+      loadAcademicCalendar(store),
       loadAppLockSetting(store),
       backupService.listRecoverySnapshots(),
     ])
-      .then(([state, workspace, evidence, lockSetting, snapshots]) => {
+      .then(([state, workspace, evidence, calendar, lockSetting, snapshots]) => {
         if (cancelled) return;
         setStudents(state.students);
         setArchivedStudents(state.archivedStudents);
@@ -2683,6 +2915,7 @@ export default function Prototype() {
         setAttendanceCivilDate(state.attendanceCivilDate);
         setTodayWorkspace(workspace);
         setEvidenceWorkspace(evidence);
+        setAcademicCalendar(calendar);
         setRecoverySnapshots(snapshots);
         if (lockSetting) {
           appLockSessionRef.current = new AppLockSession(
@@ -3340,12 +3573,14 @@ export default function Prototype() {
         restored,
         restoredWorkspace,
         restoredEvidence,
+        restoredCalendar,
         restoredLockSetting,
         snapshots,
       ] = await Promise.all([
         loadDashboardState(store, fallbackDashboardState),
         loadTodayWorkspace(store),
         loadEvidenceWorkspace(store),
+        loadAcademicCalendar(store),
         loadAppLockSetting(store),
         backupService.listRecoverySnapshots(),
       ]);
@@ -3356,6 +3591,7 @@ export default function Prototype() {
       setLastAttendanceChange(null);
       setTodayWorkspace(restoredWorkspace);
       setEvidenceWorkspace(restoredEvidence);
+      setAcademicCalendar(restoredCalendar);
       setRecoverySnapshots(snapshots);
       if (restoredLockSetting) {
         appLockSessionRef.current = new AppLockSession(
@@ -4033,10 +4269,6 @@ export default function Prototype() {
   };
 
   const archiveStudent = async (studentId: string) => {
-    if (students.length <= 1) {
-      setAnnouncement("Sınıfta en az bir çocuk kalmalı.");
-      return;
-    }
     const student = students.find((item) => item.id === studentId);
     if (!student) return;
     setDataBusy(true);
@@ -4070,6 +4302,374 @@ export default function Prototype() {
     }
   };
 
+  const openAcademicCalendar = async () => {
+    if (!configuredClassroom) {
+      setClassroomOpen(true);
+      setAnnouncement("Takvimi açmadan önce sınıfınızı kurun.");
+      return;
+    }
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      const calendar = await loadAcademicCalendar(store);
+      const preferredDate =
+        attendanceCivilDate >= configuredClassroom.academicYearStart &&
+        attendanceCivilDate <= configuredClassroom.academicYearEnd
+          ? attendanceCivilDate
+          : configuredClassroom.academicYearStart;
+      setAcademicCalendar(calendar);
+      setCalendarSelectedDate(preferredDate);
+      setCalendarMonth(preferredDate.slice(0, 7));
+      setPlansOpen(false);
+      setCalendarOpen(true);
+      setAnnouncement("Eğitim takvimi açıldı.");
+    } catch (reason) {
+      setAnnouncement(
+        reason instanceof Error
+          ? reason.message
+          : "Eğitim takvimi açılamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const selectOfficialCalendarEvent = (
+    event: (typeof OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events)[number],
+  ) => {
+    setCalendarSelectedDate(event.startDate);
+    setCalendarMonth(event.startDate.slice(0, 7));
+    setCalendarEntryForm({
+      entryType:
+        event.kind === "adaptation"
+          ? "adaptation_day"
+          : "official_marker",
+      title: event.title,
+      note: "Öğretmen işareti · MEB 2026–2027 çalışma takvimi",
+      status: "planned",
+    });
+    setCalendarError("");
+  };
+
+  const persistCalendarEntry = async () => {
+    if (!calendarEntryForm.title.trim()) {
+      setCalendarError("Takvim başlığı boş bırakılamaz.");
+      return;
+    }
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      await enqueuePersistence(() =>
+        saveCalendarEntry(store, {
+          entryType: calendarEntryForm.entryType,
+          title: calendarEntryForm.title,
+          note: calendarEntryForm.note,
+          status: calendarEntryForm.status,
+          startDate: calendarSelectedDate,
+          endDate: calendarSelectedDate,
+        }),
+      );
+      const calendar = await loadAcademicCalendar(store);
+      setAcademicCalendar(calendar);
+      setCalendarEntryForm(initialCalendarEntryForm);
+      setAnnouncement(
+        `${formatTurkishCivilDate(calendarSelectedDate)} takvim notu kaydedildi.`,
+      );
+    } catch (reason) {
+      setCalendarError(
+        reason instanceof Error
+          ? reason.message
+          : "Takvim notu kaydedilemedi.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const updateCalendarEntryStatus = async (
+    entry: CalendarEntry,
+    status: CalendarEntryStatus,
+  ) => {
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      await enqueuePersistence(() =>
+        saveCalendarEntry(store, { ...entry, status }),
+      );
+      setAcademicCalendar(await loadAcademicCalendar(store));
+      setAnnouncement(
+        `${entry.title}: ${calendarEntryStatusLabels[status].toLocaleLowerCase("tr-TR")}.`,
+      );
+    } catch (reason) {
+      setCalendarError(
+        reason instanceof Error
+          ? reason.message
+          : "Takvim işareti güncellenemedi.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const deleteCalendarEntry = async (entry: CalendarEntry) => {
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      await enqueuePersistence(() =>
+        removeCalendarEntry(store, { id: entry.id }),
+      );
+      setAcademicCalendar(await loadAcademicCalendar(store));
+      setAnnouncement(`${entry.title} takvimden kaldırıldı.`);
+    } catch (reason) {
+      setCalendarError(
+        reason instanceof Error
+          ? reason.message
+          : "Takvim notu kaldırılamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const openStudentDeletion = async (student: Student) => {
+    setDataBusy(true);
+    try {
+      const snapshot = await store.readSnapshot();
+      const impact = previewPermanentStudentDeletion(snapshot, student.id);
+      setStudentDeletionCandidate(student);
+      setStudentDeletionImpact(impact);
+      setStudentDeletionConfirmation("");
+      setChildrenOpen(false);
+      setAnnouncement(
+        `${student.name} için kalıcı silme etkisi hesaplandı.`,
+      );
+    } catch (reason) {
+      setAnnouncement(
+        reason instanceof Error
+          ? reason.message
+          : "Kalıcı silme önizlemesi hazırlanamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const confirmPermanentStudentDeletion = async () => {
+    if (!studentDeletionCandidate || !studentDeletionImpact) return;
+    setDataBusy(true);
+    try {
+      const result = await enqueuePersistence(() =>
+        permanentlyDeleteArchivedStudent(store, {
+          studentId: studentDeletionCandidate.id,
+          confirmationName: studentDeletionConfirmation,
+        }),
+      );
+      const dashboard = await loadDashboardState(
+        store,
+        fallbackDashboardState,
+      );
+      setStudents(dashboard.students);
+      setArchivedStudents(dashboard.archivedStudents);
+      setStudentDeletionCandidate(null);
+      setStudentDeletionImpact(null);
+      setStudentDeletionConfirmation("");
+      if (!native) setChildrenOpen(true);
+      setAnnouncement(
+        `${result.displayName} ve ${result.removedEntityCount} bağlı kayıt kalıcı olarak silindi.`,
+      );
+    } catch (reason) {
+      setAnnouncement(
+        reason instanceof Error
+          ? reason.message
+          : "Öğrenci kalıcı olarak silinemedi.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const openStudentShareCenter = async () => {
+    if (!selectedProfileStudent || !configuredClassroom) return;
+    setStudentShareError("");
+    setLastExportPackageId(null);
+    setStudentShareForm((current) => ({
+      ...current,
+      periodStart: configuredClassroom.academicYearStart,
+      periodEnd: configuredClassroom.academicYearEnd,
+      personalDataApprovedForAi: false,
+    }));
+    setExternalFeedbackForm((current) => ({
+      ...current,
+      periodStart: configuredClassroom.academicYearStart,
+      periodEnd: configuredClassroom.academicYearEnd,
+      feedbackText: "",
+      teacherNote: "",
+    }));
+    try {
+      const snapshot = await store.readSnapshot();
+      setExternalFeedback(
+        listExternalAiFeedback(snapshot, selectedProfileStudent.id),
+      );
+      setStudentProfileOpen(false);
+      setStudentShareOpen(true);
+      setAnnouncement(`${selectedProfileStudent.name} paylaşım merkezi açıldı.`);
+    } catch (reason) {
+      setStudentShareError(
+        reason instanceof Error
+          ? reason.message
+          : "Paylaşım merkezi açılamadı.",
+      );
+    }
+  };
+
+  const prepareStudentDossier = async () => {
+    if (!selectedProfileStudent || studentShareBusy) return;
+    const isAiDestination =
+      studentShareForm.destination === "chatgpt" ||
+      studentShareForm.destination === "gemini";
+    if (
+      isAiDestination &&
+      studentShareForm.identityMode === "full" &&
+      !studentShareForm.personalDataApprovedForAi
+    ) {
+      setStudentShareError(
+        "Yapay zekâya tam kimlikle göndermek için kişisel veri onayını açıkça işaretleyin veya takma ad kullanın.",
+      );
+      return;
+    }
+    setStudentShareBusy(true);
+    setStudentShareError("");
+    try {
+      const result = await enqueuePersistence(() =>
+        createStudentDossier(store, {
+          studentId: selectedProfileStudent.id,
+          options: {
+            destination: studentShareForm.destination,
+            audience: studentShareForm.audience,
+            identityMode: studentShareForm.identityMode,
+            alias: studentShareForm.alias,
+            periodStart: studentShareForm.periodStart,
+            periodEnd: studentShareForm.periodEnd,
+            includeContacts: studentShareForm.includeContacts,
+            includeAttendance: studentShareForm.includeAttendance,
+            includeObservations: studentShareForm.includeObservations,
+            includePortfolio: studentShareForm.includePortfolio,
+            includeExternalFeedback:
+              studentShareForm.includeExternalFeedback,
+            personalDataApprovedForAi:
+              studentShareForm.personalDataApprovedForAi,
+          },
+        }),
+      );
+      setLastExportPackageId(result.exportPackageId);
+      if (studentShareForm.destination === "whatsapp") {
+        const file = new File([result.dossier.text], result.dossier.fileName, {
+          type: "text/plain;charset=utf-8",
+        });
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          await navigator.share({
+            title: result.dossier.title,
+            text: "MaarifOS öğrenci dosyası",
+            files: [file],
+          });
+          setAnnouncement("Öğrenci dosyası paylaşım ekranına gönderildi.");
+        } else {
+          downloadText(result.dossier.fileName, result.dossier.text);
+          setAnnouncement(
+            "Bu cihaz dosya paylaşımını desteklemedi; WhatsApp’ta ekleyebilmeniz için dosya indirildi.",
+          );
+        }
+      } else if (
+        studentShareForm.destination === "chatgpt" ||
+        studentShareForm.destination === "gemini"
+      ) {
+        await navigator.clipboard.writeText(result.dossier.text);
+        const url =
+          studentShareForm.destination === "chatgpt"
+            ? "https://chatgpt.com/"
+            : "https://gemini.google.com/app";
+        window.open(url, "_blank", "noopener,noreferrer");
+        setAnnouncement(
+          `Dosya panoya kopyalandı; ${studentShareForm.destination === "chatgpt" ? "ChatGPT" : "Gemini"} ekranına yapıştırın.`,
+        );
+      } else {
+        downloadText(result.dossier.fileName, result.dossier.text);
+        setAnnouncement("Öğrenci dosyası metin olarak indirildi.");
+      }
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        return;
+      }
+      setStudentShareError(
+        reason instanceof Error
+          ? reason.message
+          : "Öğrenci dosyası hazırlanamadı.",
+      );
+    } finally {
+      setStudentShareBusy(false);
+    }
+  };
+
+  const persistExternalFeedback = async () => {
+    if (!selectedProfileStudent || studentShareBusy) return;
+    setStudentShareBusy(true);
+    setStudentShareError("");
+    try {
+      await enqueuePersistence(() =>
+        saveExternalAiFeedback(store, {
+          studentId: selectedProfileStudent.id,
+          provider: externalFeedbackForm.provider,
+          audience: externalFeedbackForm.audience,
+          periodStart: externalFeedbackForm.periodStart,
+          periodEnd: externalFeedbackForm.periodEnd,
+          feedbackText: externalFeedbackForm.feedbackText,
+          teacherNote: externalFeedbackForm.teacherNote,
+          includeInTermSummary:
+            externalFeedbackForm.includeInTermSummary,
+          includeInYearSummary:
+            externalFeedbackForm.includeInYearSummary,
+          ...(lastExportPackageId
+            ? { linkedExportPackageId: lastExportPackageId }
+            : {}),
+        }),
+      );
+      const snapshot = await store.readSnapshot();
+      setExternalFeedback(
+        listExternalAiFeedback(snapshot, selectedProfileStudent.id),
+      );
+      setExternalFeedbackForm((current) => ({
+        ...current,
+        feedbackText: "",
+        teacherNote: "",
+      }));
+      setAnnouncement(
+        "Yapay zekâ geri bildirimi öğrenciye kaydedildi.",
+      );
+    } catch (reason) {
+      setStudentShareError(
+        reason instanceof Error
+          ? reason.message
+          : "Geri bildirim kaydedilemedi.",
+      );
+    } finally {
+      setStudentShareBusy(false);
+    }
+  };
+
+  const applyOfficialAcademicCalendar = () => {
+    setClassroomForm((current) => ({
+      ...current,
+      academicYearName:
+        OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
+      academicYearStart:
+        OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+      academicYearEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+    }));
+    setAcademicYearTransitionConfirmed(false);
+    setClassroomError("");
+    setAnnouncement("2026–2027 MEB takvim tarihleri forma uygulandı.");
+  };
+
   const saveClassroom = async () => {
     if (writesBlocked) {
       setClassroomError(
@@ -4097,6 +4697,12 @@ export default function Prototype() {
       );
       return;
     }
+    if (academicYearTransitionRequired && !academicYearTransitionConfirmed) {
+      setClassroomError(
+        "Yeni eğitim yılına geçmek için önce arşivleme ve öğrenci taşıma onayını işaretleyin.",
+      );
+      return;
+    }
     setDataBusy(true);
     setClassroomError("");
     try {
@@ -4117,37 +4723,79 @@ export default function Prototype() {
           : "teacher-declared",
         officialCatalogVerified: usesOfficialStarterProfile,
       };
+      const baseConfiguration = {
+        academicYear: {
+          name: classroomForm.academicYearName,
+          startDate: classroomForm.academicYearStart,
+          endDate: classroomForm.academicYearEnd,
+        },
+        classroom: {
+          name: classroomForm.classroomName,
+          ageGroup: classroomForm.ageGroup,
+          curriculumProgram: selectedProgram,
+          curriculumCatalogLabel:
+            `${classroomForm.curriculumCatalogId.trim()} · ${classroomForm.curriculumSourceVersion.trim()}`,
+          curriculumProfile,
+        },
+        schedule: {
+          kind: selectedScheduleKind,
+          startTime: classroomForm.startTime,
+          endTime: classroomForm.endTime,
+        },
+      };
       const context = await enqueuePersistence(
-        () =>
-          saveClassroomConfiguration(store, {
+        () => {
+          if (academicYearTransitionRequired && configuredClassroom) {
+            const today = civilDateInIstanbul(new Date());
+            const closedOn =
+              today < configuredClassroom.academicYearStart
+                ? configuredClassroom.academicYearStart
+                : today > configuredClassroom.academicYearEnd
+                  ? configuredClassroom.academicYearEnd
+                  : today;
+            return transitionAcademicYearConfiguration(store, {
+              ...baseConfiguration,
+              academicYear: {
+                ...baseConfiguration.academicYear,
+                id: crypto.randomUUID(),
+              },
+              classroom: {
+                ...baseConfiguration.classroom,
+                id: crypto.randomUUID(),
+              },
+              carryStudentIds: students.map((student) => student.id),
+              closedOn,
+            });
+          }
+          return saveClassroomConfiguration(store, {
+            ...baseConfiguration,
             academicYear: {
+              ...baseConfiguration.academicYear,
               id: configuredClassroom?.academicYearId,
-              name: classroomForm.academicYearName,
-              startDate: classroomForm.academicYearStart,
-              endDate: classroomForm.academicYearEnd,
             },
             classroom: {
+              ...baseConfiguration.classroom,
               id: configuredClassroom?.classroomId,
-              name: classroomForm.classroomName,
-              ageGroup: classroomForm.ageGroup,
-              curriculumProgram: selectedProgram,
-              curriculumCatalogLabel:
-                `${classroomForm.curriculumCatalogId.trim()} · ${classroomForm.curriculumSourceVersion.trim()}`,
-              curriculumProfile,
             },
-            schedule: {
-              kind: selectedScheduleKind,
-              startTime: classroomForm.startTime,
-              endTime: classroomForm.endTime,
-            },
-          }),
+          });
+        },
         {
           failureDetail:
             "Sınıf ayarları bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Sınıf ve çalışma düzeni bu cihaza kaydedildi.",
         },
       );
-      const refreshed = await refreshD1Workspaces();
+      const [refreshed, dashboard] = await Promise.all([
+        refreshD1Workspaces(),
+        loadDashboardState(store, fallbackDashboardState),
+      ]);
+      setStudents(dashboard.students);
+      setArchivedStudents(dashboard.archivedStudents);
+      setAttendanceCompleted(dashboard.attendanceCompleted);
+      setAttendanceCivilDate(dashboard.attendanceCivilDate);
+      setAcademicYearTransitionConfirmed(false);
+      setEvidenceFlowRequest(null);
+      setPlanFlowOpen(false);
       setClassroomOpen(false);
       setAnnouncement(
         refreshed.today.classroom.status === "configured"
@@ -4232,9 +4880,16 @@ export default function Prototype() {
     setAttendanceOpen(restorableSurface === "attendance");
     setChildrenOpen(restorableSurface === "children");
     setStudentProfileOpen(restorableSurface === "student-profile");
+    setStudentShareOpen(restorableSurface === "student-share");
+    if (restorableSurface !== "student-delete") {
+      setStudentDeletionCandidate(null);
+      setStudentDeletionImpact(null);
+      setStudentDeletionConfirmation("");
+    }
     setProfileOpen(restorableSurface === "settings");
     setClassroomOpen(restorableSurface === "classroom");
     setPlansOpen(restorableSurface === "plans");
+    setCalendarOpen(restorableSurface === "calendar");
     setDocumentsOpen(restorableSurface === "documents");
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
@@ -4243,7 +4898,7 @@ export default function Prototype() {
     setActiveNav(
       restorableSurface === "children"
         ? "classroom"
-        : restorableSurface === "plans"
+        : restorableSurface === "plans" || restorableSurface === "calendar"
           ? "plans"
           : restorableSurface === "documents"
             ? "documents"
@@ -5147,6 +5802,27 @@ export default function Prototype() {
             autoComplete="off"
           />
 
+          <section className="official-calendar-preset">
+            <div>
+              <span className="d1-kicker">MEB resmî takvimi</span>
+              <strong>2026–2027 eğitim öğretim yılı</strong>
+              <small>
+                Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran
+                2027
+              </small>
+            </div>
+            <button type="button" onClick={applyOfficialAcademicCalendar}>
+              Tarihleri uygula
+            </button>
+            <a
+              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              MEB duyurusunu aç
+            </a>
+          </section>
+
           <label htmlFor="academic-year-name">Eğitim yılı</label>
           <KeyboardInput
             id="academic-year-name"
@@ -5304,6 +5980,23 @@ export default function Prototype() {
           </div>
           <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
           {classroomError ? <p role="alert">{classroomError}</p> : null}
+          {academicYearTransitionRequired ? (
+            <label className="academic-year-transition-confirm">
+              <input
+                type="checkbox"
+                checked={academicYearTransitionConfirmed}
+                onChange={(event) =>
+                  setAcademicYearTransitionConfirmed(event.target.checked)
+                }
+              />
+              <span>
+                <strong>Yeni eğitim yılına güvenli geçiş yap</strong>
+                Mevcut yıl ve sınıf arşivlensin; {students.length} etkin
+                öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve
+                değerlendirmeler kendi yılı içinde korunsun.
+              </span>
+            </label>
+          ) : null}
           <button
             className="sheet-primary"
             type="submit"
@@ -5320,10 +6013,14 @@ export default function Prototype() {
               !classroomForm.startTime ||
               !classroomForm.endTime ||
               !classroomForm.curriculumCatalogId.trim() ||
-              !classroomForm.curriculumSourceVersion.trim()
+              !classroomForm.curriculumSourceVersion.trim() ||
+              (academicYearTransitionRequired &&
+                !academicYearTransitionConfirmed)
             }
           >
-            Sınıfı ve çalışma düzenini kaydet
+            {academicYearTransitionRequired
+              ? "Yeni eğitim yılına geç"
+              : "Sınıfı ve çalışma düzenini kaydet"}
           </button>
         </form>
       </BottomSheet>
@@ -5338,6 +6035,18 @@ export default function Prototype() {
         description={`${formatTurkishCivilDate(todayWorkspace.civilDate)} · Kayıtlı etkinlikler`}
         snap={0.78}
       >
+        <button
+          className="plans-calendar-button"
+          type="button"
+          onClick={() => void openAcademicCalendar()}
+        >
+          <CalendarIcon aria-hidden="true" />
+          <span>
+            <strong>2026–2027 eğitim takvimi</strong>
+            <small>Uyum günleri, veli toplantısı, meyve günü ve notlar</small>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
         <button className="sheet-primary plans-create-button" type="button" onClick={openPlanFlow}>
           <PlusIcon aria-hidden="true" /> Günlük plan oluştur
         </button>
@@ -5365,38 +6074,298 @@ export default function Prototype() {
       </BottomSheet>
 
       <BottomSheet
+        open={calendarOpen}
+        onOpenChange={(open) => {
+          setCalendarOpen(open);
+          if (!open) setActiveNav("today");
+        }}
+        title="Eğitim takvimi"
+        description="MEB 2026–2027 çalışma takvimi ve sınıf notları"
+        snap={0.94}
+      >
+        <div className="academic-calendar-sheet">
+          <section className="calendar-source-card">
+            <CalendarIcon aria-hidden="true" />
+            <div>
+              <span className="d1-kicker">Resmî kaynak</span>
+              <strong>Okul öncesi uyum eğitimi 7–11 Eylül 2026</strong>
+              <small>
+                Birinci dönem 14 Eylül 2026’da başlar; eğitim öğretim yılı
+                25 Haziran 2027’de biter.
+              </small>
+            </div>
+            <a
+              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              MEB
+            </a>
+          </section>
+
+          <div className="calendar-month-toolbar">
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonth((current) =>
+                  shiftCalendarMonth(current, -1),
+                )
+              }
+              aria-label="Önceki ay"
+            >
+              ‹
+            </button>
+            <strong>{formatCalendarMonth(calendarMonth)}</strong>
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonth((current) =>
+                  shiftCalendarMonth(current, 1),
+                )
+              }
+              aria-label="Sonraki ay"
+            >
+              ›
+            </button>
+          </div>
+          <div className="calendar-weekdays" aria-hidden="true">
+            {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map(
+              (label) => <span key={label}>{label}</span>,
+            )}
+          </div>
+          <div className="calendar-grid" role="grid">
+            {visibleCalendarDays.map((day) => {
+              const official = officialEventsOnDate(
+                academicCalendar.officialEvents,
+                day.civilDate,
+              );
+              const entries = academicCalendar.entries.filter(
+                (entry) =>
+                  entry.startDate <= day.civilDate &&
+                  entry.endDate >= day.civilDate,
+              );
+              return (
+                <button
+                  type="button"
+                  role="gridcell"
+                  key={day.civilDate}
+                  className={[
+                    day.inMonth ? "" : "is-outside",
+                    day.civilDate === calendarSelectedDate
+                      ? "is-selected"
+                      : "",
+                    official.length > 0 ? "has-official" : "",
+                    entries.length > 0 ? "has-entry" : "",
+                  ].filter(Boolean).join(" ")}
+                  aria-selected={day.civilDate === calendarSelectedDate}
+                  aria-label={`${formatTurkishCivilDate(day.civilDate)}${
+                    official.length + entries.length > 0
+                      ? `, ${official.length + entries.length} kayıt`
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setCalendarSelectedDate(day.civilDate);
+                    if (!day.inMonth) {
+                      setCalendarMonth(day.civilDate.slice(0, 7));
+                    }
+                    setCalendarError("");
+                  }}
+                >
+                  <span>{day.day}</span>
+                  <i aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+
+          <section className="calendar-selected-day">
+            <header>
+              <div>
+                <span className="d1-kicker">Seçili gün</span>
+                <h3>{formatTurkishCivilDate(calendarSelectedDate)}</h3>
+              </div>
+              <span>
+                {selectedOfficialCalendarEvents.length +
+                  selectedTeacherCalendarEntries.length}{" "}
+                kayıt
+              </span>
+            </header>
+
+            {selectedOfficialCalendarEvents.map((event) => (
+              <article className="calendar-official-event" key={event.id}>
+                <div>
+                  <strong>{event.title}</strong>
+                  <small>
+                    {event.startDate === event.endDate
+                      ? formatTurkishCivilDate(event.startDate)
+                      : `${formatTurkishCivilDate(event.startDate)} – ${formatTurkishCivilDate(event.endDate)}`}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => selectOfficialCalendarEvent(event)}
+                >
+                  İşaretle
+                </button>
+              </article>
+            ))}
+
+            {selectedTeacherCalendarEntries.map((entry) => (
+              <article className="calendar-teacher-entry" key={entry.id}>
+                <div>
+                  <span>{calendarEntryTypeLabels[entry.entryType]}</span>
+                  <strong>{entry.title}</strong>
+                  {entry.note ? <p>{entry.note}</p> : null}
+                </div>
+                <div>
+                  <select
+                    aria-label={`${entry.title} durumu`}
+                    value={entry.status}
+                    onChange={(event) =>
+                      void updateCalendarEntryStatus(
+                        entry,
+                        event.target.value as CalendarEntryStatus,
+                      )
+                    }
+                    disabled={dataBusy}
+                  >
+                    {Object.entries(calendarEntryStatusLabels).map(
+                      ([value, label]) => (
+                        <option value={value} key={value}>{label}</option>
+                      ),
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void deleteCalendarEntry(entry)}
+                    disabled={dataBusy}
+                    aria-label={`${entry.title} takvim notunu kaldır`}
+                  >
+                    <TrashIcon aria-hidden="true" />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+
+          <form
+            className="calendar-entry-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void persistCalendarEntry();
+            }}
+          >
+            <div>
+              <span className="d1-kicker">Yeni sınıf notu</span>
+              <strong>{formatTurkishCivilDate(calendarSelectedDate)}</strong>
+            </div>
+            <label>
+              Tür
+              <select
+                value={calendarEntryForm.entryType}
+                onChange={(event) =>
+                  setCalendarEntryForm((current) => ({
+                    ...current,
+                    entryType: event.target.value as CalendarEntryType,
+                  }))
+                }
+              >
+                {Object.entries(calendarEntryTypeLabels).map(
+                  ([value, label]) => (
+                    <option value={value} key={value}>{label}</option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label>
+              Başlık
+              <KeyboardInput
+                value={calendarEntryForm.title}
+                maxLength={160}
+                onChange={(event) =>
+                  setCalendarEntryForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="Örn. Veli toplantısı"
+              />
+            </label>
+            <label>
+              Not
+              <KeyboardTextarea
+                value={calendarEntryForm.note}
+                maxLength={5_000}
+                rows={3}
+                onChange={(event) =>
+                  setCalendarEntryForm((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+                placeholder="Saat, hazırlık veya sınıf için kısa açıklama"
+              />
+            </label>
+            {calendarError ? (
+              <p className="d1-error" role="alert">{calendarError}</p>
+            ) : null}
+            <button
+              className="sheet-primary"
+              type="submit"
+              disabled={dataBusy || !calendarEntryForm.title.trim()}
+            >
+              <PlusIcon aria-hidden="true" />
+              Takvime kaydet
+            </button>
+          </form>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
         open={documentsOpen}
         onOpenChange={(open) => {
           setDocumentsOpen(open);
           if (!open) setActiveNav("today");
         }}
         title="Belgeler"
-        description="Belge üretimi henüz pilot kullanıma açılmadı"
-        snap={0.7}
+        description="Öğrenci dosyaları, yapay zekâ taslakları ve geri bildirim geçmişi"
+        snap={0.82}
       >
-        <section className="documents-coming-soon" role="status">
+        <section className="documents-coming-soon">
           <span aria-hidden="true"><ArchiveIcon /></span>
-          <small>Deneysel alan</small>
-          <h3>Belge üretimi henüz hazır değil</h3>
+          <small>Öğretmen denetimli çalışma alanı</small>
+          <h3>Öğrenci dosyasını amaca göre hazırlayın</h3>
           <p>
-            Bu sürüm PDF, gelişim raporu veya resmî belge üretmez. Önizleme,
-            öğrenci izolasyonu ve doğrulanmış dışa aktarma tamamlanmadan burada
-            belge varmış gibi bir çıktı sunulmayacak.
+            Okul idaresi, rehberlik öğretmeni, veli, ChatGPT veya Gemini için
+            kapsamı ayrı seçin. Yapay zekâdan aldığınız geri dönüşü öğrenciye
+            kaydedip dönem ve yıl sonu çalışmasına dâhil edin.
           </p>
           <strong>
-            Bugünkü veri özeti: {students.length} çocuk · {counts.present} geldi
-            · {counts.late} geç geldi · {counts.absent} gelmedi
+            {students.length + archivedStudents.length} öğrenci ·{" "}
+            {allEvidenceObservations.length} tarihli gözlem
           </strong>
-          <button
-            type="button"
-            onClick={() => {
-              setDocumentsOpen(false);
-              setProfileOpen(true);
-              setActiveNav("today");
-            }}
-          >
-            Yedek ve veri güvenliğine git
-          </button>
+          <div className="documents-student-list">
+            {[...students, ...archivedStudents].map((student) => (
+              <button
+                type="button"
+                key={student.id}
+                onClick={() => {
+                  setDocumentsOpen(false);
+                  openStudentProfile(student.id);
+                }}
+              >
+                <StudentAvatar student={student} />
+                <span>
+                  <strong>{student.preferredName ?? student.name}</strong>
+                  <small>
+                    {observationCountByStudent.get(student.id) ?? 0} gözlem ·
+                    dosyayı aç
+                  </small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            ))}
+          </div>
         </section>
       </BottomSheet>
 
@@ -5775,18 +6744,111 @@ export default function Prototype() {
                     <strong>{student.name}</strong>
                     <small>Geçmiş kayıtları korunuyor</small>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => void restoreStudent(student.id)}
-                    disabled={dataBusy}
-                    aria-label={`${student.name} çocuğunu sınıfa geri al`}
-                  >
-                    Geri al
-                  </button>
+                  <div className="archived-student-actions">
+                    <button
+                      type="button"
+                      onClick={() => openStudentProfile(student.id)}
+                      disabled={dataBusy}
+                    >
+                      Dosya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void restoreStudent(student.id)}
+                      disabled={dataBusy}
+                      aria-label={`${student.name} çocuğunu sınıfa geri al`}
+                    >
+                      Geri al
+                    </button>
+                    <button
+                      className="is-danger"
+                      type="button"
+                      onClick={() => void openStudentDeletion(student)}
+                      disabled={dataBusy}
+                      aria-label={`${student.name} çocuğunu kalıcı sil`}
+                    >
+                      Sil
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           </details>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={studentDeletionCandidate !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStudentDeletionCandidate(null);
+            setStudentDeletionImpact(null);
+            setStudentDeletionConfirmation("");
+            if (!native) setChildrenOpen(true);
+          }
+        }}
+        title="Kalıcı öğrenci silme"
+        description="Bu işlem geri alınamaz; önce etki özeti ve ad onayı gösterilir"
+        snap={0.82}
+      >
+        {studentDeletionCandidate && studentDeletionImpact ? (
+          <div className="student-delete-sheet">
+            <section className="student-delete-warning">
+              <TrashIcon aria-hidden="true" />
+              <div>
+                <span className="d1-kicker">Geri alınamaz işlem</span>
+                <h3>{studentDeletionImpact.displayName}</h3>
+                <p>
+                  Öğrenci profili ve ona bağlı kayıtlar bu cihazdan fiziksel
+                  olarak kaldırılır; öğrenciyi içeren cihaz içi kurtarma
+                  noktaları da temizlenir. Daha önce indirilmiş veya başka
+                  yerde tutulan eski yedekler değiştirilemez ve öğrenci
+                  verisini içermeye devam edebilir.
+                </p>
+              </div>
+            </section>
+            <div className="student-delete-impact" aria-label="Silme etkisi">
+              <div><strong>{studentDeletionImpact.attendanceCount}</strong><span>devam kaydı</span></div>
+              <div><strong>{studentDeletionImpact.observationCount}</strong><span>gözlem</span></div>
+              <div><strong>{studentDeletionImpact.mediaCount}</strong><span>medya</span></div>
+              <div><strong>{studentDeletionImpact.portfolioCount}</strong><span>portfolyo seçkisi</span></div>
+              <div><strong>{studentDeletionImpact.reportCount}</strong><span>rapor / geri bildirim</span></div>
+              <div><strong>{studentDeletionImpact.exportPackageCount}</strong><span>dışa aktarım</span></div>
+            </div>
+            {studentDeletionImpact.sharedObservationCount > 0 ||
+            studentDeletionImpact.sharedMediaCount > 0 ? (
+              <p className="student-delete-shared-note">
+                Paylaşımlı kayıtlar diğer öğrenciler için korunur; silinen
+                öğrenci üyeliği çıkarılır:{" "}
+                {studentDeletionImpact.sharedObservationCount} ortak gözlem,{" "}
+                {studentDeletionImpact.sharedMediaCount} ortak medya.
+              </p>
+            ) : null}
+            <label>
+              Onaylamak için öğrencinin adını aynen yazın
+              <KeyboardInput
+                value={studentDeletionConfirmation}
+                onChange={(event) =>
+                  setStudentDeletionConfirmation(event.target.value)
+                }
+                placeholder={studentDeletionImpact.displayName}
+                autoComplete="off"
+              />
+            </label>
+            <button
+              className="student-delete-confirm"
+              type="button"
+              disabled={
+                dataBusy ||
+                studentDeletionConfirmation.trim() !==
+                  studentDeletionImpact.displayName
+              }
+              onClick={() => void confirmPermanentStudentDeletion()}
+            >
+              <TrashIcon aria-hidden="true" />
+              {dataBusy ? "Siliniyor…" : "Öğrenciyi ve bağlı kayıtları kalıcı sil"}
+            </button>
+          </div>
         ) : null}
       </BottomSheet>
 
@@ -5906,6 +6968,22 @@ export default function Prototype() {
                 <strong>{selectedStudentPendingLinks}</strong>
               </button>
             </section>
+
+            <button
+              className="student-share-trigger"
+              type="button"
+              onClick={() => void openStudentShareCenter()}
+            >
+              <UploadIcon aria-hidden="true" />
+              <span>
+                <strong>Paylaşım ve yapay zekâ merkezi</strong>
+                <small>
+                  İdare / rehberlik / veli dosyası; ChatGPT veya Gemini
+                  taslağı; geri bildirim kaydı
+                </small>
+              </span>
+              <ChevronRightIcon aria-hidden="true" />
+            </button>
 
             <nav className="student-profile-tabs" aria-label="Çocuk profili bölümleri">
               <button
@@ -6729,7 +7807,7 @@ export default function Prototype() {
                             phone: formatStudentPhone(event.target.value),
                           })
                         }
-                        placeholder="0532 532 32 32"
+                        placeholder="05"
                         autoComplete="tel"
                       />
                     </label>
@@ -6844,6 +7922,428 @@ export default function Prototype() {
                 {dataBusy ? "Kaydediliyor…" : "Profili kaydet"}
               </button>
             </form>
+            ) : null}
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={studentShareOpen}
+        onOpenChange={(open) => {
+          setStudentShareOpen(open);
+          if (!open && !native && selectedProfileStudent) {
+            setStudentProfileOpen(true);
+          }
+        }}
+        title="Paylaşım ve yapay zekâ"
+        description={
+          selectedProfileStudent
+            ? `${selectedProfileStudent.name} · kapsamı ve alıcıyı siz seçersiniz`
+            : "Öğrenci dosyası"
+        }
+        snap={0.96}
+      >
+        {selectedProfileStudent ? (
+          <div className="student-share-sheet">
+            <section className="student-share-privacy">
+              <LockClosedIcon aria-hidden="true" />
+              <div>
+                <strong>Paylaşmadan önce kapsamı denetleyin</strong>
+                <p>
+                  WhatsApp ve tam kimlikli dosya; ad, okul numarası ve
+                  seçerseniz yakın telefonlarını içerir. Yapay zekâ için takma
+                  ad önerilir.
+                </p>
+              </div>
+            </section>
+
+            <section className="student-share-section">
+              <div className="student-share-section-heading">
+                <span className="d1-kicker">1 · Hedef ve amaç</span>
+                <h3>Dosya nereye hazırlanacak?</h3>
+              </div>
+              <div className="student-share-destinations" role="group" aria-label="Paylaşım hedefi">
+                {(Object.keys(dossierDestinationLabels) as DossierDestination[]).map(
+                  (destination) => (
+                    <button
+                      type="button"
+                      key={destination}
+                      aria-pressed={studentShareForm.destination === destination}
+                      onClick={() =>
+                        setStudentShareForm((current) => ({
+                          ...current,
+                          destination,
+                          ...(destination === "chatgpt" ||
+                          destination === "gemini"
+                            ? {
+                                identityMode: "alias" as const,
+                                includeContacts: false,
+                              }
+                            : {}),
+                        }))
+                      }
+                    >
+                      {dossierDestinationLabels[destination]}
+                    </button>
+                  ),
+                )}
+              </div>
+              <label>
+                Hazırlanma amacı / alıcı
+                <select
+                  value={studentShareForm.audience}
+                  onChange={(event) =>
+                    setStudentShareForm((current) => ({
+                      ...current,
+                      audience: event.target.value as DossierAudience,
+                    }))
+                  }
+                >
+                  {(Object.keys(dossierAudienceLabels) as DossierAudience[]).map(
+                    (audience) => (
+                      <option key={audience} value={audience}>
+                        {dossierAudienceLabels[audience]}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <div className="student-share-date-grid">
+                <label>
+                  Başlangıç
+                  <KeyboardInput
+                    type="date"
+                    value={studentShareForm.periodStart}
+                    max={studentShareForm.periodEnd}
+                    onChange={(event) =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        periodStart: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Bitiş
+                  <KeyboardInput
+                    type="date"
+                    min={studentShareForm.periodStart}
+                    value={studentShareForm.periodEnd}
+                    onChange={(event) =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        periodEnd: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="student-share-section">
+              <div className="student-share-section-heading">
+                <span className="d1-kicker">2 · Kimlik ve içerik</span>
+                <h3>Dosyada neler yer alacak?</h3>
+              </div>
+              <fieldset className="student-share-identity">
+                <legend>Öğrenci kimliği</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="student-share-identity"
+                    checked={studentShareForm.identityMode === "full"}
+                    onChange={() =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        identityMode: "full",
+                      }))
+                    }
+                  />
+                  Tam ad ve profil bilgileri
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="student-share-identity"
+                    checked={studentShareForm.identityMode === "alias"}
+                    onChange={() =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        identityMode: "alias",
+                        includeContacts: false,
+                      }))
+                    }
+                  />
+                  Takma adla gizle
+                </label>
+              </fieldset>
+              {studentShareForm.identityMode === "alias" ? (
+                <label>
+                  Takma ad
+                  <KeyboardInput
+                    value={studentShareForm.alias}
+                    maxLength={80}
+                    onChange={(event) =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        alias: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
+              <div className="student-share-inclusions">
+                {([
+                  ["includeContacts", "Yakınlar ve telefonlar"],
+                  ["includeAttendance", "Devam özeti"],
+                  ["includeObservations", "Tarihli gözlemler"],
+                  ["includePortfolio", "Portfolyo seçkileri"],
+                  ["includeExternalFeedback", "Kayıtlı AI geri bildirimleri"],
+                ] as const).map(([field, label]) => (
+                  <label key={field}>
+                    <input
+                      type="checkbox"
+                      checked={studentShareForm[field]}
+                      disabled={
+                        field === "includeContacts" &&
+                        studentShareForm.identityMode === "alias"
+                      }
+                      onChange={(event) =>
+                        setStudentShareForm((current) => ({
+                          ...current,
+                          [field]: event.target.checked,
+                        }))
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {(studentShareForm.destination === "chatgpt" ||
+                studentShareForm.destination === "gemini") &&
+              studentShareForm.identityMode === "full" ? (
+                <label className="student-share-ai-consent">
+                  <input
+                    type="checkbox"
+                    checked={studentShareForm.personalDataApprovedForAi}
+                    onChange={(event) =>
+                      setStudentShareForm((current) => ({
+                        ...current,
+                        personalDataApprovedForAi: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    Tam kimlik ve seçili kişisel verileri haricî yapay zekâ
+                    hizmetine göndereceğimi anladım.
+                  </span>
+                </label>
+              ) : null}
+              <button
+                className="sheet-primary"
+                type="button"
+                onClick={() => void prepareStudentDossier()}
+                disabled={studentShareBusy}
+              >
+                <MagicWandIcon aria-hidden="true" />
+                {studentShareBusy
+                  ? "Hazırlanıyor…"
+                  : `${dossierDestinationLabels[studentShareForm.destination]} için dosya hazırla`}
+              </button>
+              {lastExportPackageId ? (
+                <p className="student-share-export-ready" role="status">
+                  <CheckCircledIcon aria-hidden="true" />
+                  Son dosyanın kapsam kaydı MaarifOS’a işlendi.
+                </p>
+              ) : null}
+            </section>
+
+            <section className="student-share-section student-feedback-section">
+              <div className="student-share-section-heading">
+                <span className="d1-kicker">3 · Geri dönüşü kaydet</span>
+                <h3>ChatGPT / Gemini yanıtı</h3>
+                <p>
+                  Aldığınız metni buraya yapıştırın. Kaynak metin değişmez
+                  biçimde saklanır; dönem veya yıl sonu özetine dâhil edilip
+                  edilmeyeceğini siz seçersiniz.
+                </p>
+              </div>
+              <div className="student-share-date-grid">
+                <label>
+                  Kaynak
+                  <select
+                    value={externalFeedbackForm.provider}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        provider: event.target.value as
+                          ExternalFeedbackFormState["provider"],
+                      }))
+                    }
+                  >
+                    <option value="chatgpt">ChatGPT</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="other">Diğer</option>
+                  </select>
+                </label>
+                <label>
+                  Amaç
+                  <select
+                    value={externalFeedbackForm.audience}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        audience: event.target.value as DossierAudience,
+                      }))
+                    }
+                  >
+                    {(Object.keys(dossierAudienceLabels) as DossierAudience[]).map(
+                      (audience) => (
+                        <option key={audience} value={audience}>
+                          {dossierAudienceLabels[audience]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              </div>
+              <div className="student-share-date-grid">
+                <label>
+                  Dönem başlangıcı
+                  <KeyboardInput
+                    type="date"
+                    value={externalFeedbackForm.periodStart}
+                    max={externalFeedbackForm.periodEnd}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        periodStart: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Dönem bitişi
+                  <KeyboardInput
+                    type="date"
+                    min={externalFeedbackForm.periodStart}
+                    value={externalFeedbackForm.periodEnd}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        periodEnd: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <label>
+                Yapay zekâ geri bildirimi
+                <KeyboardTextarea
+                  value={externalFeedbackForm.feedbackText}
+                  maxLength={50_000}
+                  rows={8}
+                  onChange={(event) =>
+                    setExternalFeedbackForm((current) => ({
+                      ...current,
+                      feedbackText: event.target.value,
+                    }))
+                  }
+                  placeholder="ChatGPT veya Gemini yanıtını buraya yapıştırın"
+                />
+              </label>
+              <label>
+                Öğretmen notu
+                <KeyboardTextarea
+                  value={externalFeedbackForm.teacherNote}
+                  maxLength={5_000}
+                  rows={3}
+                  onChange={(event) =>
+                    setExternalFeedbackForm((current) => ({
+                      ...current,
+                      teacherNote: event.target.value,
+                    }))
+                  }
+                  placeholder="Kullanacağınız, düzelteceğiniz veya dışarıda bırakacağınız noktalar"
+                />
+              </label>
+              <div className="student-share-inclusions">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={externalFeedbackForm.includeInTermSummary}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        includeInTermSummary: event.target.checked,
+                      }))
+                    }
+                  />
+                  Dönem sonu çalışmasına dâhil et
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={externalFeedbackForm.includeInYearSummary}
+                    onChange={(event) =>
+                      setExternalFeedbackForm((current) => ({
+                        ...current,
+                        includeInYearSummary: event.target.checked,
+                      }))
+                    }
+                  />
+                  Yıl sonu çalışmasına dâhil et
+                </label>
+              </div>
+              <button
+                className="sheet-primary"
+                type="button"
+                onClick={() => void persistExternalFeedback()}
+                disabled={
+                  studentShareBusy ||
+                  !externalFeedbackForm.feedbackText.trim()
+                }
+              >
+                <CheckCircledIcon aria-hidden="true" />
+                Geri bildirimi öğrenciye kaydet
+              </button>
+              {studentShareError ? (
+                <p className="d1-error" role="alert">{studentShareError}</p>
+              ) : null}
+            </section>
+
+            {externalFeedback.length > 0 ? (
+              <section className="student-feedback-history">
+                <div className="student-share-section-heading">
+                  <span className="d1-kicker">Kayıt geçmişi</span>
+                  <h3>{externalFeedback.length} haricî geri bildirim</h3>
+                </div>
+                {externalFeedback.map((feedback) => (
+                  <details key={feedback.id}>
+                    <summary>
+                      <strong>
+                        {feedback.provider.toLocaleUpperCase("tr-TR")} ·{" "}
+                        {dossierAudienceLabels[feedback.audience]}
+                      </strong>
+                      <small>
+                        {feedback.periodStart}–{feedback.periodEnd}
+                      </small>
+                    </summary>
+                    <p>{feedback.feedbackText}</p>
+                    {feedback.teacherNote ? (
+                      <blockquote>{feedback.teacherNote}</blockquote>
+                    ) : null}
+                    <span>
+                      {feedback.includeInTermSummary ? "Dönem sonu" : ""}
+                      {feedback.includeInTermSummary &&
+                      feedback.includeInYearSummary
+                        ? " · "
+                        : ""}
+                      {feedback.includeInYearSummary ? "Yıl sonu" : ""}
+                    </span>
+                  </details>
+                ))}
+              </section>
             ) : null}
           </div>
         ) : null}

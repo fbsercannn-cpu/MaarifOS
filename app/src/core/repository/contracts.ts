@@ -57,6 +57,7 @@ export interface RecoverySnapshotRepository {
   listRecoverySnapshots(): Promise<RecoverySnapshotMetadata[]>;
   getRecoverySnapshot(id: string): Promise<RecoverySnapshotRecord | null>;
   deleteRecoverySnapshot(id: string): Promise<void>;
+  deleteRecoverySnapshotsContainingStudent(studentId: string): Promise<number>;
 }
 
 export interface ClassroomDataQueryRepository {
@@ -85,6 +86,7 @@ export function isRecoverySnapshotRepository(
     typeof candidate.saveRecoverySnapshot === "function" &&
     typeof candidate.listRecoverySnapshots === "function" &&
     typeof candidate.getRecoverySnapshot === "function" &&
-    typeof candidate.deleteRecoverySnapshot === "function"
+    typeof candidate.deleteRecoverySnapshot === "function" &&
+    typeof candidate.deleteRecoverySnapshotsContainingStudent === "function"
   );
 }

@@ -38,18 +38,36 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
     legacyV1.manifest.dataSchemaVersion = 1;
     delete legacyV1.payload.evidenceCurriculumLinks;
     delete legacyV1.manifest.entityCounts.evidenceCurriculumLinks;
+    delete legacyV1.payload.calendarEntries;
+    delete legacyV1.manifest.entityCounts.calendarEntries;
+    delete legacyV1.payload.externalFeedback;
+    delete legacyV1.manifest.entityCounts.externalFeedback;
     legacyV1.manifest.payloadChecksum = await core.sha256Hex(
       core.canonicalJson(legacyV1.payload),
     );
     const upgradedLegacy = await service.parseAndVerifyBackup(legacyV1);
     const legacyV2 = structuredClone(backup);
     legacyV2.manifest.dataSchemaVersion = 2;
+    delete legacyV2.payload.calendarEntries;
+    delete legacyV2.manifest.entityCounts.calendarEntries;
+    delete legacyV2.payload.externalFeedback;
+    delete legacyV2.manifest.entityCounts.externalFeedback;
     delete legacyV2.payload.students[0].firstName;
     delete legacyV2.payload.students[0].lastName;
     legacyV2.manifest.payloadChecksum = await core.sha256Hex(
       core.canonicalJson(legacyV2.payload),
     );
     const upgradedV2 = await service.parseAndVerifyBackup(legacyV2);
+    const legacyV3 = structuredClone(backup);
+    legacyV3.manifest.dataSchemaVersion = 3;
+    delete legacyV3.payload.calendarEntries;
+    delete legacyV3.manifest.entityCounts.calendarEntries;
+    delete legacyV3.payload.externalFeedback;
+    delete legacyV3.manifest.entityCounts.externalFeedback;
+    legacyV3.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(legacyV3.payload),
+    );
+    const upgradedV3 = await service.parseAndVerifyBackup(legacyV3);
     const corrupted = structuredClone(backup);
     corrupted.payload.students[0].displayName = "Değiştirilmiş Kayıt";
     let corruptionError = "";
@@ -67,24 +85,195 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
       upgradedV2Version: upgradedV2.manifest.dataSchemaVersion,
       upgradedV2FirstName: upgradedV2.payload.students[0].firstName,
       upgradedV2LastName: upgradedV2.payload.students[0].lastName,
+      upgradedV3Version: upgradedV3.manifest.dataSchemaVersion,
+      upgradedV3CalendarCount: upgradedV3.payload.calendarEntries.length,
+      upgradedV3FeedbackCount: upgradedV3.payload.externalFeedback.length,
       corruptionError,
     };
   });
 
   expect(result.manifest.format).toBe("maarifos-json");
   expect(result.manifest.backupVersion).toBe(1);
-  expect(result.manifest.dataSchemaVersion).toBe(3);
+  expect(result.manifest.dataSchemaVersion).toBe(4);
   expect(result.manifest.createdAt).toBe("2026-07-22T09:30:00.000Z");
   expect(result.manifest.civilDate).toBe("2026-07-22");
   expect(result.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
   expect(result.manifest.entityCounts.students).toBe(1);
   expect(result.studentCount).toBe(1);
-  expect(result.upgradedLegacyVersion).toBe(3);
+  expect(result.upgradedLegacyVersion).toBe(4);
   expect(result.upgradedLegacyLinkCount).toBe(0);
-  expect(result.upgradedV2Version).toBe(3);
+  expect(result.upgradedV2Version).toBe(4);
   expect(result.upgradedV2FirstName).toBe("Test Kaydı");
   expect(result.upgradedV2LastName).toBe("A");
+  expect(result.upgradedV3Version).toBe(4);
+  expect(result.upgradedV3CalendarCount).toBe(0);
+  expect(result.upgradedV3FeedbackCount).toBe(0);
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
+});
+
+test("takvim ve haricî AI geri bildirimi V4 yedekte kayıpsız döner", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const today = await import("/src/features/today/today-data.ts");
+    const calendar = await import(
+      "/src/features/calendar/academic-calendar.ts"
+    );
+    const dossier = await import(
+      "/src/features/reports/student-dossier.ts"
+    );
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-v4-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-v4-target-${crypto.randomUUID()}`,
+    });
+    await today.saveClassroomConfiguration(source, {
+      academicYear: {
+        id: "00000000-0000-4000-8000-000000000051",
+        name: "2026–2027 Eğitim Yılı",
+        startDate: "2026-09-01",
+        endDate: "2027-08-31",
+      },
+      classroom: {
+        id: "00000000-0000-4000-8000-000000000052",
+        name: "Kurgu Takvim Sınıfı",
+        ageGroup: "60–72 ay",
+      },
+      schedule: {
+        kind: "morning",
+        startTime: "08:30",
+        endTime: "12:30",
+      },
+      now: new Date("2026-09-01T06:00:00.000Z"),
+    });
+    const student = {
+      id: "00000000-0000-4000-8000-000000000053",
+      name: "Kurgu Geri Bildirim Öğrencisi",
+      firstName: "Kurgu",
+      lastName: "Geri Bildirim Öğrencisi",
+      status: "present",
+    };
+    await source.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [{
+        id: student.id,
+        displayName: student.name,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        active: true,
+        enrollmentStatus: "active",
+        enrollments: [{
+          id: "00000000-0000-4000-8000-000000000054",
+          academicYearId: "00000000-0000-4000-8000-000000000051",
+          classroomId: "00000000-0000-4000-8000-000000000052",
+          startedOn: "2026-09-01",
+          status: "active",
+          schemaVersion: 1,
+        }],
+        academicYearId: "00000000-0000-4000-8000-000000000051",
+        classroomId: "00000000-0000-4000-8000-000000000052",
+        createdAt: "2026-09-01T06:10:00.000Z",
+        updatedAt: "2026-09-01T06:10:00.000Z",
+        civilDate: "2026-09-01",
+        deletedAt: null,
+        schemaVersion: 3,
+        profileSchemaVersion: 3,
+      }]),
+    );
+    await calendar.saveCalendarEntry(source, {
+      entryType: "parent_meeting",
+      title: "Veli toplantısı",
+      note: "Saat 17.30",
+      startDate: "2026-10-05",
+      status: "planned",
+      now: new Date("2026-09-01T06:20:00.000Z"),
+    });
+    const exportedDossier = await dossier.createStudentDossier(source, {
+      studentId: student.id,
+      options: {
+        destination: "chatgpt",
+        audience: "parent",
+        identityMode: "alias",
+        alias: "Öğrenci A",
+        periodStart: "2026-09-01",
+        periodEnd: "2027-01-22",
+        includeContacts: false,
+        includeAttendance: true,
+        includeObservations: true,
+        includePortfolio: true,
+        includeExternalFeedback: false,
+      },
+      now: new Date("2027-01-22T07:00:00.000Z"),
+    });
+    await dossier.saveExternalAiFeedback(source, {
+      studentId: student.id,
+      provider: "chatgpt",
+      audience: "parent",
+      periodStart: "2026-09-01",
+      periodEnd: "2027-01-22",
+      feedbackText: "Tarihli kanıtlara dayalı kurgu geri bildirim.",
+      teacherNote: "Öğretmen tarafından incelendi.",
+      includeInTermSummary: true,
+      includeInYearSummary: true,
+      linkedExportPackageId: exportedDossier.exportPackageId,
+      now: new Date("2027-01-23T07:00:00.000Z"),
+    });
+    const sourceService = new core.BackupService(source, {
+      appVersion: "v4-roundtrip-test",
+      clock: () => new Date("2027-01-23T08:00:00.000Z"),
+      civilDateProvider: () => "2027-01-23",
+    });
+    const backup = await sourceService.exportBackup();
+    const tampered = structuredClone(backup);
+    tampered.payload.externalFeedback[0].feedbackText =
+      "Hash güncellenmeden değiştirilmiş kurgu metin.";
+    const canonical = await import("/src/core/backup/canonical-json.ts");
+    const hashing = await import("/src/core/backup/crypto.ts");
+    tampered.manifest.payloadChecksum = await hashing.sha256Hex(
+      canonical.canonicalJson(tampered.payload),
+    );
+    let contentHashError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(tampered);
+    } catch (error) {
+      contentHashError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const targetService = new core.BackupService(target, {
+      appVersion: "v4-roundtrip-test",
+    });
+    await targetService.restoreBackup(backup, { mode: "replace" });
+    const restored = await target.readSnapshot();
+    source.close();
+    target.close();
+    return {
+      version: backup.manifest.dataSchemaVersion,
+      calendarTitle: restored.calendarEntries[0]?.title,
+      calendarNote: restored.calendarEntries[0]?.note,
+      feedbackText: restored.externalFeedback[0]?.feedbackText,
+      feedbackImmutable: restored.externalFeedback[0]?.rawTextImmutable,
+      feedbackHash: restored.externalFeedback[0]?.contentHash,
+      termSummary: restored.externalFeedback[0]?.includeInTermSummary,
+      yearSummary: restored.externalFeedback[0]?.includeInYearSummary,
+      exportType: restored.exportPackages[0]?.type,
+      contentHashError,
+    };
+  });
+
+  expect(result.version).toBe(4);
+  expect(result.calendarTitle).toBe("Veli toplantısı");
+  expect(result.calendarNote).toBe("Saat 17.30");
+  expect(result.feedbackText).toBe(
+    "Tarihli kanıtlara dayalı kurgu geri bildirim.",
+  );
+  expect(result.feedbackImmutable).toBe(true);
+  expect(result.feedbackHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(result.termSummary).toBe(true);
+  expect(result.yearSummary).toBe(true);
+  expect(result.exportType).toBe("student_dossier");
+  expect(result.contentHashError).toContain("içerik hash doğrulamasını geçemedi");
 });
 
 test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ page }) => {
@@ -1006,7 +1195,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V3 yedekle birebir geri
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(3);
+  expect(result.dataSchemaVersion).toBe(4);
   expect(result.rawText).toBe("  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ");
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
@@ -1759,7 +1948,7 @@ test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini 
   expect(result.backedUpSettingType).toBe("app-lock-config-v1");
 });
 
-test("IndexedDB N-2 ve N-1 verisini v3'e kayıpsız taşır ve dar indeks sorgularını açar", async ({
+test("IndexedDB N-2 ve N-1 verisini v4'e kayıpsız taşır ve dar indeks sorgularını açar", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -1789,12 +1978,23 @@ test("IndexedDB N-2 ve N-1 verisini v3'e kayıpsız taşır ve dar indeks sorgul
             displayName: `Kurgu v${version} Öğrencisi`,
             classroomId,
           });
-          if (version === 2) {
-            for (const collection of core.COLLECTION_NAMES) {
+          if (version === 2 || version === 3) {
+            for (const collection of core.COLLECTION_NAMES.filter(
+              (name) =>
+                name !== "calendarEntries" &&
+                name !== "externalFeedback",
+            )) {
               if (!database.objectStoreNames.contains(collection)) {
                 database.createObjectStore(collection, { keyPath: "id" });
               }
             }
+          }
+          if (version === 3) {
+            const recoveryStore = database.createObjectStore(
+              core.RECOVERY_SNAPSHOT_STORE_NAME,
+              { keyPath: "id" },
+            );
+            recoveryStore.createIndex("by-created-at", "createdAt");
           }
         });
         request.addEventListener("success", () => {
@@ -1819,12 +2019,12 @@ test("IndexedDB N-2 ve N-1 verisini v3'e kayıpsız taşır ve dar indeks sorgul
         statuses,
       };
     };
-    return Promise.all([createLegacy(1), createLegacy(2)]);
+    return Promise.all([createLegacy(2), createLegacy(3)]);
   });
 
   expect(result.map((item) => item.name)).toEqual([
-    "Kurgu v1 Öğrencisi",
     "Kurgu v2 Öğrencisi",
+    "Kurgu v3 Öğrencisi",
   ]);
   expect(result.every((item) => item.queried === 1)).toBe(true);
   expect(result.every((item) => item.recovery === 0)).toBe(true);
@@ -1955,7 +2155,10 @@ test("IndexedDB blocked ve versionchange olaylarını görünür kılar; eski ba
     const snapshot = await store.readSnapshot();
 
     await new Promise((resolve, reject) => {
-      const request = indexedDB.open(databaseName, 4);
+      const request = indexedDB.open(
+        databaseName,
+        core.MAARIFOS_DATABASE_VERSION + 1,
+      );
       request.addEventListener("success", () => {
         request.result.close();
         resolve(undefined);

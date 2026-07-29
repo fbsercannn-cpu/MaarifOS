@@ -63,15 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.5.0",
+  version: "0.6.0",
   releasedOn: "2026-07-29",
-  title: "Kanıta dayalı öğrenci portfolyosu",
+  title: "2026–2027 takvimi ve öğrenci paylaşım merkezi",
   notes: Object.freeze([
-    "Çocuğun mevcut gözlemleri, kaynak metin değiştirilmeden öğretmen veya çocukla birlikte portfolyo seçkisine eklenebilir.",
-    "Öğretmen notu, çocuğun seçime ilişkin sözü ve aile katkısı birbirinden ayrı ve geri alınabilir kayıtlar olarak korunur.",
-    "Öğrenci adı ve soyadı ayrı alanlarda yönetilir; Türkçe arama ve 11 rakamlı cep telefonu girişi daha güvenli hâle getirildi.",
-    "Sürümlü yedek şeması, yeni profil ve portfolyo kayıtlarını eski yedeklerden kayıpsız taşıyacak biçimde güncellendi.",
-    "Çevrimdışı güncelleme ve kurtarma akışları yeni sürüm sözleşmesiyle güçlendirildi.",
+    "MEB 2026–2027 çalışma takvimi, 7–11 Eylül okul öncesi uyum günleri ve dönem tarihleriyle sınıf takvimine eklendi.",
+    "Veli toplantısı, meyve günü, etkinlik ve genel sınıf notları takvimde gün gün işaretlenebilir.",
+    "Yeni eğitim yılına geçiş eski yılı arşivler, öğrencileri yeni kapsama taşır ve önceki kanıtları kendi yılında korur.",
+    "Arşivlenen öğrenci geri alınabilir veya ad doğrulaması ve etki özetiyle kalıcı olarak silinebilir.",
+    "Öğrenci dosyası WhatsApp, okul idaresi, rehberlik, ChatGPT veya Gemini amacına göre hazırlanabilir; haricî yapay zekâ geri bildirimi dönem ve yıl sonu için öğrenciye kaydedilebilir.",
+    "Takvim ve haricî geri bildirim kayıtları V4 yedekleme, geri yükleme ve IndexedDB geçiş kapsamına alındı.",
   ]),
 });
 

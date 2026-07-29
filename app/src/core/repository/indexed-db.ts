@@ -20,7 +20,7 @@ import {
   verifyRecoverySnapshotRecord,
 } from "./recovery-snapshot";
 
-export const MAARIFOS_DATABASE_VERSION = 3;
+export const MAARIFOS_DATABASE_VERSION = 4;
 export const DEFAULT_DATABASE_NAME = "maarifos-local";
 export const RECOVERY_SNAPSHOT_STORE_NAME =
   "__maarifosRecoverySnapshots";
@@ -112,6 +112,11 @@ const INDEXES_BY_COLLECTION: Partial<
     ...SCOPE_INDEXES,
     { name: "by-civil-date", keyPath: "civilDate" },
   ],
+  calendarEntries: [
+    ...SCOPE_INDEXES,
+    { name: "by-start-date", keyPath: "startDate" },
+    { name: "by-entry-type", keyPath: "entryType" },
+  ],
   mediaAssets: [
     {
       name: "by-student",
@@ -128,6 +133,12 @@ const INDEXES_BY_COLLECTION: Partial<
   reportDrafts: [
     ...SCOPE_INDEXES,
     { name: "by-civil-date", keyPath: "civilDate" },
+  ],
+  externalFeedback: [
+    ...SCOPE_INDEXES,
+    { name: "by-student", keyPath: "studentId" },
+    { name: "by-received-at", keyPath: "receivedAt" },
+    { name: "by-provider", keyPath: "provider" },
   ],
   portfolioSelections: [
     { name: "by-student", keyPath: "studentId" },
@@ -157,6 +168,11 @@ export const INDEXED_DB_MIGRATIONS: readonly IndexedDbMigration[] = [
     toVersion: 3,
     description:
       "Kurtarma snapshot deposunu ve sınıf/tarih/öğrenci indekslerini ekler.",
+  },
+  {
+    toVersion: 4,
+    description:
+      "Eğitim takvimi ile haricî AI geri bildirim koleksiyonlarını ve indekslerini ekler.",
   },
 ] as const;
 
@@ -221,6 +237,17 @@ function ensureIndex(
   }
 }
 
+function ensureCollectionIndexes(transaction: IDBTransaction): void {
+  for (const [collection, definitions] of Object.entries(
+    INDEXES_BY_COLLECTION,
+  )) {
+    const store = transaction.objectStore(collection);
+    for (const definition of definitions ?? []) {
+      ensureIndex(store, definition);
+    }
+  }
+}
+
 function applyMigration(
   toVersion: number,
   database: IDBDatabase,
@@ -243,14 +270,12 @@ function applyMigration(
     if (!recoveryStore.indexNames.contains("by-created-at")) {
       recoveryStore.createIndex("by-created-at", "createdAt");
     }
-    for (const [collection, definitions] of Object.entries(
-      INDEXES_BY_COLLECTION,
-    )) {
-      const store = transaction.objectStore(collection);
-      for (const definition of definitions ?? []) {
-        ensureIndex(store, definition);
-      }
-    }
+    ensureCollectionIndexes(transaction);
+    return;
+  }
+  if (toVersion === 4) {
+    ensureCollectionStores(database);
+    ensureCollectionIndexes(transaction);
     return;
   }
   throw new Error(`IndexedDB migration sürümü desteklenmiyor: ${toVersion}`);
@@ -537,6 +562,44 @@ export class IndexedDbDataStore
         .delete(id),
     );
     await completion;
+  }
+
+  async deleteRecoverySnapshotsContainingStudent(
+    studentId: string,
+  ): Promise<number> {
+    validUuid(studentId, "Öğrenci kimliği");
+    const database = await this.openRecoveryDatabase();
+    const nativeTransaction = database.transaction(
+      RECOVERY_SNAPSHOT_STORE_NAME,
+      "readwrite",
+    );
+    const completion = transactionResult(nativeTransaction);
+    try {
+      const store = nativeTransaction.objectStore(
+        RECOVERY_SNAPSHOT_STORE_NAME,
+      );
+      const snapshots = await requestResult(
+        store.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+      );
+      const matchingSnapshots = snapshots.filter((snapshot) =>
+        snapshot.envelope.payload.students.some(
+          (student) => student.id === studentId,
+        ),
+      );
+      for (const snapshot of matchingSnapshots) {
+        await requestResult(store.delete(snapshot.id));
+      }
+      await completion;
+      return matchingSnapshots.length;
+    } catch (error) {
+      try {
+        nativeTransaction.abort();
+      } catch {
+        // Tamamlanmış işlemin asıl hatasını koru.
+      }
+      await completion.catch(() => undefined);
+      throw error;
+    }
   }
 
   close(): void {

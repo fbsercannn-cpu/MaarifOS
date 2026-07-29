@@ -51,6 +51,7 @@ export interface StudentLongitudinalArchive {
   mediaAssets: StoredRecord[];
   portfolioSelections: StoredRecord[];
   reportDrafts: StoredRecord[];
+  externalFeedback: StoredRecord[];
 }
 
 const UUID_PATTERN =
@@ -562,6 +563,9 @@ export async function buildStudentLongitudinalArchive(
     reportDrafts: snapshot.reportDrafts.filter(
       (record) =>
         Array.isArray(record.studentIds) && record.studentIds.includes(input.studentId),
+    ),
+    externalFeedback: snapshot.externalFeedback.filter(
+      (record) => record.studentId === input.studentId,
     ),
   };
 }

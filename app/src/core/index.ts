@@ -4,6 +4,7 @@ export * from "./backup/crypto";
 export * from "./backup/encrypted-backup";
 export * from "./backup/schema";
 export * from "./domain/attendance";
+export * from "./domain/calendar";
 export * from "./domain/classroom";
 export * from "./domain/classroom-scope";
 export * from "./domain/model";
