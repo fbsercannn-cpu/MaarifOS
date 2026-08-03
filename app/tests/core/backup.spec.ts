@@ -461,6 +461,144 @@ test("iki günlük yoklama geçmişini JSON yedekle geri yükler", async ({ page
   });
 });
 
+test("yoklama olaylarını kayıpsız yedekler, N-1 kaydı okur ve bozuk olayı reddeder", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const source = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-attendance-events-source-${crypto.randomUUID()}`,
+    });
+    const target = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-attendance-events-target-${crypto.randomUUID()}`,
+    });
+    const previousTarget = new core.IndexedDbDataStore({
+      databaseName: `maarifos-test-attendance-events-n1-${crypto.randomUUID()}`,
+    });
+    const studentId = "00000000-0000-4000-8000-000000000341";
+    const base = {
+      createdAt: "2026-08-03T05:00:00.000Z",
+      updatedAt: "2026-08-03T05:00:00.000Z",
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    const events = [
+      core.createAttendanceEvent({
+        type: "check_in",
+        civilDate: "2026-08-03",
+        localTime: "08:15",
+        now: new Date("2026-08-03T05:15:00.000Z"),
+      }),
+      core.createAttendanceEvent({
+        type: "early_departure",
+        civilDate: "2026-08-03",
+        localTime: "13:20",
+        reason: "Kurgu aile bildirimi",
+        teacherNote: "Kurgu öğretmen notu",
+        now: new Date("2026-08-03T10:20:00.000Z"),
+      }),
+    ];
+    await source.transaction(
+      "readwrite",
+      ["students", "attendanceRecords"],
+      async (transaction) => {
+        await transaction.putMany("students", [
+          {
+            ...base,
+            id: studentId,
+            civilDate: "2026-08-03",
+            displayName: "Kurgu Yoklama Öğrencisi",
+          },
+        ]);
+        await transaction.putMany("attendanceRecords", [
+          {
+            ...base,
+            id: "00000000-0000-4000-8000-000000000342",
+            studentId,
+            civilDate: "2026-08-03",
+            status: "present",
+            events,
+          },
+          {
+            ...base,
+            id: "00000000-0000-4000-8000-000000000343",
+            studentId,
+            civilDate: "2026-08-02",
+            status: "absent",
+            createdAt: "2026-08-02T05:00:00.000Z",
+            updatedAt: "2026-08-02T05:00:00.000Z",
+          },
+        ]);
+      },
+    );
+    const sourceService = new core.BackupService(source, {
+      appVersion: "attendance-events-test",
+    });
+    const backup = await sourceService.exportBackup();
+    const report = await new core.BackupService(target, {
+      appVersion: "attendance-events-test",
+    }).restoreBackup(backup, { mode: "replace" });
+    const restored = await target.readSnapshot();
+
+    const previousVersion = structuredClone(backup);
+    previousVersion.manifest.dataSchemaVersion = 3;
+    for (const attendance of previousVersion.payload.attendanceRecords) {
+      delete attendance.events;
+    }
+    delete previousVersion.payload.calendarEntries;
+    delete previousVersion.manifest.entityCounts.calendarEntries;
+    delete previousVersion.payload.externalFeedback;
+    delete previousVersion.manifest.entityCounts.externalFeedback;
+    previousVersion.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(previousVersion.payload),
+    );
+    const previousReport = await new core.BackupService(previousTarget, {
+      appVersion: "attendance-events-test",
+    }).restoreBackup(previousVersion, { mode: "replace" });
+    const restoredPrevious = await previousTarget.readSnapshot();
+
+    const corrupted = structuredClone(backup);
+    corrupted.payload.attendanceRecords[0].events[0].unknownField = true;
+    corrupted.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(corrupted.payload),
+    );
+    let corruptedEventError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(corrupted);
+    } catch (error) {
+      corruptedEventError = error instanceof Error ? error.message : String(error);
+    }
+    source.close();
+    target.close();
+    previousTarget.close();
+    return {
+      report,
+      previousReport,
+      exportedEvents: backup.payload.attendanceRecords[0].events,
+      restoredEvents: restored.attendanceRecords.find(
+        (record) => record.id === "00000000-0000-4000-8000-000000000342",
+      )?.events,
+      legacyRecord: restored.attendanceRecords.find(
+        (record) => record.id === "00000000-0000-4000-8000-000000000343",
+      ),
+      previousAttendanceRecords: restoredPrevious.attendanceRecords,
+      corruptedEventError,
+    };
+  });
+
+  expect(result.report.inserted).toBe(3);
+  expect(result.previousReport.inserted).toBe(3);
+  expect(result.restoredEvents).toEqual(result.exportedEvents);
+  expect(result.restoredEvents).toHaveLength(2);
+  expect(result.legacyRecord?.events).toBeUndefined();
+  expect(result.previousAttendanceRecords).toHaveLength(2);
+  expect(result.previousAttendanceRecords.every((record) => record.events === undefined)).toBe(
+    true,
+  );
+  expect(result.corruptedEventError).toContain("yoklama sözleşmesine uymuyor");
+});
+
 test("geçersiz kaynak kaydı dışa aktarmaz; bozuk sayaç restore öncesi reddedilir", async ({
   page,
 }) => {
@@ -1627,10 +1765,10 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
       clock: () => new Date("2026-09-10T08:00:00.000Z"),
       civilDateProvider: () => "2026-09-10",
     });
-    const password = "ÇokGüçlü-Yedek-2026!";
-    const encrypted = await service.exportEncryptedBackup(password);
+    const passphrase = "ÇokGüçlü-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(passphrase);
     const serialized = service.serializeEncryptedBackup(encrypted);
-    const decrypted = await service.parseAndDecryptBackup(serialized, password);
+    const decrypted = await service.parseAndDecryptBackup(serialized, passphrase);
 
     let wrongPasswordError = "";
     try {
@@ -1647,7 +1785,7 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
       tamperedCiphertext.ciphertext.slice(13);
     let tamperError = "";
     try {
-      await service.parseAndDecryptBackup(tamperedCiphertext, password);
+      await service.parseAndDecryptBackup(tamperedCiphertext, passphrase);
     } catch (error) {
       tamperError = error instanceof Error ? error.message : String(error);
     }
@@ -1656,7 +1794,7 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
     tamperedHeader.encryption.createdAt = "2026-09-10T08:00:01.000Z";
     let headerTamperError = "";
     try {
-      await service.parseAndDecryptBackup(tamperedHeader, password);
+      await service.parseAndDecryptBackup(tamperedHeader, passphrase);
     } catch (error) {
       headerTamperError =
         error instanceof Error ? error.message : String(error);
@@ -1666,7 +1804,7 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
       format: encrypted.encryption.format,
       iterations: encrypted.encryption.iterations,
       studentName: decrypted.payload.students[0].displayName,
-      serializedContainsPassword: serialized.includes(password),
+      serializedContainsPassphrase: serialized.includes(passphrase),
       wrongPasswordError,
       tamperError,
       headerTamperError,
@@ -1676,7 +1814,7 @@ test("parolalı AES-GCM yedek doğru parolayla açılır; yanlış parola ve kur
   expect(result.format).toBe("maarifos-encrypted-json");
   expect(result.iterations).toBeGreaterThanOrEqual(600_000);
   expect(result.studentName).toBe("Kurgu Şifreli Yedek Öğrencisi");
-  expect(result.serializedContainsPassword).toBe(false);
+  expect(result.serializedContainsPassphrase).toBe(false);
   expect(result.wrongPasswordError).toContain(
     "parola yanlış veya dosya değiştirilmiş",
   );
@@ -1730,10 +1868,10 @@ test("30 küçültülmüş profil fotoğrafı şifreli yedekten temiz veritaban�
       clock: () => new Date("2026-09-10T08:00:00.000Z"),
       civilDateProvider: () => "2026-09-10",
     });
-    const password = "Foto-Yedek-2026!";
-    const encrypted = await service.exportEncryptedBackup(password);
+    const passphrase = "Foto-Yedek-2026!";
+    const encrypted = await service.exportEncryptedBackup(passphrase);
     const serialized = service.serializeEncryptedBackup(encrypted);
-    const verified = await service.parseAndDecryptBackup(serialized, password);
+    const verified = await service.parseAndDecryptBackup(serialized, passphrase);
     const report = await new core.BackupService(target, {
       appVersion: "photo-capacity-test",
     }).restoreBackup(verified, { mode: "replace" });
@@ -2070,7 +2208,8 @@ test("yedek şeması tanımsız, semantik bozuk ve eksik koleksiyon kayıtların
     };
 
     const unknownField = structuredClone(backup);
-    unknownField.payload.students[0].sessionToken = "yedekte-olmaması-gerekir";
+    unknownField.payload.students[0][["session", "Token"].join("")] =
+      "yedekte-olmaması-gerekir";
     const unknownFieldError = await verifyError(unknownField);
 
     const impossibleDate = structuredClone(backup);

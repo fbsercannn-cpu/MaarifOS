@@ -32,6 +32,10 @@ zamanını, `Europe/Istanbul` sivil tarihini ve koleksiyon kayıt sayılarını 
   doğrulanır; bilinmeyen öğrenciye bağlı yoklama restore edilmeden reddedilir.
 - Günlük yoklama geçmişi ve tarihe bağlı tamamlanma ayarı diğer koleksiyonlarla
   birlikte aynı checksum ve atomik restore kapsamındadır.
+- Yoklama `events` dizisindeki giriş, çıkış, erken ayrılma, kısmi gün ve mazeret
+  olayları; UTC zaman, İstanbul sivil günü, neden ve öğretmen notuyla aynı şifreli
+  checksum kapsamındadır. Olay alanı bulunmayan N-1 kayıtlar geriye uyumlu okunur;
+  bozuk olay içeren yedek hedef veritabanına yazılmadan bütünüyle reddedilir.
 - Öğrenciye özel hızlı gözlem taslakları `settings` koleksiyonunda; gözlem türü,
   nötr kategoriler, ham metin, bağlam ve çocuğun özgün sözü ise gözlem kaydıyla
   aynı sürümlü checksum kapsamında korunur. Restore öncesinde taslağın
@@ -128,3 +132,7 @@ maarifos-backup-YYYY-MM-DD.zip
 23. Canlı öğrenci taslağı ile tamamlanmış hızlı gözlemin ham metin, bağlam,
     çocuk sözü, tür ve kategorilerle round-trip yapması
 24. Final gözlem yazımı başarısız olduğunda ilgili öğrenci taslağının etkin kalması
+25. Yoklama olaylarının şifreli JSON round-trip sonrasında saat, neden ve öğretmen
+    notunu aynen koruması
+26. Olay alanı olmayan N-1 yoklama kaydının geriye uyumlu kabul edilmesi
+27. Bozuk yoklama olayı içeren yedeğin hedef veriyi değiştirmeden reddedilmesi

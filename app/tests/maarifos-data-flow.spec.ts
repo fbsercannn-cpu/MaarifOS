@@ -26,7 +26,7 @@ async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await page.getByRole("button", { name: `${name} için işlemler` }).click();
   await expect(page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
 async function openStudentActions(page: Page, name: string) {
@@ -42,17 +42,7 @@ async function openArchivedStudents(page: Page) {
 
 async function createD1Observation(page: Page, text: string) {
   await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
-  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
-  const activityTitle = page.getByLabel("Etkinlik adı");
-  if (await activityTitle.isVisible().catch(() => false)) {
-    await activityTitle.fill("Kurgu keşif etkinliği");
-    await page
-      .getByRole("region", { name: "Program alanları" })
-      .getByRole("button", { name: "Fen", exact: true })
-      .click();
-    await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
-    await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
-  }
+  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
   await page
     .getByRole("region", { name: "Gözlem yapılacak çocuk" })
@@ -103,11 +93,11 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await expect(
     page.getByRole("heading", { name: "Şifreli yedek ve geri yükle" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Google ile giriş/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Google ile giriş/ })).toHaveCount(0);
 
-  const backupPassword = "Kurgu-Yedek-2026!";
-  await page.getByLabel("Yedek parolası").fill(backupPassword);
-  await page.getByLabel("Parolayı doğrula").fill(backupPassword);
+  const backupPassphrase = "Kurgu-Yedek-2026!";
+  await page.getByLabel("Yedek parolası").fill(backupPassphrase);
+  await page.getByLabel("Parolayı doğrula").fill(backupPassphrase);
   const backupDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: /Şifreli yedek oluştur/ }).click();
   const backup = await backupDownload;
@@ -135,7 +125,7 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await expect(
     page.getByText("Şifreli yedek tanındı. İçeriği doğrulamak için parolayı girin."),
   ).toBeVisible();
-  await page.getByLabel("Yedek parolası").last().fill(backupPassword);
+  await page.getByLabel("Yedek parolası").last().fill(backupPassphrase);
   await page.getByRole("button", { name: "Yedeği aç ve doğrula" }).click();
   await expect(
     page.getByText("Şifreli yedek doğrulandı. Geri yükleme modunu seçin."),
@@ -152,12 +142,14 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
       .getByText("0 gözlem", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
-  await page.getByRole("button", { name: new RegExp(childName) }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+0\/1 çocuk/ }).click();
+  const attendanceStudent = page.locator("button.student-row").filter({ hasText: childName });
+  await attendanceStudent.click();
+  await attendanceStudent.click();
   await expect(page.getByRole("button", { name: "Son değişikliği geri al" })).toBeVisible();
   await page.getByRole("button", { name: "Son değişikliği geri al" }).click();
-  await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geldi", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: new RegExp(childName) }).click();
+  await expect(attendanceStudent.getByText("Geldi", { exact: true })).toBeVisible();
+  await attendanceStudent.click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
@@ -193,11 +185,13 @@ test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context
   const stalePage = await context.newPage();
   await stalePage.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(stalePage);
-  await stalePage.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
-  await expect(stalePage.getByRole("button", { name: new RegExp(childName) }).getByText("Geldi", { exact: true })).toBeVisible();
+  await stalePage.getByRole("button", { name: /Bugünkü devam\s+0\/1 çocuk/ }).click();
+  await expect(stalePage.getByRole("button", { name: new RegExp(childName) }).getByText("İşaretlenmedi", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
-  await page.getByRole("button", { name: new RegExp(childName) }).click();
+  await page.getByRole("button", { name: /Bugünkü devam\s+0\/1 çocuk/ }).click();
+  const activeStudent = page.locator("button.student-row").filter({ hasText: childName });
+  await activeStudent.click();
+  await activeStudent.click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
 
   await stalePage.keyboard.press("Escape");
@@ -315,7 +309,9 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   const profile = page.getByRole("dialog", { name: `${childName} profili` });
   await expect(profile).toBeVisible();
   await expect(profile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
-  await expect(profile.getByRole("button", { name: /Program bağlantısını tamamla/ })).toBeVisible();
+  await expect(
+    profile.getByRole("button", { name: /Program bağlantısını tamamla/ }),
+  ).toHaveCount(0);
   await expect(
     profile.locator('input[type="file"][capture="environment"]'),
   ).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
@@ -389,14 +385,10 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
     "0532 000 00 00",
   );
 
-  await reloadedProfile
-    .getByRole("button", { name: /Bağlantı bekleyen/ })
-    .first()
-    .click();
-  await reloadedProfile
-    .getByRole("button", { name: /Program bağlantısını tamamla/ })
-    .click();
-  await expect(page.getByLabel("Program hedefi")).toBeVisible();
+  await expect(
+    reloadedProfile.getByRole("button", { name: /Program bağlantısını tamamla/ }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Program hedefi")).toHaveCount(0);
 });
 
 test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılışta korunur", async ({
@@ -438,60 +430,21 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
   ).toHaveCount(3);
 });
 
-test("plan, gözlem, öğretmen onaylı program bağlantısı ve kaynaklı değerlendirme telefonda tamamlanır", async ({
+test("Hediye Alpha plan, katalog ve takvim ayrıntılarını ana akıştan gizler", async ({
   page,
 }) => {
-  const childName = "Ece Kanıt";
   await page.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  await addChild(page, childName);
+
+  await expect(page.getByRole("button", { name: "Planlar", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Belgeler", exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("current-work")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Günün planı" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
-  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
-  await page.getByLabel("Etkinlik adı").fill("Yaprakları karşılaştırma");
-  await page
-    .getByRole("region", { name: "Program alanları" })
-    .getByRole("button", { name: "Fen", exact: true })
-    .click();
-  await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
-  await page.getByRole("button", { name: "Planı kaydet ve etkinliği başlat" }).click();
-
-  await page
-    .getByRole("region", { name: "Gözlem yapılacak çocuk" })
-    .getByRole("button", { name: new RegExp(childName) })
-    .click();
-  await page.getByLabel("Ne oldu?").fill("Ece iki yaprağı yan yana koydu ve çizgilerini tek tek gösterdi.");
-  await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
-  await page.getByRole("button", { name: "Bilişsel ve öğrenme", exact: true }).click();
-  await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
-
-  await expect(
-    page.getByRole("button", {
-      name: /Program bağlantısı bekleyen 1 gözlem/,
-    }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: /Program bağlantısı bekleyen 1 gözlem/ })
-    .click();
-
-  await page
-    .getByLabel("Program hedefi")
-    .selectOption("tymm-2024-60-72-fab-1");
-  await page.getByLabel("Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.").check();
-  await page.getByRole("button", { name: "Bağlantıyı onayla" }).click();
-
-  await page.getByLabel("Dört düzeyli gözlem ölçütü").selectOption("mostly_independent");
-  await page.getByLabel("Öğretmen değerlendirmesi").fill(
-    "Ece, yaprakların çizgi örüntülerini karşılaştırırken farklılıkları işaret ederek gözlemini sözlü olarak açıkladı.",
-  );
-  await page.getByRole("button", { name: "İnceleme taslağını oluştur" }).click();
-
-  await expect(page.getByRole("heading", { name: `${childName} için taslak hazır.` })).toBeVisible();
-  await expect(page.getByText("Öğretmen incelemesi bekliyor")).toBeVisible();
-  await expect(page.getByText("resmî katalogda doğrulanmadı", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Bugün ekranına dön" }).click();
-  await expect(
-    page.getByRole("button", { name: /Program bağlantısı bekleyen/ }),
-  ).toHaveCount(0);
-  await expect(page.getByText("1 öğrenme hedefi", { exact: false })).toBeVisible();
+  const capture = page.getByRole("dialog", { name: "Ne ekleyelim?" });
+  await expect(capture.getByRole("button", { name: /Gözlem yaz/ })).toBeVisible();
+  await expect(capture.getByRole("button", { name: /Yoklama al/ })).toBeVisible();
+  await expect(capture.getByRole("button", { name: /Etkinlik planla/ })).toHaveCount(0);
+  await expect(capture.getByRole("button", { name: /Takvime not ekle/ })).toHaveCount(0);
 });

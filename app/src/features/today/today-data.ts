@@ -34,6 +34,38 @@ import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-o
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
 export type TodayActivityStatus = "planned" | "in_progress" | "completed";
+export type AcademicYearOperationalStatus =
+  | "active"
+  | "preparation"
+  | "ended";
+
+export function academicYearOperationalStatus(
+  startDate: string,
+  endDate: string,
+  civilDate: string,
+): AcademicYearOperationalStatus {
+  if (!isCivilDate(startDate) || !isCivilDate(endDate) || !isCivilDate(civilDate)) {
+    throw new Error("Eğitim yılı çalışma durumu için geçerli tarihler gereklidir.");
+  }
+  if (startDate > endDate) {
+    throw new Error("Eğitim yılı bitiş tarihi başlangıç tarihinden önce olamaz.");
+  }
+  if (civilDate < startDate) return "preparation";
+  if (civilDate > endDate) return "ended";
+  return "active";
+}
+
+export function academicYearOperationalNotice(options: {
+  status: AcademicYearOperationalStatus;
+  startDate: string;
+  endDate: string;
+}): string | null {
+  if (options.status === "active") return null;
+  if (options.status === "preparation") {
+    return `Hazırlık modu: eğitim yılı ${options.startDate} tarihinde başlayacak. Plan, yoklama ve gözlem için bugün etkin olan eğitim yılını seçin.`;
+  }
+  return `Bu eğitim yılı ${options.endDate} tarihinde sona erdi. Plan, yoklama ve gözlem için yeni veya bugün etkin olan eğitim yılını seçin.`;
+}
 
 export type ClassroomContext =
   | { status: "not_configured" }
@@ -43,6 +75,7 @@ export type ClassroomContext =
       academicYearName: string;
       academicYearStart: string;
       academicYearEnd: string;
+      operationalStatus: AcademicYearOperationalStatus;
       classroomId: string;
       classroomName: string;
       ageGroup?: string;
@@ -168,7 +201,10 @@ function selectedClassroom(snapshot: DataSnapshot): ClassroomRecord | undefined 
   return available.length === 1 ? available[0] : undefined;
 }
 
-function classroomContext(snapshot: DataSnapshot): ClassroomContext {
+function classroomContext(
+  snapshot: DataSnapshot,
+  civilDate: string,
+): ClassroomContext {
   const classroom = selectedClassroom(snapshot);
   if (!classroom || !isClassroomSchedule(classroom.schedule)) return { status: "not_configured" };
 
@@ -210,6 +246,11 @@ function classroomContext(snapshot: DataSnapshot): ClassroomContext {
     academicYearName: academicYear.name.trim(),
     academicYearStart: academicYear.startDate,
     academicYearEnd: academicYear.endDate,
+    operationalStatus: academicYearOperationalStatus(
+      academicYear.startDate,
+      academicYear.endDate,
+      civilDate,
+    ),
     classroomId: classroom.id,
     classroomName: classroom.name.trim(),
     ...(classroom.ageGroup ? { ageGroup: classroom.ageGroup } : {}),
@@ -262,7 +303,7 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
 
 export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
   const civilDate = civilDateInIstanbul(now);
-  const classroom = classroomContext(snapshot);
+  const classroom = classroomContext(snapshot, civilDate);
   const scope = resolveActiveClassroomScope(snapshot);
   const scopedActivities = scope
     ? snapshot.activities.filter(

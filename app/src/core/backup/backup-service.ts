@@ -7,10 +7,15 @@ import {
 } from "../domain/model";
 import {
   isRecoverySnapshotRepository,
+  type DataTransaction,
   type LocalDataStore,
   type RecoverySnapshotMetadata,
   type RecoverySnapshotReason,
 } from "../repository/contracts";
+import {
+  assertEntityRecord,
+  type EntityMap,
+} from "../repository/entities";
 import {
   createRecoverySnapshotRecord,
   DEFAULT_RECOVERY_SNAPSHOT_RETENTION,
@@ -91,6 +96,51 @@ function recordsEqual(left: StoredRecord, right: StoredRecord): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
 
+/**
+ * Eski DataSnapshot biçimi ile literal-anahtar tipli transaction sözleşmesi
+ * arasındaki doğrulamalı köprü. Kayıtlar cast edilmez; ortak entity codec'i
+ * her öğeyi doğruladıktan sonra TypeScript tarafından daraltılır.
+ */
+class BackupDataTransaction implements DataTransaction {
+  constructor(private readonly snapshot: DataSnapshot) {}
+
+  async getAll<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<EntityMap[Collection][]> {
+    return canonicalClone(this.snapshot[collection]).map((record) => {
+      assertEntityRecord(collection, record);
+      return record;
+    });
+  }
+
+  async putMany<Collection extends CollectionName>(
+    collection: Collection,
+    records: readonly EntityMap[Collection][],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void> {
+    const byId = new Map(
+      this.snapshot[collection].map((record) => [record.id, record]),
+    );
+    for (const record of records) {
+      byId.set(record.id, canonicalClone(record));
+    }
+    this.snapshot[collection] = [...byId.values()];
+  }
+
+  async clear<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<void> {
+    this.snapshot[collection] = [];
+  }
+}
+
 class BackupSnapshotStore implements LocalDataStore {
   private snapshot: DataSnapshot;
 
@@ -104,21 +154,7 @@ class BackupSnapshotStore implements LocalDataStore {
     task: Parameters<LocalDataStore["transaction"]>[2],
   ): Promise<T> {
     const working = canonicalClone(this.snapshot);
-    const result = await task({
-      getAll: async (collection) => canonicalClone(working[collection]),
-      putMany: async (collection, records) => {
-        const byId = new Map(
-          working[collection].map((record) => [record.id, record]),
-        );
-        for (const record of records) {
-          byId.set(record.id, canonicalClone(record));
-        }
-        working[collection] = [...byId.values()];
-      },
-      clear: async (collection) => {
-        working[collection] = [];
-      },
-    });
+    const result = await task(new BackupDataTransaction(working));
     if (mode === "readwrite") {
       for (const collection of collections) {
         this.snapshot[collection] = working[collection];

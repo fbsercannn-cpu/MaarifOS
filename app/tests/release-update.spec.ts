@@ -110,11 +110,11 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await configureClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım" }).click();
-  const classroom = page.getByRole("dialog", { name: "Sınıfım" });
-  await classroom
+  await page
     .getByRole("button", { name: "Çocuk ekle", exact: true })
     .click();
-  const studentName = classroom.getByLabel("Çocuğun adı");
+  const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+  const studentName = addSheet.getByLabel("Çocuğun adı");
   await studentName.fill("Kaydedilmemiş öğretmen girdisi");
 
   await page.evaluate(() => {
@@ -122,8 +122,9 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   });
 
   await expect(studentName).toHaveValue("Kaydedilmemiş öğretmen girdisi");
-  await classroom.press("Escape");
-  await expect(classroom).toBeHidden();
+  await addSheet.press("Escape");
+  await expect(addSheet).toBeHidden();
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),
   ).toBeVisible();

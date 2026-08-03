@@ -1,5 +1,7 @@
 # Haricî Yapay Zekâ Analiz Paketi Standardı
 
+> **Durum notu:** Bu belge hedef paket standardını tanımlar. Güncel uygulama güvenli metin paylaşımı ve haricî geri bildirim kaydının bir bölümünü destekler; aşağıdaki dizin/manifest/medya paketinin tamamı uygulanmış kabul edilmez. Kanonik durum için [`../STATUS.md`](../STATUS.md) dosyasına bakın. MaarifOS haricî bir yapay zekâ API'sine otomatik veri göndermez.
+
 ## Amaç
 
 Uygulama içine yapay zekâ entegre etmeden, seçilen verileri ChatGPT gibi bir sisteme güvenli ve anlaşılır biçimde aktarabilmek.

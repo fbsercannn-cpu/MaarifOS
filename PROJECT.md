@@ -1,6 +1,8 @@
 # MaarifOS
 ## Okul Öncesi Öğretmen Dijital Hafıza ve Çalışma Ekosistemi
 
+> **Belge türü: hedef vizyon ve gereksinim.** Bu metindeki modül ve başarı ölçütleri mevcut uygulama iddiası değildir. Güncel uygulanmış/eksik/ertelenmiş kabiliyetler için kanonik kaynak [`STATUS.md`](STATUS.md) dosyasıdır.
+
 **Proje sahibi:** Sercan Topaloğlu  
 **İlk kullanıcı ve ürün danışmanı:** Emine Topaloğlu  
 **Hedef ortam:** Android/iOS telefonlarda tam ekran çalışan, kurulabilir, çevrim dışı kullanılabilir mobil öncelikli PWA

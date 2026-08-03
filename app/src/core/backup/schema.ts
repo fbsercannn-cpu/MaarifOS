@@ -34,6 +34,7 @@ import {
   assertAppLockAttemptState,
   assertAppLockConfig,
 } from "../security/app-lock";
+import { assertEntityRecord } from "../repository/entities";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
@@ -158,6 +159,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "departureTime",
     "reasonTag",
     "note",
+    "events",
     "_MUKERRER_INCELE",
     "duplicateOf",
   ],
@@ -486,8 +488,8 @@ function isSafeHttpsUrl(value: unknown): value is string {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
-      url.username === "" &&
-      url.password === "" &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
       url.hostname.length > 0
     );
   } catch {
@@ -978,6 +980,10 @@ function assertStoredRecord(value: unknown, collection: CollectionName): asserts
   const storedRecord = value as StoredRecord;
   assertAllowedRecordKeys(storedRecord, collection);
   validateCollectionRecordSemantics(storedRecord, collection);
+  // Ortak repository/domain codec temel kayıt biçiminin tek otoritesidir.
+  // Yedeğe özgü strict-key, sürüm ve çapraz-kayıt kuralları bu katmanın
+  // üzerinde bilinçli olarak korunur (özellikle öğrenci üyelik geçmişi).
+  assertEntityRecord(collection, storedRecord);
 }
 
 function validatedRecordScope(

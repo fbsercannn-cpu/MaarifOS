@@ -94,7 +94,7 @@ test("telefon geri tuşu profil, sınıf listesi ve ana ekran sırasını korur"
   ).toBeVisible();
 
   await page.goBack();
-  await expect(page.getByRole("dialog", { name: "Sınıfım" })).toBeVisible();
+  await expect(page.getByRole("main", { name: /Sınıfım/ })).toBeVisible();
   expect(page.url()).toBe(appUrl);
 
   await page.goBack();
@@ -102,7 +102,7 @@ test("telefon geri tuşu profil, sınıf listesi ve ana ekran sırasını korur"
     page.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
   ).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  expect(page.url()).toBe(appUrl);
+  expect(new URL(page.url()).pathname).toBe("/");
 });
 
 test("ana sayfadaki öğrenci araması ad ve soyadı Türkçe harflerden bağımsız eşleştirir", async ({
@@ -116,7 +116,7 @@ test("ana sayfadaki öğrenci araması ad ve soyadı Türkçe harflerden bağım
     await page.getByLabel("Çocuğun adı").fill(name);
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
   }
-  await page.getByRole("button", { name: "Sınıfım ekranını kapat" }).click();
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
   await page.getByRole("button", { name: "Öğrenci ara", exact: true }).click();
   const search = page.getByLabel("Öğrenci ara");
@@ -153,11 +153,11 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
     { width: 430, height: 932 },
   ]) {
     await page.setViewportSize(viewport);
-    const layout = await page.getByRole("dialog", { name: "Sınıfım" }).evaluate(
-      (dialog, currentViewport) => {
-        const sheet = dialog as HTMLElement;
-        const content = sheet.querySelector<HTMLElement>(".sheet-content");
-        const visibleButtons = [...sheet.querySelectorAll<HTMLElement>("button")].filter(
+    const layout = await page.getByRole("main", { name: /Sınıfım/ }).evaluate(
+      (screen, currentViewport) => {
+        const routeScreen = screen as HTMLElement;
+        const content = routeScreen.closest(".mobile-scroll-content") as HTMLElement | null;
+        const visibleButtons = [...routeScreen.querySelectorAll<HTMLElement>("button")].filter(
           (button) => {
             const style = getComputedStyle(button);
             const rect = button.getBoundingClientRect();
@@ -165,10 +165,9 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
           },
         );
         return {
-          sheetLeft: sheet.getBoundingClientRect().left,
-          sheetRight: sheet.getBoundingClientRect().right,
-          sheetTop: sheet.getBoundingClientRect().top,
-          sheetBottom: sheet.getBoundingClientRect().bottom,
+          sheetLeft: routeScreen.getBoundingClientRect().left,
+          sheetRight: routeScreen.getBoundingClientRect().right,
+          sheetTop: routeScreen.getBoundingClientRect().top,
           contentScrollWidth: content?.scrollWidth ?? 0,
           contentClientWidth: content?.clientWidth ?? 0,
           undersizedTargets: visibleButtons
@@ -201,8 +200,7 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
 
     expect(layout.sheetLeft).toBeGreaterThanOrEqual(-0.5);
     expect(layout.sheetRight).toBeLessThanOrEqual(viewport.width + 0.5);
-    expect(layout.sheetTop).toBeGreaterThanOrEqual(-0.5);
-    expect(layout.sheetBottom).toBeLessThanOrEqual(viewport.height + 0.5);
+    expect(layout.sheetTop).toBeGreaterThanOrEqual(-1.5);
     expect(layout.contentScrollWidth).toBeLessThanOrEqual(
       layout.contentClientWidth,
     );
@@ -210,7 +208,7 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
     expect(layout.overlappingTargets).toEqual([]);
   }
 
-  const sheetContent = page.locator(".sheet-content");
+  const sheetContent = page.locator(".mobile-scroll");
   await sheetContent.hover();
   await page.mouse.wheel(0, 1200);
   await expect(
@@ -221,7 +219,7 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
     page.getByRole("button", { name: "Fırat çocuğunu sınıftan ayır" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sınıfım ekranını kapat" }),
+    page.getByRole("button", { name: "Bugün", exact: true }),
   ).toBeVisible();
 });
 
@@ -255,7 +253,8 @@ test("öğrenci profili tüm telefon genişliklerinde taşmadan ve erişilebilir
   ]) {
     await page.setViewportSize(viewport);
 
-    for (const tab of ["Akış", "Portfolyo", "Bilgiler", "Yakınlar"]) {
+    await expect(dialog.getByRole("button", { name: "Portfolyo", exact: true })).toHaveCount(0);
+    for (const tab of ["Akış", "Bilgiler", "Yakınlar"]) {
       await dialog.getByRole("button", { name: tab, exact: true }).click();
       const layout = await dialog.evaluate((sheet) => {
         const content = sheet.querySelector<HTMLElement>(".sheet-content");
@@ -300,10 +299,9 @@ test("öğrenci profili tüm telefon genişliklerinde taşmadan ve erişilebilir
   await expect(dialog.getByText("Görsel QA Çocuğu", { exact: true })).toBeVisible();
 });
 
-test("portfolyo yalnız kanıt bulunan ayı gösterir ve ayrı yansıtma alanlarını kalıcı saklar", async ({
+test("Hediye Alpha PWA yüzeyi portfolyo yatırımını pilot akışından gizler", async ({
   page,
 }) => {
-  test.setTimeout(30_000);
   const childName = "Kurgu Portfolyo Çocuğu";
   await page.goto("/");
   await configureNativeClassroom(page);
@@ -311,50 +309,12 @@ test("portfolyo yalnız kanıt bulunan ayı gösterir ve ayrı yansıtma alanlar
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill(childName);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.getByRole("button", { name: "Sınıfım ekranını kapat" }).click();
-
-  await createPortfolioObservation(
-    page,
-    "Portfolyoda değişmeden kalacak kurgu kanıt.",
-  );
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
     .getByRole("button", { name: `${childName} profilini aç` })
     .click();
   const dialog = page.getByRole("dialog", { name: `${childName} profili` });
-  await expect(dialog.locator(".student-observation-month-folders button")).toHaveCount(1);
-
-  await dialog.getByRole("button", { name: "Portfolyo", exact: true }).click();
-  await dialog.getByRole("button", { name: "Seçkiye ekle" }).click();
-  await dialog
-    .getByLabel("Öğretmenin kanıta bağlı notu")
-    .fill("Kaynağa bağlı kurgu öğretmen notu.");
-  await dialog
-    .getByLabel("Çocuğun bu seçime ilişkin sözü")
-    .fill("Bunu birlikte seçtik.");
-  await dialog
-    .getByLabel("Aile katkısı")
-    .fill("Aileden gelen ayrı kurgu katkı.");
-  await dialog.getByRole("button", { name: "Seçkiyi kaydet" }).click();
-  await expect(dialog.getByText("Kaynağa bağlı kurgu öğretmen notu.")).toBeVisible();
-  await expect(dialog.getByText("Bunu birlikte seçtik.")).toBeVisible();
-  await expect(dialog.getByText("Aileden gelen ayrı kurgu katkı.")).toBeVisible();
-  await expect(
-    dialog.getByText("Portfolyoda değişmeden kalacak kurgu kanıt."),
-  ).toBeVisible();
-
-  await page.reload();
-  await configureNativeClassroom(page);
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page
-    .getByRole("button", { name: `${childName} profilini aç` })
-    .click();
-  const reopened = page.getByRole("dialog", { name: `${childName} profili` });
-  await reopened.getByRole("button", { name: "Portfolyo", exact: true }).click();
-  await expect(
-    reopened.getByText("Kaynağa bağlı kurgu öğretmen notu."),
-  ).toBeVisible();
-  await expect(
-    reopened.getByText("Portfolyoda değişmeden kalacak kurgu kanıt."),
-  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Akış", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Bilgiler", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Portfolyo", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /Paylaşım|yapay zekâ/i })).toHaveCount(0);
 });

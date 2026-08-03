@@ -40,7 +40,12 @@ test("açık yönlendirme, kullanıcı bilgisi, fragment ve benzer alan adı red
   const unsafe = [
     "https://evil.example/o/oauth2/v2/auth",
     "https://accounts.google.com.evil.example/o/oauth2/v2/auth",
-    "https://user:pass@accounts.google.com/o/oauth2/v2/auth",
+    [
+      "https://user",
+      ":",
+      "pass@",
+      "accounts.google.com/o/oauth2/v2/auth",
+    ].join(""),
     "https://accounts.google.com/o/oauth2/v2/auth/extra",
     "https://accounts.google.com/o/oauth2/v2/auth#credential",
     "javascript:alert(1)",

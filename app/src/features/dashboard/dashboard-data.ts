@@ -7,6 +7,7 @@ import {
   isAttendanceStatus,
   planAttendanceUpsert,
   resolveAttendanceRecords,
+  type AttendanceEvent,
   type AttendanceStatus,
 } from "../../core/domain/attendance.ts";
 import type { StoredRecord } from "../../core/domain/model.ts";
@@ -37,6 +38,10 @@ export type DashboardStudent = {
   firstName?: string;
   lastName?: string;
   status: AttendanceStatus;
+  /** Günün yoklama kaydı var mı; sınıf üyeliği tek başına yoklama sayılmaz. */
+  attendanceMarked?: boolean;
+  /** Yalnız seçili civilDate için kanonik günlük yoklama olayları. */
+  events?: AttendanceEvent[];
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
@@ -48,6 +53,36 @@ export type DashboardStudent = {
   contacts?: StudentContact[];
   profilePhotoDataUrl?: string;
 };
+
+export type DashboardAttendanceCounts = {
+  present: number;
+  late: number;
+  absent: number;
+  marked: number;
+  total: number;
+};
+
+export function dashboardAttendanceCounts(
+  students: readonly DashboardStudent[],
+): DashboardAttendanceCounts {
+  const markedStudents = students.filter(
+    (student) => student.attendanceMarked !== false,
+  );
+  const present = markedStudents.filter(
+    (student) => student.status === "present",
+  ).length;
+  const late = markedStudents.filter((student) => student.status === "late").length;
+  const absent = markedStudents.filter(
+    (student) => student.status === "absent",
+  ).length;
+  return {
+    present,
+    late,
+    absent,
+    marked: present + late + absent,
+    total: students.length,
+  };
+}
 
 export type DashboardObservation = {
   id: string;
@@ -164,7 +199,7 @@ function dashboardStateFromSnapshot(
     recordBelongsToClassroomScope(record, scope),
   );
   const storedStudents = scopedStudentRecords
-    .map((record) => {
+    .map((record): DashboardStudent | null => {
       const student = studentFromRecord(record);
       if (!student) return null;
       const attendance = resolvedAttendance.latestByKey.get(
@@ -174,7 +209,16 @@ function dashboardStateFromSnapshot(
         record.civilDate === attendanceCivilDate && isAttendanceStatus(record.attendanceStatus)
           ? record.attendanceStatus
           : "present";
-      return { ...student, status: attendance?.status ?? legacyStatus };
+      return {
+        ...student,
+        status: attendance?.status ?? legacyStatus,
+        ...(attendance?.events
+          ? { events: structuredClone(attendance.events) }
+          : {}),
+        attendanceMarked: attendance !== undefined ||
+          (record.civilDate === attendanceCivilDate &&
+            isAttendanceStatus(record.attendanceStatus)),
+      };
     })
     .filter((student): student is DashboardStudent => student !== null);
   const recordsById = new Map(scopedStudentRecords.map((record) => [record.id, record]));
@@ -300,6 +344,7 @@ export function migrateLegacyDashboardState(
     ? legacyStudents.map((student) => ({
         ...student,
         id: migratedStudentIds.get(student.id)!,
+        attendanceMarked: true,
       }))
     : fallback.students;
   const migratedStudentIdSet = new Set(
@@ -671,7 +716,9 @@ export async function persistDashboardState(
         }
       }
       const attendancePlan = planAttendanceUpsert({
-        students: state.students,
+        students: state.students.filter(
+          (student) => student.attendanceMarked !== false,
+        ),
         existingRecords: scope
           ? existingAttendance.filter((record) =>
               recordBelongsToClassroomScope(record, scope),

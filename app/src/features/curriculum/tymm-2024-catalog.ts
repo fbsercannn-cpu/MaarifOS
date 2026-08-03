@@ -1,3 +1,5 @@
+import { createCurriculumCatalogSnapshot } from "./catalog-provenance.ts";
+
 export const TYMM_2024_AGE_BANDS = [
   "36-48",
   "48-60",
@@ -804,3 +806,9 @@ export const TYMM_2024_LEARNING_OUTCOMES: readonly Tymm2024LearningOutcome[] = [
     ["MHB.3", "Müzik ve ritimlerle hareket ve dans edebilme"],
   ]),
 ];
+
+/** Kanonik TYMM kataloğunun çalışma zamanında değiştirilemeyen provenance snapshot'ı. */
+export const TYMM_2024_CATALOG_SNAPSHOT = createCurriculumCatalogSnapshot(
+  TYMM_2024_CATALOG_METADATA,
+  TYMM_2024_LEARNING_OUTCOMES,
+);

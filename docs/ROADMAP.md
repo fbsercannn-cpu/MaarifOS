@@ -1,5 +1,7 @@
 # MaarifOS Mega Master Planı
 
+> **Belge türü: yol haritası.** Fazlar ve hedefler tamamlanmış özellik iddiası değildir. Güncel uygulama kabiliyeti, alpha kapsamı ve açık kalite borcu için kanonik kaynak [`../STATUS.md`](../STATUS.md) dosyasıdır.
+
 > Ürün sıfırlama kararı, EÇE/TYMM çift program mimarisi ve güncel araştırma için
 > [PRODUCT_RESET_BLUEPRINT.md](./PRODUCT_RESET_BLUEPRINT.md) kanonik kaynaktır.
 

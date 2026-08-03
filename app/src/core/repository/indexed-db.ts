@@ -14,6 +14,12 @@ import type {
   RecoverySnapshotRepository,
   TransactionMode,
 } from "./contracts";
+import type {
+  EntityMap,
+  ObservationRecord,
+  StudentRecord,
+} from "./entities";
+import type { AttendanceRecord } from "../domain/attendance";
 import {
   recoverySnapshotMetadata,
   validateRecoveryRetentionLimit,
@@ -321,15 +327,25 @@ function validCivilDate(value: string): void {
 class IndexedDbTransaction implements DataTransaction {
   constructor(private readonly transaction: IDBTransaction) {}
 
-  async getAll(collection: CollectionName): Promise<StoredRecord[]> {
+  async getAll<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<EntityMap[Collection][]> {
     const records = await requestResult(
       this.transaction
         .objectStore(collection)
-        .getAll() as IDBRequest<StoredRecord[]>,
+        .getAll() as IDBRequest<EntityMap[Collection][]>,
     );
     return structuredClone(records);
   }
 
+  async putMany<Collection extends CollectionName>(
+    collection: Collection,
+    records: readonly EntityMap[Collection][],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void>;
   async putMany(
     collection: CollectionName,
     records: readonly StoredRecord[],
@@ -340,7 +356,9 @@ class IndexedDbTransaction implements DataTransaction {
     }
   }
 
-  async clear(collection: CollectionName): Promise<void> {
+  async clear<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<void> {
     await requestResult(this.transaction.objectStore(collection).clear());
   }
 }
@@ -416,7 +434,7 @@ export class IndexedDbDataStore
 
   async listStudentsByClassroom(
     classroomId: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<StudentRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     return this.queryIndex("students", "by-classroom", classroomId);
   }
@@ -424,7 +442,7 @@ export class IndexedDbDataStore
   async listAttendanceByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<AttendanceRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -437,7 +455,7 @@ export class IndexedDbDataStore
   async listAttendanceByStudentDate(
     studentId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<AttendanceRecord[]> {
     validUuid(studentId, "Öğrenci kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -450,7 +468,7 @@ export class IndexedDbDataStore
   async listObservationsByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<ObservationRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -462,7 +480,7 @@ export class IndexedDbDataStore
 
   async listObservationsByStudent(
     studentId: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<ObservationRecord[]> {
     validUuid(studentId, "Öğrenci kimliği");
     return this.queryIndex("observations", "by-student", studentId);
   }
@@ -617,11 +635,11 @@ export class IndexedDbDataStore
     this.onStatusChange?.(event);
   }
 
-  private async queryIndex(
-    collection: CollectionName,
+  private async queryIndex<Collection extends CollectionName>(
+    collection: Collection,
     indexName: string,
     key: IDBValidKey,
-  ): Promise<StoredRecord[]> {
+  ): Promise<EntityMap[Collection][]> {
     const database = await this.open();
     const nativeTransaction = database.transaction(collection, "readonly");
     const completion = transactionResult(nativeTransaction);
@@ -633,7 +651,7 @@ export class IndexedDbDataStore
     }
     const records = await requestResult(
       objectStore.index(indexName).getAll(IDBKeyRange.only(key)) as IDBRequest<
-        StoredRecord[]
+        EntityMap[Collection][]
       >,
     );
     await completion;
