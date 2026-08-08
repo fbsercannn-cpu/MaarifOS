@@ -46,6 +46,7 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
   const todayEvents = detail.getByRole("region", { name: "Bugünün ayrıntıları" });
   await expect(todayEvents.getByText("Giriş", { exact: true })).toBeVisible();
   await expect(todayEvents.locator("li").first()).toContainText(/\d{2}:\d{2}/);
+  await expect(page.locator(".sr-live")).toHaveText(`${childName}: Giriş kaydedildi.`);
 
   await page.keyboard.press("Escape");
   await page.reload({ waitUntil: "networkidle" });
@@ -62,10 +63,17 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
   await expect(todayEvents.getByText("Erken ayrılma", { exact: true })).toBeVisible();
   await expect(todayEvents).toContainText("12:30");
   await expect(todayEvents).toContainText("Kurgu aile randevusu");
+  await expect(page.locator(".sr-live")).toHaveText(
+    `${childName}: Erken ayrılma kaydedildi.`,
+  );
 
   await page.keyboard.press("Escape");
   const attendance = page.getByRole("dialog", { name: "Bugünün devam durumu" });
   await attendance.getByRole("button", { name: "Son değişikliği geri al" }).click();
+  await expect(page.locator(".sr-live")).toHaveText(
+    `${childName} için Erken ayrılma olayı geri alındı.`,
+  );
+  await expect(page.getByTestId("persistence-status")).toContainText("Kaydedildi");
   await attendance.getByRole("button", { name: `${childName} için yoklama ayrıntısını aç` }).click();
   detail = page.getByRole("dialog", { name: new RegExp(`${childName}.*yoklama ayrıntısı`) });
   const remainingEvents = detail.getByRole("region", { name: "Bugünün ayrıntıları" });
