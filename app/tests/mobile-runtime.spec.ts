@@ -363,6 +363,14 @@ test("keyboard and its attached footer dismiss on the same transition", async ({
 
   await input.click();
   await expect(keyboard).toHaveAttribute("data-visible", "true");
+  await expect.poll(() => page.evaluate(() => {
+    const footerElement = document.querySelector<HTMLElement>('[data-testid="flow-fixed-footer"]')!;
+    const keyboardElement = document.querySelector<HTMLElement>('[data-testid="keyboard-dock"]')!;
+    const footerBottom = Number.parseFloat(getComputedStyle(footerElement).bottom);
+    const keyboardHeight = Number.parseFloat(keyboardElement.style.height);
+    const keyboardY = new DOMMatrixReadOnly(getComputedStyle(keyboardElement).transform).m42;
+    return Math.max(Math.abs(footerBottom - keyboardHeight), Math.abs(keyboardY));
+  })).toBeLessThanOrEqual(1);
   await drag(page, footer, 0, 120, 5, { x: 8, y: 42 });
   await expect(keyboard).toHaveAttribute("data-visible", "false");
 
