@@ -151,6 +151,7 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await expect(attendanceStudent.getByText("Geldi", { exact: true })).toBeVisible();
   await attendanceStudent.click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
+  await expect(page.locator(".sr-live")).toContainText("Yoklama tamamlandı.");
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
@@ -193,6 +194,7 @@ test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context
   await activeStudent.click();
   await activeStudent.click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
+  await expect(page.locator(".sr-live")).toContainText("Yoklama tamamlandı.");
 
   await stalePage.keyboard.press("Escape");
   await createD1Observation(stalePage, "İkinci sekmeden kurgu gözlem.");
