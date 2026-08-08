@@ -80,13 +80,26 @@ büyük/küçük harf ile diakritik işaretlerden bağımsız çalışır.
 - classroomId
 - academicYearId
 - date
-- status: present | absent | late | early_leave | partial
-- arrivalTime?
-- departureTime?
-- reasonTag?
-- note?
+- status: present | absent | late
+- events[]?
+  - id
+  - schemaVersion: 1
+  - type: check_in | check_out | early_departure | partial_day | excuse
+  - occurredAtUtc
+  - civilDate
+  - localTime?
+  - reason?
+  - teacherNote?
+  - partialDayPeriod?: morning | afternoon | custom
+  - fromLocalTime?
+  - toLocalTime?
+- `_MUKERRER_INCELE`?
+- duplicateOf?
 
-Aynı öğrenci ve gün için tek ana kayıt bulunur; giriş/çıkış olayları ayrı `AttendanceEvent` olarak tutulabilir.
+Aynı öğrenci ve gün için tek ana kayıt seçilir. Giriş, çıkış, erken ayrılma, kısmi gün
+ve mazeret bilgileri ana kaydın sürümlü `events` dizisinde eklemeli olaylar olarak
+tutulur. Olay zamanı UTC ve İstanbul sivil günü birlikte taşınır. Olay alanı olmayan
+N-1 kayıtları geriye uyumlu kabul edilir.
 
 ### Alpha uygulama sözleşmesi
 
@@ -103,8 +116,9 @@ Eski `students.attendanceStatus` alanı kendi kayıtlı `civilDate` gününe ato
 olarak taşınır; günlük kayıt başarıyla yazılmadan legacy alan kaldırılmaz ve
 başka bir günün durumu bugüne devredilmez. Açık kalan uygulama İstanbul gün
 sınırında veya yeniden görünür olduğunda yeni günlük defteri yükler.
-`early_leave`, saatler ve neden alanları sonraki yoklama diliminde bu sözleşmeye
-eklenecektir.
+Saat, neden ve öğretmen notu olay düzeyinde doğrulanır. Geçersiz veya bozuk olay
+restore başlamadan reddedilir; aynı öğrenci/gün mükerrerleri silinmez, CS-001
+uyarınca `_MUKERRER_INCELE` ile korunur.
 
 ## Observation
 - id

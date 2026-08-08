@@ -1,0 +1,270 @@
+{
+  "id": "maarifos-tymm-6072-2026-2027-v1",
+  "version": "1.0.0",
+  "sku": "TYMM-6072",
+  "displayName": "TYMM 2024 · 60–72 Ay · 2026–2027",
+  "program": "tymm_2024",
+  "ageProfile": "60-72",
+  "academicRelease": "2026-2027",
+  "catalogId": "meb-tymm-okul-oncesi-2024-learning-outcomes",
+  "catalogSourceVersion": "2024.09.02",
+  "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+  "sourceCheckedOn": "2026-07-29",
+  "rightsStatus": "original-and-source-linked",
+  "lenses": [
+    {
+      "id": "guided-play",
+      "displayName": "Çocuk Girişimli ve Rehberli Oyun",
+      "shortDescription": "Çocuk seçimini koruyan, öğretmen sorularıyla derinleşen oyun.",
+      "evidenceGrade": "B",
+      "inspiration": "Gelişime uygun uygulama"
+    },
+    {
+      "id": "prepared-environment",
+      "displayName": "Hazırlanmış Çevre ve Bağımsız Çalışma",
+      "shortDescription": "Düzenli ortam, gerçek yaşam işi, seçim ve kademeli bağımsızlık.",
+      "evidenceGrade": "B",
+      "inspiration": "Montessori ilkeleri"
+    },
+    {
+      "id": "plan-act-reflect",
+      "displayName": "Planla–Uygula–Değerlendir Etkin Öğrenme",
+      "shortDescription": "Çocuğun niyetini belirtip uygulamasına ve sürece geri dönmesine alan açar.",
+      "evidenceGrade": "B",
+      "inspiration": "HighScope ilkeleri"
+    },
+    {
+      "id": "belonging-family-weave",
+      "displayName": "Aidiyet–İlişki–Aile Dokuması",
+      "shortDescription": "İyi oluş, aidiyet, aile bilgisi ve ilişkileri planın merkezine alır.",
+      "evidenceGrade": "C",
+      "inspiration": "Te Whāriki ilkeleri"
+    },
+    {
+      "id": "accessible-participation",
+      "displayName": "Erişilebilir Katılım ve Destekleyici İletişim",
+      "shortDescription": "Fiziksel, duyusal ve iletişimsel engelleri baştan azaltır.",
+      "evidenceGrade": "A-B",
+      "inspiration": "Kapsayıcı erken çocukluk eğitimi"
+    },
+    {
+      "id": "emotion-relationship-coregulation",
+      "displayName": "Duygu, İlişki ve Eş Düzenleme",
+      "shortDescription": "Güvenli ilişki ve yetişkin eş düzenlemesiyle sosyal-duygusal katılım.",
+      "evidenceGrade": "A",
+      "inspiration": "Sosyal-duygusal öğrenme"
+    }
+  ],
+  "annualMonths": [
+    {
+      "monthKey": "2026-09",
+      "title": "Aidiyet, sınıf topluluğu ve keşif",
+      "purpose": "Güvenli ilişki, ortak düzen, yakın çevreyi gözleme ve çocuk sorularını görünür kılma.",
+      "releaseStatus": "ready"
+    },
+    {
+      "monthKey": "2026-10",
+      "title": "Duyular, sonbahar ve malzeme",
+      "purpose": "Mevsimsel değişimi, malzeme özelliklerini ve sınıflandırmayı araştırma.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2026-11",
+      "title": "İlişki, topluluk ve ortak hafıza",
+      "purpose": "Birlikte yaşam, hak, sorumluluk ve yakın çevre kaynakları.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2026-12",
+      "title": "Işık, ses, örüntü ve yapı",
+      "purpose": "Ölçme, yapı kurma, örüntü ve çözüm üretme.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-01",
+      "title": "Kış, bakım ve dönem yansıtması",
+      "purpose": "Canlıların kış yaşamı, dayanışma ve ilk dönem kanıtlarına dönüş.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-02",
+      "title": "İletişim, duygu ve hikâye",
+      "purpose": "Yeniden bağlanma, anlatı, duygu dili ve akran etkileşimi.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-03",
+      "title": "Su, toprak, orman ve büyüme",
+      "purpose": "Yaşam alanı, bakım, uzun dönem doğa gözlemi ve sorumluluk.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-04",
+      "title": "Çoklu ifade ve sürdürülebilir tasarım",
+      "purpose": "Fikirleri sanat, yapı, hareket, söz ve sembolle temsil etme.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-05",
+      "title": "Hareket, üretim ve yerel toplum",
+      "purpose": "Ortak proje, saha araştırması ve yaşanılan yere katkı.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-06",
+      "title": "Geçiş, süreklilik ve yılın anlamı",
+      "purpose": "Yıllık kanıtlara dönüş, geçiş desteği ve sürdürülmek istenen sorular.",
+      "releaseStatus": "planned-release"
+    }
+  ],
+  "weeks": [
+    {
+      "id": "adaptation",
+      "title": "Uyum ve güven",
+      "dateRange": "7–11 Eylül 2026",
+      "purpose": "İlişki, aidiyet ve eş düzenleme.",
+      "activityIds": [
+        "tymm6072-sep-friendship-story"
+      ]
+    },
+    {
+      "id": "week-two",
+      "title": "Birlikte erişilebilir düzen kur",
+      "dateRange": "21–25 Eylül 2026",
+      "purpose": "Erişilebilirlik, bağımsızlık ve yansıtma.",
+      "activityIds": [
+        "tymm6072-sep-accessible-classroom"
+      ]
+    }
+  ],
+  "activities": [
+    {
+      "id": "tymm6072-sep-friendship-story",
+      "weekId": "adaptation",
+      "title": "Arkadaşlık Hikâyesini Birlikte Kuruyoruz",
+      "shortDescription": "Açık uçlu bir başlangıçtan çocukların sözleri, rolleri ve alternatif sonlarıyla ortak hikâye oluşturulur.",
+      "durationMinutes": 35,
+      "environment": "indoor",
+      "primaryLensId": "guided-play",
+      "supportingLensIds": [
+        "emotion-relationship-coregulation",
+        "belonging-family-weave"
+      ],
+      "curriculumTargetCodes": [
+        "TADB.2",
+        "TAKB.2",
+        "SAB.8"
+      ],
+      "materials": [
+        "Üç nötr kukla",
+        "Boş hikâye kartları",
+        "Duygu ifade kartları"
+      ],
+      "lowCostAlternatives": [
+        "Kâğıt torba kuklaları",
+        "Taş veya kozalak karakterler"
+      ],
+      "opening": "Öğretmen, yeni bir yere gelen ve oyuna nasıl katılacağını bilmeyen bir karakterle hikâyeyi başlatır.",
+      "processSteps": [
+        "Çocuklar karakterin ne hissedebileceğini önerir.",
+        "Hikâyenin sonraki adımı küçük gruplarda canlandırılır.",
+        "Farklı sonlar karşılaştırılır.",
+        "Çocukların seçtiği son ortak hikâye panosuna kaydedilir."
+      ],
+      "adultPrompts": [
+        "Karakter bunu nereden anladı?",
+        "Başka nasıl davet edilebilir?",
+        "Bu sonu değiştirirsek ne olur?"
+      ],
+      "childAgencyPoints": [
+        "Rol, ifade yolu ve hikâye sonu çocuklarca seçilir.",
+        "Konuşmak istemeyen çocuk kukla, çizim veya hareketle katkı verir."
+      ],
+      "observationPrompts": [
+        "Akran bakış açısını hangi söz veya davranışla dikkate alıyor?",
+        "Oyuna katılım için hangi çözümü öneriyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuğun özgün cümlesi",
+        "Seçtiği alternatif son",
+        "Canlandırma bağlam notu"
+      ],
+      "familyCommunityConnection": "Aileden ‘Yeni bir gruba katıldığında sana ne yardımcı olur?’ sorusunu çocukla konuşması istenir.",
+      "differentiation": [
+        "Rol almak istemeyen çocuk anlatıcı veya malzeme düzenleyici olabilir.",
+        "Duygu kartları zorunlu etiket değil, iletişim desteği olarak sunulur."
+      ],
+      "safetyNotes": [
+        "Çocuklar gerçek arkadaşlık sorunlarını açıklamaya zorlanmaz.",
+        "Kişisel anlatılar grup önünde paylaşılmadan önce çocuk onayı alınır."
+      ],
+      "reflectionPrompt": "Yetişkin yönlendirmesi çocukların kendi çözümünü üretmesine yeterince alan bıraktı mı?"
+    },
+    {
+      "id": "tymm6072-sep-accessible-classroom",
+      "weekId": "week-two",
+      "title": "Benim İçin Erişilebilir Sınıf",
+      "shortDescription": "Çocuklar sınıftaki katılım engellerini fark eder ve farklı erişim/ifade yolları tasarlar.",
+      "durationMinutes": 40,
+      "environment": "indoor",
+      "primaryLensId": "accessible-participation",
+      "supportingLensIds": [
+        "prepared-environment",
+        "plan-act-reflect"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.20",
+        "TAKB.2",
+        "SNAB.4"
+      ],
+      "materials": [
+        "Sınıf alanı fotoğrafları",
+        "Büyük sembol kartları",
+        "Yeniden yapışabilen etiketler",
+        "Farklı kavrama araçları"
+      ],
+      "lowCostAlternatives": [
+        "Karton semboller",
+        "Kalınlaştırılmış kalem tutacağı için sünger"
+      ],
+      "opening": "Öğretmen, aynı işi yapmanın birden çok yolu olabileceğine dair günlük bir örnek verir.",
+      "processSteps": [
+        "Çocuklar sınıfta ulaşılması, anlaşılması veya kullanılması zor bir yeri seçer.",
+        "Sorun çocuk suçlanmadan ortam üzerinden tarif edilir.",
+        "En az iki çözüm üretilir.",
+        "Çözüm küçük ölçekte denenir.",
+        "Çocuk geri bildirimiyle düzenleme yapılır."
+      ],
+      "adultPrompts": [
+        "Burayı zor yapan çocuk mu, ortam mı?",
+        "Konuşmadan da nasıl seçim yapılabilir?",
+        "Bu çözüm kimin için işe yarıyor, kim için yaramıyor?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk kendi erişim tercihini açıklamak zorunda değildir.",
+        "Çözüm seçimi etkilenen çocukların geri bildirimiyle yapılır."
+      ],
+      "observationPrompts": [
+        "Ortam engelini nasıl tarif ediyor?",
+        "Birden fazla çözümü karşılaştırabiliyor mu?"
+      ],
+      "evidenceOptions": [
+        "Önce/sonra ortam kaydı",
+        "Çözüm çizimi",
+        "Çocuk geri bildirim sözü"
+      ],
+      "familyCommunityConnection": "Ailelerden çocuğun evde kullandığı destekleyici iletişim veya düzenleme yollarını isteğe bağlı paylaşmaları istenir.",
+      "differentiation": [
+        "Görsel seçim, işaret, nesne ve AAC kullanımına izin verilir.",
+        "Hareket rotası tekerlekli araç ve oturarak erişim açısından kontrol edilir."
+      ],
+      "safetyNotes": [
+        "Erişilebilirlik ihtiyacı grup içinde kişisel tanı gibi açıklanmaz.",
+        "Yeni düzenleme acil çıkış ve geçişleri kapatmaz."
+      ],
+      "reflectionPrompt": "Plan, çocuğu değiştirmeye mi çalıştı, yoksa ortam engelini gerçekten azalttı mı?"
+    }
+  ],
+  "status": "internal_pilot",
+  "accessMode": "staff-code"
+}

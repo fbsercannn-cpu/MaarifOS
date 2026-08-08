@@ -26,7 +26,7 @@ async function addChild(page: Page, name: string) {
   await expect(
     page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
 test("sınıf kurulumu pedagojik bağlamı sessizce tahmin etmez", async ({
@@ -64,8 +64,8 @@ test("IndexedDB yazma hatasında yoklama geri alınır ve yeni yazmalar fail-clo
   await configureClassroom(page);
   await addChild(page, childName);
   await page.getByRole("button", { name: /Bugünkü devam/ }).click();
-  const student = page.getByRole("button", { name: new RegExp(childName) });
-  await expect(student.getByText("Geldi", { exact: true })).toBeVisible();
+  const student = page.locator("button.student-row").filter({ hasText: childName });
+  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
 
   await page.evaluate(() => {
     const testWindow = window as Window & {
@@ -99,6 +99,47 @@ test("IndexedDB yazma hatasında yoklama geri alınır ve yeni yazmalar fail-clo
     .getByRole("button", { name: "Cihaz verilerine yeniden bağlan" })
     .click();
   await expect(gate).toBeHidden();
+  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+});
+
+test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", async ({
+  page,
+}) => {
+  const childName = "Doğrulama Kurgu Çocuğu";
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  await addChild(page, childName);
+  await page.getByRole("button", { name: /Bugünkü devam/ }).click();
+  const student = page.locator("button.student-row").filter({ hasText: childName });
+  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __maarifOriginalIdbPut?: typeof IDBObjectStore.prototype.put;
+    };
+    testWindow.__maarifOriginalIdbPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function forcedValidationFailure() {
+      throw new DOMException("Kurgu alan doğrulama hatası", "DataError");
+    };
+  });
+  await student.click();
+
+  await expect(
+    page.getByRole("dialog", { name: "Yeni kayıtlar güvenlik için durduruldu" }),
+  ).toBeHidden();
+  await expect(page.getByTestId("persistence-status")).not.toContainText("Kayıt durdu");
+  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __maarifOriginalIdbPut?: typeof IDBObjectStore.prototype.put;
+    };
+    if (testWindow.__maarifOriginalIdbPut) {
+      IDBObjectStore.prototype.put = testWindow.__maarifOriginalIdbPut;
+      delete testWindow.__maarifOriginalIdbPut;
+    }
+  });
+  await student.click();
   await expect(student.getByText("Geldi", { exact: true })).toBeVisible();
 });
 
@@ -118,16 +159,11 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
     exact: true,
   });
   await captureTrigger.click();
-  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
-  await page.getByLabel("Etkinlik adı").fill("Taslak güvenliği etkinliği");
-  await page
-    .getByRole("region", { name: "Program alanları" })
-    .getByRole("button", { name: "Fen", exact: true })
-    .click();
-  await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
-  await page
-    .getByRole("button", { name: "Planı kaydet ve etkinliği başlat" })
-    .click();
+  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
+  const quickObservationTrigger = page.getByRole("button", {
+    name: `${firstChild} için hızlı gözlem`,
+  });
+  await quickObservationTrigger.click();
 
   const studentRegion = page.getByRole("region", {
     name: "Gözlem yapılacak çocuk",
@@ -146,15 +182,13 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
 
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
+    page.getByRole("main", { name: "Sınıfım" }),
   ).toBeVisible();
-  await expect(captureTrigger).toBeFocused();
+  await expect(quickObservationTrigger).toBeFocused();
 
   await captureTrigger.click();
   await page.getByRole("button", { name: /Gözlem yaz/ }).click();
-  await page
-    .getByRole("button", { name: `${firstChild} için hızlı gözlem` })
-    .click();
+  await quickObservationTrigger.click();
   await studentRegion
     .getByRole("button", { name: new RegExp(firstChild) })
     .click();
@@ -192,25 +226,16 @@ test("uygulama kilidi oturum parolasını saklamadan erişilebilir modal olarak 
   await expect(lockGate).toBeHidden();
 });
 
-test("Belgeler menüsü öğrenci dosyası akışını gösterir ve sahte PDF üretmez", async ({
+test("Hediye Alpha ana menüsü kısmi plan, belge ve AI vaatlerini gizler", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroom(page);
-  await page.getByRole("button", { name: "Belgeler", exact: true }).click();
-  const documents = page.getByRole("dialog", { name: "Belgeler" });
-  await expect(
-    documents.getByRole("heading", {
-      name: "Öğrenci dosyasını amaca göre hazırlayın",
-    }),
-  ).toBeVisible();
-  await expect(
-    documents.getByText("Öğretmen denetimli çalışma alanı"),
-  ).toBeVisible();
-  await expect(
-    documents.getByText(/ChatGPT veya Gemini/),
-  ).toBeVisible();
-  await expect(
-    documents.getByRole("button", { name: /PDF|rapor oluştur/i }),
-  ).toHaveCount(0);
+  const navigation = page.getByRole("navigation", { name: "Ana menü" });
+  await expect(navigation.getByRole("button", { name: "Bugün", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Sınıfım", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Kayıt ekle", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Planlar", exact: true })).toHaveCount(0);
+  await expect(navigation.getByRole("button", { name: "Belgeler", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Belgeler" })).toHaveCount(0);
 });

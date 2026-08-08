@@ -2,6 +2,7 @@ import {
   civilDateInIstanbul,
   isCivilDate,
 } from "../../core/domain/attendance.ts";
+import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import {
   recordBelongsToClassroomScope,
   resolveActiveClassroomScope,
@@ -20,6 +21,22 @@ import {
   type CurriculumTargetSnapshot,
   type PlannedCurriculumAssignment,
 } from "../curriculum/curriculum-catalog.ts";
+import {
+  parsePremiumLensPreferenceRecord,
+  premiumDailyFlowSnapshot,
+  samePremiumLensPreference,
+  type PremiumDailyFlowBlockDraft,
+  type PremiumDailyTemplateSelection,
+} from "../premium-plans/domain.ts";
+import { parsePedagogicalRawObservationText } from "../values/value-plan-models.ts";
+import {
+  resolveLocalTeacherIdentity,
+} from "./local-teacher-identity.ts";
+
+export {
+  LOCAL_TEACHER_IDENTITY_SETTING_ID,
+  LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
+} from "./local-teacher-identity.ts";
 
 export const CURRICULUM_PROGRAM_LABELS = {
   tymm: "Türkiye Yüzyılı Maarif Modeli",
@@ -71,10 +88,6 @@ export interface CapturedEvidenceResult {
 export interface AssessmentDraftResult {
   draft: StoredRecord;
 }
-
-export const LOCAL_TEACHER_IDENTITY_SETTING_ID =
-  "00000000-0000-4000-9000-000000000003";
-export const LOCAL_TEACHER_IDENTITY_SETTING_TYPE = "local-teacher-identity";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -251,6 +264,26 @@ function sameScope(record: StoredRecord, scope: ActiveClassroomScope): boolean {
   return recordBelongsToClassroomScope(record, scope);
 }
 
+function sameCanonicalSnapshot(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalJson(left) === canonicalJson(right);
+  } catch {
+    return false;
+  }
+}
+
+function snapshotById(candidates: unknown, id: string): unknown | null {
+  if (!Array.isArray(candidates)) return null;
+  return candidates.find(
+    (candidate) =>
+      candidate !== null &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      "id" in candidate &&
+      candidate.id === id,
+  ) ?? null;
+}
+
 export async function createPlanWithActivity(
   store: LocalDataStore,
   input: {
@@ -265,6 +298,9 @@ export async function createPlanWithActivity(
     curriculumTargets: CurriculumTargetSnapshot[];
     assignmentMode: CurriculumAssignmentMode;
     studentIds: string[];
+    premiumSource?: PremiumDailyTemplateSelection;
+    premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+    premiumAlternativeActivated?: boolean;
     now?: Date;
   },
 ): Promise<PlanActivityResult> {
@@ -347,6 +383,151 @@ export async function createPlanWithActivity(
       if (activities.some((record) => record.id === activityId)) {
         throw new Error("Bu etkinlik kimliği zaten kullanılıyor.");
       }
+      if (input.premiumSource) {
+        const premiumSource = input.premiumSource;
+        const annual = plans.find(
+          (record) =>
+            record.id === premiumSource.annualPlanId &&
+            record.planType === "annual" &&
+            typeof record.deletedAt !== "string" &&
+            sameScope(record, scope),
+        );
+        const monthly = plans.find(
+          (record) =>
+            record.id === premiumSource.monthlyPlanId &&
+            record.planType === "monthly" &&
+            typeof record.deletedAt !== "string" &&
+            sameScope(record, scope),
+        );
+        const weekly = plans.find(
+          (record) =>
+            record.id === premiumSource.weeklyPlanId &&
+            record.planType === "weekly" &&
+            typeof record.deletedAt !== "string" &&
+            sameScope(record, scope),
+        );
+        let lensPreferencesMatch = false;
+        if (annual && monthly && weekly) {
+          try {
+            const sourceLensPreference = parsePremiumLensPreferenceRecord(
+              premiumSource as unknown as Record<string, unknown>,
+              "Premium günlük seçim",
+            );
+            const annualLensPreference = parsePremiumLensPreferenceRecord(
+              annual,
+              "Premium yıllık plan",
+            );
+            const monthlyLensPreference = parsePremiumLensPreferenceRecord(
+              monthly,
+              "Premium aylık plan",
+            );
+            const weeklyLensPreference = parsePremiumLensPreferenceRecord(
+              weekly,
+              "Premium haftalık plan",
+            );
+            lensPreferencesMatch =
+              samePremiumLensPreference(
+                sourceLensPreference,
+                annualLensPreference,
+              ) &&
+              samePremiumLensPreference(
+                sourceLensPreference,
+                monthlyLensPreference,
+              ) &&
+              samePremiumLensPreference(
+                sourceLensPreference,
+                weeklyLensPreference,
+              );
+          } catch {
+            lensPreferencesMatch = false;
+          }
+        }
+        const storedWeeklyTemplate = snapshotById(
+          weekly?.premiumActivityTemplates,
+          premiumSource.activityTemplateId,
+        );
+        const storedWeeklyAlternativeTemplate = snapshotById(
+          weekly?.premiumActivityTemplates,
+          premiumSource.alternativeActivitySnapshot.id,
+        );
+        const storedMonthlyTemplate = snapshotById(
+          monthly?.premiumActivityTemplates,
+          premiumSource.activityTemplateId,
+        );
+        const storedMonthlyAlternativeTemplate = snapshotById(
+          monthly?.premiumActivityTemplates,
+          premiumSource.alternativeActivitySnapshot.id,
+        );
+        const storedMonthlyWeek = snapshotById(
+          monthly?.premiumWeeks,
+          premiumSource.weekSnapshot.id,
+        );
+        const weekActivityIds = Array.isArray(premiumSource.weekSnapshot.activityIds)
+          ? premiumSource.weekSnapshot.activityIds
+          : [];
+        const weekMainActivityIds = Array.isArray(
+          premiumSource.weekSnapshot.mainActivityIds,
+        )
+          ? premiumSource.weekSnapshot.mainActivityIds
+          : [];
+        if (
+          !annual ||
+          !monthly ||
+          !weekly ||
+          !lensPreferencesMatch ||
+          monthly.annualPlanId !== annual.id ||
+          weekly.annualPlanId !== annual.id ||
+          weekly.monthlyPlanId !== monthly.id ||
+          annual.contentPackId !== input.premiumSource.contentPack.id ||
+          annual.contentPackVersion !== input.premiumSource.contentPack.version ||
+          monthly.contentPackId !== annual.contentPackId ||
+          monthly.contentPackVersion !== annual.contentPackVersion ||
+          weekly.contentPackId !== annual.contentPackId ||
+          weekly.contentPackVersion !== annual.contentPackVersion ||
+          input.civilDate < String(weekly.periodStart) ||
+          input.civilDate > String(weekly.periodEnd) ||
+          !sameCanonicalSnapshot(annual.contentPackSnapshot, premiumSource.contentPack) ||
+          !sameCanonicalSnapshot(monthly.contentPackSnapshot, premiumSource.contentPack) ||
+          !sameCanonicalSnapshot(weekly.contentPackSnapshot, premiumSource.contentPack) ||
+          premiumSource.weekSnapshot.id !== weekly.weekId ||
+          !sameCanonicalSnapshot(weekly.premiumWeekSnapshot, premiumSource.weekSnapshot) ||
+          !storedMonthlyWeek ||
+          !sameCanonicalSnapshot(storedMonthlyWeek, premiumSource.weekSnapshot) ||
+          !sameCanonicalSnapshot(monthly.premiumFullDayFlow, premiumSource.fullDayFlow) ||
+          premiumSource.activitySnapshot.id !== premiumSource.activityTemplateId ||
+          premiumSource.activitySnapshot.activityRole !== "main" ||
+          premiumSource.activitySnapshot.weekId !== premiumSource.weekSnapshot.id ||
+          premiumSource.alternativeActivitySnapshot.activityRole !== "alternative" ||
+          premiumSource.alternativeActivitySnapshot.weekId !==
+            premiumSource.weekSnapshot.id ||
+          premiumSource.activitySnapshot.id ===
+            premiumSource.alternativeActivitySnapshot.id ||
+          premiumSource.weekSnapshot.alternativeActivityId !==
+            premiumSource.alternativeActivitySnapshot.id ||
+          !weekActivityIds.includes(premiumSource.activitySnapshot.id) ||
+          !weekActivityIds.includes(premiumSource.alternativeActivitySnapshot.id) ||
+          !weekMainActivityIds.includes(premiumSource.activitySnapshot.id) ||
+          weekMainActivityIds.includes(premiumSource.alternativeActivitySnapshot.id) ||
+          !storedWeeklyTemplate ||
+          !sameCanonicalSnapshot(storedWeeklyTemplate, premiumSource.activitySnapshot) ||
+          !storedWeeklyAlternativeTemplate ||
+          !sameCanonicalSnapshot(
+            storedWeeklyAlternativeTemplate,
+            premiumSource.alternativeActivitySnapshot,
+          ) ||
+          !storedMonthlyTemplate ||
+          !sameCanonicalSnapshot(storedMonthlyTemplate, premiumSource.activitySnapshot) ||
+          !storedMonthlyAlternativeTemplate ||
+          !sameCanonicalSnapshot(
+            storedMonthlyAlternativeTemplate,
+            premiumSource.alternativeActivitySnapshot,
+          )
+        ) {
+          throw new Error(
+            "Premium etkinlik yalnız aynı sınıfa kurulmuş yıllık, aylık ve haftalık kaynak zincirinden kullanılabilir.",
+          );
+        }
+      }
       const activeStudentIds = activeStudentIdsForScope(students, scope);
       const assignedStudentIds =
         input.assignmentMode === "whole-class"
@@ -376,6 +557,14 @@ export async function createPlanWithActivity(
           })),
         );
       const maarifRefs = curriculumTargets.map((target) => target.referenceCode);
+      const appliedPremiumTemplate = input.premiumSource
+        ? input.premiumAlternativeActivated
+          ? input.premiumSource.alternativeActivitySnapshot
+          : input.premiumSource.activitySnapshot
+        : null;
+      if (input.premiumSource && !appliedPremiumTemplate) {
+        throw new Error("Premium günlük plan için uygulanacak etkinlik belirlenmelidir.");
+      }
       const plan: StoredRecord = {
         id: planId,
         planType: "daily",
@@ -388,6 +577,32 @@ export async function createPlanWithActivity(
         assignmentMode: input.assignmentMode,
         assignmentSnapshotAt: timestamp,
         coverageStatus: "planned",
+        ...(input.premiumSource && appliedPremiumTemplate
+          ? {
+              sourceAnnualPlanId: input.premiumSource.annualPlanId,
+              sourceMonthlyPlanId: input.premiumSource.monthlyPlanId,
+              sourceWeeklyPlanId: input.premiumSource.weeklyPlanId,
+              sourceContentPackSnapshot: structuredClone(input.premiumSource.contentPack),
+              sourceActivityTemplateId: input.premiumSource.activityTemplateId,
+              sourceActivityTemplateSnapshot: structuredClone(
+                input.premiumSource.activitySnapshot,
+              ),
+              appliedActivityTemplateId: appliedPremiumTemplate.id,
+              appliedActivityTemplateSnapshot: structuredClone(appliedPremiumTemplate),
+              premiumDailyFlowSnapshot: premiumDailyFlowSnapshot(
+                input.premiumSource,
+                input.civilDate,
+                input.premiumDailyFlowBlocks,
+                input.premiumAlternativeActivated === true,
+              ),
+              teacherPreferredLensId:
+                input.premiumSource.teacherPreferredLensId,
+              teacherPreferredSupportingLensIds: [
+                ...input.premiumSource.teacherPreferredSupportingLensIds,
+              ],
+              lensSelectionMode: input.premiumSource.lensSelectionMode,
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -411,6 +626,26 @@ export async function createPlanWithActivity(
         assignmentSnapshotAt: timestamp,
         targetAssignments: assignments,
         coverageStatus: "planned",
+        ...(input.premiumSource && appliedPremiumTemplate
+          ? {
+              sourceAnnualPlanId: input.premiumSource.annualPlanId,
+              sourceMonthlyPlanId: input.premiumSource.monthlyPlanId,
+              sourceWeeklyPlanId: input.premiumSource.weeklyPlanId,
+              sourceContentPackSnapshot: structuredClone(input.premiumSource.contentPack),
+              sourceActivityTemplateId: input.premiumSource.activityTemplateId,
+              sourceActivityTemplateSnapshot: structuredClone(
+                input.premiumSource.activitySnapshot,
+              ),
+              appliedActivityTemplateId: appliedPremiumTemplate.id,
+              appliedActivityTemplateSnapshot: structuredClone(appliedPremiumTemplate),
+              teacherPreferredLensId:
+                input.premiumSource.teacherPreferredLensId,
+              teacherPreferredSupportingLensIds: [
+                ...input.premiumSource.teacherPreferredSupportingLensIds,
+              ],
+              lensSelectionMode: input.premiumSource.lensSelectionMode,
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -449,9 +684,13 @@ export async function captureImmutableRawObservation(
   const observedAt = validUtc(input.observedAt, "Gözlem zamanı");
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
-  if (input.rawText.trim().length === 0) {
-    throw new Error("Gözlem notu boş bırakılamaz.");
-  }
+  const rawText = parsePedagogicalRawObservationText(input.rawText);
+  const childQuote = input.childQuote?.trim()
+    ? parsePedagogicalRawObservationText(input.childQuote, "Çocuk sözü")
+    : undefined;
+  const context = input.context?.trim()
+    ? parsePedagogicalRawObservationText(input.context, "Gözlem bağlamı")
+    : undefined;
   const timestamp = now.toISOString();
   let observation: StoredRecord | null = null;
 
@@ -517,10 +756,10 @@ export async function captureImmutableRawObservation(
         studentIds: [studentId],
         planId,
         activityId,
-        rawText: input.rawText,
+        rawText,
         rawTextImmutable: true,
-        ...(input.childQuote?.trim() ? { childQuote: input.childQuote } : {}),
-        ...(input.context?.trim() ? { context: input.context } : {}),
+        ...(childQuote ? { childQuote } : {}),
+        ...(context ? { context } : {}),
         observedAt,
         workflowStatus: "captured",
         academicYearId: scope.academicYearId,
@@ -584,12 +823,11 @@ export async function confirmObservationCurriculumLink(
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [plans, activities, observations, links, settings] = await Promise.all([
+      const [plans, activities, observations, links] = await Promise.all([
         transaction.getAll("plans"),
         transaction.getAll("activities"),
         transaction.getAll("observations"),
         transaction.getAll("evidenceCurriculumLinks"),
-        transaction.getAll("settings"),
       ]);
       const observation = observations.find(
         (record) =>
@@ -655,39 +893,10 @@ export async function confirmObservationCurriculumLink(
           );
         }
       }
-      const identitySetting = settings.find(
-        (record) =>
-          record.id === LOCAL_TEACHER_IDENTITY_SETTING_ID &&
-          record.settingType === LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
-      );
-      const storedApproverId =
-        typeof identitySetting?.teacherUserId === "string" &&
-        UUID_PATTERN.test(identitySetting.teacherUserId)
-          ? identitySetting.teacherUserId
-          : null;
-      if (
-        requestedApproverId &&
-        storedApproverId &&
-        requestedApproverId !== storedApproverId
-      ) {
-        throw new Error("Onaylayan öğretmen kimliği bu cihazdaki kalıcı kimlikle uyuşmuyor.");
-      }
-      const approvedByUserId = storedApproverId ?? requestedApproverId ?? crypto.randomUUID();
-      if (!storedApproverId) {
-        await transaction.putMany("settings", [
-          {
-            ...(identitySetting ?? {}),
-            id: LOCAL_TEACHER_IDENTITY_SETTING_ID,
-            settingType: LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
-            teacherUserId: approvedByUserId,
-            createdAt: identitySetting?.createdAt ?? timestamp,
-            updatedAt: timestamp,
-            civilDate: identitySetting?.civilDate ?? civilDateInIstanbul(now),
-            deletedAt: null,
-            schemaVersion: 1,
-          },
-        ]);
-      }
+      const approvedByUserId = await resolveLocalTeacherIdentity(transaction, {
+        now,
+        requestedTeacherUserId: requestedApproverId,
+      });
       if (
         existingLinks.some(
           (link) =>

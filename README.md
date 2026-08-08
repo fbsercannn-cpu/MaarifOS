@@ -2,6 +2,8 @@
 
 Bu paket, MaarifOS projesini Codex ile başlatmak için hazırlanmıştır.
 
+> Güncel uygulama kabiliyeti ve pilot hazırlığı için kanonik kaynak [`STATUS.md`](STATUS.md) dosyasıdır. `PROJECT.md` hedef vizyonu, `docs/ROADMAP.md` ise planı anlatır; tamamlanmış özellik listesi değildir.
+
 ## Başlangıç
 
 1. Bu klasörü yeni bir Git deposu olarak aç.
@@ -13,8 +15,11 @@ Bu paket, MaarifOS projesini Codex ile başlatmak için hazırlanmıştır.
 ## Dosyalar
 
 - `PROJECT.md`: Mega master plan ve ürün gereksinimleri
+- `STATUS.md`: Kanonik güncel kabiliyet, risk ve kalite kapısı matrisi
 - `AGENTS.md`: Codex’in her görevde uyması gereken kurallar
 - `docs/ARCHITECTURE.md`: Teknik mimari
+- `docs/RELEASE_ARTIFACTS.md`: Kanonik Git kaynağı ve eski paketlerin SHA-256 envanteri
+- `docs/PILOT_PROTOCOL.md`: 10 okul günlük dar pilot, ölçüm ve GO/NO-GO kapıları
 - `docs/DATA_MODEL.md`: Veri modeli
 - `docs/UX_MOBILE_PWA.md`: Mobil kullanıcı deneyimi
 - `docs/AI_EXPORT_SPEC.md`: Haricî ChatGPT analiz paketi standardı

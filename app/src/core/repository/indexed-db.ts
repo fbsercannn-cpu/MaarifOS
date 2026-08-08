@@ -12,15 +12,36 @@ import type {
   RecoverySnapshotMetadata,
   RecoverySnapshotRecord,
   RecoverySnapshotRepository,
+  StudentPrivacyDeletionRepository,
+  StudentRecoveryPurgeResult,
   TransactionMode,
 } from "./contracts";
+import type {
+  EntityMap,
+  ObservationRecord,
+  StudentRecord,
+} from "./entities";
+import type { AttendanceRecord } from "../domain/attendance";
+import { canonicalJson } from "../backup/canonical-json";
 import {
   recoverySnapshotMetadata,
   validateRecoveryRetentionLimit,
   verifyRecoverySnapshotRecord,
 } from "./recovery-snapshot";
+import {
+  INDEXED_DB_MIGRATIONS,
+  MAARIFOS_DATABASE_VERSION,
+  SCOPE_INDEX_DEFINITIONS,
+  VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
+  type IndexDefinition,
+} from "./indexed-db-definitions.ts";
 
-export const MAARIFOS_DATABASE_VERSION = 4;
+export {
+  INDEXED_DB_MIGRATIONS,
+  MAARIFOS_DATABASE_VERSION,
+  VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
+} from "./indexed-db-definitions.ts";
+
 export const DEFAULT_DATABASE_NAME = "maarifos-local";
 export const RECOVERY_SNAPSHOT_STORE_NAME =
   "__maarifosRecoverySnapshots";
@@ -50,20 +71,6 @@ export interface IndexedDbDataStoreOptions {
   onStatusChange?: (event: IndexedDbStatusEvent) => void;
 }
 
-interface IndexDefinition {
-  name: string;
-  keyPath: string | readonly string[];
-  options?: IDBIndexParameters;
-}
-
-const SCOPE_INDEXES = [
-  { name: "by-classroom", keyPath: "classroomId" },
-  {
-    name: "by-academic-year-classroom",
-    keyPath: ["academicYearId", "classroomId"],
-  },
-] as const satisfies readonly IndexDefinition[];
-
 const INDEXES_BY_COLLECTION: Partial<
   Record<CollectionName, readonly IndexDefinition[]>
 > = {
@@ -72,11 +79,11 @@ const INDEXES_BY_COLLECTION: Partial<
     { name: "by-status", keyPath: "status" },
   ],
   students: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-enrollment-status", keyPath: "enrollmentStatus" },
   ],
   attendanceRecords: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-civil-date", keyPath: "civilDate" },
     {
       name: "by-classroom-civil-date",
@@ -86,7 +93,7 @@ const INDEXES_BY_COLLECTION: Partial<
     { name: "by-student", keyPath: "studentId" },
   ],
   observations: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-civil-date", keyPath: "civilDate" },
     {
       name: "by-classroom-civil-date",
@@ -104,16 +111,16 @@ const INDEXES_BY_COLLECTION: Partial<
     { name: "by-changed-at", keyPath: "changedAt" },
   ],
   activities: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-plan", keyPath: "planId" },
     { name: "by-civil-date", keyPath: "civilDate" },
   ],
   plans: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-civil-date", keyPath: "civilDate" },
   ],
   calendarEntries: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-start-date", keyPath: "startDate" },
     { name: "by-entry-type", keyPath: "entryType" },
   ],
@@ -127,15 +134,16 @@ const INDEXES_BY_COLLECTION: Partial<
     { name: "by-activity", keyPath: "activityId" },
   ],
   evidenceCurriculumLinks: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-observation", keyPath: "observationId" },
   ],
+  valueEvidenceLinks: VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
   reportDrafts: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-civil-date", keyPath: "civilDate" },
   ],
   externalFeedback: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-student", keyPath: "studentId" },
     { name: "by-received-at", keyPath: "receivedAt" },
     { name: "by-provider", keyPath: "provider" },
@@ -145,36 +153,10 @@ const INDEXES_BY_COLLECTION: Partial<
     { name: "by-student-period", keyPath: ["studentId", "periodStart"] },
   ],
   settings: [
-    ...SCOPE_INDEXES,
+    ...SCOPE_INDEX_DEFINITIONS,
     { name: "by-setting-type", keyPath: "settingType" },
   ],
 };
-
-export interface IndexedDbMigration {
-  toVersion: number;
-  description: string;
-}
-
-export const INDEXED_DB_MIGRATIONS: readonly IndexedDbMigration[] = [
-  {
-    toVersion: 1,
-    description: "Kanonik veri koleksiyonlarını oluşturur.",
-  },
-  {
-    toVersion: 2,
-    description: "Yeni kanonik koleksiyonları kayıp olmadan tamamlar.",
-  },
-  {
-    toVersion: 3,
-    description:
-      "Kurtarma snapshot deposunu ve sınıf/tarih/öğrenci indekslerini ekler.",
-  },
-  {
-    toVersion: 4,
-    description:
-      "Eğitim takvimi ile haricî AI geri bildirim koleksiyonlarını ve indekslerini ekler.",
-  },
-] as const;
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -278,6 +260,11 @@ function applyMigration(
     ensureCollectionIndexes(transaction);
     return;
   }
+  if (toVersion === 5) {
+    ensureCollectionStores(database);
+    ensureCollectionIndexes(transaction);
+    return;
+  }
   throw new Error(`IndexedDB migration sürümü desteklenmiyor: ${toVersion}`);
 }
 
@@ -321,15 +308,25 @@ function validCivilDate(value: string): void {
 class IndexedDbTransaction implements DataTransaction {
   constructor(private readonly transaction: IDBTransaction) {}
 
-  async getAll(collection: CollectionName): Promise<StoredRecord[]> {
+  async getAll<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<EntityMap[Collection][]> {
     const records = await requestResult(
       this.transaction
         .objectStore(collection)
-        .getAll() as IDBRequest<StoredRecord[]>,
+        .getAll() as IDBRequest<EntityMap[Collection][]>,
     );
     return structuredClone(records);
   }
 
+  async putMany<Collection extends CollectionName>(
+    collection: Collection,
+    records: readonly EntityMap[Collection][],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void>;
   async putMany(
     collection: CollectionName,
     records: readonly StoredRecord[],
@@ -340,7 +337,9 @@ class IndexedDbTransaction implements DataTransaction {
     }
   }
 
-  async clear(collection: CollectionName): Promise<void> {
+  async clear<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<void> {
     await requestResult(this.transaction.objectStore(collection).clear());
   }
 }
@@ -349,6 +348,7 @@ export class IndexedDbDataStore
   implements
     LocalDataStore,
     RecoverySnapshotRepository,
+    StudentPrivacyDeletionRepository,
     ClassroomDataQueryRepository
 {
   private databasePromise: Promise<IDBDatabase> | undefined;
@@ -416,7 +416,7 @@ export class IndexedDbDataStore
 
   async listStudentsByClassroom(
     classroomId: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<StudentRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     return this.queryIndex("students", "by-classroom", classroomId);
   }
@@ -424,7 +424,7 @@ export class IndexedDbDataStore
   async listAttendanceByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<AttendanceRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -437,7 +437,7 @@ export class IndexedDbDataStore
   async listAttendanceByStudentDate(
     studentId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<AttendanceRecord[]> {
     validUuid(studentId, "Öğrenci kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -450,7 +450,7 @@ export class IndexedDbDataStore
   async listObservationsByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<ObservationRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
     validCivilDate(civilDate);
     return this.queryIndex(
@@ -462,7 +462,7 @@ export class IndexedDbDataStore
 
   async listObservationsByStudent(
     studentId: string,
-  ): Promise<StoredRecord[]> {
+  ): Promise<ObservationRecord[]> {
     validUuid(studentId, "Öğrenci kimliği");
     return this.queryIndex("observations", "by-student", studentId);
   }
@@ -482,11 +482,29 @@ export class IndexedDbDataStore
     );
     const database = await this.openRecoveryDatabase();
     const nativeTransaction = database.transaction(
-      RECOVERY_SNAPSHOT_STORE_NAME,
+      [RECOVERY_SNAPSHOT_STORE_NAME, ...COLLECTION_NAMES],
       "readwrite",
     );
     const completion = transactionResult(nativeTransaction);
     try {
+      const currentSnapshot = createEmptySnapshot();
+      for (const collection of COLLECTION_NAMES) {
+        currentSnapshot[collection] = structuredClone(
+          await requestResult(
+            nativeTransaction.objectStore(collection).getAll() as IDBRequest<
+              StoredRecord[]
+            >,
+          ),
+        );
+      }
+      if (
+        canonicalJson(currentSnapshot) !==
+        canonicalJson(verified.envelope.payload)
+      ) {
+        throw new Error(
+          "Kurtarma snapshot kaydedilmedi; yerel veri snapshot oluşturulduktan sonra değişti.",
+        );
+      }
       const store = nativeTransaction.objectStore(
         RECOVERY_SNAPSHOT_STORE_NAME,
       );
@@ -602,6 +620,58 @@ export class IndexedDbDataStore
     }
   }
 
+  async transactionWithStudentRecoveryPurge<T>(
+    studentId: string,
+    task: (transaction: DataTransaction) => Promise<T>,
+  ): Promise<StudentRecoveryPurgeResult<T>> {
+    validUuid(studentId, "Öğrenci kimliği");
+    const database = await this.openRecoveryDatabase();
+    const nativeTransaction = database.transaction(
+      [...COLLECTION_NAMES, RECOVERY_SNAPSHOT_STORE_NAME],
+      "readwrite",
+    );
+    const completion = transactionResult(nativeTransaction);
+    const transaction = new IndexedDbTransaction(nativeTransaction);
+
+    try {
+      const result = await task(transaction);
+      const recoveryStore = nativeTransaction.objectStore(
+        RECOVERY_SNAPSHOT_STORE_NAME,
+      );
+      const snapshots = await requestResult(
+        recoveryStore.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+      );
+      const matchingSnapshots: RecoverySnapshotRecord[] = [];
+      for (const snapshot of snapshots) {
+        const students = snapshot?.envelope?.payload?.students;
+        if (!Array.isArray(students)) {
+          throw new Error(
+            "Kurtarma snapshot yapısı doğrulanamadı; kalıcı silme uygulanmadı.",
+          );
+        }
+        if (students.some((student) => student.id === studentId)) {
+          matchingSnapshots.push(snapshot);
+        }
+      }
+      for (const snapshot of matchingSnapshots) {
+        await requestResult(recoveryStore.delete(snapshot.id));
+      }
+      await completion;
+      return {
+        result,
+        purgedRecoverySnapshotCount: matchingSnapshots.length,
+      };
+    } catch (error) {
+      try {
+        nativeTransaction.abort();
+      } catch {
+        // Tamamlanmış işlemin asıl hatasını koru.
+      }
+      await completion.catch(() => undefined);
+      throw error;
+    }
+  }
+
   close(): void {
     const current = this.databasePromise;
     this.databasePromise = undefined;
@@ -617,11 +687,11 @@ export class IndexedDbDataStore
     this.onStatusChange?.(event);
   }
 
-  private async queryIndex(
-    collection: CollectionName,
+  private async queryIndex<Collection extends CollectionName>(
+    collection: Collection,
     indexName: string,
     key: IDBValidKey,
-  ): Promise<StoredRecord[]> {
+  ): Promise<EntityMap[Collection][]> {
     const database = await this.open();
     const nativeTransaction = database.transaction(collection, "readonly");
     const completion = transactionResult(nativeTransaction);
@@ -633,7 +703,7 @@ export class IndexedDbDataStore
     }
     const records = await requestResult(
       objectStore.index(indexName).getAll(IDBKeyRange.only(key)) as IDBRequest<
-        StoredRecord[]
+        EntityMap[Collection][]
       >,
     );
     await completion;

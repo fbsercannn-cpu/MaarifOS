@@ -1,10 +1,16 @@
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
+import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import { sha256Hex } from "../../core/backup/crypto.ts";
 import { formatStudentPhone, studentContactsFromRecord } from "../../core/domain/student.ts";
-import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
+import {
+  COLLECTION_NAMES,
+  createEmptySnapshot,
+  type DataSnapshot,
+  type StoredRecord,
+} from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import {
-  buildStudentLongitudinalArchive,
+  buildStudentLongitudinalArchiveFromSnapshot,
   type StudentLongitudinalArchive,
 } from "../archive/academic-year-archive.ts";
 import { formatObservationDateTime } from "../students/student-profile-tools.ts";
@@ -109,6 +115,86 @@ function dateInRange(
   endDate: string,
 ): boolean {
   return record.civilDate >= startDate && record.civilDate <= endDate;
+}
+
+function latestStoredRecordTimestampMillis(
+  record: StoredRecord,
+  label: string,
+): number {
+  const timestamps = [
+    record.createdAt,
+    record.updatedAt,
+    ...(typeof record.deletedAt === "string" ? [record.deletedAt] : []),
+  ];
+  if (
+    timestamps.some((timestamp) => {
+      return (
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(timestamp) ||
+        Number.isNaN(Date.parse(timestamp))
+      );
+    })
+  ) {
+    throw new Error(`${label} UTC zaman çizelgesi geçersiz; dosya oluşturulmadı.`);
+  }
+  return Math.max(...timestamps.map((timestamp) => Date.parse(timestamp)));
+}
+
+function assertDossierCreationChronology(
+  snapshot: DataSnapshot,
+  dossier: StudentDossier,
+  studentId: string,
+  academicYearId: string,
+  classroomId: string,
+  timestamp: string,
+): void {
+  const requiredRecords: Array<{ label: string; record: StoredRecord | undefined }> = [
+    {
+      label: `students/${studentId}`,
+      record: snapshot.students.find((record) => record.id === studentId),
+    },
+    {
+      label: `academicYears/${academicYearId}`,
+      record: snapshot.academicYears.find((record) => record.id === academicYearId),
+    },
+    {
+      label: `classrooms/${classroomId}`,
+      record: snapshot.classrooms.find((record) => record.id === classroomId),
+    },
+  ];
+  const includedCollections: ReadonlyArray<
+    readonly [keyof StudentDossier["includedEntityIds"], readonly StoredRecord[]]
+  > = [
+    ["observations", snapshot.observations],
+    ["valueEvidenceLinks", snapshot.valueEvidenceLinks],
+    ["attendanceRecords", snapshot.attendanceRecords],
+    ["portfolioSelections", snapshot.portfolioSelections],
+    ["externalFeedback", snapshot.externalFeedback],
+    ["mediaAssets", snapshot.mediaAssets],
+  ];
+  for (const [group, records] of includedCollections) {
+    for (const id of dossier.includedEntityIds[group] ?? []) {
+      requiredRecords.push({
+        label: `${String(group)}/${id}`,
+        record: records.find((record) => record.id === id),
+      });
+    }
+  }
+  for (const source of requiredRecords) {
+    if (!source.record) {
+      throw new Error(`${source.label} kaynak kaydı bulunamadı; dosya oluşturulmadı.`);
+    }
+    if (
+      Date.parse(timestamp) <
+        latestStoredRecordTimestampMillis(source.record, source.label) ||
+      Date.parse(source.record.createdAt) > Date.parse(timestamp) ||
+      (typeof source.record.deletedAt === "string" &&
+        Date.parse(source.record.deletedAt) < Date.parse(timestamp))
+    ) {
+      throw new Error(
+        "Öğrenci dosyası zamanı kaynak kayıtların son değişiklik zamanından eski veya canlılık penceresi dışında; dosya oluşturulmadı.",
+      );
+    }
+  }
 }
 
 function observationLines(record: StoredRecord, index: number): string {
@@ -290,6 +376,10 @@ export function buildStudentDossier(
   const observations = archive.observations
     .filter(
       (record) =>
+        typeof record.deletedAt !== "string" &&
+        Array.isArray(record.studentIds) &&
+        record.studentIds.length === 1 &&
+        record.studentIds[0] === student.id &&
         record.academicYearId === academicYearId &&
         record.classroomId === classroomId &&
         dateInRange(record, options.periodStart, options.periodEnd),
@@ -301,21 +391,37 @@ export function buildStudentDossier(
     );
   const attendance = archive.attendanceRecords.filter(
     (record) =>
+      typeof record.deletedAt !== "string" &&
+      record.studentId === student.id &&
       record.academicYearId === academicYearId &&
       record.classroomId === classroomId &&
       dateInRange(record, options.periodStart, options.periodEnd),
   );
   const observationIds = new Set(observations.map((record) => record.id));
+  const valueEvidenceLinks = (archive.valueEvidenceLinks ?? []).filter(
+    (record) =>
+      record.academicYearId === academicYearId &&
+      record.classroomId === classroomId &&
+      record.studentId === student.id &&
+      typeof record.deletedAt !== "string" &&
+      observationIds.has(record.observationId) &&
+      dateInRange(record, options.periodStart, options.periodEnd),
+  );
   const portfolio = archive.portfolioSelections.filter(
     (record) => {
       const periodStart =
         typeof record.periodStart === "string" ? record.periodStart : "";
       const periodEnd =
         typeof record.periodEnd === "string" ? record.periodEnd : "";
+      const sourceObservationIsSafe =
+        record.itemType !== "observation" ||
+        (typeof record.itemId === "string" && observationIds.has(record.itemId));
       return (
+        record.studentId === student.id &&
         record.academicYearId === academicYearId &&
         record.classroomId === classroomId &&
         typeof record.deletedAt !== "string" &&
+        sourceObservationIsSafe &&
         periodStart <= options.periodEnd &&
         periodEnd >= options.periodStart
       );
@@ -327,11 +433,13 @@ export function buildStudentDossier(
       (record): record is ExternalAiFeedback =>
         record !== null &&
         archive.externalFeedback.some(
-          (source) =>
-            source.id === record.id &&
-            source.academicYearId === academicYearId &&
-            source.classroomId === classroomId,
-        ) &&
+           (source) =>
+             source.id === record.id &&
+             source.studentId === student.id &&
+             source.academicYearId === academicYearId &&
+             source.classroomId === classroomId &&
+             typeof source.deletedAt !== "string",
+         ) &&
         record.periodStart <= options.periodEnd &&
         record.periodEnd >= options.periodStart,
     );
@@ -450,6 +558,9 @@ export function buildStudentDossier(
       observations: options.includeObservations
         ? observations.map((record) => record.id)
         : [],
+      valueEvidenceLinks: options.includeObservations
+        ? valueEvidenceLinks.map((record) => record.id)
+        : [],
       attendanceRecords: options.includeAttendance
         ? attendance.map((record) => record.id)
         : [],
@@ -497,7 +608,12 @@ export async function createStudentDossier(
     throw new Error("Dosyası hazırlanacak öğrenci kimliği geçersiz.");
   }
   const now = input.now ?? new Date();
-  const archive = await buildStudentLongitudinalArchive(store, {
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Geçerli bir öğrenci dosyası oluşturma zamanı gerekli.");
+  }
+  const preimage = await store.readSnapshot();
+  const preimageCanonical = canonicalJson(preimage);
+  const archive = buildStudentLongitudinalArchiveFromSnapshot(preimage, {
     studentId: input.studentId,
     now,
   });
@@ -510,8 +626,29 @@ export async function createStudentDossier(
   ) {
     throw new Error("Öğrenci paylaşım için eğitim yılı kapsamına bağlı değil.");
   }
+  const academicYearId = student.academicYearId;
+  const classroomId = student.classroomId;
   const timestamp = now.toISOString();
-  await store.transaction("readwrite", ["exportPackages"], async (transaction) => {
+  await store.transaction("readwrite", COLLECTION_NAMES, async (transaction) => {
+    const current = createEmptySnapshot();
+    await Promise.all(
+      COLLECTION_NAMES.map(async (collection) => {
+        current[collection] = await transaction.getAll(collection);
+      }),
+    );
+    if (canonicalJson(current) !== preimageCanonical) {
+      throw new Error(
+        "Öğrenci dosyası hazırlanırken kaynak kayıtlar değişti; dosya oluşturulmadı.",
+      );
+    }
+    assertDossierCreationChronology(
+      current,
+      dossier,
+      input.studentId,
+      academicYearId,
+      classroomId,
+      timestamp,
+    );
     await transaction.putMany("exportPackages", [
       {
         id: exportPackageId,
@@ -526,8 +663,8 @@ export async function createStudentDossier(
         includedEntityIds: dossier.includedEntityIds,
         manifest: dossier.manifest,
         createdFileIds: [],
-        academicYearId: student.academicYearId,
-        classroomId: student.classroomId,
+        academicYearId,
+        classroomId,
         createdAt: timestamp,
         updatedAt: timestamp,
         civilDate: civilDateInIstanbul(now),

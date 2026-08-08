@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "profileType": "authored_annual_values_release_profile",
+  "profileId": "tymm-6072-2026-2027-annual-values-release-profile-v1",
+  "sku": "TYMM-6072",
+  "academicRelease": "2026-2027",
+  "programProfile": {
+    "program": "tymm_2024",
+    "ageProfile": "60-72",
+    "constitutionId": "maarifos-values-pedagogy-constitution",
+    "constitutionVersion": "1.1.0",
+    "constitutionSchemaVersion": 1,
+    "frameworkSourceUrl": "https://tymm.meb.gov.tr/beceriler/erdem-deger-eylem-cercevesi",
+    "sourceCheckedOn": "2026-08-07",
+    "officialActionCatalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+    "officialActionCatalogSourceVersion": "2024.09.02",
+    "officialActionCatalogSourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+    "officialActionCatalogSourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09"
+  },
+  "terms": [
+    {
+      "id": "term-1",
+      "monthKeys": [
+        "2026-09",
+        "2026-10",
+        "2026-11",
+        "2026-12",
+        "2027-01"
+      ],
+      "primaryValueCoverageTargetCodes": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "D8",
+        "D9",
+        "D10",
+        "D11",
+        "D12",
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D17",
+        "D18",
+        "D19",
+        "D20"
+      ],
+      "weekCount": 18,
+      "activityCount": 54,
+      "roofValueActivityTargets": {
+        "D1": 18,
+        "D14": 18,
+        "D16": 18
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 27,
+        "learning_outcome_led": 27
+      }
+    },
+    {
+      "id": "term-2",
+      "monthKeys": [
+        "2027-02",
+        "2027-03",
+        "2027-04",
+        "2027-05",
+        "2027-06"
+      ],
+      "primaryValueCoverageTargetCodes": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "D8",
+        "D9",
+        "D10",
+        "D11",
+        "D12",
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D17",
+        "D18",
+        "D19",
+        "D20"
+      ],
+      "weekCount": 18,
+      "activityCount": 54,
+      "roofValueActivityTargets": {
+        "D1": 18,
+        "D14": 18,
+        "D16": 18
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 27,
+        "learning_outcome_led": 27
+      }
+    }
+  ],
+  "months": [
+    {
+      "monthKey": "2026-09",
+      "termId": "term-1",
+      "state": "machine_validated_pending_human_review",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D1",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D8",
+        "D11",
+        "D12",
+        "D13",
+        "D14",
+        "D16"
+      ],
+      "supportingValueTargetCodes": [
+        "D1",
+        "D3",
+        "D5",
+        "D6",
+        "D8",
+        "D10",
+        "D11",
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D17"
+      ],
+      "culturalBridgeTargetIds": [
+        "emanet",
+        "kul-hakki",
+        "edep-nezaket",
+        "helal-emek-caliskanlik",
+        "sukur-kanaat-israf-etmeme",
+        "aile-sila-i-rahim-komsuluk",
+        "imece-yardimlasma"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": null,
+      "releaseReference": {
+        "contentPackId": "maarifos-tymm-6072-2026-2027-v3",
+        "contentPackVersion": "3.0.0",
+        "contentReleaseId": "tymm-6072-2026-09-v3",
+        "manifestDigest": "sha256:9b4c2bcc155e3f6f8567ba5737249cd417405bc4205b75b68d194e63ca3eff1e",
+        "valuesMappingStatus": "machine_validated_pending_human_review"
+      }
+    },
+    {
+      "monthKey": "2026-10",
+      "termId": "term-1",
+      "state": "planned",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D5",
+        "D7",
+        "D9",
+        "D17",
+        "D18",
+        "D19"
+      ],
+      "supportingValueTargetCodes": [
+        "D3",
+        "D13",
+        "D14",
+        "D16",
+        "D20"
+      ],
+      "culturalBridgeTargetIds": [
+        "sukur-kanaat-israf-etmeme",
+        "temizlik",
+        "vatan-kulturel-miras",
+        "yaratilmislara-dogaya-merhamet"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": "D19, 29 Ekim bağlamında ritüel performansı olarak değil; ortak iyilik, ortak sorumluluk ve yaşanılan yere katkı yaşantılarıyla ele alınır.",
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2026-11",
+      "termId": "term-1",
+      "state": "planned",
+      "weekCount": 3,
+      "activityCount": 9,
+      "primaryValueTargetCodes": [
+        "D2",
+        "D4",
+        "D14",
+        "D15",
+        "D19",
+        "D20"
+      ],
+      "supportingValueTargetCodes": [
+        "D6",
+        "D8",
+        "D11",
+        "D16"
+      ],
+      "culturalBridgeTargetIds": [
+        "aile-sila-i-rahim-komsuluk",
+        "imece-yardimlasma",
+        "vatan-kulturel-miras"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 3,
+        "D14": 3,
+        "D16": 3
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 5,
+        "learning_outcome_led": 4
+      },
+      "contextualValueNote": "D19, 10 Kasım ve ortak hafıza bağlamında duygu performansı olarak değil; ortak geçmişi saygıyla araştırma ve ortak iyiliğe katkı olarak sürer.",
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2026-12",
+      "termId": "term-1",
+      "state": "planned",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D1",
+        "D3",
+        "D6",
+        "D10",
+        "D11",
+        "D16"
+      ],
+      "supportingValueTargetCodes": [
+        "D7",
+        "D12",
+        "D14",
+        "D17"
+      ],
+      "culturalBridgeTargetIds": [
+        "kul-hakki",
+        "edep-nezaket",
+        "helal-emek-caliskanlik"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-01",
+      "termId": "term-1",
+      "state": "planned",
+      "weekCount": 3,
+      "activityCount": 9,
+      "primaryValueTargetCodes": [
+        "D5",
+        "D9",
+        "D12",
+        "D13",
+        "D17",
+        "D20"
+      ],
+      "supportingValueTargetCodes": [
+        "D6",
+        "D14",
+        "D18",
+        "D19"
+      ],
+      "culturalBridgeTargetIds": [
+        "emanet",
+        "merhamet",
+        "temizlik"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 3,
+        "D14": 3,
+        "D16": 3
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 4,
+        "learning_outcome_led": 5
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-02",
+      "termId": "term-2",
+      "state": "planned",
+      "weekCount": 3,
+      "activityCount": 9,
+      "primaryValueTargetCodes": [
+        "D4",
+        "D6",
+        "D8",
+        "D11",
+        "D14",
+        "D15"
+      ],
+      "supportingValueTargetCodes": [
+        "D1",
+        "D12",
+        "D16",
+        "D20"
+      ],
+      "culturalBridgeTargetIds": [
+        "emanet",
+        "edep-nezaket",
+        "aile-sila-i-rahim-komsuluk"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 3,
+        "D14": 3,
+        "D16": 3
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 5,
+        "learning_outcome_led": 4
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-03",
+      "termId": "term-2",
+      "state": "planned",
+      "weekCount": 3,
+      "activityCount": 9,
+      "primaryValueTargetCodes": [
+        "D5",
+        "D9",
+        "D13",
+        "D16",
+        "D17",
+        "D18"
+      ],
+      "supportingValueTargetCodes": [
+        "D7",
+        "D12",
+        "D14",
+        "D20"
+      ],
+      "culturalBridgeTargetIds": [
+        "sukur-kanaat-israf-etmeme",
+        "temizlik",
+        "yaratilmislara-dogaya-merhamet"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 3,
+        "D14": 3,
+        "D16": 3
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 4,
+        "learning_outcome_led": 5
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-04",
+      "termId": "term-2",
+      "state": "planned",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D3",
+        "D5",
+        "D7",
+        "D10",
+        "D11",
+        "D12"
+      ],
+      "supportingValueTargetCodes": [
+        "D8",
+        "D14",
+        "D17",
+        "D18"
+      ],
+      "culturalBridgeTargetIds": [
+        "edep-nezaket",
+        "helal-emek-caliskanlik",
+        "sukur-kanaat-israf-etmeme"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-05",
+      "termId": "term-2",
+      "state": "planned",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D2",
+        "D3",
+        "D4",
+        "D16",
+        "D19",
+        "D20"
+      ],
+      "supportingValueTargetCodes": [
+        "D6",
+        "D11",
+        "D14",
+        "D15"
+      ],
+      "culturalBridgeTargetIds": [
+        "aile-sila-i-rahim-komsuluk",
+        "imece-yardimlasma",
+        "vatan-kulturel-miras"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    },
+    {
+      "monthKey": "2027-06",
+      "termId": "term-2",
+      "state": "planned",
+      "weekCount": 4,
+      "activityCount": 12,
+      "primaryValueTargetCodes": [
+        "D1",
+        "D5",
+        "D13",
+        "D14",
+        "D15",
+        "D16"
+      ],
+      "supportingValueTargetCodes": [
+        "D4",
+        "D8",
+        "D9",
+        "D12"
+      ],
+      "culturalBridgeTargetIds": [
+        "kul-hakki",
+        "vatan-kulturel-miras",
+        "yaratilmislara-dogaya-merhamet"
+      ],
+      "roofValueActivityTargets": {
+        "D1": 4,
+        "D14": 4,
+        "D16": 4
+      },
+      "designDirectionActivityTargets": {
+        "value_led": 6,
+        "learning_outcome_led": 6
+      },
+      "contextualValueNote": null,
+      "releaseReference": null
+    }
+  ],
+  "annualTargets": {
+    "weekCount": 36,
+    "activityCount": 108,
+    "roofValueActivityTargets": {
+      "D1": 36,
+      "D14": 36,
+      "D16": 36
+    },
+    "designDirectionActivityTargets": {
+      "value_led": 54,
+      "learning_outcome_led": 54
+    }
+  },
+  "culturalCandidates": [
+    {
+      "culturalBridgeId": "emanet",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "kul-hakki",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "merhamet",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "edep-nezaket",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "helal-emek-caliskanlik",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "sukur-kanaat-israf-etmeme",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "aile-sila-i-rahim-komsuluk",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "imece-yardimlasma",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "temizlik",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "vatan-kulturel-miras",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    },
+    {
+      "culturalBridgeId": "yaratilmislara-dogaya-merhamet",
+      "provenanceStatus": "draft",
+      "reviewDecisionId": null,
+      "humanReviewRequired": true
+    }
+  ],
+  "reviewPolicy": {
+    "status": "pending",
+    "requiredRoles": [
+      "early-childhood-education",
+      "practicing-preschool-teacher",
+      "child-rights-and-safeguarding",
+      "tymm-curriculum",
+      "content-and-language-editor",
+      "turkish-islamic-culture-and-theology"
+    ],
+    "publicationEligible": false
+  },
+  "pedagogicalLensBoundaries": {
+    "natureBasedContinuity": {
+      "claimLevel": "nature_based_continuity",
+      "governingStandard": "https://forestschoolassociation.org/full-principles-and-criteria-for-good-practice/",
+      "minimumDurationWeeks": 24,
+      "minimumPlannedSessions": 12,
+      "recognitionClaimed": false,
+      "certificationClaimed": false,
+      "qualifiedPracticeBoundary": "Bu doğa sürekliliği Orman Okulu değildir; tanınma veya sertifika iddia etmez ve Orman Okulu uygulaması nitelikli lider gerektirir."
+    },
+    "preparedEnvironment": {
+      "claimLevel": "montessori_inspired",
+      "certificationClaimed": false,
+      "certificationBoundary": "Katman hazırlanmış çevreden öğrenir; Montessori okul veya sertifika iddiası kurmaz."
+    }
+  }
+}

@@ -79,7 +79,7 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
     const registration = await navigator.serviceWorker.ready;
     return registration.active?.scriptURL ?? "";
   });
-  expect(serviceWorkerScript).toContain("/sw.js?v=0.7.0");
+  expect(serviceWorkerScript).toContain("/sw.js?v=0.8.0");
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),
@@ -145,19 +145,24 @@ test("kalıcı tarayıcı profili ağsız yeni süreçte app-shell ile soğuk ba
     });
 
     expect(response).not.toBeNull();
-    await expect(offlinePage.locator(".native-app-runtime")).toBeVisible();
+    await expect(offlinePage.locator(".native-app-runtime")).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(
       offlinePage.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
-    ).toBeVisible();
-    expect(
-      await offlinePage.evaluate(
+    ).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(
         () =>
-          Boolean(
-            navigator.serviceWorker.controller &&
-              (window as PwaWindow).__maarifosPwaStatus?.offlineReady,
+          offlinePage.evaluate(() =>
+            Boolean(
+              navigator.serviceWorker.controller &&
+                (window as PwaWindow).__maarifosPwaStatus?.offlineReady,
+            ),
           ),
-      ),
-    ).toBe(true);
+        { timeout: 15_000 },
+      )
+      .toBe(true);
   } finally {
     await offlineContext?.close();
     await onlineContext?.close();

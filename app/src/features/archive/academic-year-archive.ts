@@ -1,6 +1,10 @@
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
+import {
+  isValueEvidenceLinkRecord,
+  type ValueEvidenceLinkRecord,
+} from "../../core/repository/entities.ts";
 
 export const STUDENT_ENROLLMENT_VERSION = 1 as const;
 export const STUDENT_ARCHIVE_VERSION = 1 as const;
@@ -32,6 +36,7 @@ export interface AcademicYearArchiveSummary {
   observationCount: number;
   activityCount: number;
   planCount: number;
+  valueEvidenceLinkCount: number;
 }
 
 export interface StudentLongitudinalArchive {
@@ -46,6 +51,7 @@ export interface StudentLongitudinalArchive {
   observations: StoredRecord[];
   observationRevisions: StoredRecord[];
   evidenceCurriculumLinks: StoredRecord[];
+  valueEvidenceLinks: ValueEvidenceLinkRecord[];
   activityReferences: StoredRecord[];
   planReferences: StoredRecord[];
   mediaAssets: StoredRecord[];
@@ -147,6 +153,10 @@ export function listAcademicYearArchives(
         observationCount: countByScope(snapshot.observations, scopes),
         activityCount: countByScope(snapshot.activities, scopes),
         planCount: countByScope(snapshot.plans, scopes),
+        valueEvidenceLinkCount: countByScope(
+          snapshot.valueEvidenceLinks,
+          scopes,
+        ),
       };
     })
     .sort((left, right) => right.closedOn.localeCompare(left.closedOn));
@@ -468,16 +478,15 @@ export async function reenrollArchivedStudent(
   return result;
 }
 
-export async function buildStudentLongitudinalArchive(
-  store: LocalDataStore,
+export function buildStudentLongitudinalArchiveFromSnapshot(
+  snapshot: DataSnapshot,
   input: { studentId: string; now?: Date },
-): Promise<StudentLongitudinalArchive> {
+): StudentLongitudinalArchive {
   if (!UUID_PATTERN.test(input.studentId)) {
     throw new Error("Arşivi üretilecek öğrenci kimliği geçersiz.");
   }
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir arşiv zamanı gerekli.");
-  const snapshot = await store.readSnapshot();
   const student = snapshot.students.find((record) => record.id === input.studentId);
   if (!student) throw new Error("Arşivi üretilecek öğrenci bulunamadı.");
 
@@ -549,6 +558,11 @@ export async function buildStudentLongitudinalArchive(
         typeof record.observationId === "string" &&
         observationIds.has(record.observationId),
     ),
+    valueEvidenceLinks: snapshot.valueEvidenceLinks.filter(
+      (record): record is ValueEvidenceLinkRecord =>
+        isValueEvidenceLinkRecord(record) &&
+        record.studentId === input.studentId,
+    ),
     activityReferences: snapshot.activities.filter((record) =>
       activityIds.has(record.id),
     ),
@@ -568,4 +582,14 @@ export async function buildStudentLongitudinalArchive(
       (record) => record.studentId === input.studentId,
     ),
   };
+}
+
+export async function buildStudentLongitudinalArchive(
+  store: LocalDataStore,
+  input: { studentId: string; now?: Date },
+): Promise<StudentLongitudinalArchive> {
+  return buildStudentLongitudinalArchiveFromSnapshot(
+    await store.readSnapshot(),
+    input,
+  );
 }

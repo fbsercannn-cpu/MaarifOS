@@ -2,6 +2,8 @@
 
 ## Durable MaarifOS Product Decisions
 
+- Values education is the non-optional pedagogical operating system of MaarifOS. Every annual, monthly, weekly, daily, activity, observation, evaluation, family/community, and nature-continuity plan must preserve an explicit `value -> action -> evidence -> reflection -> next plan` trace. TYMM and EÇE remain separate official program ontologies; no automatic code conversion is allowed.
+- Turkish-Islamic cultural grounding must be expressed through age-appropriate lived ethics such as adalet, emanet, kul hakkı, merhamet, edep/nezaket, honest work, gratitude without waste, family and neighbourly care, mutual aid, cleanliness, stewardship of nature, and protection of national/cultural heritage. Never score a child or family’s belief, worship, sect, clothing, family form, or ritual participation; never use fear, shame, forced disclosure, coerced ritual, moral ranking, or personality labels as evidence of values.
 - Every vertical slice must be implemented test-first or with tests in the same delivery; build, runtime, data-loss, and relevant interaction tests are release gates.
 - Backup and restore are core product capabilities. Any persisted entity added to the app must be included in the versioned backup contract and covered by restore tests before the slice is considered complete.
 - Use multiple agents for independent, bounded engineering work when requested, with explicit file ownership and a single verified integration decision.

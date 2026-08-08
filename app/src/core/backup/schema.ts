@@ -8,6 +8,7 @@ import {
   ATTENDANCE_COMPLETION_SETTING_TYPE,
   isAttendanceCompletionSetting,
   isAttendanceRecord,
+  isCivilDate,
 } from "../domain/attendance";
 import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
@@ -34,13 +35,34 @@ import {
   assertAppLockAttemptState,
   assertAppLockConfig,
 } from "../security/app-lock";
+import { assertEntityRecord } from "../repository/entities";
+import { canonicalJson } from "./canonical-json";
+import {
+  parsePremiumActivityValueDesignSnapshot,
+  parsePremiumValuesContentPackSnapshot,
+} from "../../features/premium-plans/content-repository";
+import {
+  parsePremiumLensPreferenceRecord,
+  samePremiumLensPreference,
+  type PremiumLensPreferenceSnapshot,
+} from "../../features/premium-plans/domain";
+import {
+  assertValueEvidenceSourceObservationPolicy,
+  parseTeacherEvidenceRationale,
+  parseTeacherWeeklyValuesNarrative,
+} from "../../features/values/value-plan-models";
+import {
+  LOCAL_TEACHER_IDENTITY_SETTING_ID,
+  LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
+} from "../../features/evidence/local-teacher-identity";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
 export const LEGACY_DATA_SCHEMA_VERSION = 1;
 export const SECOND_PREVIOUS_DATA_SCHEMA_VERSION = 2;
 export const PREVIOUS_DATA_SCHEMA_VERSION = 3;
-export const DATA_SCHEMA_VERSION = 4;
+export const IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION = 4;
+export const DATA_SCHEMA_VERSION = 5;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
@@ -49,6 +71,7 @@ export interface BackupManifest {
     | typeof LEGACY_DATA_SCHEMA_VERSION
     | typeof SECOND_PREVIOUS_DATA_SCHEMA_VERSION
     | typeof PREVIOUS_DATA_SCHEMA_VERSION
+    | typeof IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION
     | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
   createdAt: string;
@@ -84,8 +107,10 @@ const UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SHA256_URN_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const VALUE_CODE_PATTERN = /^D(?:[1-9]|1\d|20)$/;
+const VALUE_INDICATOR_CODE_PATTERN = /^(D(?:[1-9]|1\d|20))\.\d+\.\d+$/;
 const APP_LOCK_SETTING_TYPE = "app-lock-config-v1";
-const LOCAL_TEACHER_IDENTITY_SETTING_TYPE = "local-teacher-identity";
 const BASE_RECORD_KEYS = [
   "id",
   "createdAt",
@@ -158,6 +183,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "departureTime",
     "reasonTag",
     "note",
+    "events",
     "_MUKERRER_INCELE",
     "duplicateOf",
   ],
@@ -224,6 +250,19 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "curriculumConnection",
     "evidenceIds",
     "evidenceCount",
+    "sourceAnnualPlanId",
+    "sourceMonthlyPlanId",
+    "sourceWeeklyPlanId",
+    "sourceContentPackSnapshot",
+    "sourceActivityTemplateId",
+    "sourceActivityTemplateSnapshot",
+    "appliedActivityTemplateId",
+    "appliedActivityTemplateSnapshot",
+    "primaryLensId",
+    "supportingLensIds",
+    "teacherPreferredLensId",
+    "teacherPreferredSupportingLensIds",
+    "lensSelectionMode",
   ],
   mediaAssets: [
     ...BASE_RECORD_KEYS,
@@ -259,6 +298,45 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "coverageStatus",
     "studentIds",
     "targetAssignments",
+    "periodStart",
+    "periodEnd",
+    "ageProfile",
+    "contentPackId",
+    "contentPackVersion",
+    "contentPackSnapshot",
+    "primaryLensId",
+    "supportingLensIds",
+    "teacherPreferredLensId",
+    "teacherPreferredSupportingLensIds",
+    "lensSelectionMode",
+    "monthlySectionIds",
+    "weeklySectionIds",
+    "annualMonths",
+    "coverageSummary",
+    "annualPlanId",
+    "monthlyPlanId",
+    "monthKey",
+    "weekId",
+    "premiumWeeks",
+    "premiumWeekSnapshot",
+    "premiumActivityTemplates",
+    "premiumMonthlyPlan",
+    "premiumFullDayFlow",
+    "teacherReviewRequired",
+    "monthlyReflection",
+    "weeklyEvaluations",
+    "nextPlanDecisionRequired",
+    "previousWeekEvaluationId",
+    "nextPlanDecisionContext",
+    "sourceAnnualPlanId",
+    "sourceMonthlyPlanId",
+    "sourceWeeklyPlanId",
+    "sourceContentPackSnapshot",
+    "sourceActivityTemplateId",
+    "sourceActivityTemplateSnapshot",
+    "appliedActivityTemplateId",
+    "appliedActivityTemplateSnapshot",
+    "premiumDailyFlowSnapshot",
   ],
   calendarEntries: [
     ...BASE_RECORD_KEYS,
@@ -307,6 +385,26 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "targetKind",
     "targetDomain",
     "targetSourceUrl",
+  ],
+  valueEvidenceLinks: [
+    ...BASE_RECORD_KEYS,
+    "academicYearId",
+    "classroomId",
+    "observationId",
+    "studentId",
+    "planId",
+    "activityId",
+    "evidenceRole",
+    "targetValueCode",
+    "targetIndicatorCode",
+    "teacherRationale",
+    "confirmationMethod",
+    "confirmationScope",
+    "confirmedByActorKind",
+    "confirmedByActorId",
+    "confirmedAt",
+    "provenance",
+    "supersedesLinkId",
   ],
   portfolioSelections: [
     ...BASE_RECORD_KEYS,
@@ -435,6 +533,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function sameCanonicalSnapshot(left: unknown, right: unknown): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+function valueEvidenceTargetKey(record: StoredRecord): string {
+  return [
+    record.observationId,
+    record.activityId,
+    record.targetValueCode,
+    record.targetIndicatorCode,
+  ].map(String).join("\u0000");
+}
+
 function hasExactKeys(
   value: Record<string, unknown>,
   expected: readonly string[],
@@ -486,8 +597,8 @@ function isSafeHttpsUrl(value: unknown): value is string {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
-      url.username === "" &&
-      url.password === "" &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
       url.hostname.length > 0
     );
   } catch {
@@ -556,6 +667,77 @@ function validateCollectionRecordSemantics(
     ) {
       throw new Error(
         `observationRevisions/${record.id} revizyon sözleşmesine uymuyor.`,
+      );
+    }
+    return;
+  }
+
+  if (collection === "valueEvidenceLinks") {
+    const provenance = isRecord(record.provenance) ? record.provenance : null;
+    const indicatorMatch = typeof record.targetIndicatorCode === "string"
+      ? VALUE_INDICATOR_CODE_PATTERN.exec(record.targetIndicatorCode)
+      : null;
+    if (
+      record.schemaVersion !== 1 ||
+      !isUuid(record.academicYearId) ||
+      !isUuid(record.classroomId) ||
+      !isUuid(record.observationId) ||
+      !isUuid(record.studentId) ||
+      !isUuid(record.planId) ||
+      !isUuid(record.activityId) ||
+      (record.evidenceRole !== "supports" &&
+        record.evidenceRole !== "contrasts" &&
+        record.evidenceRole !== "context_only") ||
+      typeof record.targetValueCode !== "string" ||
+      !VALUE_CODE_PATTERN.test(record.targetValueCode) ||
+      !indicatorMatch ||
+      indicatorMatch[1] !== record.targetValueCode ||
+      record.confirmationMethod !== "teacher-confirmed" ||
+      record.confirmationScope !== "observation-to-value-action-link" ||
+      record.confirmedByActorKind !== "local-teacher-identity" ||
+      !isUuid(record.confirmedByActorId) ||
+      !isValidUtcIso(record.confirmedAt) ||
+      record.confirmedAt !== record.createdAt ||
+      (record.supersedesLinkId !== null && !isUuid(record.supersedesLinkId)) ||
+      !provenance ||
+      !hasExactKeys(provenance, [
+        "contentPackId",
+        "contentPackVersion",
+        "contentReleaseId",
+        "contentManifestDigest",
+        "appliedActivityTemplateId",
+        "appliedValuesDesignId",
+        "appliedValuesDesignVersion",
+        "appliedValuesDesignDigest",
+      ]) ||
+      !isNonEmptyText(provenance.contentPackId, 200) ||
+      !isNonEmptyText(provenance.contentPackVersion, 120) ||
+      !isNonEmptyText(provenance.contentReleaseId, 200) ||
+      typeof provenance.contentManifestDigest !== "string" ||
+      !SHA256_URN_PATTERN.test(provenance.contentManifestDigest) ||
+      !isNonEmptyText(provenance.appliedActivityTemplateId, 200) ||
+      !isNonEmptyText(provenance.appliedValuesDesignId, 240) ||
+      provenance.appliedValuesDesignVersion !== "1.0.0" ||
+      typeof provenance.appliedValuesDesignDigest !== "string" ||
+      !SHA256_URN_PATTERN.test(provenance.appliedValuesDesignDigest) ||
+      (record.deletedAt !== null && typeof record.deletedAt !== "string") ||
+      (record.deletedAt === null && record.updatedAt !== record.createdAt) ||
+      (typeof record.deletedAt === "string" &&
+        (record.deletedAt !== record.updatedAt ||
+          record.deletedAt < record.confirmedAt))
+    ) {
+      throw new Error(
+        `valueEvidenceLinks/${record.id} öğretmen onaylı değer kanıtı sözleşmesine uymuyor.`,
+      );
+    }
+    if (
+      parseTeacherEvidenceRationale(
+        record.teacherRationale,
+        record.evidenceRole,
+      ) !== record.teacherRationale
+    ) {
+      throw new Error(
+        `valueEvidenceLinks/${record.id} öğretmen gerekçesi kırpılmış NFC biçiminde değil.`,
       );
     }
     return;
@@ -758,6 +940,7 @@ function validateCollectionRecordSemantics(
         manifest.periodEnd !== record.periodEnd ||
         manifest.academicYearId !== record.academicYearId ||
         manifest.classroomId !== record.classroomId ||
+        manifest.generatedAt !== record.createdAt ||
         ((destination === "chatgpt" || destination === "gemini") &&
           manifest.provider !== destination) ||
         ((destination === "whatsapp" || destination === "file") &&
@@ -812,6 +995,14 @@ function validateCollectionRecordSemantics(
     if (!isNonEmptyText(record.settingType, 120)) {
       throw new Error(`settings/${record.id} ayar türü geçersiz.`);
     }
+    if (
+      (record.settingType === LOCAL_TEACHER_IDENTITY_SETTING_TYPE) !==
+      (record.id === LOCAL_TEACHER_IDENTITY_SETTING_ID)
+    ) {
+      throw new Error(
+        `settings/${record.id} yerel öğretmen kimliği ayrılmış ayar kimliğiyle uyuşmuyor.`,
+      );
+    }
     const scopedSettingKeys = [
       ...BASE_RECORD_KEYS,
       "settingType",
@@ -833,9 +1024,14 @@ function validateCollectionRecordSemantics(
         [...BASE_RECORD_KEYS, "settingType", "teacherUserId"],
         `settings/${record.id}`,
       );
-      if (!isUuid(record.teacherUserId)) {
+      if (
+        !isUuid(record.teacherUserId) ||
+        (record.deletedAt !== null && typeof record.deletedAt !== "string") ||
+        (typeof record.deletedAt === "string" &&
+          record.deletedAt < record.createdAt)
+      ) {
         throw new Error(
-          `settings/${record.id} yerel öğretmen kimliği geçersiz.`,
+          `settings/${record.id} yerel öğretmen kimliği veya zaman çizelgesi geçersiz.`,
         );
       }
       return;
@@ -890,6 +1086,18 @@ function isValidCivilDate(value: unknown): value is string {
     parsed.getUTCMonth() === month - 1 &&
     parsed.getUTCDate() === day
   );
+}
+
+function istanbulCivilDate(value: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function validatedCurriculumProvenance(
@@ -978,6 +1186,65 @@ function assertStoredRecord(value: unknown, collection: CollectionName): asserts
   const storedRecord = value as StoredRecord;
   assertAllowedRecordKeys(storedRecord, collection);
   validateCollectionRecordSemantics(storedRecord, collection);
+  // Ortak repository/domain codec temel kayıt biçiminin tek otoritesidir.
+  // Yedeğe özgü strict-key, sürüm ve çapraz-kayıt kuralları bu katmanın
+  // üzerinde bilinçli olarak korunur (özellikle öğrenci üyelik geçmişi).
+  assertEntityRecord(collection, storedRecord);
+}
+
+function premiumValuesSnapshotStatus(
+  contentPackSnapshot: Record<string, unknown>,
+  label: string,
+): "legacy-unmapped" | "machine_validated_pending_human_review" {
+  const version = typeof contentPackSnapshot.version === "string"
+    ? contentPackSnapshot.version
+    : "";
+  const majorVersion = Number.parseInt(version.split(".")[0] ?? "", 10);
+  const status = contentPackSnapshot.valuesMappingStatus;
+  if (status === undefined) {
+    if (majorVersion >= 3 || contentPackSnapshot.valuesContract !== undefined) {
+      throw new Error(`${label} v3 değer sözleşmesi durumunu taşımıyor.`);
+    }
+    return "legacy-unmapped";
+  }
+  if (status === "legacy-unmapped") {
+    if (majorVersion >= 3 || contentPackSnapshot.valuesContract !== null) {
+      throw new Error(`${label} legacy değer durumu paket sürümüyle çelişiyor.`);
+    }
+    return status;
+  }
+  if (status === "machine_validated_pending_human_review") {
+    if (majorVersion !== 3) {
+      throw new Error(`${label} exact content.v3 ana sürümünü taşımıyor.`);
+    }
+    parsePremiumValuesContentPackSnapshot(contentPackSnapshot, label);
+    return status;
+  }
+  throw new Error(`${label} bilinmeyen değer eşleme durumu taşıyor.`);
+}
+
+function assertPremiumActivityValuesSnapshot(
+  contentPackSnapshot: Record<string, unknown>,
+  activityTemplateSnapshot: unknown,
+  label: string,
+): void {
+  if (!isRecord(activityTemplateSnapshot) || typeof activityTemplateSnapshot.id !== "string") {
+    throw new Error(`${label} etkinlik snapshot'ı geçersiz.`);
+  }
+  const status = premiumValuesSnapshotStatus(contentPackSnapshot, `${label} içerik paketi`);
+  if (status === "legacy-unmapped") {
+    if (
+      activityTemplateSnapshot.valuesDesign !== undefined &&
+      activityTemplateSnapshot.valuesDesign !== null
+    ) {
+      throw new Error(`${label} legacy etkinliğe geriye dönük değer eşlemesi ekliyor.`);
+    }
+    return;
+  }
+  parsePremiumActivityValueDesignSnapshot(
+    activityTemplateSnapshot.valuesDesign,
+    activityTemplateSnapshot.id,
+  );
 }
 
 function validatedRecordScope(
@@ -1027,6 +1294,23 @@ function scopesMatch(
     left.classroomId === right.classroomId &&
     left.academicYearId === right.academicYearId
   );
+}
+
+function recordWasVisibleAt(record: StoredRecord, timestamp: string): boolean {
+  const at = Date.parse(timestamp);
+  return (
+    Date.parse(record.createdAt) <= at &&
+    (typeof record.deletedAt !== "string" || at <= Date.parse(record.deletedAt))
+  );
+}
+
+function periodsOverlap(
+  leftStart: string,
+  leftEnd: string,
+  rightStart: string,
+  rightEnd: string,
+): boolean {
+  return leftStart <= rightEnd && leftEnd >= rightStart;
 }
 
 function validatedEnrollmentScopes(
@@ -1291,6 +1575,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     manifest.dataSchemaVersion !== LEGACY_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== SECOND_PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== PREVIOUS_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
   ) {
     throw new Error("Yedek veri şeması bu uygulama sürümüyle uyumlu değil.");
@@ -1326,7 +1611,13 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     if (
       (collection === "calendarEntries" ||
         collection === "externalFeedback") &&
-      manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
+      Number(manifest.dataSchemaVersion) < IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION
+    ) {
+      return false;
+    }
+    if (
+      collection === "valueEvidenceLinks" &&
+      Number(manifest.dataSchemaVersion) < DATA_SCHEMA_VERSION
     ) {
       return false;
     }
@@ -1478,7 +1769,10 @@ function assertBackupRelationships(
     ]);
   }
 
-  const studentIds = new Set(payload.students.map((student) => student.id));
+  const studentsById = new Map(
+    payload.students.map((student) => [student.id, student]),
+  );
+  const studentIds = new Set(studentsById.keys());
   for (const attendance of payload.attendanceRecords) {
     if (!isAttendanceRecord(attendance) || !UUID_PATTERN.test(attendance.studentId)) {
       throw new Error(`attendanceRecords/${attendance.id} yoklama sözleşmesine uymuyor.`);
@@ -1543,6 +1837,10 @@ function assertBackupRelationships(
   }
 
   const planScopes = new Map<string, ActiveClassroomScope | null>();
+  const premiumPlanLensPreferences = new Map<
+    string,
+    PremiumLensPreferenceSnapshot
+  >();
   for (const plan of payload.plans) {
     const planScope = validatedRecordScope(plan, "plans", classroomsById);
     planScopes.set(plan.id, planScope);
@@ -1575,8 +1873,646 @@ function assertBackupRelationships(
       }
       validatedCurriculumProvenance(profile, `plans/${plan.id}`);
     }
+    if (
+      plan.planType === "annual" ||
+      plan.planType === "monthly" ||
+      plan.planType === "weekly"
+    ) {
+      if (
+        !isCivilDate(plan.periodStart) ||
+        !isCivilDate(plan.periodEnd) ||
+        plan.periodStart > plan.periodEnd ||
+        plan.civilDate !== plan.periodStart ||
+        typeof plan.contentPackId !== "string" ||
+        !plan.contentPackId.trim() ||
+        typeof plan.contentPackVersion !== "string" ||
+        !plan.contentPackVersion.trim() ||
+        !isRecord(plan.contentPackSnapshot)
+      ) {
+        throw new Error(`plans/${plan.id} premium plan sözleşmesine uymuyor.`);
+      }
+      premiumPlanLensPreferences.set(
+        plan.id,
+        parsePremiumLensPreferenceRecord(plan, `plans/${plan.id}`),
+      );
+      const profile = isRecord(plan.curriculumProfileSnapshot)
+        ? plan.curriculumProfileSnapshot
+        : null;
+      if (!profile || profile.framework !== "tymm") {
+        throw new Error(`plans/${plan.id} TYMM program profili taşımıyor.`);
+      }
+      validatedCurriculumProvenance(profile, `plans/${plan.id}`);
+      const contentPackSnapshot = plan.contentPackSnapshot as Record<string, unknown>;
+      premiumValuesSnapshotStatus(
+        contentPackSnapshot,
+        `plans/${plan.id} premium içerik snapshot'ı`,
+      );
+      if (
+        contentPackSnapshot.id !== plan.contentPackId ||
+        contentPackSnapshot.version !== plan.contentPackVersion
+      ) {
+        throw new Error(`plans/${plan.id} içerik paket kimliği snapshot ile uyuşmuyor.`);
+      }
+      if (
+        (plan.planType === "monthly" || plan.planType === "weekly") &&
+        Array.isArray(plan.premiumActivityTemplates)
+      ) {
+        plan.premiumActivityTemplates.forEach((template, index) =>
+          assertPremiumActivityValuesSnapshot(
+            contentPackSnapshot,
+            template,
+            `plans/${plan.id} premiumActivityTemplates[${index}]`,
+          ),
+        );
+      }
+    }
+    if (
+      plan.planType === "annual" &&
+      (!Array.isArray(plan.monthlySectionIds) ||
+        !Array.isArray(plan.annualMonths) ||
+        !isRecord(plan.coverageSummary))
+    ) {
+      throw new Error(`plans/${plan.id} yıllık plan omurgası eksik.`);
+    }
+    if (
+      plan.planType === "monthly" &&
+      (typeof plan.annualPlanId !== "string" ||
+        typeof plan.monthKey !== "string" ||
+        !/^\d{4}-\d{2}$/.test(plan.monthKey) ||
+        !Array.isArray(plan.weeklySectionIds) ||
+        plan.weeklySectionIds.length !== 4 ||
+        !Array.isArray(plan.premiumWeeks) ||
+        !Array.isArray(plan.premiumActivityTemplates) ||
+        !isRecord(plan.premiumMonthlyPlan) ||
+        !Array.isArray(plan.premiumFullDayFlow) ||
+        plan.premiumFullDayFlow.length !== 10 ||
+        plan.teacherReviewRequired !== true ||
+        typeof plan.periodStart !== "string" ||
+        typeof plan.periodEnd !== "string" ||
+        !plan.periodStart.startsWith(`${plan.monthKey}-`) ||
+        !plan.periodEnd.startsWith(`${plan.monthKey}-`))
+    ) {
+      throw new Error(`plans/${plan.id} aylık plan sözleşmesine uymuyor.`);
+    }
+    if (
+      plan.planType === "weekly" &&
+      (typeof plan.annualPlanId !== "string" ||
+        typeof plan.monthlyPlanId !== "string" ||
+        typeof plan.weekId !== "string" ||
+        !plan.weekId.trim() ||
+        !isRecord(plan.premiumWeekSnapshot) ||
+        !Array.isArray(plan.premiumActivityTemplates) ||
+        plan.premiumActivityTemplates.length !== 3 ||
+        plan.teacherReviewRequired !== true ||
+        !Array.isArray(plan.weeklyEvaluations) ||
+        typeof plan.nextPlanDecisionRequired !== "boolean")
+    ) {
+      throw new Error(`plans/${plan.id} haftalık plan sözleşmesine uymuyor.`);
+    }
+    if (plan.planType === "weekly") {
+      const weekSnapshot = isRecord(plan.premiumWeekSnapshot)
+        ? plan.premiumWeekSnapshot
+        : null;
+      const templates = Array.isArray(plan.premiumActivityTemplates)
+        ? plan.premiumActivityTemplates
+        : [];
+      const templateIds = templates.flatMap((template) =>
+        isRecord(template) && typeof template.id === "string" ? [template.id] : [],
+      );
+      const mainTemplateIds = templates.flatMap((template) =>
+        isRecord(template) &&
+        typeof template.id === "string" &&
+        template.activityRole === "main"
+          ? [template.id]
+          : [],
+      );
+      const alternativeTemplateIds = templates.flatMap((template) =>
+        isRecord(template) &&
+        typeof template.id === "string" &&
+        template.activityRole === "alternative"
+          ? [template.id]
+          : [],
+      );
+      const snapshotActivityIds = weekSnapshot && Array.isArray(weekSnapshot.activityIds)
+        ? weekSnapshot.activityIds
+        : [];
+      const snapshotMainIds = weekSnapshot && Array.isArray(weekSnapshot.mainActivityIds)
+        ? weekSnapshot.mainActivityIds
+        : [];
+      if (
+        !weekSnapshot ||
+        weekSnapshot.id !== plan.weekId ||
+        weekSnapshot.periodStart !== plan.periodStart ||
+        weekSnapshot.periodEnd !== plan.periodEnd ||
+        templateIds.length !== 3 ||
+        new Set(templateIds).size !== 3 ||
+        mainTemplateIds.length !== 2 ||
+        alternativeTemplateIds.length !== 1 ||
+        templates.some(
+          (template) => !isRecord(template) || template.weekId !== plan.weekId,
+        ) ||
+        snapshotActivityIds.length !== 3 ||
+        new Set(snapshotActivityIds).size !== 3 ||
+        [...snapshotActivityIds].sort().join("|") !== [...templateIds].sort().join("|") ||
+        snapshotMainIds.length !== 2 ||
+        [...snapshotMainIds].sort().join("|") !== [...mainTemplateIds].sort().join("|") ||
+        weekSnapshot.alternativeActivityId !== alternativeTemplateIds[0]
+      ) {
+        throw new Error(`plans/${plan.id} haftalık 2 ana + 1 alternatif ilişkisi geçersiz.`);
+      }
+    }
+    if (plan.planType === "weekly" && Array.isArray(plan.weeklyEvaluations)) {
+      const evaluationIds = new Set<string>();
+      let previousEvaluationCreatedAt: string | null = null;
+      for (const evaluation of plan.weeklyEvaluations) {
+        if (
+          !isRecord(evaluation) ||
+          !hasExactKeys(evaluation, [
+            "createdAt",
+            "evidenceSummary",
+            "id",
+            "nextPlanDecision",
+            "nextPlanTargetPlanId",
+            "observationIds",
+            "reflection",
+            "teacherAuthored",
+          ]) ||
+          typeof evaluation.id !== "string" ||
+          !UUID_PATTERN.test(evaluation.id) ||
+          typeof evaluation.reflection !== "string" ||
+          !evaluation.reflection.trim() ||
+          typeof evaluation.evidenceSummary !== "string" ||
+          !evaluation.evidenceSummary.trim() ||
+          !Array.isArray(evaluation.observationIds) ||
+          evaluation.observationIds.length === 0 ||
+          !evaluation.observationIds.every(
+            (id) => typeof id === "string" && UUID_PATTERN.test(id),
+          ) ||
+          new Set(evaluation.observationIds).size !==
+            evaluation.observationIds.length ||
+          !["keep", "adapt", "replace", "observe-more"].includes(
+            String(evaluation.nextPlanDecision),
+          ) ||
+          (evaluation.nextPlanTargetPlanId !== null &&
+            (typeof evaluation.nextPlanTargetPlanId !== "string" ||
+              !UUID_PATTERN.test(evaluation.nextPlanTargetPlanId))) ||
+          evaluation.teacherAuthored !== true ||
+          !isValidUtcIso(evaluation.createdAt) ||
+          evaluation.createdAt > plan.updatedAt ||
+          evaluationIds.has(evaluation.id) ||
+          (previousEvaluationCreatedAt !== null &&
+            evaluation.createdAt < previousEvaluationCreatedAt)
+        ) {
+          throw new Error(`plans/${plan.id} haftalık değerlendirmesi geçersiz.`);
+        }
+        evaluationIds.add(evaluation.id);
+        previousEvaluationCreatedAt = evaluation.createdAt;
+        if (
+          parseTeacherWeeklyValuesNarrative(
+            evaluation.reflection,
+            "Haftalık öğretmen yansıtması",
+          ) !== evaluation.reflection ||
+          parseTeacherWeeklyValuesNarrative(
+            evaluation.evidenceSummary,
+            "Haftalık kanıt özeti",
+          ) !== evaluation.evidenceSummary
+        ) {
+          throw new Error(
+            `plans/${plan.id} haftalık değerlendirmesi kanonik öğretmen anlatısı taşımıyor.`,
+          );
+        }
+      }
+      if (plan.nextPlanDecisionContext !== undefined) {
+        const context = plan.nextPlanDecisionContext;
+        if (
+          !isRecord(context) ||
+          !hasExactKeys(context, [
+            "createdAt",
+            "decision",
+            "evaluationId",
+            "evidenceSummary",
+            "sourceWeeklyPlanId",
+            "teacherReflection",
+          ]) ||
+          typeof plan.previousWeekEvaluationId !== "string" ||
+          !UUID_PATTERN.test(plan.previousWeekEvaluationId) ||
+          context.evaluationId !== plan.previousWeekEvaluationId ||
+          typeof context.sourceWeeklyPlanId !== "string" ||
+          !UUID_PATTERN.test(context.sourceWeeklyPlanId) ||
+          !["keep", "adapt", "replace", "observe-more"].includes(
+            String(context.decision),
+          ) ||
+          typeof context.evidenceSummary !== "string" ||
+          !context.evidenceSummary.trim() ||
+          typeof context.teacherReflection !== "string" ||
+          !context.teacherReflection.trim() ||
+          typeof context.createdAt !== "string" ||
+          !UTC_ISO_PATTERN.test(context.createdAt)
+        ) {
+          throw new Error(`plans/${plan.id} önceki hafta karar bağlamı geçersiz.`);
+        }
+        if (
+          parseTeacherWeeklyValuesNarrative(
+            context.evidenceSummary,
+            "Önceki hafta kanıt özeti",
+          ) !== context.evidenceSummary ||
+          parseTeacherWeeklyValuesNarrative(
+            context.teacherReflection,
+            "Önceki hafta öğretmen yansıtması",
+          ) !== context.teacherReflection
+        ) {
+          throw new Error(
+            `plans/${plan.id} önceki hafta karar bağlamı kanonik öğretmen anlatısı taşımıyor.`,
+          );
+        }
+      }
+    }
   }
   const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
+  for (const plan of payload.plans) {
+    const planScope = planScopes.get(plan.id) ?? null;
+    if (plan.planType === "monthly") {
+      const annual =
+        typeof plan.annualPlanId === "string"
+          ? plansById.get(plan.annualPlanId)
+          : undefined;
+      const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
+      const monthlyLensPreference = premiumPlanLensPreferences.get(plan.id);
+      const annualLensPreference = annual
+        ? premiumPlanLensPreferences.get(annual.id)
+        : undefined;
+      if (
+        !annual ||
+        annual.planType !== "annual" ||
+        !planScope ||
+        !annualScope ||
+        !scopesMatch(planScope, annualScope) ||
+        annual.contentPackId !== plan.contentPackId ||
+        annual.contentPackVersion !== plan.contentPackVersion ||
+        !sameCanonicalSnapshot(
+          annual.contentPackSnapshot,
+          plan.contentPackSnapshot,
+        ) ||
+        !monthlyLensPreference ||
+        !annualLensPreference ||
+        !samePremiumLensPreference(
+          monthlyLensPreference,
+          annualLensPreference,
+        ) ||
+        !Array.isArray(annual.monthlySectionIds) ||
+        !annual.monthlySectionIds.includes(plan.id)
+      ) {
+        throw new Error(`plans/${plan.id} yıllık plan ilişkisi geçersiz.`);
+      }
+    }
+    if (plan.planType === "weekly") {
+      const annual =
+        typeof plan.annualPlanId === "string"
+          ? plansById.get(plan.annualPlanId)
+          : undefined;
+      const monthly =
+        typeof plan.monthlyPlanId === "string"
+          ? plansById.get(plan.monthlyPlanId)
+          : undefined;
+      const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
+      const monthlyScope = monthly ? planScopes.get(monthly.id) ?? null : null;
+      const weeklyLensPreference = premiumPlanLensPreferences.get(plan.id);
+      const annualLensPreference = annual
+        ? premiumPlanLensPreferences.get(annual.id)
+        : undefined;
+      const monthlyLensPreference = monthly
+        ? premiumPlanLensPreferences.get(monthly.id)
+        : undefined;
+      if (
+        !annual ||
+        annual.planType !== "annual" ||
+        !monthly ||
+        monthly.planType !== "monthly" ||
+        monthly.annualPlanId !== annual.id ||
+        !planScope ||
+        !annualScope ||
+        !monthlyScope ||
+        !scopesMatch(planScope, annualScope) ||
+        !scopesMatch(planScope, monthlyScope) ||
+        plan.contentPackId !== annual.contentPackId ||
+        plan.contentPackVersion !== annual.contentPackVersion ||
+        plan.contentPackId !== monthly.contentPackId ||
+        plan.contentPackVersion !== monthly.contentPackVersion ||
+        !sameCanonicalSnapshot(
+          annual.contentPackSnapshot,
+          plan.contentPackSnapshot,
+        ) ||
+        !sameCanonicalSnapshot(
+          monthly.contentPackSnapshot,
+          plan.contentPackSnapshot,
+        ) ||
+        !weeklyLensPreference ||
+        !annualLensPreference ||
+        !monthlyLensPreference ||
+        !samePremiumLensPreference(
+          weeklyLensPreference,
+          annualLensPreference,
+        ) ||
+        !samePremiumLensPreference(
+          weeklyLensPreference,
+          monthlyLensPreference,
+        ) ||
+        !Array.isArray(monthly.weeklySectionIds) ||
+        !monthly.weeklySectionIds.includes(plan.id) ||
+        String(plan.periodStart) < String(monthly.periodStart) ||
+        String(plan.periodEnd) > String(monthly.periodEnd)
+      ) {
+        throw new Error(`plans/${plan.id} aylık plan ilişkisi geçersiz.`);
+      }
+      const monthlyTemplates = Array.isArray(monthly.premiumActivityTemplates)
+        ? monthly.premiumActivityTemplates
+        : [];
+      if (
+        !Array.isArray(plan.premiumActivityTemplates) ||
+        plan.premiumActivityTemplates.some(
+          (weeklyTemplate) =>
+            !isRecord(weeklyTemplate) ||
+            !monthlyTemplates.some(
+              (monthlyTemplate) =>
+                isRecord(monthlyTemplate) &&
+                monthlyTemplate.id === weeklyTemplate.id &&
+                sameCanonicalSnapshot(monthlyTemplate, weeklyTemplate),
+            ),
+        )
+      ) {
+        throw new Error(`plans/${plan.id} haftalık etkinlik kümesi aylık kaynakla uyuşmuyor.`);
+      }
+      if (Array.isArray(plan.weeklyEvaluations)) {
+        for (const evaluation of plan.weeklyEvaluations) {
+          if (!isRecord(evaluation) || evaluation.nextPlanTargetPlanId === null) {
+            continue;
+          }
+          const target =
+            typeof evaluation.nextPlanTargetPlanId === "string"
+              ? plansById.get(evaluation.nextPlanTargetPlanId)
+              : undefined;
+          const targetContext = target && isRecord(target.nextPlanDecisionContext)
+            ? target.nextPlanDecisionContext
+            : null;
+          const latestEvaluationForTarget = plan.weeklyEvaluations
+            .filter(
+              (candidate) =>
+                isRecord(candidate) &&
+                candidate.nextPlanTargetPlanId === evaluation.nextPlanTargetPlanId,
+            )
+            .reduce<Record<string, unknown> | null>((latest, candidate) => {
+              if (!isRecord(candidate)) return latest;
+              if (!latest) return candidate;
+              return String(candidate.createdAt) >= String(latest.createdAt)
+                ? candidate
+                : latest;
+            }, null);
+          const isLatestDecision = latestEvaluationForTarget?.id === evaluation.id;
+          if (
+            !target ||
+            target.planType !== "weekly" ||
+            target.monthlyPlanId !== plan.monthlyPlanId ||
+            String(target.periodStart) <= String(plan.periodEnd) ||
+            (isLatestDecision &&
+              (target.previousWeekEvaluationId !== evaluation.id ||
+                !targetContext ||
+                targetContext.sourceWeeklyPlanId !== plan.id ||
+                targetContext.evaluationId !== evaluation.id))
+          ) {
+            throw new Error(`plans/${plan.id} sonraki plan karar ilişkisi geçersiz.`);
+          }
+        }
+      }
+    }
+    if (
+      plan.planType === "daily" &&
+      (plan.sourceAnnualPlanId !== undefined ||
+        plan.sourceMonthlyPlanId !== undefined ||
+        plan.sourceWeeklyPlanId !== undefined)
+    ) {
+      const annual =
+        typeof plan.sourceAnnualPlanId === "string"
+          ? plansById.get(plan.sourceAnnualPlanId)
+          : undefined;
+      const monthly =
+        typeof plan.sourceMonthlyPlanId === "string"
+          ? plansById.get(plan.sourceMonthlyPlanId)
+          : undefined;
+      const weekly =
+        typeof plan.sourceWeeklyPlanId === "string"
+          ? plansById.get(plan.sourceWeeklyPlanId)
+          : undefined;
+      const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
+      const monthlyScope = monthly ? planScopes.get(monthly.id) ?? null : null;
+      const weeklyScope = weekly ? planScopes.get(weekly.id) ?? null : null;
+      // Günlük kayıt, oluşturulduğu andaki öğretmen tercihini korur; daha sonra
+      // değişen pano tercihi tarihsel günlük planı sessizce yeniden yazmaz.
+      parsePremiumLensPreferenceRecord(plan, `plans/${plan.id}`);
+      if (
+        !annual ||
+        annual.planType !== "annual" ||
+        !monthly ||
+        monthly.planType !== "monthly" ||
+        !weekly ||
+        weekly.planType !== "weekly" ||
+        monthly.annualPlanId !== annual.id ||
+        weekly.annualPlanId !== annual.id ||
+        weekly.monthlyPlanId !== monthly.id ||
+        !planScope ||
+        !annualScope ||
+        !monthlyScope ||
+        !weeklyScope ||
+        !scopesMatch(planScope, annualScope) ||
+        !scopesMatch(planScope, monthlyScope) ||
+        !scopesMatch(planScope, weeklyScope) ||
+        String(plan.civilDate) < String(weekly.periodStart) ||
+        String(plan.civilDate) > String(weekly.periodEnd) ||
+        !isRecord(plan.sourceContentPackSnapshot) ||
+        !sameCanonicalSnapshot(
+          plan.sourceContentPackSnapshot,
+          annual.contentPackSnapshot,
+        ) ||
+        !sameCanonicalSnapshot(
+          plan.sourceContentPackSnapshot,
+          monthly.contentPackSnapshot,
+        ) ||
+        !sameCanonicalSnapshot(
+          plan.sourceContentPackSnapshot,
+          weekly.contentPackSnapshot,
+        ) ||
+        typeof plan.sourceActivityTemplateId !== "string" ||
+        !isRecord(plan.sourceActivityTemplateSnapshot) ||
+        plan.sourceActivityTemplateSnapshot.id !== plan.sourceActivityTemplateId ||
+        plan.sourceActivityTemplateSnapshot.weekId !== weekly.weekId ||
+        !Array.isArray(weekly.premiumActivityTemplates) ||
+        !weekly.premiumActivityTemplates.some(
+          (template) =>
+            isRecord(template) &&
+            template.id === plan.sourceActivityTemplateId &&
+            sameCanonicalSnapshot(
+              template,
+              plan.sourceActivityTemplateSnapshot,
+            ),
+        )
+      ) {
+        throw new Error(`plans/${plan.id} premium kaynak zinciri geçersiz.`);
+      }
+      assertPremiumActivityValuesSnapshot(
+        plan.sourceContentPackSnapshot,
+        plan.sourceActivityTemplateSnapshot,
+        `plans/${plan.id} sourceActivityTemplateSnapshot`,
+      );
+      const dailyFlow = isRecord(plan.premiumDailyFlowSnapshot)
+        ? plan.premiumDailyFlowSnapshot
+        : null;
+      const blocks = dailyFlow && Array.isArray(dailyFlow.blocks)
+        ? dailyFlow.blocks
+        : [];
+      const expectedBlockIds = [
+        "arrival-wellbeing",
+        "learning-centers",
+        "morning-meeting",
+        "first-main",
+        "nutrition-selfcare",
+        "outdoor-movement",
+        "second-main",
+        "rest-regulation",
+        "small-group",
+        "reflection-departure",
+      ];
+      const selectedPlacements = blocks.flatMap((block) =>
+        isRecord(block) && Array.isArray(block.selectedActivityTemplateIds)
+          ? block.selectedActivityTemplateIds
+          : [],
+      );
+      const alternativePlacements = blocks.flatMap((block) =>
+        isRecord(block) && Array.isArray(block.alternativeActivityTemplateIds)
+          ? block.alternativeActivityTemplateIds
+          : [],
+      );
+      const appliedPlacements = blocks.flatMap((block) =>
+        isRecord(block) && Array.isArray(block.appliedActivityTemplateIds)
+          ? block.appliedActivityTemplateIds
+          : [],
+      );
+      const alternativeTemplate =
+        dailyFlow && typeof dailyFlow.alternativeActivityTemplateId === "string"
+          ? weekly.premiumActivityTemplates.find(
+              (template) =>
+                isRecord(template) &&
+                template.id === dailyFlow.alternativeActivityTemplateId &&
+                template.activityRole === "alternative",
+            )
+          : undefined;
+      const appliedTemplateId =
+        typeof plan.appliedActivityTemplateId === "string"
+          ? plan.appliedActivityTemplateId
+          : plan.sourceActivityTemplateId;
+      const appliedTemplate = weekly.premiumActivityTemplates.find(
+        (template) => isRecord(template) && template.id === appliedTemplateId,
+      );
+      const sourceTemplate = isRecord(plan.sourceActivityTemplateSnapshot)
+        ? plan.sourceActivityTemplateSnapshot
+        : null;
+      const replacement = dailyFlow && isRecord(dailyFlow.alternativeReplacement)
+        ? dailyFlow.alternativeReplacement
+        : null;
+      const alternativeActivated =
+        dailyFlow?.activatedAlternativeTemplateId ===
+        dailyFlow?.alternativeActivityTemplateId;
+      if (
+        !dailyFlow ||
+        dailyFlow.sourceWeekId !== weekly.weekId ||
+        dailyFlow.planCivilDate !== plan.civilDate ||
+        dailyFlow.selectedActivityTemplateId !== plan.sourceActivityTemplateId ||
+        (dailyFlow.activatedAlternativeTemplateId !== null &&
+          typeof dailyFlow.activatedAlternativeTemplateId !== "string") ||
+        typeof dailyFlow.alternativeActivityTemplateId !== "string" ||
+        dailyFlow.alternativeActivityTemplateId === plan.sourceActivityTemplateId ||
+        plan.sourceActivityTemplateSnapshot.activityRole !== "main" ||
+        !alternativeTemplate ||
+        !isRecord(appliedTemplate) ||
+        (plan.appliedActivityTemplateId !== undefined &&
+          (!isRecord(plan.appliedActivityTemplateSnapshot) ||
+            plan.appliedActivityTemplateSnapshot.id !== appliedTemplateId ||
+            !sameCanonicalSnapshot(
+              plan.appliedActivityTemplateSnapshot,
+              appliedTemplate,
+            ))) ||
+        (alternativeActivated
+          ? appliedTemplateId !== dailyFlow.alternativeActivityTemplateId ||
+            !replacement ||
+            !hasExactKeys(replacement, [
+              "activatedAlternativeTemplateId",
+              "replacesMainActivityTemplateId",
+              "teacherConfirmed",
+            ]) ||
+            replacement.activatedAlternativeTemplateId !==
+              dailyFlow.alternativeActivityTemplateId ||
+            replacement.replacesMainActivityTemplateId !==
+              plan.sourceActivityTemplateId ||
+            replacement.teacherConfirmed !== true
+          : appliedTemplateId !== plan.sourceActivityTemplateId || replacement !== null) ||
+        blocks.length !== 10 ||
+        blocks.some(
+          (block, index) =>
+            !isRecord(block) ||
+            !hasExactKeys(block, [
+              "appliedActivityTemplateIds",
+              "alternativeActivityTemplateIds",
+              "durationMinutes",
+              "flexibilityNote",
+              "id",
+              "purpose",
+              "selectedActivityTemplateIds",
+              "status",
+              "teacherNote",
+              "title",
+              "transitionNote",
+            ]) ||
+            block.id !== expectedBlockIds[index] ||
+            typeof block.title !== "string" ||
+            !block.title.trim() ||
+            typeof block.purpose !== "string" ||
+            !block.purpose.trim() ||
+            typeof block.flexibilityNote !== "string" ||
+            !block.flexibilityNote.trim() ||
+            !Array.isArray(block.selectedActivityTemplateIds) ||
+            !Array.isArray(block.alternativeActivityTemplateIds) ||
+            !Array.isArray(block.appliedActivityTemplateIds) ||
+            !["planned", "optional", "skipped"].includes(String(block.status)) ||
+            !Number.isInteger(block.durationMinutes) ||
+            Number(block.durationMinutes) < 5 ||
+            Number(block.durationMinutes) > 240 ||
+            typeof block.transitionNote !== "string" ||
+            block.transitionNote.length > 500 ||
+            typeof block.teacherNote !== "string" ||
+            block.teacherNote.length > 1_000 ||
+            !block.selectedActivityTemplateIds.every((id) => id === plan.sourceActivityTemplateId) ||
+            block.selectedActivityTemplateIds.length !==
+              (sourceTemplate?.flowSlot === block.id ? 1 : 0) ||
+            !block.alternativeActivityTemplateIds.every((id) => id === dailyFlow.alternativeActivityTemplateId) ||
+            block.alternativeActivityTemplateIds.length !==
+              (isRecord(alternativeTemplate) && alternativeTemplate.flowSlot === block.id ? 1 : 0) ||
+            !block.appliedActivityTemplateIds.every((id) => id === appliedTemplateId) ||
+            block.appliedActivityTemplateIds.length !==
+              (block.status !== "skipped" && appliedTemplate.flowSlot === block.id ? 1 : 0) ||
+            (block.status === "skipped" && block.appliedActivityTemplateIds.length > 0) ||
+            block.appliedActivityTemplateIds.length > 1,
+        ) ||
+        selectedPlacements.length !== 1 ||
+        alternativePlacements.length !== 1 ||
+        appliedPlacements.length > 1
+      ) {
+        throw new Error(`plans/${plan.id} premium tam gün akışı geçersiz.`);
+      }
+      assertPremiumActivityValuesSnapshot(
+        plan.sourceContentPackSnapshot,
+        appliedTemplate,
+        `plans/${plan.id} appliedActivityTemplateSnapshot`,
+      );
+    }
+  }
   const activityScopes = new Map<string, ActiveClassroomScope | null>();
   for (const activity of payload.activities) {
     const activityScope = validatedRecordScope(
@@ -1605,6 +2541,62 @@ function assertBackupRelationships(
         activity.civilDate !== plan.civilDate
       ) {
         throw new Error(`activities/${activity.id} plan ilişkisi geçersiz.`);
+      }
+      if (
+        activity.sourceAnnualPlanId !== undefined ||
+        activity.sourceMonthlyPlanId !== undefined ||
+        activity.sourceWeeklyPlanId !== undefined
+      ) {
+        const activityLensPreference = parsePremiumLensPreferenceRecord(
+          activity,
+          `activities/${activity.id}`,
+        );
+        const planLensPreference = parsePremiumLensPreferenceRecord(
+          plan,
+          `plans/${plan.id}`,
+        );
+        if (
+          plan.planType !== "daily" ||
+          !samePremiumLensPreference(
+            activityLensPreference,
+            planLensPreference,
+          ) ||
+          activity.sourceAnnualPlanId !== plan.sourceAnnualPlanId ||
+          activity.sourceMonthlyPlanId !== plan.sourceMonthlyPlanId ||
+          activity.sourceWeeklyPlanId !== plan.sourceWeeklyPlanId ||
+          activity.sourceActivityTemplateId !== plan.sourceActivityTemplateId ||
+          activity.appliedActivityTemplateId !== plan.appliedActivityTemplateId ||
+          !isRecord(activity.sourceContentPackSnapshot) ||
+          !isRecord(activity.sourceActivityTemplateSnapshot) ||
+          !sameCanonicalSnapshot(
+            activity.sourceContentPackSnapshot,
+            plan.sourceContentPackSnapshot,
+          ) ||
+          !sameCanonicalSnapshot(
+            activity.sourceActivityTemplateSnapshot,
+            plan.sourceActivityTemplateSnapshot,
+          ) ||
+          !sameCanonicalSnapshot(
+            activity.appliedActivityTemplateSnapshot,
+            plan.appliedActivityTemplateSnapshot,
+          )
+        ) {
+          throw new Error(
+            `activities/${activity.id} premium kaynak zinciri geçersiz.`,
+          );
+        }
+        assertPremiumActivityValuesSnapshot(
+          activity.sourceContentPackSnapshot,
+          activity.sourceActivityTemplateSnapshot,
+          `activities/${activity.id} sourceActivityTemplateSnapshot`,
+        );
+        if (activity.appliedActivityTemplateSnapshot !== undefined) {
+          assertPremiumActivityValuesSnapshot(
+            activity.sourceContentPackSnapshot,
+            activity.appliedActivityTemplateSnapshot,
+            `activities/${activity.id} appliedActivityTemplateSnapshot`,
+          );
+        }
       }
       if (activity.assignmentMode !== undefined) {
         const assignedStudentIds =
@@ -1752,6 +2744,55 @@ function assertBackupRelationships(
   const observationsById = new Map(
     payload.observations.map((observation) => [observation.id, observation]),
   );
+  for (const plan of payload.plans) {
+    if (plan.planType !== "weekly" || !Array.isArray(plan.weeklyEvaluations)) {
+      continue;
+    }
+    const planScope = planScopes.get(plan.id) ?? null;
+    for (const evaluation of plan.weeklyEvaluations) {
+      if (!isRecord(evaluation) || !Array.isArray(evaluation.observationIds)) {
+        continue;
+      }
+      const evaluationCreatedAt = isValidUtcIso(evaluation.createdAt)
+        ? evaluation.createdAt
+        : null;
+      for (const observationId of evaluation.observationIds) {
+        const observation =
+          typeof observationId === "string"
+            ? observationsById.get(observationId)
+            : undefined;
+        const observationScope = observation
+          ? observationScopes.get(observation.id) ?? null
+          : null;
+        const observationPlan =
+          observation && typeof observation.planId === "string"
+            ? plansById.get(observation.planId)
+            : undefined;
+        if (
+          !observation ||
+          !evaluationCreatedAt ||
+          observation.rawTextImmutable !== true ||
+          !recordWasVisibleAt(observation, evaluationCreatedAt) ||
+          !isValidUtcIso(observation.observedAt) ||
+          Date.parse(observation.observedAt) > Date.parse(evaluationCreatedAt) ||
+          !observationPlan ||
+          observationPlan.planType !== "daily" ||
+          observationPlan.sourceWeeklyPlanId !== plan.id ||
+          !planScope ||
+          !observationScope ||
+          !scopesMatch(planScope, observationScope)
+        ) {
+          throw new Error(
+            `plans/${plan.id} haftalık değerlendirmesi bilinmeyen veya kapsam dışı gözleme bağlı.`,
+          );
+        }
+        parseTeacherWeeklyValuesNarrative(
+          observation.rawText,
+          `plans/${plan.id} haftalık değerlendirmesine bağlı ham gözlem`,
+        );
+      }
+    }
+  }
   for (const revision of payload.observationRevisions) {
     const observation = observationsById.get(
       revision.observationId as string,
@@ -2027,6 +3068,324 @@ function assertBackupRelationships(
     linksByObservation.set(observation.id, group);
   }
 
+  const valueEvidenceLinksById = new Map(
+    payload.valueEvidenceLinks.map((link) => [link.id, link]),
+  );
+  const activeValueEvidenceTargetKeys = new Set<string>();
+  const localTeacherIdentity = payload.settings.find(
+    (setting) =>
+      setting.id === LOCAL_TEACHER_IDENTITY_SETTING_ID &&
+      setting.settingType === LOCAL_TEACHER_IDENTITY_SETTING_TYPE &&
+      typeof setting.deletedAt !== "string",
+  );
+  for (const link of payload.valueEvidenceLinks) {
+    const linkScope = validatedRecordScope(
+      link,
+      "valueEvidenceLinks",
+      classroomsById,
+    );
+    const observation = typeof link.observationId === "string"
+      ? observationsById.get(link.observationId)
+      : undefined;
+    const activity = typeof link.activityId === "string"
+      ? activitiesById.get(link.activityId)
+      : undefined;
+    const plan = typeof link.planId === "string"
+      ? plansById.get(link.planId)
+      : undefined;
+    const student = typeof link.studentId === "string"
+      ? studentsById.get(link.studentId)
+      : undefined;
+    const observationScope = observation
+      ? observationScopes.get(observation.id) ?? null
+      : null;
+    const activityScope = activity
+      ? activityScopes.get(activity.id) ?? null
+      : null;
+    const planScope = plan ? planScopes.get(plan.id) ?? null : null;
+    const allowedStudentScopes = student
+      ? studentScopes.get(student.id) ?? []
+      : [];
+    const sourceContentPack = activity && isRecord(activity.sourceContentPackSnapshot)
+      ? activity.sourceContentPackSnapshot
+      : null;
+    const planSourceContentPack = plan && isRecord(plan.sourceContentPackSnapshot)
+      ? plan.sourceContentPackSnapshot
+      : null;
+    const appliedTemplate = activity && isRecord(activity.appliedActivityTemplateSnapshot)
+      ? activity.appliedActivityTemplateSnapshot
+      : null;
+    const planAppliedTemplate = plan && isRecord(plan.appliedActivityTemplateSnapshot)
+      ? plan.appliedActivityTemplateSnapshot
+      : null;
+    const provenance = isRecord(link.provenance) ? link.provenance : null;
+    const studentIds = observation && Array.isArray(observation.studentIds)
+      ? observation.studentIds
+      : [];
+    const isTombstoned = typeof link.deletedAt === "string";
+    const annualSourcePlan = plan && typeof plan.sourceAnnualPlanId === "string"
+      ? plansById.get(plan.sourceAnnualPlanId)
+      : undefined;
+    const monthlySourcePlan = plan && typeof plan.sourceMonthlyPlanId === "string"
+      ? plansById.get(plan.sourceMonthlyPlanId)
+      : undefined;
+    const weeklySourcePlan = plan && typeof plan.sourceWeeklyPlanId === "string"
+      ? plansById.get(plan.sourceWeeklyPlanId)
+      : undefined;
+    const annualSourceScope = annualSourcePlan
+      ? planScopes.get(annualSourcePlan.id) ?? null
+      : null;
+    const monthlySourceScope = monthlySourcePlan
+      ? planScopes.get(monthlySourcePlan.id) ?? null
+      : null;
+    const weeklySourceScope = weeklySourcePlan
+      ? planScopes.get(weeklySourcePlan.id) ?? null
+      : null;
+    const canonicalActivityContent = sourceContentPack
+      ? parsePremiumValuesContentPackSnapshot(
+          sourceContentPack,
+          `valueEvidenceLinks/${link.id} etkinlik içerik snapshot'ı`,
+        )
+      : null;
+    const canonicalPlanContent = planSourceContentPack
+      ? parsePremiumValuesContentPackSnapshot(
+          planSourceContentPack,
+          `valueEvidenceLinks/${link.id} günlük plan içerik snapshot'ı`,
+        )
+      : null;
+    const canonicalAnnualContent = annualSourcePlan &&
+        isRecord(annualSourcePlan.contentPackSnapshot)
+      ? parsePremiumValuesContentPackSnapshot(
+          annualSourcePlan.contentPackSnapshot,
+          `valueEvidenceLinks/${link.id} yıllık plan içerik snapshot'ı`,
+        )
+      : null;
+    const canonicalMonthlyContent = monthlySourcePlan &&
+        isRecord(monthlySourcePlan.contentPackSnapshot)
+      ? parsePremiumValuesContentPackSnapshot(
+          monthlySourcePlan.contentPackSnapshot,
+          `valueEvidenceLinks/${link.id} aylık plan içerik snapshot'ı`,
+        )
+      : null;
+    const canonicalWeeklyContent = weeklySourcePlan &&
+        isRecord(weeklySourcePlan.contentPackSnapshot)
+      ? parsePremiumValuesContentPackSnapshot(
+          weeklySourcePlan.contentPackSnapshot,
+          `valueEvidenceLinks/${link.id} haftalık plan içerik snapshot'ı`,
+        )
+      : null;
+    const monthlyStoredAppliedTemplate = monthlySourcePlan &&
+        Array.isArray(monthlySourcePlan.premiumActivityTemplates)
+      ? monthlySourcePlan.premiumActivityTemplates.find(
+          (candidate) =>
+            isRecord(candidate) &&
+            candidate.id === activity?.appliedActivityTemplateId,
+        )
+      : undefined;
+    const weeklyStoredAppliedTemplate = weeklySourcePlan &&
+        Array.isArray(weeklySourcePlan.premiumActivityTemplates)
+      ? weeklySourcePlan.premiumActivityTemplates.find(
+          (candidate) =>
+            isRecord(candidate) &&
+            candidate.id === activity?.appliedActivityTemplateId,
+        )
+      : undefined;
+
+    let parsedValuesDesign: ReturnType<
+      typeof parsePremiumActivityValueDesignSnapshot
+    > | null = null;
+    if (
+      appliedTemplate &&
+      typeof activity?.appliedActivityTemplateId === "string" &&
+      appliedTemplate.id === activity.appliedActivityTemplateId
+    ) {
+      if (sourceContentPack) {
+        assertPremiumActivityValuesSnapshot(
+          sourceContentPack,
+          appliedTemplate,
+          `valueEvidenceLinks/${link.id} appliedActivityTemplateSnapshot`,
+        );
+      }
+      parsedValuesDesign = parsePremiumActivityValueDesignSnapshot(
+        appliedTemplate.valuesDesign,
+        activity.appliedActivityTemplateId,
+      );
+    }
+    const mappedValueCodes: Set<string> = parsedValuesDesign
+      ? new Set<string>([
+          parsedValuesDesign.mapping.primaryValueCode,
+          parsedValuesDesign.mapping.roofValueCode,
+          ...parsedValuesDesign.mapping.supportingValueCodes,
+        ])
+      : new Set<string>();
+    const targetOfficialAction = parsedValuesDesign?.mapping.officialActionSnapshots.find(
+      (snapshot) =>
+        snapshot.valueCode === link.targetValueCode &&
+        snapshot.indicatorCode === link.targetIndicatorCode,
+    );
+    const normalizedRationale = typeof link.teacherRationale === "string"
+      ? link.teacherRationale.trim().normalize("NFC")
+      : "";
+    const normalizedRawObservation = typeof observation?.rawText === "string"
+      ? observation.rawText.trim().normalize("NFC")
+      : "";
+
+    if (
+      !linkScope ||
+      !observation ||
+      observation.rawTextImmutable !== true ||
+      studentIds.length !== 1 ||
+      studentIds[0] !== link.studentId ||
+      observation.planId !== link.planId ||
+      observation.activityId !== link.activityId ||
+      !activity ||
+      activity.planId !== plan?.id ||
+      !plan ||
+      plan.planType !== "daily" ||
+      !student ||
+      !observationScope ||
+      !activityScope ||
+      !planScope ||
+      !scopesMatch(linkScope, observationScope) ||
+      !scopesMatch(linkScope, activityScope) ||
+      !scopesMatch(linkScope, planScope) ||
+      !allowedStudentScopes.some((scope) => scopesMatch(linkScope, scope)) ||
+      (!isTombstoned &&
+        (typeof observation.deletedAt === "string" ||
+          typeof activity.deletedAt === "string" ||
+          typeof plan.deletedAt === "string" ||
+          typeof student.deletedAt === "string")) ||
+      !sourceContentPack ||
+      !planSourceContentPack ||
+      !appliedTemplate ||
+      !planAppliedTemplate ||
+      !parsedValuesDesign ||
+      !provenance ||
+      !canonicalActivityContent ||
+      !canonicalPlanContent ||
+      !canonicalAnnualContent ||
+      !canonicalMonthlyContent ||
+      !canonicalWeeklyContent ||
+      !sameCanonicalSnapshot(canonicalActivityContent, canonicalPlanContent) ||
+      !sameCanonicalSnapshot(canonicalActivityContent, canonicalAnnualContent) ||
+      !sameCanonicalSnapshot(canonicalActivityContent, canonicalMonthlyContent) ||
+      !sameCanonicalSnapshot(canonicalActivityContent, canonicalWeeklyContent) ||
+      activity.appliedActivityTemplateId !== plan.appliedActivityTemplateId ||
+      !sameCanonicalSnapshot(appliedTemplate, planAppliedTemplate) ||
+      typeof plan.sourceAnnualPlanId !== "string" ||
+      typeof plan.sourceMonthlyPlanId !== "string" ||
+      typeof plan.sourceWeeklyPlanId !== "string" ||
+      activity.sourceAnnualPlanId !== plan.sourceAnnualPlanId ||
+      activity.sourceMonthlyPlanId !== plan.sourceMonthlyPlanId ||
+      activity.sourceWeeklyPlanId !== plan.sourceWeeklyPlanId ||
+      !annualSourcePlan ||
+      annualSourcePlan.planType !== "annual" ||
+      !monthlySourcePlan ||
+      monthlySourcePlan.planType !== "monthly" ||
+      monthlySourcePlan.annualPlanId !== annualSourcePlan.id ||
+      !weeklySourcePlan ||
+      weeklySourcePlan.planType !== "weekly" ||
+      weeklySourcePlan.annualPlanId !== annualSourcePlan.id ||
+      weeklySourcePlan.monthlyPlanId !== monthlySourcePlan.id ||
+      !annualSourceScope ||
+      !monthlySourceScope ||
+      !weeklySourceScope ||
+      !scopesMatch(linkScope, annualSourceScope) ||
+      !scopesMatch(linkScope, monthlySourceScope) ||
+      !scopesMatch(linkScope, weeklySourceScope) ||
+      !monthlyStoredAppliedTemplate ||
+      !weeklyStoredAppliedTemplate ||
+      !sameCanonicalSnapshot(monthlyStoredAppliedTemplate, appliedTemplate) ||
+      !sameCanonicalSnapshot(weeklyStoredAppliedTemplate, appliedTemplate) ||
+      sourceContentPack.id !== provenance.contentPackId ||
+      sourceContentPack.version !== provenance.contentPackVersion ||
+      sourceContentPack.contentReleaseId !== provenance.contentReleaseId ||
+      sourceContentPack.manifestDigest !== provenance.contentManifestDigest ||
+      activity.appliedActivityTemplateId !==
+        provenance.appliedActivityTemplateId ||
+      parsedValuesDesign.id !== provenance.appliedValuesDesignId ||
+      parsedValuesDesign.version !== provenance.appliedValuesDesignVersion ||
+      !mappedValueCodes.has(String(link.targetValueCode)) ||
+      !targetOfficialAction ||
+      !localTeacherIdentity ||
+      localTeacherIdentity.teacherUserId !== link.confirmedByActorId ||
+      String(link.confirmedAt) < localTeacherIdentity.createdAt ||
+      link.civilDate !== istanbulCivilDate(String(link.confirmedAt)) ||
+      String(link.confirmedAt) < observation.createdAt ||
+      normalizedRationale === normalizedRawObservation
+    ) {
+      throw new Error(
+        `valueEvidenceLinks/${link.id} değer kanıtı ilişki, kapsam veya authoritative provenance zinciri geçersiz.`,
+      );
+    }
+
+    assertValueEvidenceSourceObservationPolicy(
+      observation.rawText,
+      link.evidenceRole as "supports" | "contrasts" | "context_only",
+      String(link.teacherRationale),
+    );
+
+    if (!isTombstoned) {
+      const targetKey = valueEvidenceTargetKey(link);
+      if (activeValueEvidenceTargetKeys.has(targetKey)) {
+        throw new Error(
+          `valueEvidenceLinks/${link.id} aynı gözlem ve değer eylemi için ikinci aktif bağ oluşturuyor.`,
+        );
+      }
+      activeValueEvidenceTargetKeys.add(targetKey);
+    }
+  }
+
+  const claimedValueEvidencePredecessorIds = new Set<string>();
+  const valueEvidencePredecessorByLinkId = new Map<string, string>();
+  for (const link of payload.valueEvidenceLinks) {
+    const predecessorId = typeof link.supersedesLinkId === "string"
+      ? link.supersedesLinkId
+      : null;
+    if (predecessorId === null) continue;
+    if (claimedValueEvidencePredecessorIds.has(predecessorId)) {
+      throw new Error(
+        `valueEvidenceLinks/${link.id} supersedes zinciri aynı predecessor üzerinde dallanıyor.`,
+      );
+    }
+    claimedValueEvidencePredecessorIds.add(predecessorId);
+    valueEvidencePredecessorByLinkId.set(link.id, predecessorId);
+    const predecessor = valueEvidenceLinksById.get(predecessorId);
+    if (
+      !predecessor ||
+      typeof predecessor.deletedAt !== "string" ||
+      predecessor.deletedAt !== link.confirmedAt ||
+      valueEvidenceTargetKey(predecessor) !== valueEvidenceTargetKey(link) ||
+      predecessor.studentId !== link.studentId ||
+      predecessor.planId !== link.planId ||
+      !sameCanonicalSnapshot(predecessor.provenance, link.provenance) ||
+      (predecessor.evidenceRole === link.evidenceRole &&
+        predecessor.teacherRationale === link.teacherRationale)
+    ) {
+      throw new Error(
+        `valueEvidenceLinks/${link.id} supersedes predecessor ilişkisi geçersiz.`,
+      );
+    }
+  }
+  const fullyVisitedValueEvidenceLinks = new Set<string>();
+  for (const link of payload.valueEvidenceLinks) {
+    if (fullyVisitedValueEvidenceLinks.has(link.id)) continue;
+    const currentPath = new Set<string>();
+    let currentId: string | undefined = link.id;
+    while (currentId && !fullyVisitedValueEvidenceLinks.has(currentId)) {
+      if (currentPath.has(currentId)) {
+        throw new Error(
+          `valueEvidenceLinks/${link.id} supersedes zinciri döngü içeriyor.`,
+        );
+      }
+      currentPath.add(currentId);
+      currentId = valueEvidencePredecessorByLinkId.get(currentId);
+    }
+    for (const visitedId of currentPath) {
+      fullyVisitedValueEvidenceLinks.add(visitedId);
+    }
+  }
+
   for (const draft of payload.reportDrafts) {
     if (draft.reportType !== "evidence-assessment") {
       const selectedObservationIds = draft.selectedObservationIds;
@@ -2227,7 +3586,18 @@ function assertBackupRelationships(
       payload[collection].map((record) => record.id),
     ),
   );
+  const attendanceRecordsById = new Map(
+    payload.attendanceRecords.map((record) => [record.id, record]),
+  );
+  const portfolioSelectionsById = new Map(
+    payload.portfolioSelections.map((record) => [record.id, record]),
+  );
+  const externalFeedbackById = new Map(
+    payload.externalFeedback.map((record) => [record.id, record]),
+  );
   for (const exportPackage of payload.exportPackages) {
+    const exportPeriodStart = String(exportPackage.periodStart);
+    const exportPeriodEnd = String(exportPackage.periodEnd);
     const exportScope = validatedRecordScope(
       exportPackage,
       "exportPackages",
@@ -2255,9 +3625,24 @@ function assertBackupRelationships(
         `exportPackages/${exportPackage.id} öğrenci, dönem veya sınıf kapsamıyla uyuşmuyor.`,
       );
     }
-    const includedGroups = Object.values(
-      exportPackage.includedEntityIds as Record<string, unknown>,
-    );
+    const includedEntityIds =
+      exportPackage.includedEntityIds as Record<string, unknown>;
+    if (
+      exportPackage.type === "student_dossier" &&
+      !hasExactKeys(includedEntityIds, [
+        "attendanceRecords",
+        "externalFeedback",
+        "mediaAssets",
+        "observations",
+        "portfolioSelections",
+        "valueEvidenceLinks",
+      ])
+    ) {
+      throw new Error(
+        `exportPackages/${exportPackage.id} öğrenci dosyası dahil edilen kayıt grupları exact sözleşmeye uymuyor.`,
+      );
+    }
+    const includedGroups = Object.values(includedEntityIds);
     if (
       includedGroups.some(
         (group) =>
@@ -2268,6 +3653,196 @@ function assertBackupRelationships(
       throw new Error(
         `exportPackages/${exportPackage.id} bilinmeyen veya geçersiz kayıt kimliği içeriyor.`,
       );
+    }
+    if (exportPackage.type === "student_dossier") {
+      const packageStudentIds = exportPackage.studentIds as string[];
+      const packageStudentId = packageStudentIds[0];
+      const packageStudent = studentsById.get(packageStudentId);
+      const packageClassroom = classroomsById.get(exportScope.classroomId);
+      const manifest = exportPackage.manifest as Record<string, unknown>;
+      const observationIds = includedEntityIds.observations as string[];
+      const valueEvidenceLinkIds = includedEntityIds.valueEvidenceLinks as string[];
+      const attendanceRecordIds = includedEntityIds.attendanceRecords as string[];
+      const portfolioSelectionIds = includedEntityIds.portfolioSelections as string[];
+      const externalFeedbackIds = includedEntityIds.externalFeedback as string[];
+      const mediaAssetIds = includedEntityIds.mediaAssets as string[];
+      if (
+        packageStudentIds.length !== 1 ||
+        !packageStudent ||
+        !recordWasVisibleAt(packageStudent, exportPackage.createdAt) ||
+        !packageClassroom ||
+        !recordWasVisibleAt(packageClassroom, exportPackage.createdAt) ||
+        !recordWasVisibleAt(exportAcademicYear, exportPackage.createdAt) ||
+        (manifest.identityMode !== "full" && manifest.identityMode !== "alias") ||
+        typeof manifest.includeContacts !== "boolean" ||
+        typeof manifest.includeAttendance !== "boolean" ||
+        typeof manifest.includeObservations !== "boolean" ||
+        typeof manifest.includePortfolio !== "boolean" ||
+        typeof manifest.includeExternalFeedback !== "boolean" ||
+        (manifest.includeObservations !== true &&
+          (observationIds.length > 0 || valueEvidenceLinkIds.length > 0)) ||
+        (manifest.includeAttendance !== true && attendanceRecordIds.length > 0) ||
+        (manifest.includePortfolio !== true && portfolioSelectionIds.length > 0) ||
+        (manifest.includeExternalFeedback !== true &&
+          externalFeedbackIds.length > 0) ||
+        mediaAssetIds.length > 0
+      ) {
+        throw new Error(
+          `exportPackages/${exportPackage.id} öğrenci dosyası gizlilik veya dahil etme sözleşmesine uymuyor.`,
+        );
+      }
+
+      const observationIdSet = new Set(observationIds);
+      const invalidObservation = observationIds.some((id) => {
+        const observation = observationsById.get(id);
+        const observationScope = observation
+          ? validatedRecordScope(observation, "observations", classroomsById)
+          : null;
+        return (
+          !observation ||
+          !recordWasVisibleAt(observation, exportPackage.createdAt) ||
+          !Array.isArray(observation.studentIds) ||
+          observation.studentIds.length !== 1 ||
+          observation.studentIds[0] !== packageStudentId ||
+          !observationScope ||
+          !scopesMatch(exportScope, observationScope) ||
+          observation.civilDate < exportPeriodStart ||
+          observation.civilDate > exportPeriodEnd
+        );
+      });
+      const invalidAttendance = attendanceRecordIds.some((id) => {
+        const attendance = attendanceRecordsById.get(id);
+        const attendanceScope = attendance
+          ? validatedRecordScope(attendance, "attendanceRecords", classroomsById)
+          : null;
+        return (
+          !attendance ||
+          !recordWasVisibleAt(attendance, exportPackage.createdAt) ||
+          attendance.studentId !== packageStudentId ||
+          !attendanceScope ||
+          !scopesMatch(exportScope, attendanceScope) ||
+          attendance.civilDate < exportPeriodStart ||
+          attendance.civilDate > exportPeriodEnd
+        );
+      });
+      const invalidPortfolioSelection = portfolioSelectionIds.some((id) => {
+        const selection = portfolioSelectionsById.get(id);
+        const selectionScope = selection
+          ? validatedRecordScope(selection, "portfolioSelections", classroomsById)
+          : null;
+        const sourceObservation =
+          selection?.itemType === "observation" &&
+          typeof selection.itemId === "string"
+            ? observationsById.get(selection.itemId)
+            : undefined;
+        const sourceObservationScope = sourceObservation
+          ? validatedRecordScope(sourceObservation, "observations", classroomsById)
+          : null;
+        return (
+          !selection ||
+          !recordWasVisibleAt(selection, exportPackage.createdAt) ||
+          selection.studentId !== packageStudentId ||
+          !selectionScope ||
+          !scopesMatch(exportScope, selectionScope) ||
+          typeof selection.periodStart !== "string" ||
+          typeof selection.periodEnd !== "string" ||
+          !periodsOverlap(
+            selection.periodStart,
+            selection.periodEnd,
+            exportPeriodStart,
+            exportPeriodEnd,
+          ) ||
+          (selection.itemType === "observation" &&
+            (!sourceObservation ||
+              !recordWasVisibleAt(sourceObservation, exportPackage.createdAt) ||
+              !Array.isArray(sourceObservation.studentIds) ||
+              sourceObservation.studentIds.length !== 1 ||
+              sourceObservation.studentIds[0] !== packageStudentId ||
+              !sourceObservationScope ||
+              !scopesMatch(exportScope, sourceObservationScope) ||
+              sourceObservation.civilDate < exportPeriodStart ||
+              sourceObservation.civilDate > exportPeriodEnd ||
+              (manifest.includeObservations === true &&
+                !observationIdSet.has(sourceObservation.id))))
+        );
+      });
+      const invalidExternalFeedback = externalFeedbackIds.some((id) => {
+        const feedback = externalFeedbackById.get(id);
+        const feedbackScope = feedback
+          ? validatedRecordScope(feedback, "externalFeedback", classroomsById)
+          : null;
+        return (
+          !feedback ||
+          !recordWasVisibleAt(feedback, exportPackage.createdAt) ||
+          feedback.studentId !== packageStudentId ||
+          !feedbackScope ||
+          !scopesMatch(exportScope, feedbackScope) ||
+          typeof feedback.periodStart !== "string" ||
+          typeof feedback.periodEnd !== "string" ||
+          !periodsOverlap(
+            feedback.periodStart,
+            feedback.periodEnd,
+            exportPeriodStart,
+            exportPeriodEnd,
+          )
+        );
+      });
+      if (
+        invalidObservation ||
+        invalidAttendance ||
+        invalidPortfolioSelection ||
+        invalidExternalFeedback
+      ) {
+        throw new Error(
+          `exportPackages/${exportPackage.id} başka çocuk, kapsam, dönem veya canlılık penceresinden kayıt içeriyor.`,
+        );
+      }
+    }
+
+    const includedValueEvidenceLinkIds = includedEntityIds.valueEvidenceLinks;
+    if (Array.isArray(includedValueEvidenceLinkIds)) {
+      const packageStudentIds = new Set(exportPackage.studentIds as string[]);
+      const invalidValueEvidenceLink = includedValueEvidenceLinkIds.some((id) => {
+        const link = typeof id === "string"
+          ? valueEvidenceLinksById.get(id)
+          : undefined;
+        const observation = link && typeof link.observationId === "string"
+          ? observationsById.get(link.observationId)
+          : undefined;
+        const linkScope = link
+          ? validatedRecordScope(link, "valueEvidenceLinks", classroomsById)
+          : null;
+        const observationScope = observation
+          ? validatedRecordScope(observation, "observations", classroomsById)
+          : null;
+        return (
+          !link ||
+          !recordWasVisibleAt(link, exportPackage.createdAt) ||
+          !packageStudentIds.has(String(link.studentId)) ||
+          !linkScope ||
+          !scopesMatch(exportScope, linkScope) ||
+          !observation ||
+          !recordWasVisibleAt(observation, exportPackage.createdAt) ||
+          !Array.isArray(observation.studentIds) ||
+          observation.studentIds.length !== 1 ||
+          observation.studentIds[0] !== link.studentId ||
+          !observationScope ||
+          !scopesMatch(exportScope, observationScope) ||
+          (exportPackage.type === "student_dossier" &&
+            !(includedEntityIds.observations as string[]).includes(
+              observation.id,
+            )) ||
+          observation.civilDate < exportPeriodStart ||
+          observation.civilDate > exportPeriodEnd ||
+          link.civilDate < exportPeriodStart ||
+          link.civilDate > exportPeriodEnd
+        );
+      });
+      if (invalidValueEvidenceLink) {
+        throw new Error(
+          `exportPackages/${exportPackage.id} başka çocuk, kapsam veya dönemden değer kanıtı içeriyor.`,
+        );
+      }
     }
   }
 

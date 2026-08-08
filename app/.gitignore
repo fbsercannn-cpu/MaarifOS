@@ -3,3 +3,6 @@ dist/
 test-results/
 playwright-report/
 .playwright-cli/
+.env.development.local
+premium-preview-cache/
+output/playwright/value-evidence-mobile-*.png

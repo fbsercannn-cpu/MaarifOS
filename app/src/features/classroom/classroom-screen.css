@@ -1,0 +1,58 @@
+.classroom-screen {
+  width: min(100%, 760px);
+  max-width: 760px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: calc(var(--app-safe-top) + 16px) 20px
+    calc(var(--app-bottom-inset) + var(--maarif-nav-height) + 16px);
+}
+
+.classroom-screen__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.classroom-screen__header h1 {
+  margin: 3px 0 2px;
+  color: var(--maarif-navy);
+  font-size: clamp(24px, 7vw, 32px);
+  line-height: 1.1;
+}
+
+.classroom-screen__header p {
+  margin: 0;
+  color: var(--maarif-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.classroom-screen__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.classroom-screen button:focus-visible,
+.classroom-screen input:focus-visible,
+.classroom-screen summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--maarif-teal) 55%, white);
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .classroom-screen {
+    padding: calc(var(--app-safe-top) + 12px) 12px
+      calc(var(--app-bottom-inset) + var(--maarif-nav-height) + 12px);
+  }
+
+  .classroom-screen .roster-toolbar {
+    top: 0;
+  }
+}

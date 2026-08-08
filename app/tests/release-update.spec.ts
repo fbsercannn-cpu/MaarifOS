@@ -53,12 +53,12 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.7.0");
-  await expect(updateDialog).toContainText("29 Temmuz 2026");
+  await expect(updateDialog).toContainText("Sürüm 0.8.0");
+  await expect(updateDialog).toContainText("8 Ağustos 2026");
   await expect(updateDialog).toContainText(
-    "Sade kayıt akışı ve tam TYMM öğrenme çıktıları",
+    "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
   );
-  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.7.0");
+  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.8.0");
   await expect(updateDialog).toContainText("Kayıtlarınız korundu");
   await updateDialog.getByRole("button", {
     name: "Harika, başlayalım",
@@ -74,13 +74,13 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.7.0");
-  await expect(settings).toContainText("29 Temmuz 2026");
+  await expect(settings).toContainText("MaarifOS 0.8.0");
+  await expect(settings).toContainText("8 Ağustos 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "Kayıt Ekle artık gözlem, yoklama, etkinlik planı",
+    "Saygı, sorumluluk ve adalet merkezli Değerler Pedagojisi altyapısı",
   );
 });
 
@@ -99,8 +99,8 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", as
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.7.0");
-  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.7.0");
+  await expect(updateDialog).toContainText("Sürüm 0.8.0");
+  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.8.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({
@@ -110,11 +110,11 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await configureClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım" }).click();
-  const classroom = page.getByRole("dialog", { name: "Sınıfım" });
-  await classroom
+  await page
     .getByRole("button", { name: "Çocuk ekle", exact: true })
     .click();
-  const studentName = classroom.getByLabel("Çocuğun adı");
+  const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+  const studentName = addSheet.getByLabel("Çocuğun adı");
   await studentName.fill("Kaydedilmemiş öğretmen girdisi");
 
   await page.evaluate(() => {
@@ -122,8 +122,9 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   });
 
   await expect(studentName).toHaveValue("Kaydedilmemiş öğretmen girdisi");
-  await classroom.press("Escape");
-  await expect(classroom).toBeHidden();
+  await addSheet.press("Escape");
+  await expect(addSheet).toBeHidden();
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),
   ).toBeVisible();

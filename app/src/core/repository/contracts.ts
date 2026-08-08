@@ -4,13 +4,31 @@ import type {
   StoredRecord,
 } from "../domain/model";
 import type { BackupEnvelope } from "../backup/schema";
+import type {
+  AttendanceRecord,
+} from "../domain/attendance";
+import type {
+  EntityMap,
+  ObservationRecord,
+  StudentRecord,
+} from "./entities";
 
 export type TransactionMode = "readonly" | "readwrite";
 
 export interface DataTransaction {
-  getAll(collection: CollectionName): Promise<StoredRecord[]>;
-  putMany(collection: CollectionName, records: readonly StoredRecord[]): Promise<void>;
-  clear(collection: CollectionName): Promise<void>;
+  getAll<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<EntityMap[Collection][]>;
+  putMany<Collection extends CollectionName>(
+    collection: Collection,
+    records: readonly EntityMap[Collection][],
+  ): Promise<void>;
+  /** Dinamik koleksiyon kullanan migration/restore akışları için eski sözleşme. */
+  putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void>;
+  clear<Collection extends CollectionName>(collection: Collection): Promise<void>;
 }
 
 export interface LocalDataStore {
@@ -60,21 +78,38 @@ export interface RecoverySnapshotRepository {
   deleteRecoverySnapshotsContainingStudent(studentId: string): Promise<number>;
 }
 
+export interface StudentRecoveryPurgeResult<T> {
+  result: T;
+  purgedRecoverySnapshotCount: number;
+}
+
+/**
+ * Kalıcı öğrenci silme ile öğrenciyi içeren kurtarma snapshot'larını aynı
+ * dayanıklı işlemde sonuçlandırır. Task ya da snapshot taraması hata verirse
+ * ana koleksiyonlar ve kurtarma deposu birlikte geri alınmalıdır.
+ */
+export interface StudentPrivacyDeletionRepository {
+  transactionWithStudentRecoveryPurge<T>(
+    studentId: string,
+    task: (transaction: DataTransaction) => Promise<T>,
+  ): Promise<StudentRecoveryPurgeResult<T>>;
+}
+
 export interface ClassroomDataQueryRepository {
-  listStudentsByClassroom(classroomId: string): Promise<StoredRecord[]>;
+  listStudentsByClassroom(classroomId: string): Promise<StudentRecord[]>;
   listAttendanceByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]>;
+  ): Promise<AttendanceRecord[]>;
   listAttendanceByStudentDate(
     studentId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]>;
+  ): Promise<AttendanceRecord[]>;
   listObservationsByClassroomDate(
     classroomId: string,
     civilDate: string,
-  ): Promise<StoredRecord[]>;
-  listObservationsByStudent(studentId: string): Promise<StoredRecord[]>;
+  ): Promise<ObservationRecord[]>;
+  listObservationsByStudent(studentId: string): Promise<ObservationRecord[]>;
   listMediaByStudent(studentId: string): Promise<StoredRecord[]>;
 }
 
@@ -88,5 +123,14 @@ export function isRecoverySnapshotRepository(
     typeof candidate.getRecoverySnapshot === "function" &&
     typeof candidate.deleteRecoverySnapshot === "function" &&
     typeof candidate.deleteRecoverySnapshotsContainingStudent === "function"
+  );
+}
+
+export function isStudentPrivacyDeletionRepository(
+  store: LocalDataStore,
+): store is LocalDataStore & StudentPrivacyDeletionRepository {
+  const candidate = store as Partial<StudentPrivacyDeletionRepository>;
+  return (
+    typeof candidate.transactionWithStudentRecoveryPurge === "function"
   );
 }

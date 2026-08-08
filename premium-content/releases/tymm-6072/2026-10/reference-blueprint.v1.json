@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 1,
+  "blueprintId": "tymm-6072-2026-10-reference-v1",
+  "artifactKind": "planned_reference_blueprint",
+  "status": "planned_reference_blueprint",
+  "sku": "TYMM-6072",
+  "program": "tymm_2024",
+  "ageProfile": "60-72",
+  "academicRelease": "2026-2027",
+  "monthKey": "2026-10",
+  "title": "Ekim 2026 · Değişen Çevre, Malzeme ve Ortak Yaşam",
+  "purpose": "Çocukların sonbahar ve yakın çevre izlerini gözlemesine, malzeme özelliklerini karşılaştırmasına ve ortak yaşam için gönüllü katkı yolları geliştirmesine alan açmak.",
+  "inquiryQuestion": "Çevremiz nasıl değişiyor; değişen çevre ve ortak varlıklar için birlikte ne yapabiliriz?",
+  "schedule": {
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-30",
+    "bridgeDays": [
+      "2026-10-01",
+      "2026-10-02"
+    ],
+    "weekCount": 4,
+    "activitiesPerWeek": 3,
+    "mainActivitiesPerWeek": 2,
+    "alternativeActivitiesPerWeek": 1
+  },
+  "primaryValuePolicy": {
+    "codes": [
+      "D5",
+      "D7",
+      "D9",
+      "D17",
+      "D18",
+      "D19"
+    ],
+    "occurrencesPerCode": 2,
+    "roofCounts": {
+      "D1": 4,
+      "D14": 4,
+      "D16": 4
+    },
+    "designDirectionCounts": {
+      "value_led": 6,
+      "learning_outcome_led": 6
+    }
+  },
+  "authoredLensIds": [
+    "guided-play",
+    "belonging-family-weave",
+    "accessible-participation",
+    "prepared-environment",
+    "emotion-relationship-coregulation",
+    "plan-act-reflect"
+  ],
+  "culturalCandidates": [
+    {
+      "id": "sukur-kanaat-israf-etmeme",
+      "status": "draft",
+      "checkedAtUtc": null,
+      "humanReviewRequired": true,
+      "officialTymmValue": false
+    },
+    {
+      "id": "temizlik",
+      "status": "draft",
+      "checkedAtUtc": null,
+      "humanReviewRequired": true,
+      "officialTymmValue": false
+    },
+    {
+      "id": "vatan-kulturel-miras",
+      "status": "draft",
+      "checkedAtUtc": null,
+      "humanReviewRequired": true,
+      "officialTymmValue": false
+    },
+    {
+      "id": "yaratilmislara-dogaya-merhamet",
+      "status": "draft",
+      "checkedAtUtc": null,
+      "humanReviewRequired": true,
+      "officialTymmValue": false
+    }
+  ],
+  "nature_based_continuity": {
+    "kind": "nature_based_continuity",
+    "status": "planned",
+    "weekIds": [
+      "october-notice-and-ask",
+      "october-compare-materials",
+      "october-care-and-transform",
+      "october-common-life"
+    ],
+    "activityIds": [
+      "tymm6072-oct-autumn-traces",
+      "tymm6072-oct-nearby-natural-heritage",
+      "tymm6072-oct-material-enough",
+      "tymm6072-oct-no-harm-choice",
+      "tymm6072-oct-observe-before-helping",
+      "tymm6072-oct-clean-environment-plan",
+      "tymm6072-oct-new-use",
+      "tymm6072-oct-common-place-selection"
+    ],
+    "preparedEnvironmentSupportActivityIds": [
+      "tymm6072-oct-autumn-traces",
+      "tymm6072-oct-colour-texture-choices",
+      "tymm6072-oct-material-enough",
+      "tymm6072-oct-environment-impact",
+      "tymm6072-oct-no-harm-choice",
+      "tymm6072-oct-observe-before-helping",
+      "tymm6072-oct-clean-environment-plan",
+      "tymm6072-oct-new-use",
+      "tymm6072-oct-common-place-selection"
+    ],
+    "principle": "Doğa ve yakın çevre gözlemi dört haftanın her birinde çocuk sorusu, güvenli bakım ve öğretmen yansıtmasıyla sürdürülür.",
+    "indoorContinuityPrinciple": "Açık hava koşulları uygun olmadığında mekân ve nesne izleriyle aynı gözlem, karşılaştırma ve sınıflandırma döngüsü kapalı alanda sürdürülür.",
+    "claimMode": "no_program_or_certification_claim"
+  },
+  "republicContext": {
+    "activityId": "tymm6072-oct-republic-common-good",
+    "contextMode": "pluralist_child_rights",
+    "commemorationDate": "2026-10-29",
+    "calendarClosureClaim": null,
+    "childRightsSnapshotCodes": [
+      "D1.1.2",
+      "D11.1.2"
+    ],
+    "safeguards": [
+      "child_voice",
+      "right_to_decline",
+      "no_othering"
+    ]
+  },
+  "reviewBoundary": {
+    "humanReviewRequired": true,
+    "humanApproved": false,
+    "publicationApproved": false,
+    "manifestAuthorized": false,
+    "contentV3Authorized": false
+  },
+  "weeks": [
+    {
+      "id": "october-notice-and-ask",
+      "title": "Fark et ve sor · Sonbahar izleri",
+      "periodStart": "2026-10-05",
+      "periodEnd": "2026-10-09",
+      "inquiryQuestion": "Yakın çevrede hangi değişimleri fark ediyoruz?",
+      "activities": [
+        {
+          "id": "tymm6072-oct-autumn-traces",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-06",
+          "title": "Sonbahar İzlerini Seçiyoruz",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D5",
+          "roofValueCode": "D1",
+          "indicatorCode": "D5.2.6",
+          "culturalCandidateIds": [
+            "yaratilmislara-dogaya-merhamet"
+          ],
+          "primaryLensId": "prepared-environment",
+          "supportingLensIds": [
+            "guided-play",
+            "accessible-participation"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar güvenli rota seçeneklerinden birini seçer, çevredeki canlı ve cansız izleri birbirinden ayırarak sorularını oluşturur.",
+          "childRightsGuardrail": "Çocuk dokunmak, uzaktan gözlemek, işaret etmek veya beklemek yollarından birini seçebilir."
+        },
+        {
+          "id": "tymm6072-oct-colour-texture-choices",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-08",
+          "title": "Renk ve Doku Tercihlerimiz",
+          "designDirection": "value_led",
+          "primaryValueCode": "D7",
+          "roofValueCode": "D14",
+          "indicatorCode": "D7.1.2",
+          "culturalCandidateIds": [],
+          "primaryLensId": "accessible-participation",
+          "supportingLensIds": [
+            "prepared-environment",
+            "emotion-relationship-coregulation"
+          ],
+          "natureContinuity": false,
+          "plannedExperience": "Çocuklar aynı malzemeye ilişkin farklı renk, doku ve düzen tercihlerini karşılaştırır ve tek doğru beğeni olmadığını deneyimler.",
+          "childRightsGuardrail": "Duyusal rahatsızlık bildiren çocuk başka malzemeyi, yalnız görsel incelemeyi veya etkinlik dışında kalmayı seçebilir."
+        },
+        {
+          "id": "tymm6072-oct-nearby-natural-heritage",
+          "role": "alternative",
+          "recommendedCivilDate": "2026-10-09",
+          "title": "Yakın Çevrenin Doğal İzleri",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D19",
+          "roofValueCode": "D16",
+          "indicatorCode": "D19.3.3",
+          "culturalCandidateIds": [
+            "vatan-kulturel-miras"
+          ],
+          "primaryLensId": "guided-play",
+          "supportingLensIds": [
+            "belonging-family-weave",
+            "plan-act-reflect"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar yaşadıkları çevreden bilinen bir doğal izi oyun haritasında konumlandırır ve onu korumak için yaşa uygun bir öneri seçer.",
+          "childRightsGuardrail": "Yerel aidiyet başka yerleri, halkları veya kültürleri değersizleştiren bir karşılaştırmaya dönüştürülmez."
+        }
+      ]
+    },
+    {
+      "id": "october-compare-materials",
+      "title": "Dene ve karşılaştır · Malzeme özellikleri",
+      "periodStart": "2026-10-12",
+      "periodEnd": "2026-10-16",
+      "inquiryQuestion": "Aynı malzeme farklı koşullarda nasıl davranıyor?",
+      "activities": [
+        {
+          "id": "tymm6072-oct-material-enough",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-13",
+          "title": "Malzemenin Yettiği Kadar",
+          "designDirection": "value_led",
+          "primaryValueCode": "D17",
+          "roofValueCode": "D16",
+          "indicatorCode": "D17.3.1",
+          "culturalCandidateIds": [
+            "sukur-kanaat-israf-etmeme"
+          ],
+          "primaryLensId": "prepared-environment",
+          "supportingLensIds": [
+            "plan-act-reflect",
+            "accessible-participation"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar aynı işi farklı miktarlardaki güvenli malzemeyle dener ve ihtiyacı karşılayan miktara ilişkin gerekçe geliştirir.",
+          "childRightsGuardrail": "Tasarruf temel ihtiyaçtan mahrum bırakma, aile bütçesi karşılaştırması veya kıtlık korkusu olarak sunulmaz."
+        },
+        {
+          "id": "tymm6072-oct-environment-impact",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-15",
+          "title": "Ortamımıza Etkimiz",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D18",
+          "roofValueCode": "D14",
+          "indicatorCode": "D18.3.5",
+          "culturalCandidateIds": [
+            "temizlik"
+          ],
+          "primaryLensId": "plan-act-reflect",
+          "supportingLensIds": [
+            "prepared-environment",
+            "accessible-participation"
+          ],
+          "natureContinuity": false,
+          "plannedExperience": "Çocuklar iki kullanım biçiminin ortak mekânda bıraktığı nesnel izleri karşılaştırır ve ortamı koruyan seçeneği yeniden dener.",
+          "childRightsGuardrail": "Temizlik görevi ceza, utandırma veya yetişkin işini çocuğa yükleme aracı yapılmaz."
+        },
+        {
+          "id": "tymm6072-oct-no-harm-choice",
+          "role": "alternative",
+          "recommendedCivilDate": "2026-10-16",
+          "title": "Zarar Vermeyen Seçenek",
+          "designDirection": "value_led",
+          "primaryValueCode": "D5",
+          "roofValueCode": "D1",
+          "indicatorCode": "D5.2.1",
+          "culturalCandidateIds": [
+            "yaratilmislara-dogaya-merhamet"
+          ],
+          "primaryLensId": "guided-play",
+          "supportingLensIds": [
+            "prepared-environment",
+            "emotion-relationship-coregulation"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar oyun içindeki iki malzeme kullanma yolunun çevreye etkisini tartışır ve zarar azaltan yeni bir yol önerir.",
+          "childRightsGuardrail": "Çocuk çevre sorunlarını tek başına çözmekle sorumlu tutulmaz; güvenli yetişkin desteği görünür kalır."
+        }
+      ]
+    },
+    {
+      "id": "october-care-and-transform",
+      "title": "Derinleştir ve dönüştür · Bakım ve yeniden kullanım",
+      "periodStart": "2026-10-19",
+      "periodEnd": "2026-10-23",
+      "inquiryQuestion": "Bir canlıya ve ortak çevreye nasıl ölçülü katkı sunabiliriz?",
+      "activities": [
+        {
+          "id": "tymm6072-oct-observe-before-helping",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-20",
+          "title": "Canlıya Yardım Etmeden Önce Gözle",
+          "designDirection": "value_led",
+          "primaryValueCode": "D9",
+          "roofValueCode": "D14",
+          "indicatorCode": "D9.3.2",
+          "culturalCandidateIds": [
+            "yaratilmislara-dogaya-merhamet"
+          ],
+          "primaryLensId": "emotion-relationship-coregulation",
+          "supportingLensIds": [
+            "accessible-participation",
+            "prepared-environment"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar bir canlıya yaklaşmadan önce uzaktan gözlem yapar, ihtiyacı yetişkinle değerlendirir ve güvenli bir bakım seçeneği belirler.",
+          "childRightsGuardrail": "Çocuk kurtarıcı rolüne, canlıya dokunmaya veya güvenliğini aşan bir müdahaleye zorlanmaz."
+        },
+        {
+          "id": "tymm6072-oct-clean-environment-plan",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-22",
+          "title": "Temiz Ortam İçin Ayırma Planı",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D18",
+          "roofValueCode": "D16",
+          "indicatorCode": "D18.3.3",
+          "culturalCandidateIds": [
+            "temizlik"
+          ],
+          "primaryLensId": "plan-act-reflect",
+          "supportingLensIds": [
+            "prepared-environment",
+            "accessible-participation"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar temiz ve güvenli örnek malzemeleri özelliklerine göre ayırır, sınıf için anlaşılır bir yerleştirme planı dener.",
+          "childRightsGuardrail": "Hijyen riski taşıyan gerçek atıklar çocuklara verilmez; katılım gönüllü ve erişilebilir seçeneklidir."
+        },
+        {
+          "id": "tymm6072-oct-new-use",
+          "role": "alternative",
+          "recommendedCivilDate": "2026-10-23",
+          "title": "Malzemeye Yeni Bir Kullanım",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D17",
+          "roofValueCode": "D1",
+          "indicatorCode": "D17.3.2",
+          "culturalCandidateIds": [
+            "sukur-kanaat-israf-etmeme"
+          ],
+          "primaryLensId": "accessible-participation",
+          "supportingLensIds": [
+            "guided-play",
+            "prepared-environment"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar kullanımını tamamlamış güvenli bir sınıf malzemesi için birden çok yeni işlev tasarlar ve tercih ettiği yolu dener.",
+          "childRightsGuardrail": "Ürün kusursuzluğu, hız ve yetişkin beğenisi değer kanıtı sayılmaz; farklı ifade yolları eşdeğerdir."
+        }
+      ]
+    },
+    {
+      "id": "october-common-life",
+      "title": "Paylaş ve sonraki adımı kur · Cumhuriyet ve ortak yaşam",
+      "periodStart": "2026-10-26",
+      "periodEnd": "2026-10-30",
+      "inquiryQuestion": "Ortak yaşamda herkesin sözü ve katkısı nasıl korunur?",
+      "activities": [
+        {
+          "id": "tymm6072-oct-republic-common-good",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-27",
+          "title": "29 Ekim Cumhuriyet ve Ortak İyilik: Hepimizin Sözü Var",
+          "designDirection": "value_led",
+          "primaryValueCode": "D19",
+          "roofValueCode": "D1",
+          "indicatorCode": "D19.2.1",
+          "culturalCandidateIds": [
+            "vatan-kulturel-miras"
+          ],
+          "primaryLensId": "belonging-family-weave",
+          "supportingLensIds": [
+            "accessible-participation",
+            "guided-play"
+          ],
+          "natureContinuity": false,
+          "plannedExperience": "Çocuklar millî bayramların neden birlikte hatırlandığına ilişkin farklı düşünceleri dinler ve ortak sınıf yaşamına gönüllü bir katkı yolu seçer.",
+          "childRightsGuardrail": "Tek doğru siyasi cevap aranmaz; çocuk söz, çizim, nesne, hareket, dinleme veya katılmama yolunu seçebilir ve başka halklar değersizleştirilmez."
+        },
+        {
+          "id": "tymm6072-oct-voluntary-common-life",
+          "role": "main",
+          "recommendedCivilDate": "2026-10-28",
+          "title": "Ortak Yaşam İçin Gönüllü Katkı",
+          "designDirection": "value_led",
+          "primaryValueCode": "D9",
+          "roofValueCode": "D14",
+          "indicatorCode": "D9.3.5",
+          "culturalCandidateIds": [
+            "yaratilmislara-dogaya-merhamet"
+          ],
+          "primaryLensId": "emotion-relationship-coregulation",
+          "supportingLensIds": [
+            "belonging-family-weave",
+            "accessible-participation"
+          ],
+          "natureContinuity": false,
+          "plannedExperience": "Çocuklar sınıfın veya yakın çevrenin gerçek bir bakım ihtiyacını konuşur ve isterse kendi gücüne uygun bir katkı seçer.",
+          "childRightsGuardrail": "Gönüllülük katılmama hakkını da içerir; katkı miktarı çocuk veya aile hakkında ahlaki hüküm doğurmaz."
+        },
+        {
+          "id": "tymm6072-oct-common-place-selection",
+          "role": "alternative",
+          "recommendedCivilDate": "2026-10-30",
+          "title": "Ekimden Kasım’a Ortak Mekân Seçkisi",
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D7",
+          "roofValueCode": "D16",
+          "indicatorCode": "D7.2.2",
+          "culturalCandidateIds": [],
+          "primaryLensId": "belonging-family-weave",
+          "supportingLensIds": [
+            "plan-act-reflect",
+            "prepared-environment"
+          ],
+          "natureContinuity": true,
+          "plannedExperience": "Çocuklar Ekim boyunca inceledikleri mekân ve nesne izlerinden bir seçki kurar, korunacak özelliği ve Kasım sorusunu birlikte belirler.",
+          "childRightsGuardrail": "Seçki çocukları karşılaştırmaz; konuşmak istemeyen çocuk nesne, işaret veya yerleştirme yoluyla katkı sunabilir."
+        }
+      ]
+    }
+  ]
+}

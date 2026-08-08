@@ -1,0 +1,1798 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+  "sourceVersion": "2024.09.02",
+  "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+  "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+  "pageNumbering": "pdf-page-label-and-viewer-1-based",
+  "sourcePageRange": [
+    324,
+    332
+  ],
+  "transcription": {
+    "method": "Poppler raw/layout text extraction and rendered-PNG visual verification",
+    "verifiedOn": "2026-08-07",
+    "layoutNormalization": "Yalnız fiziksel satır sonundaki dizgi amaçlı heceleme tireleri kaldırılmıştır; aynı fiziksel satırdaki metin, yazım ve kod anomalileri aynen korunmuştur.",
+    "statusPolicy": "source_anomaly kayıtları resmî düzeltme yayımlanana kadar etkinlik snapshot indeksine alınmaz.",
+    "indicatorCount": 219
+  },
+  "actions": [
+    {
+      "valueCode": "D1",
+      "actionCode": "D1.1",
+      "actionName": "Hak ve özgürlüklerini bilmek ve korumak",
+      "sourcePage": 324,
+      "indicators": [
+        {
+          "indicatorCode": "D1.1.1",
+          "indicatorText": "Her insanın temel hak ve özgürlüklere sahip olduğunu kabul eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.1.2",
+          "indicatorText": "Çocuk haklarını bilir.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.1.3",
+          "indicatorText": "Kendi haklarını uygun şekilde kullanır.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.1.4",
+          "indicatorText": "Kendisinin ve başkalarının haklarını savunur.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.1.5",
+          "indicatorText": "Toplumsal hayatta kadın ve erkeklerin eşit haklara sahip olduğunu bilir.",
+          "sourcePage": 324,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D1",
+      "actionCode": "D1.2",
+      "actionName": "Hakkaniyetli davranmak",
+      "sourcePage": 324,
+      "indicators": [
+        {
+          "indicatorCode": "D1.2.1",
+          "indicatorText": "Toplumsal karar alma süreçlerinde farklı görüşler olabileceğini kabul eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.2.2",
+          "indicatorText": "Haksızlıkların düzeltilmesi konusunda kararlı davranır.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.2.3",
+          "indicatorText": "Görev ve sorumluluklarını kuralına uygun olarak yerine getirir.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.2.4",
+          "indicatorText": "Bireysel farklılıkların haklardan yararlanmaya engel olmaması gerektiğini bilir.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D1.2.5",
+          "indicatorText": "Görev, sorumluluk ve ödül paylaşımında adil davranması gerektiğini bilir.",
+          "sourcePage": 324,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D2",
+      "actionCode": "D2.1",
+      "actionName": "Aile içi dayanışma göstermek",
+      "sourcePage": 324,
+      "indicators": [
+        {
+          "indicatorCode": "D2.1.1",
+          "indicatorText": "Aile fertlerinin birbirine destek olması gerektiğini fark eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.1.2",
+          "indicatorText": "Duygu ve düşüncelerini, öğrendiği bilgileri ailesiyle paylaşmaya istekli olur.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.1.3",
+          "indicatorText": "Aile üyelerinin sevinç ve üzüntülerini paylaşır.",
+          "sourcePage": 324,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D2",
+      "actionCode": "D2.2",
+      "actionName": "Aile içi iletişimi güçlendirmek",
+      "sourcePage": 324,
+      "indicators": [
+        {
+          "indicatorCode": "D2.2.1",
+          "indicatorText": "Aile ilişkilerine önem verir.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.2.2",
+          "indicatorText": "Aile içi etkili iletişimin sağlayacağı yararları fark eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.2.3",
+          "indicatorText": "Anne, baba ve aile büyüklerine hürmet gösterir.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.2.4",
+          "indicatorText": "Aileyle ilgili kararlarda kendisinin de görüşlerinin alınması gerektiğini fark eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D2",
+      "actionCode": "D2.3",
+      "actionName": "Aile içi sorumlulukları yerine getirmek",
+      "sourcePage": 324,
+      "indicators": [
+        {
+          "indicatorCode": "D2.3.1",
+          "indicatorText": "Aile içinde iş birliği yapmanın önemini fark eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.3.2",
+          "indicatorText": "Aile içi görevleri yerine getirmenin önemini fark eder.",
+          "sourcePage": 324,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D2.3.3",
+          "indicatorText": "Aile içindeki görev ve sorumluluklarını en iyi şekilde ve zamanında yapmaya özen gösterir.",
+          "sourcePage": 324,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D3",
+      "actionCode": "D3.1",
+      "actionName": "Azimli olmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D3.1.1",
+          "indicatorText": "Gayretli olmanın hedeflere ulaşma üzerindeki etkisini fark eder.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.1.2",
+          "indicatorText": "Zorlukları aşmak için çaba gösterir.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D3",
+      "actionCode": "D3.2",
+      "actionName": "Planlı olmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D3.2.1",
+          "indicatorText": "Görev ve sorumlulukları yerine getirmek için planlama yapar.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.2.2",
+          "indicatorText": "Hedeflere ulaşmak için hazırladığı planı uygular.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.2.3",
+          "indicatorText": "Zamanı etkili yönetmenin önemini fark eder.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D3",
+      "actionCode": "D3.3",
+      "actionName": "Araştırmacı ve sorgulayıcı olmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D3.3.1",
+          "indicatorText": "Yaratıcılığını geliştirecek faaliyetlere katılır.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.3.2",
+          "indicatorText": "Çeşitli fikir, argüman ve yeni bilgilere açık olur.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D.3.3.3",
+          "indicatorText": "Bilimsel, teknolojik alanlardaki gelişmelerle ilgili etkinliklere katılmaya istekli olur.",
+          "sourcePage": 325,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de gösterge kodu fazladan noktayla ‘D.3.3.3’ olarak basılmıştır; kanonik kod varsayılmamıştır."
+        }
+      ]
+    },
+    {
+      "valueCode": "D3",
+      "actionCode": "D3.4",
+      "actionName": "Çalışmalarda aktif rol almak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D3.4.1",
+          "indicatorText": "Grupla çalışma becerisi sergiler.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.4.2",
+          "indicatorText": "Sosyal sorumluluk ve toplum hizmeti çalışmala- rında aktif görev alır.",
+          "sourcePage": 325,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de ‘çalışmala- rında’ aynı fiziksel satırda bölünmüş basılmıştır; metin düzeltilmemiştir."
+        },
+        {
+          "indicatorCode": "D3.4.3",
+          "indicatorText": "Kendine uygun görevleri almaya istekli olur.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D3.4.4",
+          "indicatorText": "Kişisel ve grup içi etkinliklerde sorumluluklarını yerine getirir.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D4",
+      "actionCode": "D4.1",
+      "actionName": "Arkadaşlarına destek olmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D4.1.1",
+          "indicatorText": "İyi ve kötü zamanlarında arkadaşlarına destek olur.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.1.2",
+          "indicatorText": "Arkadaşlarının sorunlarını çözmek için çaba gösterir.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.1.3",
+          "indicatorText": "Ortak hedeflere ulaşmak için arkadaşlarıyla daya- nışma içinde olur.",
+          "sourcePage": 325,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de ‘daya- nışma’ aynı fiziksel satırda bölünmüş basılmıştır; metin düzeltilmemiştir."
+        },
+        {
+          "indicatorCode": "D4.1.4",
+          "indicatorText": "İhtiyaç duyduğunda arkadaşlarından yardım ister.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D4",
+      "actionCode": "D4.2",
+      "actionName": "Arkadaşları ile etkili iletişim kurmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D4.2.1",
+          "indicatorText": "Arkadaşlarını etkin bir şekilde dinler.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.2.2",
+          "indicatorText": "Arkadaşlarıyla duygu ve düşüncelerini paylaşır.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.2.3",
+          "indicatorText": "Arkadaşlarının duygu ve düşüncelerini anlamaya çalışır.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.2.4",
+          "indicatorText": "Arkadaşlarına karşı nazik davranır.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D4",
+      "actionCode": "D4.3",
+      "actionName": "Güvene dayalı ilişkiler kurmak",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D4.3.1",
+          "indicatorText": "Arkadaşlarına verdiği sözleri yerine getirmeye çaba gösterir.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.3.2",
+          "indicatorText": "Arkadaşının hakkını onun bulunmadığı ortamlarda da savunur.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D4",
+      "actionCode": "D4.4",
+      "actionName": "Arkadaşlarını ve onlarla vakit geçirmeyi önemsemek",
+      "sourcePage": 325,
+      "indicators": [
+        {
+          "indicatorCode": "D4.4.1",
+          "indicatorText": "Arkadaşlarıyla vakit geçirmekten keyif alır.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.4.2",
+          "indicatorText": "Arkadaşlarıyla oynamaya istekli olur.",
+          "sourcePage": 325,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D4.4.3",
+          "indicatorText": "Arkadaşlarının kişisel alan ve sınırlarını korumaya özen gösterir.",
+          "sourcePage": 325,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D5",
+      "actionCode": "D5.1",
+      "actionName": "İnsana ve topluma değer vermek",
+      "sourcePage": 326,
+      "indicators": [
+        {
+          "indicatorCode": "D5.1.1",
+          "indicatorText": "İnsanlara nazik davranır.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.1.2",
+          "indicatorText": "Sosyal ilişkilerinde sabırlı ve anlayışlı olmaya gayret eder.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.1.3",
+          "indicatorText": "Yaşlıların ve özel gereksinimli bireylerin toplumsal hayata etkin katılımını destekler.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.1.4",
+          "indicatorText": "Şiddetin her türüne karşı çıkar.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.1.5",
+          "indicatorText": "Kendisine yapılmasını istemediği davranışları başkalarına yapmaz.",
+          "sourcePage": 326,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D5",
+      "actionCode": "D5.2",
+      "actionName": "Çevreye ve canlılara değer vermek",
+      "sourcePage": 326,
+      "indicators": [
+        {
+          "indicatorCode": "D5.2.1",
+          "indicatorText": "Çevre sorunlarına yol açabilecek davranışlardan kaçınır.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.2",
+          "indicatorText": "Temiz enerji kaynaklarının önemini fark eder.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.3",
+          "indicatorText": "Çevresel sürdürülebilirliğin sağlanabilmesi için atık yönetimini önemser.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.4",
+          "indicatorText": "Tüketim tercihlerinin sürdürülebilirliğe katkıda bulunduğunu bilir.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.5",
+          "indicatorText": "Tüm canlıların haklarını korur.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.6",
+          "indicatorText": "Çevresinde yaşayan canlı türlerini tanımaya istekli olur.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.2.7",
+          "indicatorText": "Çevresini korumak ve güzelleştirmek için girişimlerde bulunur.",
+          "sourcePage": 326,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D5",
+      "actionCode": "D5.3",
+      "actionName": "Afet bilincine sahip olmak",
+      "sourcePage": 326,
+      "indicators": [
+        {
+          "indicatorCode": "D5.3.1",
+          "indicatorText": "Afet ve acil durumların her an her yerde gerçekleşebileceğini bilir.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.3.2",
+          "indicatorText": "Afet ve acil durumların neden olduğu riskleri ve bu riskleri azaltmak için alınabilecek önlemleri bilir.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.3.3",
+          "indicatorText": "Afet öncesinde, afet sırasında ve sonrasında yapılması gerekenlerin farkında olur.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.3.4",
+          "indicatorText": "Afet durumlarında ulaşabildiği insanlara ve diğer canlılara yardımcı olur.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D5.3.5",
+          "indicatorText": "Afet sonrası toplumsal dayanışmaya katkıda bulunur.",
+          "sourcePage": 326,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D6",
+      "actionCode": "D6.1",
+      "actionName": "Samimi olmak",
+      "sourcePage": 326,
+      "indicators": [
+        {
+          "indicatorCode": "D6.1.1",
+          "indicatorText": "Üzerine düşen görevleri yerine getirir.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D6.1.2",
+          "indicatorText": "Karşılaştığı ikilem durumlarında iyi niyetli ve doğru sözlü davranması gerektiğini bilir.",
+          "sourcePage": 326,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D6",
+      "actionCode": "D6.2",
+      "actionName": "Doğru ve güvenilir olmak",
+      "sourcePage": 326,
+      "indicators": [
+        {
+          "indicatorCode": "D6.2.1",
+          "indicatorText": "Duygu ve düşüncelerini açıkça ifade eder.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D6.2.2",
+          "indicatorText": "Kendisine emanet edilenlere sahip çıkmaya gayret gösterir.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D6.2.3",
+          "indicatorText": "Söz verdiği işleri zamanında ve eksiksiz yapmaya gayret eder.",
+          "sourcePage": 326,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D6.2.4",
+          "indicatorText": "Yanıltma amaçlı söz ve davranışların zararlarını fark eder.",
+          "sourcePage": 326,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D7",
+      "actionCode": "D7.1",
+      "actionName": "Duyusal derinliği anlamak",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D7.1.1",
+          "indicatorText": "Estetiğin sanat ve doğada önemli bir yere sahip olduğunu fark eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D7.1.2",
+          "indicatorText": "Güzelliğin göreceli olduğunu fark eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D7.1.3",
+          "indicatorText": "Estetik açıdan nitelikli tasarımları ve çevresel güzellikleri takdir eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D7",
+      "actionCode": "D7.2",
+      "actionName": "Sanatsal ve görsel zevkleri hayatın bir parçası hâline getirmek",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D7.2.1",
+          "indicatorText": "Geleneksel sanatlara ve yerel kültüre yönelik etkinliklere katılır.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D7.2.2",
+          "indicatorText": "Estetik unsurların korunmasının önemini fark eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D8",
+      "actionCode": "D8.1",
+      "actionName": "Kişisel özgürlük alanını korumak",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D8.1.1",
+          "indicatorText": "Her ferdin karar alma ve fikir belirtme hakkının olduğunu savunur.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.1.2",
+          "indicatorText": "Özel alanını ihlal edebilecek fiziksel temasları ayırt eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.1.3",
+          "indicatorText": "Sosyal ilişkilerinde kişisel sınırlarını belirler.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D8",
+      "actionCode": "D8.2",
+      "actionName": "Sosyal ilişkilerde kişisel alanları korumak",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D8.2.1",
+          "indicatorText": "Bedensel ve mekânsal mahremiyetin korunmasına özen gösterir.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.2.2",
+          "indicatorText": "Ortak kullanım alanlarında başkasını rahatsız edecek davranışlarda bulunmamaya dikkat eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.2.3",
+          "indicatorText": "Hak ve özgürlüklerden yararlanırken diğer insanların kişisel sınırlarını gözetir.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.2.4",
+          "indicatorText": "Zorbalık davranışlarını ayırt eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D8.2.5",
+          "indicatorText": "Zorbalığa maruz kaldığında yardım ister.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D9",
+      "actionCode": "D9.1",
+      "actionName": "Vicdanlı olmak",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D9.1.1",
+          "indicatorText": "Merhametli davranmayı gerektiren durumları fark eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.1.2",
+          "indicatorText": "İnsanların acılarına karşı duyarlı davranır.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D9",
+      "actionCode": "D9.2",
+      "actionName": "Şefkatli olmak",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D9.2.1",
+          "indicatorText": "Kendisine şefkatli davranır.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.2.2",
+          "indicatorText": "Yardıma muhtaç kişilere sabırlı ve anlayışlı davranır.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.2.3",
+          "indicatorText": "Özel gereksinimli fertlerin duygularına önem verir.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.2.4",
+          "indicatorText": "Herkesin hata yapabileceğini kabul eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.2.5",
+          "indicatorText": "Affetmenin önemini fark eder.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D9",
+      "actionCode": "D9.3",
+      "actionName": "İnsanı ve doğayı sevmek",
+      "sourcePage": 327,
+      "indicators": [
+        {
+          "indicatorCode": "D9.3.1",
+          "indicatorText": "Doğayı korumaya önem verir.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.3.2",
+          "indicatorText": "Doğadaki tüm canlıların yaşam haklarını savunur.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.3.3",
+          "indicatorText": "Hayvanlara karşı duyarlı olur.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.3.4",
+          "indicatorText": "İnsan ve diğer canlılara yardım etmekten mutluluk duyar.",
+          "sourcePage": 327,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D9.3.5",
+          "indicatorText": "Doğal yaşamı korumaya ve zenginleştirmeye yönelik etkinliklere gönüllü olarak katılır.",
+          "sourcePage": 327,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D10",
+      "actionCode": "D10.1",
+      "actionName": "İnsan ilişkilerinde yapıcı olmak",
+      "sourcePage": 328,
+      "indicators": [
+        {
+          "indicatorCode": "D10.1.1",
+          "indicatorText": "Olay ve durumlar karşısında ılımlı ve iyimser yaklaşım sergiler.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D10.1.2",
+          "indicatorText": "Çevresindekilerin başarılarını, olumlu ve güzel yanlarını takdir eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D10.1.3",
+          "indicatorText": "Grup çalışmalarında uyumlu davranır.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D10.1.4",
+          "indicatorText": "İnsanlara karşı sabır, nezaket ve anlayış gösterir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D10.1.5",
+          "indicatorText": "Gerektiğinde diğerkâm davranılması gerektiğini fark eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D10.1.6",
+          "indicatorText": "Olaylar ve durumlar karşısında farklı bakış açıları olabileceğini kabul eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D11",
+      "actionCode": "D11.1",
+      "actionName": "Kararlı olmak",
+      "sourcePage": 328,
+      "indicators": [
+        {
+          "indicatorCode": "D11.1.1",
+          "indicatorText": "Gerektiğinde kendi kararlarını alır.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.1.2",
+          "indicatorText": "Duygu ve düşüncelerini etki altında kalmadan ifade eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.1.3",
+          "indicatorText": "Hak ve özgürlüklerini kullanma ve korumaya önem verir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.1.4",
+          "indicatorText": "Gerektiğinde verdiği kararların sorumluluğunu alır.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.1.5",
+          "indicatorText": "Gerektiğinde hayır diyebilme becerisi sergiler.",
+          "sourcePage": 328,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D11",
+      "actionCode": "D11.2",
+      "actionName": "Kişisel ve toplumsal haklara saygı göstermek",
+      "sourcePage": 328,
+      "indicators": [
+        {
+          "indicatorCode": "D11.2.1",
+          "indicatorText": "Özgürlüklerini kullanırken diğer insanlara ve topluma karşı sorumluluklarına önem verir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.2.2",
+          "indicatorText": "Haklarını kullanırken diğer insanların haklarını dikkate alır.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D11.2.3",
+          "indicatorText": "Toplumsal düzenin sağlanması için kurallara uyar.",
+          "sourcePage": 328,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D12",
+      "actionCode": "D12.1",
+      "actionName": "Düşünce, duygu ve davranışlarında kontrollü olmak",
+      "sourcePage": 328,
+      "indicators": [
+        {
+          "indicatorCode": "D12.1.1",
+          "indicatorText": "Sabrın toplumsal hayattaki önemini fark eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.1.2",
+          "indicatorText": "Sabır gerektiren davranışları bilir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.1.3",
+          "indicatorText": "Beklemekte zorlandığı durumlarda dikkatini farklı bir işe yönlendirir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.1.4",
+          "indicatorText": "Gerektiğinde kendini sakinleştirir.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.1.5",
+          "indicatorText": "Zorlukların üstesinden gelmek için tahammül etmenin önemini fark eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D12",
+      "actionCode": "D12.2",
+      "actionName": "İstikrarlı olmak",
+      "sourcePage": 328,
+      "indicators": [
+        {
+          "indicatorCode": "D12.2.1",
+          "indicatorText": "Görev ve sorumluluklarını yerine getirirken kararlı davranır.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.2.2",
+          "indicatorText": "Çalışmalarında sebat eder.",
+          "sourcePage": 328,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D12.2.3",
+          "indicatorText": "Olaylar ve durumlar karşısında motivasyonunu sürdürür.",
+          "sourcePage": 328,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D13",
+      "actionCode": "D13.1",
+      "actionName": "Yeterli, dengeli ve sağlıklı beslenmek",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D13.1.1",
+          "indicatorText": "Sağlıklı ve sağlıksız besinleri ayırt eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.1.2",
+          "indicatorText": "Sağlıklı besinleri tercih eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.1.3",
+          "indicatorText": "Dengeli beslenir.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.1.4",
+          "indicatorText": "Vücudu için yeterli miktarda su ve besin alır.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D13",
+      "actionCode": "D13.2",
+      "actionName": "Sosyal ve sportif etkinliklere katılmak",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D13.2.1",
+          "indicatorText": "Spor ve egzersiz yapmanın iyi oluşa katkılarını fark eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.2.2",
+          "indicatorText": "Yaşına ve fiziksel özelliklerine uygun sosyal ve sportif etkinliklere katılır.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D13",
+      "actionCode": "D13.3",
+      "actionName": "İnsan sağlığını önemsemek",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D13.3.1",
+          "indicatorText": "Hastalıkların yayılmasını önlemek için gerekli önlemleri alır.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.3.2",
+          "indicatorText": "Su, besin kaynakları ve havayı temiz tutmanın sağlık için önemini fark eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.3.3",
+          "indicatorText": "Hastalıklardan korunma yollarını bilir.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.3.4",
+          "indicatorText": "Kimyasal maddelerin zararlı etkilerine karşı önlem alır.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.3.5",
+          "indicatorText": "Düşme, çarpma gibi ergonomik risk faktörlerine karşı önlem alır.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D13.3.6",
+          "indicatorText": "Yeterli ve düzenli uyku alışkanlığı edinir.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D14",
+      "actionCode": "D14.1",
+      "actionName": "Nezaketli olmak",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D14.1.1",
+          "indicatorText": "Her ferdin değerli olduğunu kabul eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D.14.1.2",
+          "indicatorText": "Yeni bir ortama girdiğinde selam verir.",
+          "sourcePage": 329,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de gösterge kodu fazladan noktayla ‘D.14.1.2’ olarak basılmıştır; kanonik kod varsayılmamıştır."
+        },
+        {
+          "indicatorCode": "D14.1.3",
+          "indicatorText": "Söz hakkı vermek, söz kesmemek, etkin dinlemek gibi etkili iletişim becerilerini kullanır.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.4",
+          "indicatorText": "Muhatabını dinlerken tüm dikkatini verir.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.5",
+          "indicatorText": "Konuşurken göz teması kurar.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.6",
+          "indicatorText": "Gerektiğinde teşekkür ve takdir eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.7",
+          "indicatorText": "Gerektiğinde samimiyetle özür diler.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.8",
+          "indicatorText": "Kişisel eşyalara dokunmak için izin alınması gerektiğini bilir.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.9",
+          "indicatorText": "Uygun şekilde vedalaşır.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.1.10",
+          "indicatorText": "Farklı fikirlere sahip insanlara saygı duymanın önemini fark eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D14",
+      "actionCode": "D14.2",
+      "actionName": "Kendisine saygı duymak",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D14.2.1",
+          "indicatorText": "Kendisinin de her insan gibi değerli olduğunu fark eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.2.2",
+          "indicatorText": "Bedenine ve kişisel eşyalarına dokunulması için izin istenmesi gerektiğini bilir.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.2.3",
+          "indicatorText": "Sağlığına ve öz bakımına dikkat eder.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D14",
+      "actionCode": "D14.3",
+      "actionName": "Çevresine, millî ve manevi değerlerine saygı duymak",
+      "sourcePage": 329,
+      "indicators": [
+        {
+          "indicatorCode": "D14.3.1",
+          "indicatorText": "Doğayı ve canlıları korur.",
+          "sourcePage": 329,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D14.3.2",
+          "indicatorText": "Millî ve manevi değerlere duyarlı davranır.",
+          "sourcePage": 329,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D15",
+      "actionCode": "D15.1",
+      "actionName": "Anlayışlı ve barışçıl olmak",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D15.1.1",
+          "indicatorText": "İnsanları farklılıklarıyla kabul eder.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.1.2",
+          "indicatorText": "Sevginin toplumsal barışa katkılarını fark eder.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.1.3",
+          "indicatorText": "Duygu ve düşüncelerini anlamak için muhatabını dikkatle dinler.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.1.4",
+          "indicatorText": "Başkalarının sevincine ve üzüntüsüne ortak olur.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D15",
+      "actionCode": "D15.2",
+      "actionName": "Vefalı olmak",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D15.2.1",
+          "indicatorText": "Kültürel mirasın korunmasında duyarlı davranır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.2.2",
+          "indicatorText": "Medeniyetinin gelişiminde katkısı olanları bilir.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D15",
+      "actionCode": "D15.3",
+      "actionName": "Sadakatli olmak",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D15.3.1",
+          "indicatorText": "Dürüstlüğün güvenilirlik için gerekli olduğunu bilir.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.3.2",
+          "indicatorText": "Her canlının/nesnenin sevilmeye değer yönleri olduğunu keşfeder.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D15",
+      "actionCode": "D15.4",
+      "actionName": "Özverili olmak",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D15.4.1",
+          "indicatorText": "Sevgiyi ifade etmenin farklı yolları olduğunu bilir.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.4.2",
+          "indicatorText": "Sevgisini sözel olarak ifade eder.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.4.3",
+          "indicatorText": "Sevgisini çeşitli yollarla gösterir.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.4.4",
+          "indicatorText": "Sevdiği şeye/kişiye karşı sorumlu davranışlar sergiler.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.4.5",
+          "indicatorText": "Aile büyüklerinin ilgi ve bakım ihtiyacını önem ser.",
+          "sourcePage": 330,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de ‘önem ser.’ iki fiziksel satıra tiresiz bölünmüş basılmıştır; ‘önemser’ varsayılmamıştır."
+        },
+        {
+          "indicatorCode": "D15.4.6",
+          "indicatorText": "Sevginin gerektiğinde fedakârlığa ihtiyaç duyduğunu bilir.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D15",
+      "actionCode": "D15.5",
+      "actionName": "Misafirperverlik",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D15.5.1",
+          "indicatorText": "Misafirlerine güler yüzlü ve nazik davranır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.5.2",
+          "indicatorText": "Ülkesindeki turist, göçmen, mülteci, sığınmacı gibi diğer ülke vatandaşlarına konuksever davranır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D15.5.3",
+          "indicatorText": "Misafirlerine elindeki imkânlar doğrultusunda ikramda bulunur.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D16",
+      "actionCode": "D16.1",
+      "actionName": "Kendine karşı görevlerini yerine getirmek",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D16.1.1",
+          "indicatorText": "Kararlarını çevresiyle fikir alışverişi yaparak kendisi alır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.1.2",
+          "indicatorText": "Öz bakımını doğru biçimde ve zamanında yapar.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.1.3",
+          "indicatorText": "Güvenliğini tehlikeye sokacak davranışlardan kaçınır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.1.4",
+          "indicatorText": "Verdiği kararların sorumluluğunu alır.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D16",
+      "actionCode": "D16.2",
+      "actionName": "Topluma karşı görevlerini yerine getirmek",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D16.2.1",
+          "indicatorText": "Toplumsal yardımlaşma ve dayanışma için düzelenen etkinliklere katılır.",
+          "sourcePage": 330,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de ‘düzelenen’ yazmaktadır; ‘düzenlenen’ varsayılmamıştır."
+        },
+        {
+          "indicatorCode": "D16.2.2",
+          "indicatorText": "Kamu malları ve ortak yaşam alanlarını özenli ve temiz kullanır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.2.3",
+          "indicatorText": "Ülkede yaşanan olağanüstü durumlarda (salgın, afet vb.) yardımlaşma ve dayanışma faaliyetlerine katılır.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.2.4",
+          "indicatorText": "Toplumun millî ve manevi değerlerini koruyup yaşatmaya istekli olur.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.2.5",
+          "indicatorText": "Toplumsal hayatı düzenleyen kurallara uygun hareket eder.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D16",
+      "actionCode": "D16.3",
+      "actionName": "Görev bilincine sahip olmak",
+      "sourcePage": 330,
+      "indicators": [
+        {
+          "indicatorCode": "D16.3.1",
+          "indicatorText": "Görevlerini zamanında ve eksiksiz yerine getirmeye özen gösterir.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.3.2",
+          "indicatorText": "Duygu, düşünce ve davranışlarından sorumlu olduğunu kabul eder.",
+          "sourcePage": 330,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D16.3.3",
+          "indicatorText": "Yanlış karar ve davranışlarının telafisi için çaba gösterir.",
+          "sourcePage": 330,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D17",
+      "actionCode": "D17.1",
+      "actionName": "Bilinçli tüketici olmak",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D17.1.1",
+          "indicatorText": "Harcamalarında fiş ya da fatura alındığını fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.1.2",
+          "indicatorText": "Satın alacağı ürünleri belirlerken ihtiyaçlarına öncelik verilmesi gerektiğini bilir.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.1.3",
+          "indicatorText": "Yerli ve sürdürülebilirliğe katkısı olan ürünlerin tercih edilmesi gerektiğini bilir.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.1.4",
+          "indicatorText": "İsrafın zararlarını fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D17",
+      "actionCode": "D17.2",
+      "actionName": "İsraftan kaçınmak",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D17.2.1",
+          "indicatorText": "Gıda israfını önlemeye yönelik yapılan çalışmalara katılır.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.2.2",
+          "indicatorText": "Zamanı verimli kullanmak için planlama yapar.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.2.3",
+          "indicatorText": "Enerji tasarrufuna yönelik planları uygular.",
+          "sourcePage": 331,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D17",
+      "actionCode": "D17.3",
+      "actionName": "Sahip olduklarının değerini bilmek",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D17.3.1",
+          "indicatorText": "Sahip olduklarını en verimli şekilde kullanmanın yollarını araştırır.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.3.2",
+          "indicatorText": "Kullanım ömrünü tamamlamış ürünleri dönüştürür.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.3.3",
+          "indicatorText": "Sahip olduğu eşyalardaki emeği fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D17.3.4",
+          "indicatorText": "Sahip olduğu eşyaları özenli kullanır",
+          "sourcePage": 331,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D18",
+      "actionCode": "D18.1",
+      "actionName": "Kişisel temizlik ve bakımına önem vermek",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D18.1.1",
+          "indicatorText": "Kişisel temizliğin insan ve toplum sağlığı için önemini fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.1.2",
+          "indicatorText": "Beden temizliğini zamanında ve özenli yapmaya gayret eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.1.3",
+          "indicatorText": "Kılık kıyafetinin temiz ve düzgün olmasına dikkat eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.1.4",
+          "indicatorText": "Tükettiği ürünlerin temiz ve sağlıklı olmasına özen gösterir.",
+          "sourcePage": 331,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D18",
+      "actionCode": "D18.2",
+      "actionName": "Yaşadığı ortamın temizliğine dikkat etmek",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D18.2.1",
+          "indicatorText": "Uygun temizleme araç ve yöntemlerini kullanır.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.2.2",
+          "indicatorText": "Ortam temizliğinin yetersiz olmasının yol açabileceği sorunları bilir.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.2.3",
+          "indicatorText": "Ev, sınıf, okul bahçesi gibi ortak alanların temiz- liğinde görev alır.",
+          "sourcePage": 331,
+          "status": "source_anomaly",
+          "sourceAnomaly": "PDF’de ‘temiz- liğinde’ aynı fiziksel satırda bölünmüş basılmıştır; metin düzeltilmemiştir."
+        }
+      ]
+    },
+    {
+      "valueCode": "D18",
+      "actionCode": "D18.3",
+      "actionName": "Çevresel temizliğe ve sürdürülebilirliğe önem vermek",
+      "sourcePage": 331,
+      "indicators": [
+        {
+          "indicatorCode": "D18.3.1",
+          "indicatorText": "Çevre kirliliğinin kaynaklarını, nedenlerini ve sonuçlarını bilir.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.2",
+          "indicatorText": "Doğal kaynakları temiz tutar.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.3",
+          "indicatorText": "Ekosistemi korumak için etkili atık yönetiminin önemini fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.4",
+          "indicatorText": "Temiz enerji kaynaklarının çevre ve toplum sağlığı için önemini fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.5",
+          "indicatorText": "Davranışlarının çevre temizliği üzerindeki etkilerini fark eder.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.6",
+          "indicatorText": "Çevre temizliği ve atık yönetimi konusunda örnek davranışlar sergiler.",
+          "sourcePage": 331,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D18.3.7",
+          "indicatorText": "Gelecek nesillere temiz bir çevre bırakmak için çaba gösterir.",
+          "sourcePage": 331,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D19",
+      "actionCode": "D19.1",
+      "actionName": "Millî bilinç sahibi olmak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D19.1.1",
+          "indicatorText": "Türk bayrağındaki renk ve sembolleri açıklar.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.1.2",
+          "indicatorText": "Türk bayrağına ve İstiklal Marşı’na saygı gösterir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.1.3",
+          "indicatorText": "Konuşmasında yabancı kelimeler kullanmaktan kaçınır.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.1.4",
+          "indicatorText": "Vatanını sevmenin işini en iyi şekilde yapmayı gerektirdiğini bilir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.1.5",
+          "indicatorText": "Türk kültürünün devamlılığı için çaba",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D19",
+      "actionCode": "D19.2",
+      "actionName": "Millî kimliğini tanımak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D19.2.1",
+          "indicatorText": "Millî bayramların ve anma günlerinin önemini fark eder.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.2.2",
+          "indicatorText": "Millî ve dinî bayramları coşkuyla kutlar.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.2.3",
+          "indicatorText": "Şehit ve gazilere saygı gösterir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.2.4",
+          "indicatorText": "Atalarının başarılarını takdir eder.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.2.5",
+          "indicatorText": "Bilim, sanat, spor ve kültür alanında ülkesini temsil edenleri takdir eder.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D19",
+      "actionCode": "D19.3",
+      "actionName": "Ülke varlıklarına sahip çıkmak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D19.3.1",
+          "indicatorText": "Ülkesinin ekonomik değerlerini bilir ve korur.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.3.2",
+          "indicatorText": "Koruma alanları, müzeler, el işleri, yemekler gibi somut ve ninniler, türküler, bilmeceler, destanlar gibi somut olmayan kültürel mirasını tanır.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.3.3",
+          "indicatorText": "Ülkesinin göl, dağ, canlı türleri, endemik bitki örtüsü gibi doğal güzelliklerini bilir.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D19",
+      "actionCode": "D19.4",
+      "actionName": "Bağımsızlığı korumak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D19.4.1",
+          "indicatorText": "Ülke kaynaklarını sürdürülebilir bir şekilde kullanmanın gerekliliğini fark eder.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D19.4.2",
+          "indicatorText": "Yerli ve millî ürünlerin önemini fark eder.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D20",
+      "actionCode": "D20.1",
+      "actionName": "Cömert olmak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D20.1.1",
+          "indicatorText": "İmkânları ölçüsünde maddi varlıklarını ihtiyaç sahipleriyle paylaşması gerektiğini bilir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D20.1.2",
+          "indicatorText": "İnsanlara yardım etmekten mutluluk duyar.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D20",
+      "actionCode": "D20.2",
+      "actionName": "Dayanışma ve fedakârlık göstermek",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D20.2.1",
+          "indicatorText": "İmkânları kullanırken ihtiyaç sahiplerine öncelik verir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D20.2.2",
+          "indicatorText": "Yardıma muhtaç insanların duygularını anlamaya çalışır.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D20.2.3",
+          "indicatorText": "Kendisinin de yardıma ihtiyaç duyduğu durumlara örnekler verir.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D20.2.4",
+          "indicatorText": "Hastaların, yaşlıların ve özel gereksinimli bireylerin ihtiyaçlarına öncelik verir.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "valueCode": "D20",
+      "actionCode": "D20.3",
+      "actionName": "İyiliksever olmak",
+      "sourcePage": 332,
+      "indicators": [
+        {
+          "indicatorCode": "D20.3.1",
+          "indicatorText": "İyilik yapmaya istekli olur.",
+          "sourcePage": 332,
+          "status": "verified"
+        },
+        {
+          "indicatorCode": "D20.3.2",
+          "indicatorText": "Doğaya ve hayvanlara iyi davranır.",
+          "sourcePage": 332,
+          "status": "verified"
+        }
+      ]
+    }
+  ]
+}

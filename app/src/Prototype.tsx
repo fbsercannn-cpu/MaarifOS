@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -24,8 +26,6 @@ import {
   Link2Icon,
   LockClosedIcon,
   MagicWandIcon,
-  MagnifyingGlassIcon,
-  DotsHorizontalIcon,
   PersonIcon,
   Pencil1Icon,
   PlusIcon,
@@ -63,22 +63,32 @@ import {
   createAppLockConfig,
   formatStudentPhone,
   initialAppLockAttemptState,
+  isCapabilityEnabled,
   isEncryptedBackupEnvelope,
   normalizeTurkishSearchText,
+  backupReminderState,
+  inspectStorageHealth,
+  readLastSuccessfulEncryptedBackup,
+  recordSuccessfulEncryptedBackup,
   splitStudentDisplayName,
+  visiblePrimaryNavigation,
   type AppLockAttemptState,
   type AppLockConfig,
+  type AttendanceEvent,
+  type AttendanceRecord,
   type BackupEnvelope,
   type CalendarEntry,
   type CalendarEntryStatus,
   type CalendarEntryType,
   type RecoverySnapshotMetadata,
   type RestoreMode,
+  type StorageHealthState,
   type StudentContact,
   type StoredRecord,
 } from "./core";
 import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type AuthState } from "./auth";
 import {
+  dashboardAttendanceCounts,
   loadDashboardState,
   persistAttendanceUpdate,
   persistStudentRosterChange,
@@ -86,6 +96,19 @@ import {
   type DashboardState,
   type DashboardStudent as Student,
 } from "./features/dashboard/dashboard-data";
+import { loadStudentAttendanceHistory } from "./features/attendance";
+import {
+  AttendancePanels,
+  StudentAttendanceHistoryPanel,
+} from "./features/attendance/AttendancePanels";
+import { ATTENDANCE_EVENT_LABELS } from "./features/attendance/attendance-panel-model";
+import { RouteFocusBoundary, useBrowserRouter } from "./shell";
+import { classifyApplicationError } from "./core/errors";
+import {
+  TodayScreen,
+  createTodayStudentCards,
+} from "./features/today";
+import { ClassroomToolsSheets } from "./features/classroom/ClassroomToolsSheets";
 import {
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
@@ -107,10 +130,10 @@ import {
 } from "./features/evidence/quick-observation";
 import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
 import {
-  PRESCHOOL_ACTIVITY_AREAS,
-  PRESCHOOL_ACTIVITY_SUGGESTIONS,
-  type PreschoolActivityArea,
-} from "./features/planning/activity-suggestions";
+  PlanCreationFlow,
+  type PlanCreationCommand,
+} from "./features/planning";
+import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -136,6 +159,8 @@ import {
   type CurriculumTargetSnapshot,
 } from "./features/curriculum/curriculum-catalog";
 import {
+  academicYearOperationalNotice,
+  academicYearOperationalStatus,
   loadTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
@@ -183,6 +208,18 @@ import {
   PWA_UPDATE_READY_EVENT,
 } from "./release";
 import { COLLECTION_NAMES } from "./core/domain/model";
+
+const ClassroomScreen = lazy(() =>
+  import("./features/classroom/ClassroomScreen").then((module) => ({
+    default: module.ClassroomScreen,
+  })),
+);
+
+const PremiumPlanCenterScreen = lazy(() =>
+  import("./features/premium-plans/PremiumPlanCenterScreen.tsx").then((module) => ({
+    default: module.PremiumPlanCenterScreen,
+  })),
+);
 
 const initialStudents: Student[] = [];
 
@@ -461,9 +498,16 @@ function curriculumCatalogDisplayLabel(label: string | undefined): string {
 
 type AttendanceChange = {
   studentId: string;
+  description: string;
   previousStatus: AttendanceStatus;
   nextStatus: AttendanceStatus;
+  previousMarked: boolean;
+  nextMarked: boolean;
+  previousEvents: AttendanceEvent[];
+  nextEvents: AttendanceEvent[];
 };
+
+
 
 type PendingRestore = {
   fileName: string;
@@ -534,7 +578,6 @@ type EvidenceFlowRequest = {
 
 type AppSurface =
   | "attendance"
-  | "children"
   | "student-profile"
   | "student-share"
   | "student-delete"
@@ -545,6 +588,7 @@ type AppSurface =
   | "documents"
   | "release-notes"
   | "plan-flow"
+  | "premium-plans"
   | "evidence-flow";
 
 const APP_HISTORY_MARKER = "__maarifOSSurface";
@@ -553,7 +597,6 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
   if (!state || typeof state !== "object") return null;
   const candidate = (state as Record<string, unknown>)[APP_HISTORY_MARKER];
   return candidate === "attendance" ||
-    candidate === "children" ||
     candidate === "student-profile" ||
     candidate === "student-share" ||
     candidate === "student-delete" ||
@@ -564,6 +607,7 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
     candidate === "documents" ||
     candidate === "release-notes" ||
     candidate === "plan-flow" ||
+    candidate === "premium-plans" ||
     candidate === "evidence-flow"
     ? candidate
     : null;
@@ -679,449 +723,6 @@ function createQuickObservationHeader(activityTitle: string, onClose: () => void
   );
 }
 
-type PlanCreationCommand = {
-  planId: string;
-  activityId: string;
-  planTitle: string;
-  activityTitle: string;
-  startTime: string;
-  endTime?: string;
-  curriculumTargets: CurriculumTargetSnapshot[];
-  assignmentMode: CurriculumAssignmentMode;
-  studentIds: string[];
-};
-
-function PlanCreationScreen({
-  civilDate,
-  defaultStartTime,
-  defaultEndTime,
-  ageGroup,
-  curriculumProfile,
-  students,
-  onCreate,
-}: {
-  civilDate: string;
-  defaultStartTime: string;
-  defaultEndTime: string;
-  ageGroup: string;
-  curriculumProfile: CurriculumProfileSnapshot;
-  students: Student[];
-  onCreate: (command: PlanCreationCommand) => Promise<void>;
-}) {
-  const [ids] = useState(() => ({
-    planId: crypto.randomUUID(),
-    activityId: crypto.randomUUID(),
-  }));
-  const [planTitle, setPlanTitle] = useState("Günlük öğrenme planı");
-  const [activityTitle, setActivityTitle] = useState("");
-  const [startTime, setStartTime] = useState(defaultStartTime);
-  const [endTime, setEndTime] = useState(defaultEndTime);
-  const [suggestionArea, setSuggestionArea] =
-    useState<PreschoolActivityArea>("all");
-  const curriculumAgeBand = curriculumAgeBandFromLabel(ageGroup);
-  const availableTargets = useMemo(
-    () =>
-      curriculumTargetsForProfile(
-        curriculumProfile,
-        curriculumAgeBand ?? undefined,
-      ),
-    [curriculumAgeBand, curriculumProfile],
-  );
-  const [targetQuery, setTargetQuery] = useState("");
-  const [targetDomain, setTargetDomain] = useState("");
-  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
-  const [assignmentMode, setAssignmentMode] =
-    useState<CurriculumAssignmentMode>("whole-class");
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const targetDomains = useMemo(
-    () => Array.from(new Set(availableTargets.map((target) => target.domain))),
-    [availableTargets],
-  );
-  const visibleTargets = useMemo(() => {
-    const query = targetQuery.trim().toLocaleLowerCase("tr-TR");
-    if (!query && !targetDomain) return [];
-    return availableTargets
-      .filter(
-        (target) =>
-          !targetDomain || target.domain === targetDomain,
-      )
-      .filter(
-        (target) =>
-          !query ||
-          [
-            target.referenceCode,
-            target.referenceTitle,
-            target.domain,
-            CURRICULUM_TARGET_KIND_LABELS[target.kind],
-          ]
-            .join(" ")
-            .toLocaleLowerCase("tr-TR")
-            .includes(query),
-      )
-      .slice(0, 16);
-  }, [availableTargets, targetDomain, targetQuery]);
-  const selectedTargets = availableTargets.filter((target) =>
-    selectedTargetIds.includes(target.id),
-  );
-  const visibleActivitySuggestions = useMemo(
-    () =>
-      suggestionArea === "all"
-        ? PRESCHOOL_ACTIVITY_SUGGESTIONS
-        : PRESCHOOL_ACTIVITY_SUGGESTIONS.filter(
-            (suggestion) => suggestion.area === suggestionArea,
-          ),
-    [suggestionArea],
-  );
-  const assignedStudentIds =
-    assignmentMode === "whole-class"
-      ? students.map((student) => student.id)
-      : selectedStudentIds;
-  const assignmentCount = selectedTargets.length * assignedStudentIds.length;
-
-  const save = async () => {
-    if (
-      !planTitle.trim() ||
-      !activityTitle.trim() ||
-      selectedTargets.length === 0 ||
-      assignedStudentIds.length === 0 ||
-      busy
-    ) return;
-    setBusy(true);
-    setError("");
-    try {
-      await onCreate({
-        ...ids,
-        planTitle,
-        activityTitle,
-        startTime,
-        ...(endTime ? { endTime } : {}),
-        curriculumTargets: selectedTargets,
-        assignmentMode,
-        studentIds: assignedStudentIds,
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Plan kaydedilemedi.");
-      setBusy(false);
-    }
-  };
-
-  return (
-    <MobileScroll className="d1-flow-scroll">
-      <div className="d1-flow-content">
-        <div className="d1-flow-intro">
-          <span className="d1-kicker">Bugünün uygulama kaydı</span>
-          <h1>Bir etkinlik ve bir program hedefi seçin.</h1>
-          <p>İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz.</p>
-        </div>
-
-        <section className="d1-context-card" aria-label="Plan bağlamı">
-          <span>{formatTurkishCivilDate(civilDate)}</span>
-          <strong>{curriculumDisplayLabel(curriculumProfile)}</strong>
-          <em>
-            {curriculumProfile.officialCatalogVerified
-              ? "Resmî MEB kaynağıyla doğrulanmış program"
-              : "Sınıf için seçilen program"}
-          </em>
-        </section>
-
-        <section className="plan-ideas" aria-labelledby="plan-ideas-title">
-          <div className="plan-ideas-heading">
-            <div>
-              <span className="d1-kicker">Oyun temelli fikir havuzu</span>
-              <h2 id="plan-ideas-title">Bugün neyi keşfedelim?</h2>
-            </div>
-            <strong>Birini seçin</strong>
-          </div>
-          <p>
-            Alanı seçin, ardından bir etkinliğe dokunun.
-          </p>
-          <Carousel
-            className="plan-area-carousel"
-            contentClassName="plan-area-track"
-            ariaLabel="Etkinlik fikir alanları"
-          >
-            {PRESCHOOL_ACTIVITY_AREAS.map((area) => (
-              <button
-                type="button"
-                key={area.id}
-                aria-pressed={suggestionArea === area.id}
-                onClick={() => setSuggestionArea(area.id)}
-              >
-                {area.label}
-              </button>
-            ))}
-          </Carousel>
-          <Carousel
-            className="plan-suggestion-carousel"
-            contentClassName="plan-suggestion-track"
-            ariaLabel="Etkinlik fikirleri"
-          >
-            {visibleActivitySuggestions.slice(0, 8).map((suggestion) => (
-              <button
-                type="button"
-                className="plan-suggestion"
-                key={suggestion.id}
-                aria-pressed={activityTitle === suggestion.title}
-                onClick={() => {
-                  setActivityTitle(suggestion.title);
-                  if (planTitle === "Günlük öğrenme planı") {
-                    setPlanTitle(`${suggestion.title} planı`);
-                  }
-                }}
-              >
-                <StarIcon aria-hidden="true" />
-                <strong>{suggestion.title}</strong>
-                <small>{suggestion.teacherPrompt}</small>
-                <span>Bu fikri kullan</span>
-              </button>
-            ))}
-          </Carousel>
-        </section>
-
-        <div className="d1-form">
-          <label htmlFor="d1-activity-title">Etkinlik adı</label>
-          <KeyboardInput
-            id="d1-activity-title"
-            value={activityTitle}
-            onChange={(event) => setActivityTitle(event.target.value)}
-            placeholder="Örn. Bahçede gölge incelemesi"
-            autoComplete="off"
-            autoFocus
-          />
-
-          <details className="quick-details plan-optional-details">
-            <summary>
-              <span>
-                <ClockIcon aria-hidden="true" />
-                <strong>Başlık ve saati değiştir</strong>
-                <small>İsteğe bağlı</small>
-              </span>
-              <ChevronDownIcon aria-hidden="true" />
-            </summary>
-            <div className="quick-details-fields">
-              <label htmlFor="d1-plan-title">Plan başlığı</label>
-              <KeyboardInput
-                id="d1-plan-title"
-                value={planTitle}
-                onChange={(event) => setPlanTitle(event.target.value)}
-                autoComplete="off"
-              />
-              <div className="d1-form-grid">
-                <label htmlFor="d1-start-time">Başlangıç
-                  <input
-                    id="d1-start-time"
-                    type="time"
-                    value={startTime}
-                    onChange={(event) => setStartTime(event.target.value)}
-                  />
-                </label>
-                <label htmlFor="d1-end-time">Bitiş
-                  <input
-                    id="d1-end-time"
-                    type="time"
-                    value={endTime}
-                    onChange={(event) => setEndTime(event.target.value)}
-                  />
-                </label>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <section className="curriculum-picker" aria-labelledby="curriculum-picker-title">
-          <div className="curriculum-section-heading">
-            <div>
-              <span className="d1-kicker">Program omurgası</span>
-              <h2 id="curriculum-picker-title">Bu etkinlikte ele alınacak hedefler</h2>
-            </div>
-            <strong>{selectedTargets.length} seçili</strong>
-          </div>
-          <KeyboardInput
-            value={targetQuery}
-            onChange={(event) => setTargetQuery(event.target.value)}
-            placeholder="Kod, başlık veya alan ara"
-            aria-label="Program hedeflerinde ara"
-          />
-          <Carousel
-            className="plan-area-carousel"
-            contentClassName="plan-area-track"
-            ariaLabel="Program alanları"
-          >
-            {targetDomains.map((domain) => (
-              <button
-                type="button"
-                key={domain}
-                aria-pressed={targetDomain === domain}
-                onClick={() => setTargetDomain(domain)}
-              >
-                {domain}
-              </button>
-            ))}
-          </Carousel>
-          <div className="curriculum-target-list" role="group" aria-label="Program hedefleri">
-            {visibleTargets.map((target) => {
-              const selected = selectedTargetIds.includes(target.id);
-              return (
-                <button
-                  type="button"
-                  className={selected ? "curriculum-target is-selected" : "curriculum-target"}
-                  aria-pressed={selected}
-                  key={target.id}
-                  onClick={() =>
-                    setSelectedTargetIds((current) =>
-                      current.includes(target.id)
-                        ? current.filter((id) => id !== target.id)
-                        : [...current, target.id],
-                    )
-                  }
-                >
-                  <span>
-                    <b>{target.referenceCode}</b>
-                    <small>{target.domain} · {CURRICULUM_TARGET_KIND_LABELS[target.kind]}</small>
-                  </span>
-                  <strong>{target.referenceTitle}</strong>
-                  <em>{selected ? "Seçildi" : "Seç"}</em>
-                </button>
-              );
-            })}
-          </div>
-          <p className="catalog-scope-note">
-            {targetDomain || targetQuery.trim()
-              ? "İlk 16 eşleşme gösterilir; arayarak daha da daraltabilirsiniz."
-              : "Önce bir program alanına dokunun veya hedef kodunu arayın."}
-          </p>
-        </section>
-
-        <details className="quick-details plan-optional-details">
-          <summary>
-            <span>
-              <PersonIcon aria-hidden="true" />
-              <strong>Çocuk kapsamı</strong>
-              <small>{assignmentMode === "whole-class" ? "Tüm sınıf" : `${assignedStudentIds.length} çocuk`}</small>
-            </span>
-            <ChevronDownIcon aria-hidden="true" />
-          </summary>
-          <div className="quick-details-fields">
-          <div className="assignment-mode" role="radiogroup" aria-label="Öğrenci kapsamı">
-            <label>
-              <input
-                type="radio"
-                name="assignment-mode"
-                checked={assignmentMode === "whole-class"}
-                onChange={() => setAssignmentMode("whole-class")}
-              />
-              <span><strong>Tüm sınıf</strong><small>Şu anki {students.length} aktif çocuk</small></span>
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="assignment-mode"
-                checked={assignmentMode === "selected-students"}
-                onChange={() => setAssignmentMode("selected-students")}
-              />
-              <span><strong>Seçili çocuklar</strong><small>Farklılaştırılmış takip</small></span>
-            </label>
-          </div>
-          {assignmentMode === "selected-students" ? (
-            <div className="student-assignment-list" role="group" aria-label="Seçilecek çocuklar">
-              {students.map((student) => (
-                <label key={student.id}>
-                  <input
-                    type="checkbox"
-                    checked={selectedStudentIds.includes(student.id)}
-                    onChange={(event) =>
-                      setSelectedStudentIds((current) =>
-                        event.target.checked
-                          ? [...current, student.id]
-                          : current.filter((id) => id !== student.id),
-                      )
-                    }
-                  />
-                  <span>{student.name}</span>
-                </label>
-              ))}
-            </div>
-          ) : null}
-          <div className="assignment-summary" aria-live="polite">
-            <strong>{selectedTargets.length} hedef × {assignedStudentIds.length} çocuk</strong>
-            <span>{assignmentCount} planlı takip kaydı açılacak.</span>
-          </div>
-          </div>
-        </details>
-
-        {error ? <p className="d1-error" role="alert">{error}</p> : null}
-        <button
-          className="d1-primary"
-          type="button"
-          onClick={() => void save()}
-          disabled={
-            busy ||
-            !planTitle.trim() ||
-            !activityTitle.trim() ||
-            selectedTargets.length === 0 ||
-            assignedStudentIds.length === 0
-          }
-        >
-          {busy ? "Kaydediliyor…" : "Planı kaydet ve etkinliği başlat"}
-        </button>
-      </div>
-    </MobileScroll>
-  );
-}
-
-function PlanCreationFlow({
-  civilDate,
-  defaultStartTime,
-  defaultEndTime,
-  ageGroup,
-  curriculumProfile,
-  students,
-  onCreate,
-  onClose,
-}: {
-  civilDate: string;
-  defaultStartTime: string;
-  defaultEndTime: string;
-  ageGroup: string;
-  curriculumProfile: CurriculumProfileSnapshot;
-  students: Student[];
-  onCreate: (command: PlanCreationCommand) => Promise<void>;
-  onClose: () => void;
-}) {
-  const initial = useMemo<FlowScreen>(
-    () => ({
-      id: "plan-create",
-      title: "Plan oluştur",
-      headerHeight: 64,
-      header: createFlowHeader("Plan oluştur", "1 / 1", onClose),
-      render: () => (
-        <PlanCreationScreen
-          civilDate={civilDate}
-          defaultStartTime={defaultStartTime}
-          defaultEndTime={defaultEndTime}
-          ageGroup={ageGroup}
-          curriculumProfile={curriculumProfile}
-          students={students}
-          onCreate={onCreate}
-        />
-      ),
-    }),
-    [
-      civilDate,
-      ageGroup,
-      curriculumProfile,
-      defaultEndTime,
-      defaultStartTime,
-      students,
-      onClose,
-      onCreate,
-    ],
-  );
-
-  return <FlowStack initial={initial} />;
-}
 
 type EvidenceFlowActions = {
   close: () => Promise<boolean>;
@@ -2332,6 +1933,14 @@ export default function Prototype() {
   const keyboard = useKeyboard();
   const { device, native } = useMobileDevice();
   const { bottomInset } = useKeyboardInsets();
+  const { route, navigate } = useBrowserRouter();
+  const premiumPilotPreviewEnabled =
+    isCapabilityEnabled("premiumPlanCenter") ||
+    (import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get("premiumPilot") === "1");
+  const internalStaffExportEnabled =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("premiumPilot") === "1";
   const store = useMemo(() => new IndexedDbDataStore(), []);
   const backupService = useMemo(
     () => new BackupService(store, { appVersion: CURRENT_RELEASE.version }),
@@ -2374,7 +1983,6 @@ export default function Prototype() {
   const [offlineReadiness, setOfflineReadiness] =
     useState<OfflineReadiness>("checking");
   const [attendanceOpen, setAttendanceOpen] = useState(false);
-  const [childrenOpen, setChildrenOpen] = useState(false);
   const [studentProfileOpen, setStudentProfileOpen] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentProfileForm, setStudentProfileForm] =
@@ -2403,6 +2011,10 @@ export default function Prototype() {
     useState<StudentObservationMonth>("all");
   const [studentPortfolioWorkspace, setStudentPortfolioWorkspace] =
     useState<StudentPortfolioWorkspace>(emptyStudentPortfolioWorkspace);
+  const [studentAttendanceHistory, setStudentAttendanceHistory] =
+    useState<AttendanceRecord[]>([]);
+  const [studentAttendanceHistoryError, setStudentAttendanceHistoryError] =
+    useState("");
   const [portfolioEditor, setPortfolioEditor] =
     useState<PortfolioEditorState | null>(null);
   const [portfolioError, setPortfolioError] = useState("");
@@ -2444,6 +2056,9 @@ export default function Prototype() {
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
+  const [premiumDailyTemplate, setPremiumDailyTemplate] =
+    useState<PremiumDailyTemplateSelection | null>(null);
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
     useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
@@ -2505,6 +2120,10 @@ export default function Prototype() {
   const [backupPasswordConfirm, setBackupPasswordConfirm] = useState("");
   const [restorePassword, setRestorePassword] = useState("");
   const [secureBackupError, setSecureBackupError] = useState("");
+  const [storageHealth, setStorageHealth] =
+    useState<StorageHealthState | null>(null);
+  const [lastSuccessfulBackupAt, setLastSuccessfulBackupAt] =
+    useState<string | null>(null);
   const [wipeConfirmation, setWipeConfirmation] = useState("");
   const [dataBusy, setDataBusy] = useState(false);
   const [dataStatus, setDataStatus] = useState("Bu cihazdaki veriler hazırlanıyor.");
@@ -2526,7 +2145,10 @@ export default function Prototype() {
       googleReadiness: "coming_soon",
     }),
   );
-  const [activeNav, setActiveNav] = useState("today");
+  const backupReminder = useMemo(
+    () => backupReminderState(lastSuccessfulBackupAt),
+    [lastSuccessfulBackupAt],
+  );
   const [announcement, setAnnouncement] = useState("MaarifOS hazır.");
   const authView = useMemo(() => deriveWelcomeViewModel(authState), [authState]);
   const dataHydrated =
@@ -2534,17 +2156,41 @@ export default function Prototype() {
   const writesBlocked =
     !dataHydrated || persistenceState.phase === "error" || appLocked;
 
-  const counts = useMemo(
-    () => ({
-      present: students.filter((student) => student.status === "present").length,
-      late: students.filter((student) => student.status === "late").length,
-      absent: students.filter((student) => student.status === "absent").length,
-    }),
-    [students],
-  );
+  const counts = useMemo(() => dashboardAttendanceCounts(students), [students]);
   const configuredClassroom = todayWorkspace.classroom.status === "configured"
     ? todayWorkspace.classroom
     : null;
+  const educationalWriteNotice = configuredClassroom
+    ? academicYearOperationalNotice({
+        status: configuredClassroom.operationalStatus,
+        startDate: configuredClassroom.academicYearStart,
+        endDate: configuredClassroom.academicYearEnd,
+      })
+    : null;
+  const educationalWritesDisabled = educationalWriteNotice !== null;
+  const classroomFormOperationalNotice = useMemo(() => {
+    if (!classroomForm.academicYearStart || !classroomForm.academicYearEnd) {
+      return null;
+    }
+    try {
+      const status = academicYearOperationalStatus(
+        classroomForm.academicYearStart,
+        classroomForm.academicYearEnd,
+        attendanceCivilDate,
+      );
+      return academicYearOperationalNotice({
+        status,
+        startDate: classroomForm.academicYearStart,
+        endDate: classroomForm.academicYearEnd,
+      });
+    } catch {
+      return null;
+    }
+  }, [
+    attendanceCivilDate,
+    classroomForm.academicYearEnd,
+    classroomForm.academicYearStart,
+  ]);
   const academicYearTransitionRequired =
     configuredClassroom !== null &&
     (classroomForm.academicYearName.trim() !==
@@ -2640,6 +2286,10 @@ export default function Prototype() {
     }
     return countsByStudent;
   }, [allEvidenceObservations]);
+  const todayStudentCards = useMemo(
+    () => createTodayStudentCards(students, observationCountByStudent),
+    [observationCountByStudent, students],
+  );
   const normalizedStudentSearch = normalizeTurkishSearchText(studentSearch);
   const visibleStudents = useMemo(
     () =>
@@ -2680,6 +2330,8 @@ export default function Prototype() {
     ? "evidence-flow"
     : planFlowOpen
       ? "plan-flow"
+      : premiumPlanOpen
+        ? "premium-plans"
       : studentShareOpen
         ? "student-share"
         : studentDeletionCandidate
@@ -2688,9 +2340,7 @@ export default function Prototype() {
         ? "student-profile"
         : attendanceOpen
           ? "attendance"
-          : childrenOpen
-            ? "children"
-            : classroomOpen
+          : classroomOpen
               ? "classroom"
               : plansOpen
                 ? "plans"
@@ -2794,7 +2444,28 @@ export default function Prototype() {
         const detail =
           options.failureDetail ??
           "Değişiklik bu cihaza kaydedilemedi. Yeni yazmalar güvenlik için durduruldu.";
-        markPersistenceFailure(detail);
+        pendingWriteCountRef.current = Math.max(
+          0,
+          pendingWriteCountRef.current - 1,
+        );
+        const classification = classifyApplicationError(reason);
+        if (classification.shouldFailClosed) {
+          markPersistenceFailure(detail);
+        } else {
+          const operationDetail =
+            reason instanceof Error && reason.message.trim()
+              ? reason.message
+              : detail;
+          applyPersistenceState({
+            phase: pendingWriteCountRef.current > 0 ? "pending" : "ready",
+            detail: operationDetail,
+            pendingWrites: pendingWriteCountRef.current,
+            ...(persistenceStateRef.current.lastCommittedAt
+              ? { lastCommittedAt: persistenceStateRef.current.lastCommittedAt }
+              : {}),
+          });
+          setDataStatus(operationDetail);
+        }
         throw reason;
       },
     );
@@ -3339,6 +3010,18 @@ export default function Prototype() {
     };
   }, [appLockSetting, appLocked, lockApplication]);
 
+  useEffect(() => {
+    let active = true;
+    void inspectStorageHealth().then((health) => {
+      if (active) setStorageHealth(health);
+    });
+    const storedBackup = readLastSuccessfulEncryptedBackup(window.localStorage);
+    setLastSuccessfulBackupAt(storedBackup.lastSuccessfulAt);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const createBackup = async (prefix = "maarifos-backup") => {
     if (writesBlocked) {
       setAnnouncement(
@@ -3354,16 +3037,21 @@ export default function Prototype() {
       setSecureBackupError("Yedek parolaları eşleşmiyor.");
       return null;
     }
-    const password = backupPassword;
+    const passphrase = backupPassword;
     setDataBusy(true);
     setSecureBackupError("");
     try {
       await flushPendingWrites();
-      const envelope = await backupService.exportEncryptedBackup(password);
+      const envelope = await backupService.exportEncryptedBackup(passphrase);
       const serialized = backupService.serializeEncryptedBackup(envelope);
-      await backupService.parseAndDecryptBackup(serialized, password);
+      await backupService.parseAndDecryptBackup(serialized, passphrase);
       const civilDate = envelope.encryption.createdAt.slice(0, 10);
       downloadJson(`${prefix}-${civilDate}.maarifos`, serialized);
+      recordSuccessfulEncryptedBackup(
+        window.localStorage,
+        new Date(envelope.encryption.createdAt),
+      );
+      setLastSuccessfulBackupAt(envelope.encryption.createdAt);
       setDataStatus(`Şifreli yedek doğrulandı · ${civilDate}`);
       setAnnouncement("Parola korumalı MaarifOS yedeği oluşturuldu.");
       return envelope;
@@ -3475,13 +3163,13 @@ export default function Prototype() {
       setSecureBackupError("Yedek parolası en az 10 karakter olmalıdır.");
       return;
     }
-    const password = restorePassword;
+    const passphrase = restorePassword;
     setDataBusy(true);
     setSecureBackupError("");
     try {
       const envelope = await backupService.parseAndDecryptBackup(
         pendingRestore.source,
-        password,
+        passphrase,
       );
       setPendingRestore((current) =>
         current
@@ -3519,7 +3207,7 @@ export default function Prototype() {
       return;
     }
     const restoreRequest = pendingRestore;
-    const password = restorePassword;
+    const passphrase = restorePassword;
     setDataBusy(true);
     setSecureBackupError("");
     try {
@@ -3533,7 +3221,7 @@ export default function Prototype() {
             restoreRequest.encryption === "encrypted"
               ? await backupService.restoreEncryptedBackup(
                   restoreRequest.source,
-                  password,
+                  passphrase,
                   {
                     mode,
                     createRecoverySnapshot: false,
@@ -3628,6 +3316,10 @@ export default function Prototype() {
   };
 
   const updateStudentStatus = (studentId: string) => {
+    if (educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     if (
       !persistenceReadyRef.current ||
       pendingWriteCountRef.current > 0 ||
@@ -3642,23 +3334,34 @@ export default function Prototype() {
     if (!student) return;
     const mutationSequence = attendanceMutationSequenceRef.current + 1;
     attendanceMutationSequenceRef.current = mutationSequence;
-    const status = nextStatus(student.status);
+    const status = student.attendanceMarked === false
+      ? "present"
+      : nextStatus(student.status);
     const previousAttendanceCompleted = attendanceCompleted;
     const previousLastAttendanceChange = lastAttendanceChange;
     setStudents((current) =>
-      current.map((item) => (item.id === studentId ? { ...item, status } : item)),
+      current.map((item) =>
+        item.id === studentId
+          ? { ...item, status, attendanceMarked: true }
+          : item,
+      ),
     );
     setLastAttendanceChange({
       studentId,
+      description: `${statusLabels[status]} durumu`,
       previousStatus: student.status,
       nextStatus: status,
+      previousMarked: student.attendanceMarked !== false,
+      nextMarked: true,
+      previousEvents: structuredClone(student.events ?? []),
+      nextEvents: structuredClone(student.events ?? []),
     });
     setAttendanceCompleted(false);
     setAnnouncement(`${student.name}: ${statusLabels[status]}.`);
     void enqueuePersistence(
       () =>
         persistAttendanceUpdate(store, {
-          students: [{ ...student, status }],
+          students: [{ ...student, status, attendanceMarked: true }],
           attendanceCivilDate,
           attendanceCompleted: false,
         }),
@@ -3672,7 +3375,12 @@ export default function Prototype() {
         setStudents((current) =>
           current.map((item) =>
             item.id === studentId
-              ? { ...item, status: student.status }
+              ? {
+                  ...item,
+                  status: student.status,
+                  attendanceMarked: student.attendanceMarked,
+                  events: structuredClone(student.events ?? []),
+                }
               : item,
           ),
         );
@@ -3683,6 +3391,77 @@ export default function Prototype() {
         "Yoklama değişikliği kaydedilemedi ve ekrandaki değişiklik geri alındı.",
       );
     });
+  };
+
+  const persistAttendanceEvent = async (
+    student: Student,
+    event: AttendanceEvent,
+  ): Promise<string | null> => {
+    if (dataBusy) return "Önce devam eden kaydın tamamlanmasını bekleyin.";
+    if (educationalWriteNotice) return educationalWriteNotice;
+    const previousEvents = structuredClone(student.events ?? []);
+    const nextEvents = [...previousEvents, event];
+    const nextAttendanceStatus: AttendanceStatus =
+      event.type === "excuse"
+        ? "absent"
+        : student.attendanceMarked === false
+          ? "present"
+          : student.status;
+    const nextStudent: Student = {
+      ...student,
+      status: nextAttendanceStatus,
+      attendanceMarked: true,
+      events: nextEvents,
+    };
+    const change: AttendanceChange = {
+      studentId: student.id,
+      description: `${ATTENDANCE_EVENT_LABELS[event.type]} olayı`,
+      previousStatus: student.status,
+      nextStatus: nextAttendanceStatus,
+      previousMarked: student.attendanceMarked !== false,
+      nextMarked: true,
+      previousEvents,
+      nextEvents: structuredClone(nextEvents),
+    };
+
+    setDataBusy(true);
+    setStudents((current) =>
+      current.map((item) => (item.id === student.id ? nextStudent : item)),
+    );
+    setLastAttendanceChange(change);
+    setAttendanceCompleted(false);
+    try {
+      await enqueuePersistence(
+        () =>
+          persistAttendanceUpdate(store, {
+            students: [nextStudent],
+            attendanceCivilDate,
+            attendanceCompleted: false,
+          }),
+        {
+          failureDetail:
+            "Yoklama ayrıntısı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
+          successDetail: `${student.name} için ${ATTENDANCE_EVENT_LABELS[event.type].toLocaleLowerCase("tr-TR")} kaydedildi.`,
+        },
+      );
+      if (selectedStudentId === student.id) {
+        void refreshStudentAttendanceHistory(student.id);
+      }
+      setAnnouncement(
+        `${student.name}: ${ATTENDANCE_EVENT_LABELS[event.type]} kaydedildi.`,
+      );
+      return null;
+    } catch (reason) {
+      setStudents((current) =>
+        current.map((item) => (item.id === student.id ? student : item)),
+      );
+      setLastAttendanceChange(null);
+      return reason instanceof Error
+        ? reason.message
+        : "Yoklama ayrıntısı kaydedilemedi.";
+    } finally {
+      setDataBusy(false);
+    }
   };
 
   const undoAttendanceChange = () => {
@@ -3706,20 +3485,30 @@ export default function Prototype() {
     setStudents((current) =>
       current.map((item) =>
         item.id === lastAttendanceChange.studentId
-          ? { ...item, status: lastAttendanceChange.previousStatus }
+          ? {
+              ...item,
+              status: lastAttendanceChange.previousStatus,
+              attendanceMarked: lastAttendanceChange.previousMarked,
+              events: structuredClone(lastAttendanceChange.previousEvents),
+            }
           : item,
       ),
     );
     setAttendanceCompleted(false);
     setLastAttendanceChange(null);
     setAnnouncement(
-      `${student?.name ?? "Çocuk"} için ${statusLabels[lastAttendanceChange.nextStatus]} değişikliği geri alındı.`,
+      `${student?.name ?? "Çocuk"} için ${lastAttendanceChange.description} geri alındı.`,
     );
     if (student) {
       void enqueuePersistence(
         () =>
           persistAttendanceUpdate(store, {
-            students: [{ ...student, status: changeToUndo.previousStatus }],
+            students: [{
+              ...student,
+              status: changeToUndo.previousStatus,
+              attendanceMarked: changeToUndo.previousMarked,
+              events: structuredClone(changeToUndo.previousEvents),
+            }],
             attendanceCivilDate,
             attendanceCompleted: false,
           }),
@@ -3733,7 +3522,12 @@ export default function Prototype() {
           setStudents((current) =>
             current.map((item) =>
               item.id === student.id
-                ? { ...item, status: changeToUndo.nextStatus }
+                ? {
+                    ...item,
+                    status: changeToUndo.nextStatus,
+                    attendanceMarked: changeToUndo.nextMarked,
+                    events: structuredClone(changeToUndo.nextEvents),
+                  }
                 : item,
             ),
           );
@@ -3747,6 +3541,10 @@ export default function Prototype() {
   };
 
   const completeAttendance = async () => {
+    if (educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     if (writesBlocked) return;
     setDataBusy(true);
     try {
@@ -3787,6 +3585,7 @@ export default function Prototype() {
       firstName: nameParts.firstName,
       ...(nameParts.lastName ? { lastName: nameParts.lastName } : {}),
       status: "present",
+      attendanceMarked: false,
     };
     setDataBusy(true);
     try {
@@ -3813,6 +3612,23 @@ export default function Prototype() {
         "Portfolyo verileri açılamadı; mevcut kanıtlar değiştirilmedi.",
       );
       return null;
+    }
+  };
+
+  const refreshStudentAttendanceHistory = async (studentId: string) => {
+    try {
+      const history = await loadStudentAttendanceHistory(store, studentId, {
+        limit: 30,
+      });
+      setStudentAttendanceHistory(history);
+      setStudentAttendanceHistoryError("");
+      return history;
+    } catch {
+      setStudentAttendanceHistory([]);
+      setStudentAttendanceHistoryError(
+        "Yoklama geçmişi okunamadı; mevcut günlük kayıt değiştirilmedi.",
+      );
+      return [];
     }
   };
 
@@ -3852,15 +3668,17 @@ export default function Prototype() {
     setStudentObservationFilter("all");
     setStudentObservationMonth("all");
     setStudentPortfolioWorkspace(emptyStudentPortfolioWorkspace);
+    setStudentAttendanceHistory([]);
+    setStudentAttendanceHistoryError("");
     setPortfolioEditor(null);
     setPortfolioError("");
     setRemovedStudentContact(null);
     setRemovedProfilePhoto(null);
     setStudentActionsOpenId(null);
-    setChildrenOpen(false);
     setStudentProfileOpen(true);
     setAnnouncement(`${student.name} profili açıldı.`);
     void refreshStudentPortfolio(student.id);
+    void refreshStudentAttendanceHistory(student.id);
   };
 
   const openPortfolioEditor = (observation: EvidenceObservationSummary) => {
@@ -4422,7 +4240,6 @@ export default function Prototype() {
       setStudentDeletionCandidate(student);
       setStudentDeletionImpact(impact);
       setStudentDeletionConfirmation("");
-      setChildrenOpen(false);
       setAnnouncement(
         `${student.name} için kalıcı silme etkisi hesaplandı.`,
       );
@@ -4456,7 +4273,6 @@ export default function Prototype() {
       setStudentDeletionCandidate(null);
       setStudentDeletionImpact(null);
       setStudentDeletionConfirmation("");
-      if (!native) setChildrenOpen(true);
       setAnnouncement(
         `${result.displayName} ve ${result.removedEntityCount} bağlı kayıt kalıcı olarak silindi.`,
       );
@@ -4832,6 +4648,10 @@ export default function Prototype() {
   };
 
   const completeCurrentActivity = async () => {
+    if (educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     if (!currentActivity || writesBlocked) return;
     setDataBusy(true);
     try {
@@ -4863,8 +4683,8 @@ export default function Prototype() {
     }
     keyboard.hide();
     setPlanFlowOpen(false);
+    setPremiumDailyTemplate(null);
     setEvidenceFlowRequest(null);
-    setActiveNav("today");
     const returnFocusTarget = d1ReturnFocusRef.current;
     d1ReturnFocusRef.current = null;
     window.requestAnimationFrame(() => returnFocusTarget?.focus());
@@ -4878,7 +4698,6 @@ export default function Prototype() {
       surface === "evidence-flow" && !evidenceRequest ? null : surface;
 
     setAttendanceOpen(restorableSurface === "attendance");
-    setChildrenOpen(restorableSurface === "children");
     setStudentProfileOpen(restorableSurface === "student-profile");
     setStudentShareOpen(restorableSurface === "student-share");
     if (restorableSurface !== "student-delete") {
@@ -4893,17 +4712,9 @@ export default function Prototype() {
     setDocumentsOpen(restorableSurface === "documents");
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
+    setPremiumPlanOpen(restorableSurface === "premium-plans");
     setEvidenceFlowRequest(evidenceRequest);
     setStudentActionsOpenId(null);
-    setActiveNav(
-      restorableSurface === "children"
-        ? "classroom"
-        : restorableSurface === "plans" || restorableSurface === "calendar"
-          ? "plans"
-          : restorableSurface === "documents"
-            ? "documents"
-            : "today",
-    );
   }, []);
 
   useEffect(() => {
@@ -5005,7 +4816,7 @@ export default function Prototype() {
     surfaceTransitionRef.current = null;
   }, [activeSurface, native]);
 
-  const openPlanFlow = () => {
+  const openPlanFlow = (initialTemplate?: PremiumDailyTemplateSelection) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Plan oluşturma güvenlik için kapalı.",
@@ -5015,6 +4826,14 @@ export default function Prototype() {
     if (!configuredClassroom) {
       setClassroomOpen(true);
       setAnnouncement("Plan oluşturmadan önce sınıfınızı kurun.");
+      return;
+    }
+    const futurePremiumPreparation =
+      configuredClassroom.operationalStatus === "preparation" &&
+      initialTemplate !== undefined;
+    if (educationalWriteNotice && !futurePremiumPreparation) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
       return;
     }
     if (!configuredClassroom.curriculumProfile) {
@@ -5028,6 +4847,8 @@ export default function Prototype() {
         : null;
     surfaceTransitionRef.current = "plan-flow";
     setPlansOpen(false);
+    setPremiumPlanOpen(false);
+    setPremiumDailyTemplate(initialTemplate ?? null);
     setPlanFlowOpen(true);
   };
 
@@ -5035,6 +4856,11 @@ export default function Prototype() {
     activityId: string,
     initialStudentId?: string,
   ) => {
+    if (educationalWriteNotice) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     const selected = evidenceWorkspace.activities.find((item) => item.id === activityId);
     if (!selected) {
       setAnnouncement("Etkinliğin kanıt bağlantısı açılamadı; planı yeniden kontrol edin.");
@@ -5062,7 +4888,6 @@ export default function Prototype() {
       d1ReturnFocusRef.current ??= returnFocusTarget;
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
-      setChildrenOpen(false);
       setPlansOpen(false);
       setEvidenceFlowRequest({
         activity,
@@ -5093,6 +4918,11 @@ export default function Prototype() {
     if (!configuredClassroom?.curriculumProfile) {
       setClassroomOpen(true);
       setAnnouncement("Hızlı gözlem için önce sınıf ve program kurulumunu tamamlayın.");
+      return;
+    }
+    if (educationalWriteNotice) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
       return;
     }
 
@@ -5144,7 +4974,6 @@ export default function Prototype() {
       d1ReturnFocusRef.current ??= returnFocusTarget;
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
-      setChildrenOpen(false);
       setPlansOpen(false);
       setEvidenceFlowRequest({ activity, initialStudentId: studentId });
       setAnnouncement(`${student.name} için anlık gözlem hazır.`);
@@ -5204,11 +5033,12 @@ export default function Prototype() {
     const result = await enqueuePersistence(
       async () => {
         const created = await createPlanWithActivity(store, {
-          civilDate: todayWorkspace.civilDate,
           ...command,
           curriculumProfile,
         });
-        await setTodayActivityStatus(store, created.activity.id, "in_progress");
+        if (command.civilDate === currentCivilDate) {
+          await setTodayActivityStatus(store, created.activity.id, "in_progress");
+        }
         return created;
       },
       {
@@ -5218,6 +5048,16 @@ export default function Prototype() {
       },
     );
     const refreshed = await refreshD1Workspaces();
+    if (command.civilDate !== currentCivilDate) {
+      const activity = result.activity;
+      surfaceTransitionRef.current = null;
+      setPlanFlowOpen(false);
+      setPremiumDailyTemplate(null);
+      setAnnouncement(
+        `${activity.title} ${command.civilDate} tarihi için planlandı. Etkinlik ve gözlem, plan gününde başlatılabilir.`,
+      );
+      return;
+    }
     const activity = refreshed.evidence.activities.find(
       (item) => item.id === result.activity.id,
     );
@@ -5231,9 +5071,8 @@ export default function Prototype() {
   const evidenceFlowActions: EvidenceFlowActions = {
     close: closeD1Flow,
     manageChildren: async () => {
-      surfaceTransitionRef.current = "children";
       if (await closeD1Flow()) {
-        setChildrenOpen(true);
+        navigate("classroom");
       } else {
         surfaceTransitionRef.current = null;
       }
@@ -5417,26 +5256,28 @@ export default function Prototype() {
       return;
     }
     if (id === "classroom") {
-      setActiveNav(id);
-      setChildrenOpen(true);
+      keyboard.hide();
+      navigate("classroom");
       setAnnouncement("Sınıfım bölümü açıldı.");
       return;
     }
     if (id === "plans") {
-      setActiveNav(id);
       setPlansOpen(true);
       return;
     }
     if (id === "documents") {
-      setActiveNav(id);
       setDocumentsOpen(true);
       return;
     }
-    setActiveNav(id);
+    navigate("today");
     setAnnouncement(`${label} bölümü seçildi.`);
   };
 
   const changeAttendanceOpen = (open: boolean) => {
+    if (open && educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     if (!open) keyboard.hide();
     setAttendanceOpen(open);
   };
@@ -5450,10 +5291,23 @@ export default function Prototype() {
     );
   };
 
-  const applyReadyUpdate = () => {
-    setUpdateReady(false);
-    setAnnouncement("MaarifOS güncelleniyor.");
-    window.dispatchEvent(new CustomEvent("maarifos:apply-update"));
+  const applyReadyUpdate = async () => {
+    if (dataBusy) return;
+    setDataBusy(true);
+    setAnnouncement("Bekleyen kayıtlar doğrulanıyor.");
+    try {
+      await flushPendingWrites();
+      setUpdateReady(false);
+      setAnnouncement("Kayıtlar doğrulandı; MaarifOS güncelleniyor.");
+      window.dispatchEvent(new CustomEvent("maarifos:apply-update"));
+    } catch {
+      setUpdateReady(true);
+      setAnnouncement(
+        "Güncelleme bekletildi; önce bekleyen kaydın bu cihaza yazıldığını doğrulayın.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
   };
 
   const retryPersistence = () => {
@@ -5517,264 +5371,152 @@ export default function Prototype() {
         inert={securityGateOpen}
         aria-hidden={securityGateOpen ? true : undefined}
       >
-      <MobileScroll className="maarif-scroll">
-        <main className="maarif-screen today-screen" aria-label="MaarifOS Bugün ekranı" data-testid="today-screen">
-          <header className="today-header">
-            <div className="today-title-row">
-              <div className="today-brand-title">
-                <img
-                  className="today-brand-logo"
-                  src="/assets/brand/maarifos-icon-192.png"
-                  alt=""
-                  aria-hidden="true"
-                />
-                <div>
-                  <span className="today-brand-name">MaarifOS</span>
-                  <h1>Bugün</h1>
+      <RouteFocusBoundary routeId={route.id}>
+        <MobileScroll className="maarif-scroll">
+          {route.id === "classroom" ? (
+            <Suspense
+              fallback={
+                <div className="route-loading" role="status" data-testid="classroom-route-loading">
+                  Sınıf ekranı hazırlanıyor…
                 </div>
-              </div>
-              <button
-                className="settings-button"
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                aria-label="Ayarları aç"
-              >
-                <GearIcon aria-hidden="true" />
-              </button>
-            </div>
-            <p className="today-flow-label">Günün akışı</p>
-            <p className="today-date">{formatTurkishCivilDate(attendanceCivilDate)}</p>
-            <div className="today-context" aria-label="Sınıf ve program bilgisi">
-              {configuredClassroom ? (
-                <>
-                  <span className="today-context-primary"><strong>{configuredClassroom.classroomName}</strong><b>{configuredClassroom.scheduleLabel}</b></span>
-                  <span className="today-context-program">{configuredClassroom.ageGroup ?? "Yaş grubu belirtilmedi"} · {compactProgramLabel(configuredClassroom.curriculumProgram)} · {curriculumCatalogDisplayLabel(configuredClassroom.curriculumCatalogLabel)}</span>
-                </>
-              ) : (
-                <span><strong>Sınıf kurulumu tamamlanmadı</strong> · Çalışma düzenini bir kez belirleyin</span>
-              )}
-            </div>
-            <p
-              className={`sync-state ${syncStateView.className}`}
-              data-testid="persistence-status"
-              role="status"
-              aria-live="polite"
+              }
             >
-              {syncStateView.icon}
-              {syncStateView.label}
-            </p>
-          </header>
-
-          {updateReady ? (
-            <section className="update-ready-card" aria-labelledby="update-ready-title">
-              <span className="update-ready-icon" aria-hidden="true">
-                <MagicWandIcon />
-              </span>
-              <span className="update-ready-copy">
-                <strong id="update-ready-title">Yeni sürüm hazır</strong>
-                <small>Kaydınızı tamamladıysanız güvenle güncelleyin.</small>
-              </span>
-              <button type="button" onClick={applyReadyUpdate}>
-                Şimdi güncelle
-              </button>
-            </section>
-          ) : null}
-
-          <section className="daily-summary" aria-label="Günlük özet">
-            <button className="summary-action" type="button" onClick={() => setAttendanceOpen(true)}>
-              <PersonIcon aria-hidden="true" />
-              <span><small>Bugünkü devam</small><strong>{counts.present + counts.late}/{students.length} çocuk</strong></span>
-            </button>
-            <button
-              className="summary-action"
-              type="button"
-              onClick={() => void openAcademicCalendar()}
-            >
-              <CalendarIcon aria-hidden="true" />
-              <span>
-                <small>Sınıf takvimi</small>
-                <strong>Takvimi aç</strong>
-              </span>
-            </button>
-          </section>
-
-          <section className="home-children" aria-labelledby="home-children-title">
-            <div className="home-section-heading">
-              <div>
-                <span className="section-eyebrow">Sınıfın kalbi</span>
-                <h2 id="home-children-title">Çocuklarım</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setChildrenOpen(true);
-                  setStudentSearch("");
-                  setAnnouncement("Öğrenci arama açıldı.");
+              <ClassroomScreen
+                summary={{
+                  activeStudentCount: students.length,
+                  presentStudentCount: counts.present,
+                  observedStudentCount,
                 }}
-              >
-                <MagnifyingGlassIcon aria-hidden="true" />
-                Öğrenci ara
-              </button>
-            </div>
-            {students.length > 0 ? (
-              <Carousel
-                className="home-child-carousel"
-                contentClassName="home-child-track"
-                ariaLabel="Çocuk profilleri ve hızlı gözlem eylemleri"
-              >
-                {students.map((student, index) => (
-                  <article
-                    className={`home-child-card home-child-card--tone-${(index % 5) + 1}`}
-                    key={student.id}
-                  >
-                    <button
-                      className="home-child-profile"
-                      type="button"
-                      onClick={() => openStudentProfile(student.id)}
-                      aria-label={`${student.name} profilini aç`}
-                    >
-                      <StudentAvatar
-                        student={student}
-                        className="home-child-avatar"
-                      />
-                      <span className="home-child-copy">
-                        <strong>{student.preferredName ?? student.name}</strong>
-                        {student.preferredName ? <small>{student.name}</small> : null}
-                        <small>
-                          {formatChildAge(student.birthDate, attendanceCivilDate)}
-                        </small>
-                        <em>
-                          {observationCountByStudent.get(student.id) ?? 0} gözlem
-                        </em>
-                      </span>
-                      <ChevronRightIcon aria-hidden="true" />
-                    </button>
-                    <button
-                      className="home-child-observe"
-                      type="button"
-                      onClick={() => void openStudentObservation(student.id)}
-                      disabled={dataBusy}
-                      aria-label={`${student.name} için hızlı gözlem`}
-                    >
-                      <PlusIcon aria-hidden="true" />
-                      Hızlı gözlem
-                    </button>
-                  </article>
-                ))}
-              </Carousel>
-            ) : (
-              <button
-                className="home-children-empty"
-                type="button"
-                onClick={() => setChildrenOpen(true)}
-              >
-                <span><PersonIcon aria-hidden="true" /></span>
-                <strong>Çocukları ekleyin</strong>
-                <small>Profil, günlük gözlem ve gelişim izi burada başlayacak.</small>
-              </button>
-            )}
-          </section>
-
-          <section className={`current-work ${focusActivity ? "" : "empty-work"}`} aria-labelledby="current-work-title" data-testid="current-work">
-            {focusActivity ? (
-              <>
-                <div className="current-work-heading">
-                  <p className="section-eyebrow">{focusActivity.status === "in_progress" ? "Sınıfta şimdi" : "Sıradaki etkinlik"}</p>
-                  <span className="status-label">{activityStatusLabels[focusActivity.status]}</span>
-                </div>
-                <h2 id="current-work-title">{focusActivity.title}</h2>
-                <p className="current-time">{focusActivity.startTime}{focusActivity.endTime ? `–${focusActivity.endTime}` : ""}{focusActivity.subject ? ` · ${focusActivity.subject}` : ""}</p>
-                <div className="current-details">
-                  <div className="current-meta-row"><TargetIcon aria-hidden="true" /><span>{focusActivity.curriculumConnection ?? `${focusActivity.subject ?? "Planlı etkinlik"} · Program bağlantısı`}</span></div>
-                  <div className="current-evidence-row"><ReaderIcon aria-hidden="true" /><span>{focusActivity.evidenceCount} öğrenme kanıtı</span></div>
-                </div>
-                <button
-                  className="primary-evidence-button"
-                  type="button"
-                  onClick={() => void openActivityEvidence(focusActivity.id)}
-                  disabled={dataBusy}
-                >
-                  <PlusIcon aria-hidden="true" /> {focusActivity.status === "planned" ? "Etkinliği başlat" : "Hızlı gözlem ekle"}
-                </button>
-                {focusActivity.status === "in_progress" ? (
-                  <button className="secondary-text-button" type="button" onClick={() => void completeCurrentActivity()} disabled={dataBusy}>
-                    Etkinliği tamamla
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <p className="section-eyebrow">Başlangıç</p>
-                <h2 id="current-work-title">{configuredClassroom ? "Bugün için plan eklenmedi" : "Önce sınıfınızı kurun"}</h2>
-                <p>{configuredClassroom ? "Kayıtlı bir plan olduğunda sıradaki etkinlik ve öğrenme kanıtları burada görünür." : "Sınıf adı, yaş grubu, program ve kalıcı çalışma düzenini belirleyerek başlayın."}</p>
-                <button className="empty-primary" type="button" onClick={() => configuredClassroom ? openPlanFlow() : setClassroomOpen(true)}>
-                  {configuredClassroom ? "Günlük plan oluştur" : "Sınıfı kur"}
-                </button>
-              </>
-            )}
-          </section>
-
-          <section className="today-plan" aria-labelledby="today-plan-title">
-            <div className="today-plan-heading">
-              <div>
-                <span className="today-plan-kicker">Sıradaki adımlar</span>
-                <h2 id="today-plan-title">Günün planı</h2>
-              </div>
-              <span className="today-plan-count">{todayWorkspace.planItems.length} etkinlik</span>
-            </div>
-            {todayWorkspace.planItems.length > 0 ? (
-              <div className="activity-list">
-                {todayWorkspace.planItems.map((item, index) => (
-                  <button
-                    className={`activity-row is-${item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`}
-                    type="button"
-                    key={item.id}
-                    onClick={() => {
-                      setPlansOpen(true);
-                      setAnnouncement(`${item.title} plan kaydı açıldı.`);
-                    }}
-                  >
-                    <span className="activity-marker" aria-hidden="true">{item.status === "completed" ? <CheckCircledIcon /> : index + 1}</span>
-                    <span className="activity-copy"><strong>{item.title}</strong><small>{item.startTime} · <b>{activityStatusLabels[item.status]}</b></small></span>
-                    <span className="activity-evidence">{item.evidenceCount > 0 ? `${item.evidenceCount} kanıt` : "Henüz kanıt yok"}</span>
-                    <ChevronRightIcon aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {evidenceWorkspace.pendingObservations.length > 0 ? (
-              <button className="pending-link" type="button" onClick={() => openPendingObservation()}>
-                <ClockIcon aria-hidden="true" />
-                <span>Program bağlantısı bekleyen {evidenceWorkspace.pendingObservations.length} gözlem</span>
-                <ChevronRightIcon aria-hidden="true" />
-              </button>
-            ) : null}
-            {todayWorkspace.planItems.length > 0 ? (
-              <div className="traceability-link">
-                <Link2Icon aria-hidden="true" />
-                <span>Bugünün planı {todayWorkspace.linkedLearningGoalCount} öğrenme hedefi ve {todayWorkspace.datedEvidenceCount} tarihli kanıtla bağlantılı.</span>
-              </div>
-            ) : null}
-          </section>
-        </main>
-      </MobileScroll>
+                visibleStudents={visibleStudents}
+                archivedStudents={archivedStudents}
+                searchQuery={studentSearch}
+                hasActiveSearch={Boolean(normalizedStudentSearch)}
+                openActionsStudentId={studentActionsOpenId}
+                isBusy={dataBusy}
+                educationalWritesDisabled={educationalWritesDisabled}
+                educationalWriteNotice={educationalWriteNotice}
+                getObservationCount={(studentId) =>
+                  observationCountByStudent.get(studentId) ?? 0
+                }
+                getAgeLabel={(student) =>
+                  formatChildAge(student.birthDate, attendanceCivilDate)
+                }
+                renderAvatar={(student) => {
+                  const sourceStudent = [...students, ...archivedStudents].find(
+                    (candidate) => candidate.id === student.id,
+                  );
+                  return sourceStudent ? <StudentAvatar student={sourceStudent} /> : null;
+                }}
+                onSearchQueryChange={setStudentSearch}
+                onOpenAddStudent={() => {
+                  setStudentActionsOpenId(null);
+                  setStudentAddOpen(true);
+                }}
+                onOpenExport={() => {
+                  if (classExportStudentIds.length === 0) {
+                    setClassExportStudentIds(
+                      [...students, ...archivedStudents].map((student) => student.id),
+                    );
+                  }
+                  setClassExportPreviewOpen(true);
+                }}
+                onOpenProfile={openStudentProfile}
+                onOpenObservation={openStudentObservation}
+                onToggleStudentActions={(studentId) =>
+                  setStudentActionsOpenId((current) =>
+                    current === studentId ? null : studentId,
+                  )
+                }
+                onArchiveStudent={archiveStudent}
+                onRestoreStudent={restoreStudent}
+                onDeleteStudent={(student) => {
+                  const sourceStudent = archivedStudents.find(
+                    (candidate) => candidate.id === student.id,
+                  );
+                  if (sourceStudent) void openStudentDeletion(sourceStudent);
+                }}
+              />
+            </Suspense>
+          ) : (
+            <TodayScreen
+              model={{
+                workspace: todayWorkspace,
+                civilDateLabel: formatTurkishCivilDate(attendanceCivilDate),
+                students: todayStudentCards,
+                attendance: counts,
+                syncState: syncStateView,
+                educationalWriteNotice,
+                educationalWritesDisabled,
+                dataBusy,
+                updateReady,
+                updateVersion: CURRENT_RELEASE.version,
+                pendingObservationCount: evidenceWorkspace.pendingObservations.length,
+                planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
+                premiumPlanCenterEnabled: premiumPilotPreviewEnabled,
+              }}
+              actions={{
+                onOpenSettings: () => setProfileOpen(true),
+                onApplyReadyUpdate: applyReadyUpdate,
+                onOpenClassroom: () => setClassroomOpen(true),
+                onOpenAttendance: () => changeAttendanceOpen(true),
+                onOpenCalendar: openAcademicCalendar,
+                onOpenStudentSearch: () => {
+                  setStudentSearch("");
+                  navigate("classroom");
+                  setAnnouncement("Öğrenci arama açıldı.");
+                },
+                onOpenStudentProfile: openStudentProfile,
+                onOpenStudentObservation: openStudentObservation,
+                onOpenActivityEvidence: openActivityEvidence,
+                onCompleteCurrentActivity: completeCurrentActivity,
+                onOpenPlanFlow: () => openPlanFlow(),
+                onOpenPremiumPlans: () => {
+                  if (!configuredClassroom?.curriculumProfile) {
+                    setClassroomOpen(true);
+                    setAnnouncement("Plan Kütüphanesi için önce sınıf program profilini tamamlayın.");
+                    return;
+                  }
+                  surfaceTransitionRef.current = "premium-plans";
+                  setPremiumPlanOpen(true);
+                },
+                onOpenPlanItem: (item) => {
+                  setPlansOpen(true);
+                  setAnnouncement(`${item.title} plan kaydı açıldı.`);
+                },
+                onOpenPendingObservation: () => openPendingObservation(),
+              }}
+              slots={{ formatStudentAge: formatChildAge }}
+            />
+          )}
+        </MobileScroll>
+      </RouteFocusBoundary>
 
       <nav className="bottom-nav" aria-label="Ana menü">
-        <button type="button" className={activeNav === "today" ? "is-active" : ""} onClick={() => handleNav("today", "Bugün")} aria-current={activeNav === "today" ? "page" : undefined}>
-          <HomeIcon aria-hidden="true" /><span>Bugün</span>
-        </button>
-        <button type="button" className={activeNav === "classroom" ? "is-active" : ""} onClick={() => handleNav("classroom", "Sınıfım")} aria-current={activeNav === "classroom" ? "page" : undefined}>
-          <PersonIcon aria-hidden="true" /><span>Sınıfım</span>
-        </button>
-        <button type="button" className="nav-add" onClick={() => handleNav("capture", "Kayıt Ekle")} aria-label="Kayıt ekle">
-          <PlusIcon aria-hidden="true" /><span>Kayıt Ekle</span>
-        </button>
-        <button type="button" className={activeNav === "plans" ? "is-active" : ""} onClick={() => handleNav("plans", "Planlar")} aria-current={activeNav === "plans" ? "page" : undefined}>
-          <ReaderIcon aria-hidden="true" /><span>Planlar</span>
-        </button>
-        <button type="button" className={activeNav === "documents" ? "is-active" : ""} onClick={() => handleNav("documents", "Belgeler")} aria-current={activeNav === "documents" ? "page" : undefined}>
-          <ArchiveIcon aria-hidden="true" /><span>Belgeler</span>
-        </button>
+        {visiblePrimaryNavigation().map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            className={
+              item.id === "capture"
+                ? "nav-add"
+                : route.id === item.id
+                  ? "is-active"
+                  : ""
+            }
+            onClick={() => handleNav(item.id, item.label)}
+            aria-label={item.id === "capture" ? "Kayıt ekle" : undefined}
+            aria-current={route.id === item.id ? "page" : undefined}
+          >
+            {item.id === "today" ? (
+              <HomeIcon aria-hidden="true" />
+            ) : item.id === "classroom" ? (
+              <PersonIcon aria-hidden="true" />
+            ) : (
+              <PlusIcon aria-hidden="true" />
+            )}
+            <span>{item.label}</span>
+          </button>
+        ))}
       </nav>
 
       <BottomSheet
@@ -5792,10 +5534,11 @@ export default function Prototype() {
               if (students.length === 1) {
                 void openStudentObservation(students[0].id);
               } else {
-                setChildrenOpen(true);
+                navigate("classroom");
                 setAnnouncement("Gözlem yazacağınız öğrenciyi seçin.");
               }
             }}
+            disabled={educationalWritesDisabled}
           >
             <Pencil1Icon aria-hidden="true" />
             <span>
@@ -5810,6 +5553,7 @@ export default function Prototype() {
               setCaptureMenuOpen(false);
               changeAttendanceOpen(true);
             }}
+            disabled={educationalWritesDisabled}
           >
             <CheckCircledIcon aria-hidden="true" />
             <span>
@@ -5818,6 +5562,7 @@ export default function Prototype() {
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
+          {isCapabilityEnabled("planEvidenceDetails") ? (
           <button
             type="button"
             onClick={() => {
@@ -5826,6 +5571,7 @@ export default function Prototype() {
               setCaptureMenuOpen(false);
               openPlanFlow();
             }}
+            disabled={educationalWritesDisabled}
           >
             <ReaderIcon aria-hidden="true" />
             <span>
@@ -5834,6 +5580,8 @@ export default function Prototype() {
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
+          ) : null}
+          {isCapabilityEnabled("calendarNotes") ? (
           <button
             type="button"
             onClick={() => {
@@ -5848,6 +5596,7 @@ export default function Prototype() {
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
+          ) : null}
         </div>
       </BottomSheet>
 
@@ -5927,6 +5676,16 @@ export default function Prototype() {
               />
             </label>
           </div>
+
+          {classroomFormOperationalNotice ? (
+            <div className="academic-year-form-warning" role="alert">
+              <CalendarIcon aria-hidden="true" />
+              <span>
+                <strong>Seçili tarihler bugün etkin değil</strong>
+                {classroomFormOperationalNotice}
+              </span>
+            </div>
+          ) : null}
 
           <div className="settings-grid">
             <label htmlFor="age-group">Yaş grubu
@@ -6102,9 +5861,8 @@ export default function Prototype() {
         open={plansOpen}
         onOpenChange={(open) => {
           setPlansOpen(open);
-          if (!open) setActiveNav("today");
         }}
-        title="Planlar"
+        title="Bugünün planı"
         description={`${formatTurkishCivilDate(todayWorkspace.civilDate)} · Kayıtlı etkinlikler`}
         snap={0.78}
       >
@@ -6120,7 +5878,7 @@ export default function Prototype() {
           </span>
           <ChevronRightIcon aria-hidden="true" />
         </button>
-        <button className="sheet-primary plans-create-button" type="button" onClick={openPlanFlow}>
+        <button className="sheet-primary plans-create-button" type="button" onClick={() => openPlanFlow()} disabled={educationalWritesDisabled}>
           <PlusIcon aria-hidden="true" /> Günlük plan oluştur
         </button>
         {todayWorkspace.planItems.length > 0 ? (
@@ -6131,6 +5889,7 @@ export default function Prototype() {
                 type="button"
                 key={item.id}
                 onClick={() => void openActivityEvidence(item.id)}
+                disabled={educationalWritesDisabled}
               >
                 <span className="activity-marker" aria-hidden="true">{item.status === "completed" ? <CheckCircledIcon /> : index + 1}</span>
                 <span className="activity-copy"><strong>{item.title}</strong><small>{item.startTime} · <b>{activityStatusLabels[item.status]}</b></small></span>
@@ -6150,7 +5909,6 @@ export default function Prototype() {
         open={calendarOpen}
         onOpenChange={(open) => {
           setCalendarOpen(open);
-          if (!open) setActiveNav("today");
         }}
         title="Eğitim takvimi"
         description="MEB 2026–2027 çalışma takvimi ve sınıf notları"
@@ -6398,10 +6156,9 @@ export default function Prototype() {
         open={documentsOpen}
         onOpenChange={(open) => {
           setDocumentsOpen(open);
-          if (!open) setActiveNav("today");
         }}
-        title="Belgeler"
-        description="Öğrenci dosyaları, yapay zekâ taslakları ve geri bildirim geçmişi"
+        title="Paylaşım taslakları"
+        description="Yalnız öğretmenin seçtiği kapsamla hazırlanan metin dışa aktarımları"
         snap={0.82}
       >
         <section className="documents-coming-soon">
@@ -6445,7 +6202,7 @@ export default function Prototype() {
               type="button"
               onClick={() => {
                 setDocumentsOpen(false);
-                setChildrenOpen(true);
+                navigate("classroom");
                 setStudentAddOpen(true);
               }}
             >
@@ -6456,413 +6213,34 @@ export default function Prototype() {
         </section>
       </BottomSheet>
 
-      <BottomSheet
-        open={childrenOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            keyboard.hide();
-            setStudentActionsOpenId(null);
-            setStudentAddOpen(false);
-            setStudentSearch("");
-            setClassExportPreviewOpen(false);
-          }
-          setChildrenOpen(open);
+      <ClassroomToolsSheets
+        addOpen={studentAddOpen}
+        exportOpen={classExportPreviewOpen}
+        busy={dataBusy}
+        newStudentName={newStudentName}
+        civilDate={attendanceCivilDate}
+        exportStartDate={classExportStartDate}
+        exportEndDate={classExportEndDate}
+        exportNameMode={classExportNameMode}
+        exportStudentIds={classExportStudentIds}
+        students={[...students, ...archivedStudents]}
+        observationCount={classExportObservations.length}
+        onAddOpenChange={(open) => {
+          if (!open) keyboard.hide();
+          setStudentAddOpen(open);
         }}
-        title="Sınıfım"
-        description={`${students.length} sınıfta · ${archivedStudents.length} sınıftan ayrılmış çocuk`}
-        snap={1}
-      >
-        <div className="roster-overview" aria-label="Sınıf özeti">
-          <div>
-            <strong>{students.length}</strong>
-            <span>Aktif çocuk</span>
-          </div>
-          <div>
-            <strong>{counts.present}</strong>
-            <span>Bugün geldi</span>
-          </div>
-          <div>
-            <strong>
-              {observedStudentCount}/{students.length}
-            </strong>
-            <span>Gözlem izi</span>
-          </div>
-        </div>
-
-        <div className="roster-toolbar">
-          <div className="roster-search">
-            <MagnifyingGlassIcon aria-hidden="true" />
-              <KeyboardInput
-              aria-label="Öğrenci ara"
-              value={studentSearch}
-              onChange={(event) => setStudentSearch(event.target.value)}
-              placeholder="Ad veya soyad ile ara"
-              autoComplete="off"
-            />
-            {studentSearch ? (
-              <button
-                type="button"
-                onClick={() => setStudentSearch("")}
-                aria-label="Aramayı temizle"
-              >
-                <Cross2Icon aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-          <button
-            className="roster-add-trigger"
-            type="button"
-            onClick={() => {
-              setStudentActionsOpenId(null);
-              setStudentAddOpen((current) => !current);
-            }}
-            aria-expanded={studentAddOpen}
-            aria-controls="student-add-form"
-          >
-            <PlusIcon aria-hidden="true" />
-            Çocuk ekle
-          </button>
-          <button
-            className="roster-export-trigger"
-            type="button"
-            onClick={() => {
-              setClassExportPreviewOpen((current) => {
-                const next = !current;
-                if (next && classExportStudentIds.length === 0) {
-                  setClassExportStudentIds(
-                    [...students, ...archivedStudents].map(
-                      (student) => student.id,
-                    ),
-                  );
-                }
-                return next;
-              });
-            }}
-            aria-label="Sınıfın tüm gözlemlerini metin olarak dışa aktar"
-            aria-expanded={classExportPreviewOpen}
-            aria-controls="class-observation-export-preview"
-          >
-            <DownloadIcon aria-hidden="true" />
-            Gözlem dökümü
-          </button>
-        </div>
-
-        {classExportPreviewOpen ? (
-          <section
-            className="roster-export-preview"
-            id="class-observation-export-preview"
-            aria-labelledby="class-observation-export-heading"
-          >
-            <div className="roster-export-preview-heading">
-              <div>
-                <span className="d1-kicker">Paylaşmadan önce denetle</span>
-                <h3 id="class-observation-export-heading">
-                  Sınıf gözlem dökümü
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setClassExportPreviewOpen(false)}
-                aria-label="Dışa aktarım önizlemesini kapat"
-              >
-                <Cross2Icon aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="roster-export-date-grid">
-              <label>
-                Başlangıç
-                <KeyboardInput
-                  type="date"
-                  value={classExportStartDate}
-                  max={classExportEndDate || attendanceCivilDate}
-                  onChange={(event) =>
-                    setClassExportStartDate(event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                Bitiş
-                <KeyboardInput
-                  type="date"
-                  value={classExportEndDate}
-                  min={classExportStartDate || undefined}
-                  max={attendanceCivilDate}
-                  onChange={(event) =>
-                    setClassExportEndDate(event.target.value)
-                  }
-                />
-              </label>
-            </div>
-
-            <fieldset className="roster-export-name-mode">
-              <legend>Metinde kullanılacak ad</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="class-export-name-mode"
-                  checked={classExportNameMode === "preferred"}
-                  onChange={() => setClassExportNameMode("preferred")}
-                />
-                Tercih edilen ad
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="class-export-name-mode"
-                  checked={classExportNameMode === "registered"}
-                  onChange={() => setClassExportNameMode("registered")}
-                />
-                Kayıtlı tam ad
-              </label>
-            </fieldset>
-
-            <details className="roster-export-students">
-              <summary>
-                Çocuk kapsamı
-                <strong>
-                  {classExportStudentIds.length}/
-                  {students.length + archivedStudents.length}
-                </strong>
-              </summary>
-              <div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setClassExportStudentIds(
-                      [...students, ...archivedStudents].map(
-                        (student) => student.id,
-                      ),
-                    )
-                  }
-                >
-                  Tümünü seç
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassExportStudentIds([])}
-                >
-                  Temizle
-                </button>
-              </div>
-              {[...students, ...archivedStudents].map((student) => (
-                <label key={student.id}>
-                  <input
-                    type="checkbox"
-                    checked={classExportStudentIds.includes(student.id)}
-                    onChange={(event) =>
-                      setClassExportStudentIds((current) =>
-                        event.target.checked
-                          ? [...current, student.id]
-                          : current.filter((id) => id !== student.id),
-                      )
-                    }
-                  />
-                  {student.preferredName ?? student.name}
-                </label>
-              ))}
-            </details>
-
-            <div className="roster-export-summary">
-              <strong>{classExportObservations.length} gözlem</strong>
-              <span>
-                {classExportStudents.length} çocuk · Telefon ve fotoğraf dahil
-                edilmeyecek
-              </span>
-            </div>
-
-            <button
-              className="roster-export-download"
-              type="button"
-              onClick={downloadClassObservations}
-              disabled={classExportStudents.length === 0}
-            >
-              <DownloadIcon aria-hidden="true" />
-              Düz metin dosyasını indir
-            </button>
-          </section>
-        ) : null}
-
-        {studentAddOpen ? (
-          <form
-            id="student-add-form"
-            className="children-form roster-add-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addStudent();
-            }}
-          >
-            <label htmlFor="new-student-name">Çocuğun adı</label>
-            <div className="children-add-row">
-              <KeyboardInput
-                id="new-student-name"
-                value={newStudentName}
-                onChange={(event) => setNewStudentName(event.target.value)}
-                placeholder="Ad ve soyad"
-                autoComplete="off"
-              />
-              <button type="submit" disabled={!newStudentName.trim() || dataBusy}>
-                Ekle
-              </button>
-            </div>
-          </form>
-        ) : null}
-
-        <section
-          className="children-section roster-section"
-          aria-labelledby="active-students-heading"
-        >
-          <div className="roster-section-heading">
-            <h3 id="active-students-heading">Sınıftaki çocuklar</h3>
-            <span>{visibleStudents.length} gösteriliyor</span>
-          </div>
-          {visibleStudents.length > 0 ? (
-            <ul className="children-list roster-list">
-              {visibleStudents.map((student) => {
-                const observationCount =
-                  observationCountByStudent.get(student.id) ?? 0;
-                const actionsOpen = studentActionsOpenId === student.id;
-                return (
-                  <li
-                    className="children-row roster-card"
-                    data-actions-open={actionsOpen ? "true" : "false"}
-                    key={student.id}
-                  >
-                    <div className="roster-card-main">
-                      <button
-                        className="children-profile-button"
-                        type="button"
-                        onClick={() => openStudentProfile(student.id)}
-                        aria-label={`${student.name} profilini aç`}
-                      >
-                        <StudentAvatar student={student} />
-                        <span className="student-name">
-                          <strong>{student.preferredName ?? student.name}</strong>
-                          <small>
-                            {student.preferredName ? `${student.name} · ` : ""}
-                            {formatChildAge(student.birthDate, attendanceCivilDate)}
-                          </small>
-                          <span>
-                            <i
-                              className={`roster-status-dot roster-status-dot--${student.status}`}
-                            />
-                            {statusLabels[student.status]} · {observationCount} gözlem
-                          </span>
-                        </span>
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                      <button
-                        className="roster-quick-action"
-                        type="button"
-                        onClick={() => void openStudentObservation(student.id)}
-                        disabled={dataBusy}
-                        aria-label={`${student.name} için hızlı gözlem`}
-                      >
-                        <PlusIcon aria-hidden="true" />
-                      </button>
-                      <button
-                        className="roster-more-action"
-                        type="button"
-                        onClick={() =>
-                          setStudentActionsOpenId((current) =>
-                            current === student.id ? null : student.id,
-                          )
-                        }
-                        aria-label={`${student.name} için işlemler`}
-                        aria-expanded={actionsOpen}
-                        aria-controls={`student-actions-${student.id}`}
-                      >
-                        <DotsHorizontalIcon aria-hidden="true" />
-                      </button>
-                    </div>
-                    {actionsOpen ? (
-                      <div
-                        className="roster-card-actions"
-                        id={`student-actions-${student.id}`}
-                        role="group"
-                        aria-label={`${student.name} işlemleri`}
-                      >
-                        <span>Geçmiş gözlem ve devam kayıtları korunur.</span>
-                        <button
-                          className="roster-action-observe"
-                          type="button"
-                          onClick={() => void openStudentObservation(student.id)}
-                          disabled={dataBusy}
-                          aria-label={`${student.name} için hızlı gözlem menü işlemi`}
-                        >
-                          <PlusIcon aria-hidden="true" />
-                          Gözlem ekle
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void archiveStudent(student.id)}
-                          disabled={dataBusy}
-                          aria-label={`${student.name} çocuğunu sınıftan ayır`}
-                        >
-                          Arşivle
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="roster-empty" role="status">
-              <MagnifyingGlassIcon aria-hidden="true" />
-              <strong>Eşleşen çocuk bulunamadı</strong>
-              <span>Arama ifadesini değiştirerek yeniden deneyin.</span>
-            </div>
-          )}
-        </section>
-
-        {archivedStudents.length > 0 ? (
-          <details className="roster-archive">
-            <summary>
-              <span>Sınıftan ayrılanlar / arşivlenenler · geri al veya kalıcı sil</span>
-              <strong>{archivedStudents.length}</strong>
-              <ChevronDownIcon aria-hidden="true" />
-            </summary>
-            <ul className="children-list roster-archive-list">
-              {archivedStudents.map((student) => (
-                <li className="children-row children-row--archived" key={student.id}>
-                  <StudentAvatar student={student} />
-                  <span className="student-name">
-                    <strong>{student.name}</strong>
-                    <small>Geçmiş kayıtları korunuyor</small>
-                  </span>
-                  <div className="archived-student-actions">
-                    <button
-                      type="button"
-                      onClick={() => openStudentProfile(student.id)}
-                      disabled={dataBusy}
-                    >
-                      Dosya
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void restoreStudent(student.id)}
-                      disabled={dataBusy}
-                      aria-label={`${student.name} çocuğunu sınıfa geri al`}
-                    >
-                      Geri al
-                    </button>
-                    <button
-                      className="is-danger"
-                      type="button"
-                      onClick={() => void openStudentDeletion(student)}
-                      disabled={dataBusy}
-                      aria-label={`${student.name} çocuğunu kalıcı sil`}
-                    >
-                      Sil
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </BottomSheet>
+        onExportOpenChange={(open) => {
+          if (!open) keyboard.hide();
+          setClassExportPreviewOpen(open);
+        }}
+        onNewStudentNameChange={setNewStudentName}
+        onAddStudent={addStudent}
+        onExportStartDateChange={setClassExportStartDate}
+        onExportEndDateChange={setClassExportEndDate}
+        onExportNameModeChange={setClassExportNameMode}
+        onExportStudentIdsChange={setClassExportStudentIds}
+        onDownload={downloadClassObservations}
+      />
 
       <BottomSheet
         open={studentDeletionCandidate !== null}
@@ -6871,7 +6249,6 @@ export default function Prototype() {
             setStudentDeletionCandidate(null);
             setStudentDeletionImpact(null);
             setStudentDeletionConfirmation("");
-            if (!native) setChildrenOpen(true);
           }
         }}
         title="Kalıcı öğrenci silme"
@@ -7028,7 +6405,11 @@ export default function Prototype() {
             <section className="student-profile-metrics" aria-label="Profil göstergeleri">
               <div>
                 <small>Bugünkü devam</small>
-                <strong>{statusLabels[selectedProfileStudent.status]}</strong>
+                <strong>
+                  {selectedProfileStudent.attendanceMarked === false
+                    ? "İşaretlenmedi"
+                    : statusLabels[selectedProfileStudent.status]}
+                </strong>
               </div>
               <button
                 type="button"
@@ -7056,21 +6437,27 @@ export default function Prototype() {
               </button>
             </section>
 
-            <button
-              className="student-share-trigger"
-              type="button"
-              onClick={() => void openStudentShareCenter()}
-            >
-              <UploadIcon aria-hidden="true" />
-              <span>
-                <strong>Paylaşım ve yapay zekâ merkezi</strong>
-                <small>
-                  İdare / rehberlik / veli dosyası; ChatGPT veya Gemini
-                  taslağı; geri bildirim kaydı
-                </small>
-              </span>
-              <ChevronRightIcon aria-hidden="true" />
-            </button>
+            <StudentAttendanceHistoryPanel
+              records={studentAttendanceHistory}
+              error={studentAttendanceHistoryError}
+              formatCivilDate={formatTurkishCivilDate}
+            />
+
+            {isCapabilityEnabled("documentCenter") ||
+            isCapabilityEnabled("aiFeedback") ? (
+              <button
+                className="student-share-trigger"
+                type="button"
+                onClick={() => void openStudentShareCenter()}
+              >
+                <UploadIcon aria-hidden="true" />
+                <span>
+                  <strong>Paylaşım taslakları</strong>
+                  <small>Yalnız çalışan dışa aktarımlar ve öğretmen onaylı taslaklar</small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            ) : null}
 
             <nav className="student-profile-tabs" aria-label="Çocuk profili bölümleri">
               <button
@@ -7080,19 +6467,21 @@ export default function Prototype() {
               >
                 Akış
               </button>
-              <button
-                type="button"
-                aria-current={studentProfileTab === "portfolio" ? "page" : undefined}
-                onClick={() => {
-                  setStudentProfileTab("portfolio");
-                  setStudentObservationFilter("all");
-                  setStudentObservationMonth("all");
-                  setStudentObservationLimit(20);
-                  void refreshStudentPortfolio(selectedProfileStudent.id);
-                }}
-              >
-                Portfolyo
-              </button>
+              {isCapabilityEnabled("portfolio") ? (
+                <button
+                  type="button"
+                  aria-current={studentProfileTab === "portfolio" ? "page" : undefined}
+                  onClick={() => {
+                    setStudentProfileTab("portfolio");
+                    setStudentObservationFilter("all");
+                    setStudentObservationMonth("all");
+                    setStudentObservationLimit(20);
+                    void refreshStudentPortfolio(selectedProfileStudent.id);
+                  }}
+                >
+                  Portfolyo
+                </button>
+              ) : null}
               <button
                 type="button"
                 aria-current={studentProfileTab === "details" ? "page" : undefined}
@@ -7115,7 +6504,7 @@ export default function Prototype() {
               className="student-profile-observe"
               type="button"
               onClick={() => void openStudentObservation(selectedProfileStudent.id)}
-              disabled={dataBusy || archivedStudents.some(
+              disabled={dataBusy || educationalWritesDisabled || archivedStudents.some(
                 (student) => student.id === selectedProfileStudent.id,
               )}
             >
@@ -7247,7 +6636,7 @@ export default function Prototype() {
                               ) : null}
                             </details>
                           ) : null}
-                          {pending ? (
+                          {pending && isCapabilityEnabled("planEvidenceDetails") ? (
                             <button
                               type="button"
                               onClick={() => openPendingObservation(observation)}
@@ -8022,7 +7411,7 @@ export default function Prototype() {
             setStudentProfileOpen(true);
           }
         }}
-        title="Paylaşım ve yapay zekâ"
+        title="Paylaşım taslağı"
         description={
           selectedProfileStudent
             ? `${selectedProfileStudent.name} · kapsamı ve alıcıyı siz seçersiniz`
@@ -8442,55 +7831,25 @@ export default function Prototype() {
         ) : null}
       </BottomSheet>
 
-      <BottomSheet
+      <AttendancePanels
         open={attendanceOpen}
         onOpenChange={changeAttendanceOpen}
-        title="Bugünün devam durumu"
-        description={`${formatTurkishCivilDate(attendanceCivilDate)} · Bir çocuğa dokunarak Geldi → Geç geldi → Gelmedi durumları arasında ilerleyin.`}
-        snap={0.84}
-      >
-        <div className="attendance-list">
-          {students.map((student) => (
-            <button
-              className="student-row"
-              type="button"
-              key={student.id}
-              onClick={() => updateStudentStatus(student.id)}
-              disabled={
-                writesBlocked ||
-                persistenceState.phase === "pending" ||
-                dataBusy
-              }
-            >
-              <StudentAvatar student={student} />
-              <span className="student-name">{student.name}</span>
-              <span className={`status-pill status-pill--${student.status}`}>{statusLabels[student.status]}</span>
-            </button>
-          ))}
-        </div>
-        {lastAttendanceChange ? (
-          <button
-            className="attendance-undo"
-            type="button"
-            onClick={undoAttendanceChange}
-            disabled={
-              writesBlocked ||
-              persistenceState.phase === "pending" ||
-              dataBusy
-            }
-          >
-            Son değişikliği geri al
-          </button>
-        ) : null}
-        <button
-          className="sheet-primary"
-          type="button"
-          onClick={() => void completeAttendance()}
-          disabled={dataBusy || writesBlocked}
-        >
-          <CheckCircledIcon aria-hidden="true" /> Devam durumunu tamamla
-        </button>
-      </BottomSheet>
+        students={students}
+        civilDate={attendanceCivilDate}
+        formattedCivilDate={formatTurkishCivilDate(attendanceCivilDate)}
+        statusLabels={statusLabels}
+        renderAvatar={(student) => <StudentAvatar student={student} />}
+        writesBlocked={writesBlocked}
+        educationalWritesDisabled={educationalWritesDisabled}
+        persistencePending={persistenceState.phase === "pending"}
+        dataBusy={dataBusy}
+        canUndo={lastAttendanceChange !== null}
+        onToggleStatus={updateStudentStatus}
+        onUndo={undoAttendanceChange}
+        onComplete={() => void completeAttendance()}
+        onSaveEvent={persistAttendanceEvent}
+      />
+
 
       <BottomSheet
         open={profileOpen}
@@ -8635,6 +7994,7 @@ export default function Prototype() {
             </small>
           </section>
 
+          {isCapabilityEnabled("googleAuth") ? (
           <section className="security-section" aria-labelledby="account-heading">
             <div className="security-heading-row">
               <div>
@@ -8654,6 +8014,7 @@ export default function Prototype() {
             </button>
             <small className="provider-status">{authView.googleAction.statusText}</small>
           </section>
+          ) : null}
 
           <section className="security-section" aria-labelledby="install-heading">
             <div className="security-heading-row">
@@ -8713,6 +8074,51 @@ export default function Prototype() {
                 ))}
               </ul>
             ) : null}
+          </section>
+
+          <section
+            className="security-section storage-health-section"
+            aria-labelledby="storage-health-heading"
+          >
+            <div className="security-heading-row">
+              <div>
+                <h3 id="storage-health-heading">Yerel kasa durumu</h3>
+                <p>Tarayıcı kalıcılığı, kullanılabilir alan ve yedek yaşı birlikte izlenir.</p>
+              </div>
+            </div>
+            <div className="storage-health-grid" aria-live="polite">
+              <article>
+                <strong>Kalıcı depolama</strong>
+                <span>
+                  {storageHealth?.persistence.message ??
+                    "Kalıcı depolama desteği kontrol ediliyor."}
+                </span>
+              </article>
+              <article
+                data-level={storageHealth?.estimate.level ?? "unknown"}
+              >
+                <strong>Yerel alan</strong>
+                <span>
+                  {storageHealth?.estimate.message ??
+                    "Yerel kullanım ve kota kontrol ediliyor."}
+                </span>
+                {storageHealth?.estimate.level === "warning" ? (
+                  <small>Alan %80 eşiğini geçti; eski dışa aktarımları cihazdan kaldırıp şifreli yedek alın.</small>
+                ) : null}
+                {storageHealth?.estimate.level === "critical" ? (
+                  <small>Alan %90 eşiğini geçti; yeni medya eklemeden önce cihazda alan açın ve şifreli yedek alın.</small>
+                ) : null}
+              </article>
+              <article data-level={backupReminder.kind}>
+                <strong>Son şifreli yedek</strong>
+                <span>{backupReminder.message}</span>
+                {lastSuccessfulBackupAt ? (
+                  <time dateTime={lastSuccessfulBackupAt}>
+                    {formatTurkishCivilDate(lastSuccessfulBackupAt.slice(0, 10))}
+                  </time>
+                ) : null}
+              </article>
+            </div>
           </section>
 
           <section className="security-section" aria-labelledby="backup-heading">
@@ -8974,8 +8380,42 @@ export default function Prototype() {
               curriculumProfile={configuredClassroom.curriculumProfile}
               students={students}
               onCreate={createPlanAndStart}
+              initialTemplate={premiumDailyTemplate ?? undefined}
               onClose={() => void closeD1Flow()}
             />
+          </Dialog.Content>
+        </Dialog.Root>
+      ) : null}
+
+      {premiumPlanOpen && premiumPilotPreviewEnabled && configuredClassroom?.curriculumProfile ? (
+        <Dialog.Root
+          open
+          onOpenChange={(open) => {
+            if (!open) setPremiumPlanOpen(false);
+          }}
+        >
+          <Dialog.Overlay className="d1-flow-overlay" />
+          <Dialog.Content className="d1-flow-layer" key="premium-plan-center">
+            <Dialog.Title className="sr-only">Plan Kütüphanesi</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Kapalı premium pilotun yıllık plan, pedagojik lens ve etkinlik seçimi.
+            </Dialog.Description>
+            <Suspense fallback={<div className="premium-loading">Plan Kütüphanesi açılıyor…</div>}>
+              <PremiumPlanCenterScreen
+                store={store}
+                curriculumProfile={configuredClassroom.curriculumProfile}
+                ageGroup={configuredClassroom.ageGroup ?? ""}
+                internalStaffExportEnabled={internalStaffExportEnabled}
+                valueEvidenceWritesDisabled={
+                  writesBlocked || educationalWritesDisabled
+                }
+                onClose={() => setPremiumPlanOpen(false)}
+                onUseActivity={(selection) => {
+                  setPremiumPlanOpen(false);
+                  openPlanFlow(selection);
+                }}
+              />
+            </Suspense>
           </Dialog.Content>
         </Dialog.Root>
       ) : null}

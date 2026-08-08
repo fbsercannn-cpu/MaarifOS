@@ -5,6 +5,19 @@ import process from "node:process";
 const projectRoot = new URL("../", import.meta.url);
 const port = Number(process.env.MOBILE_RUNTIME_TEST_PORT ?? 4174);
 const healthUrl = `http://127.0.0.1:${port}/tests/runtime-fixture.html`;
+const rawArguments = process.argv.slice(2);
+const budgetArgument = rawArguments.find((argument) =>
+  argument.startsWith("--budget-ms="),
+);
+const budgetMs = budgetArgument
+  ? Number(budgetArgument.slice("--budget-ms=".length))
+  : 0;
+const playwrightArguments = rawArguments.filter(
+  (argument) => argument !== budgetArgument,
+);
+if (budgetArgument && (!Number.isFinite(budgetMs) || budgetMs <= 0)) {
+  throw new Error("Runtime süre bütçesi pozitif milisaniye olmalıdır.");
+}
 
 function waitForExit(child) {
   return new Promise((resolve, reject) => {
@@ -45,10 +58,11 @@ const server = spawn(
 );
 
 try {
+  const startedAt = Date.now();
   await waitForServer(server);
   const playwright = spawn(
     process.execPath,
-    ["./node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(2)],
+    ["./node_modules/@playwright/test/cli.js", "test", ...playwrightArguments],
     {
       cwd: projectRoot,
       env: { ...process.env, MOBILE_RUNTIME_EXTERNAL_SERVER: "1", MOBILE_RUNTIME_TEST_PORT: String(port) },
@@ -56,7 +70,18 @@ try {
     },
   );
   const result = await waitForExit(playwright);
-  process.exitCode = result.code ?? 1;
+  const elapsedMs = Date.now() - startedAt;
+  if (result.code === 0 && budgetMs > 0 && elapsedMs > budgetMs) {
+    console.error(
+      `Runtime test dilimi ${elapsedMs} ms sürdü; bütçe ${budgetMs} ms.`,
+    );
+    process.exitCode = 1;
+  } else {
+    if (result.code === 0 && budgetMs > 0) {
+      console.log(`Runtime süre bütçesi geçti: ${elapsedMs}/${budgetMs} ms.`);
+    }
+    process.exitCode = result.code ?? 1;
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Runtime testleri başlatılamadı.");
   process.exitCode = 1;

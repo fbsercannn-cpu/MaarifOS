@@ -11,6 +11,7 @@ export const COLLECTION_NAMES = [
   "calendarEntries",
   "maarifReferences",
   "evidenceCurriculumLinks",
+  "valueEvidenceLinks",
   "portfolioSelections",
   "reportDrafts",
   "externalFeedback",

@@ -63,16 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.7.0",
-  releasedOn: "2026-07-29",
-  title: "Sade kayıt akışı ve tam TYMM öğrenme çıktıları",
+  version: "0.8.0",
+  releasedOn: "2026-08-08",
+  title: "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
   notes: Object.freeze([
-    "Kayıt Ekle artık gözlem, yoklama, etkinlik planı ve takvim notunu tek dokunuşla seçtiren sade menüyü açar.",
-    "Hızlı gözlem ana akışı öğrenci seç, yaz ve kaydet olarak kısaltıldı; tür, alan, bağlam ve çocuk sözü isteğe bağlı ayrıntıya taşındı.",
-    "TYMM 2024 okul öncesi alan matrislerindeki 210 öğrenme çıktısı, yedi alan ve üç yaş bandında kaynak digest’iyle sürümlendi.",
-    "Plan hedefleri sınıfın 36–48, 48–60 veya 60–72 ay yaş grubuna göre filtrelenir ve alan seçimiyle hızlıca daraltılır.",
-    "Öğrenci dosyası tam kimlik ve iletişim bilgileriyle hazırlanır; ChatGPT veya Gemini metni uygulama içindeki düzenlenebilir yazma alanına yerleştirilir.",
-    "Arşivleme, öğrenci kalıcı silme ve cihazdaki bütün verileri doğrulamalı biçimde kalıcı silme yolları görünür hâle getirildi.",
+    "Saygı, sorumluluk ve adalet merkezli Değerler Pedagojisi altyapısı; TYMM’nin D1–D20 değerleri ve resmî Ek-14 kaynak zinciriyle güçlendirildi.",
+    "Uzman incelemesi bekleyen yıllık ve premium içerikler ana öğretmen akışından ayrı tutuldu; günlük kullanım yalnız doğrulanmış mevcut yeteneklerle devam eder.",
+    "Plan ve gözlem kayıtlarından değer kanıtı oluşturma, yalnız öğretmenin açık seçimi ve onayıyla ilerleyecek biçimde güvence altına alındı.",
+    "Çocuk gözlemlerinde puanlama, kalıcı karakter hükmü ve inanç ya da ibadet üzerinden değer sonucu üretmeye karşı koruma katmanları eklendi.",
+    "Şifreli yedek, geri yükleme, kalıcı silme ve eşzamanlı işlemlerde veri bütünlüğü ile mahremiyet kontrolleri güçlendirildi.",
+    "Yeni sürüm açık öğretmen girdisini kesmeden hazır olur; kayıtlar cihazda korunur ve yenilikler güncellemeden sonra bir kez gösterilir.",
   ]),
 });
 

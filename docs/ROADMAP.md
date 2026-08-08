@@ -1,5 +1,7 @@
 # MaarifOS Mega Master Planı
 
+> **Belge türü: yol haritası.** Fazlar ve hedefler tamamlanmış özellik iddiası değildir. Güncel uygulama kabiliyeti, alpha kapsamı ve açık kalite borcu için kanonik kaynak [`../STATUS.md`](../STATUS.md) dosyasıdır.
+
 > Ürün sıfırlama kararı, EÇE/TYMM çift program mimarisi ve güncel araştırma için
 > [PRODUCT_RESET_BLUEPRINT.md](./PRODUCT_RESET_BLUEPRINT.md) kanonik kaynaktır.
 
@@ -759,15 +761,52 @@ Ticari hedef hipotezleri:
 
 ---
 
-## 23. İlk sonraki eylemler
+## 23. Kanıtlı durum ve gerçek sonraki kapılar
 
-1. Mevcut yoklama teslimatını kullanıcı isterse ayrı commit ile kanonik F0 yap.
-2. Sprint 1 için `AcademicYear + Classroom + Student` domain sözleşmesini dondur.
-3. Öğrenci CRUD/arşiv/geri alma E2E kabul senaryosunu koddan önce yaz.
-4. Migration registry ve recovery snapshot ADR’sini hazırla.
-5. Emine hediye akışının kurgu veri senaryosunu ve gerçek cihaz listesini belirle.
-6. G1 için hukuk danışmanına sunulacak veri envanteri taslağını çıkar.
-7. Her sprint sonunda bu belgeyi kanıtlar ve gerçek ilerlemeyle güncelle.
+- [x] Anayasa adayı ile D1–D20 makine-okunur değer çekirdeğini kanonik üst norm olarak kur.
+- [x] Yıllık, aylık, haftalık, günlük, etkinlik, gözlem, değerlendirme, aile/toplum, doğa sürekliliği ve hazırlanmış çevre sözleşmelerini uygula.
+- [x] TYMM Okul Öncesi Ek-14'ü kaynak sayfası, PDF özeti ve sürüm zinciriyle ayrı kataloglaştır; MaarifOS uyarlamasını resmî metinden ayır.
+- [x] `content.v2.json` baytlarını koruyarak değer şemalı Eylül `content.v3.json` ve manifest zincirini kur; kurulu v2 plana geriye dönük değer uydurma.
+- [x] Ham gözlemden ayrı, öğretmen onaylı ve geçmişi korunan `valueEvidenceLinks` v5 akışını backup/restore ile tamamla.
+- [x] Doğa sürekliliğini marka/sertifika iddiasından, hazırlanmış çevre tercihini otomatik etkinlik dönüşümünden ayıran fail-closed sınırları kur.
+- [ ] Eylül–Haziran yayın setini üret; aylık en az dört değer ve her dönemde D1–D20 kapsamını tek release-set manifesti üzerinde doğrula.
+- [ ] Erken çocukluk, uygulayıcı öğretmen, çocuk hakları, TYMM, içerik/dil ve Türk-İslam kültürü/ilahiyat rollerinin insan incelemesini tamamla; kültürel kaynak adaylarını tek tek kabul veya revizyona gönder.
+- [ ] Sınırlı öğretmen pilotunda anlaşılabilirlik, uygulanabilirlik, çocuk öznesi ve karşı-kanıt kullanımını ölç; gerçek çocuk verisi öncesi KVKK/cihaz/restore GO kapılarını kapat.
+- [ ] Yoklama ve öğrenci domain teslimatlarını değerler çalışmasından bağımsız, kanıtlı dikey dilimler hâlinde sürdür; her sprint sonunda bu belgeyi fiilî kanıtla güncelle.
+
+### 8 Ağustos 2026 kanıtlı durum
+
+- **Teknik temel tamamlandı:** İnsan uzman onayı bekleyen Değerler Pedagojisi
+  Anayasası adayı; strict D1–D20 katalogu; resmî PDF özetiyle bağlı Ek-14'ün 57
+  üst eylem/219 gösterge kataloğu; 7 kaynak anomalisini kullanıma kapatan
+  fail-closed indeks; etkinlik ve dokuz plan/overlay runtime sözleşmesi.
+- **Yayın kapısının çekirdeği tamamlandı:** Saygı–sorumluluk–adalet üçlü
+  kontrolü, yalnız doğrulanmış niyetlerden aylık/dönemlik kapsam, kaynaklı
+  kültürel süreklilik, aile/doğa dengesi ve çocuk hakkı hard-stop kuralları.
+  Altı rolün kararını içerik ham özeti, kanonik payload, manifest, anayasa ve
+  Ek-14 katalog zincirine bağlayan değişmez sicil sözleşmesi hazırdır; gerçek
+  uzman kararları bu teknik sözleşmeden ayrı ve henüz beklemededir.
+- **Eylül v3 teknik dilimi tamamlandı:** `content.v3.json` ve doğrulanabilir
+  `manifest.v3.json`; 12/12 etkinlikte authored değer wrapper'ı; 36 exact Ek-14
+  snapshot'ı; insan uzman doğrulaması bekleyen 20 `draft` kültürel bağlam;
+  4/4/4 çatı ve 6/6 tasarım yönü;
+  annual→monthly→weekly→daily→backup/temiz restore snapshot zinciri. V2 byte
+  kilidi korunur ve `legacy-unmapped` okunur.
+- **Değer kanıtı v5 teknik dilimi tamamlandı:** Ayrı `valueEvidenceLinks`
+  koleksiyonu, öğretmen onayı, supports/contrasts/context-only rolleri,
+  immutable geçmiş, öğrenci mahremiyeti, backup/restore ve mobil öğretmen
+  editörü birlikte çalışır; otomatik skor, inanç/ibadet kanıtı ve karakter hükmü
+  üretilmez.
+- **Yıllık authored hedef profili tamamlandı:** 2026–2027 için exact iki dönem,
+  on ay, 36 hafta ve 108 etkinlik hedefi; her dönemde yalnız ana değerlerin
+  birleşiminden D1–D20, 18/18/18 çatı, 27/27 tasarım yönü ve ay bazlı anayasa
+  bağlantılı kültürel köprü adayları fail-closed doğrulanır. Ekim için 12
+  etkinliklik `planned_reference_blueprint` vardır; bu profil gerçek aylık
+  içerik dosyası veya release-set manifesti değildir.
+- **Henüz tamamlanmadı:** Gerçek altı rollü insan kararları, Ekim–Haziranın
+  üretim içerikleri, bunları bağlayan dönemlik release-set manifesti ve sınırlı
+  sınıf pilotu. V3 bu işler bitmeden
+  `machine_validated_pending_human_review` iç pilot durumundan çıkarılmaz.
 
 Bu planın başarı ilkesi: **önce Emine’nin işini görünmez biçimde kolaylaştır,
 sonra güvenilirliğini kanıtla, daha sonra başka öğretmenlerde tekrarlandığını

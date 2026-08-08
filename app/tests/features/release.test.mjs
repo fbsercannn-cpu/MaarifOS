@@ -37,11 +37,11 @@ function acknowledgement({
 }
 
 test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata taşır", () => {
-  assert.equal(CURRENT_RELEASE.version, "0.7.0");
-  assert.equal(CURRENT_RELEASE.releasedOn, "2026-07-29");
+  assert.equal(CURRENT_RELEASE.version, "0.8.0");
+  assert.equal(CURRENT_RELEASE.releasedOn, "2026-08-08");
   assert.equal(
     CURRENT_RELEASE.title,
-    "Sade kayıt akışı ve tam TYMM öğrenme çıktıları",
+    "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
   );
   assert.ok(CURRENT_RELEASE.notes.length >= 4);
   assert.ok(CURRENT_RELEASE.notes.every((note) => note.trim().length >= 20));
@@ -53,14 +53,17 @@ test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata ta�
 });
 
 test("paket, yedek ve PWA aynı kanonik uygulama sürümünü kullanır", async () => {
-  const [packageJson, prototype, pwa, worker] = await Promise.all([
+  const [packageJson, packageLock, prototype, pwa, worker] = await Promise.all([
     readFile(new URL("../../package.json", import.meta.url), "utf8").then(JSON.parse),
+    readFile(new URL("../../package-lock.json", import.meta.url), "utf8").then(JSON.parse),
     readFile(new URL("../../src/Prototype.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../src/pwa.ts", import.meta.url), "utf8"),
     readFile(new URL("../../public/sw.js", import.meta.url), "utf8"),
   ]);
 
   assert.equal(packageJson.version, CURRENT_RELEASE.version);
+  assert.equal(packageLock.version, CURRENT_RELEASE.version);
+  assert.equal(packageLock.packages[""].version, CURRENT_RELEASE.version);
   assert.match(prototype, /appVersion: CURRENT_RELEASE\.version/);
   assert.match(
     pwa,
@@ -69,6 +72,10 @@ test("paket, yedek ve PWA aynı kanonik uygulama sürümünü kullanır", async 
   assert.match(
     worker,
     new RegExp(`const WORKER_RELEASE = "${CURRENT_RELEASE.version.replaceAll(".", "\\.")}"`),
+  );
+  assert.match(
+    prototype,
+    /const applyReadyUpdate = async \(\) => \{[\s\S]*?await flushPendingWrites\(\);[\s\S]*?maarifos:apply-update/,
   );
 });
 
@@ -94,8 +101,8 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
     JSON.parse(storage.getItem(RELEASE_ACKNOWLEDGEMENT_STORAGE_KEY)),
     {
       schemaVersion: 1,
-      firstSeenVersion: "0.7.0",
-      acknowledgedVersion: "0.7.0",
+      firstSeenVersion: "0.8.0",
+      acknowledgedVersion: "0.8.0",
       acknowledgedAt: "2026-07-28T12:30:00.000Z",
     },
   );
@@ -103,7 +110,7 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
   const state = inspectCurrentRelease({ storage });
   assert.equal(state.kind, "current");
   assert.equal(state.shouldPresent, false);
-  assert.equal(state.previousVersion, "0.7.0");
+  assert.equal(state.previousVersion, "0.8.0");
 });
 
 test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notlarını sunar", () => {
@@ -118,7 +125,7 @@ test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notların
   assert.equal(state.kind, "update");
   assert.equal(state.shouldPresent, true);
   assert.equal(state.previousVersion, "0.1.0");
-  assert.equal(state.release.version, "0.7.0");
+  assert.equal(state.release.version, "0.8.0");
 });
 
 test("güncelleme onayında ilk görülen sürümü korur", () => {
@@ -144,7 +151,7 @@ test("güncelleme onayında ilk görülen sürümü korur", () => {
     {
       schemaVersion: 1,
       firstSeenVersion: "0.0.5",
-      acknowledgedVersion: "0.7.0",
+      acknowledgedVersion: "0.8.0",
       acknowledgedAt: "2026-07-28T15:00:00.000Z",
     },
   );
