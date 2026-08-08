@@ -6,7 +6,7 @@ import {
   type StoredRecord,
 } from "../../core/domain/model.ts";
 import {
-  isRecoverySnapshotRepository,
+  isStudentPrivacyDeletionRepository,
   type LocalDataStore,
 } from "../../core/repository/contracts.ts";
 
@@ -21,6 +21,7 @@ export interface StudentDeletionImpact {
   sharedObservationCount: number;
   mediaCount: number;
   sharedMediaCount: number;
+  valueEvidenceLinkCount: number;
   portfolioCount: number;
   reportCount: number;
   exportPackageCount: number;
@@ -56,6 +57,14 @@ export function previewPermanentStudentDeletion(
   const media = snapshot.mediaAssets.filter((record) =>
     includesStudent(record.studentIds, studentId),
   );
+  const deletedObservationIds = new Set(
+    observations
+      .filter(
+        (record) =>
+          !Array.isArray(record.studentIds) || record.studentIds.length <= 1,
+      )
+      .map((record) => record.id),
+  );
   return {
     studentId,
     displayName:
@@ -74,6 +83,12 @@ export function previewPermanentStudentDeletion(
     sharedMediaCount: media.filter(
       (record) =>
         Array.isArray(record.studentIds) && record.studentIds.length > 1,
+    ).length,
+    valueEvidenceLinkCount: snapshot.valueEvidenceLinks.filter(
+      (record) =>
+        record.studentId === studentId ||
+        (typeof record.observationId === "string" &&
+          deletedObservationIds.has(record.observationId)),
     ).length,
     portfolioCount: snapshot.portfolioSelections.filter(
       (record) => record.studentId === studentId,
@@ -111,18 +126,52 @@ function removeStudentAssignments(
   record: StoredRecord,
   studentId: string,
   updatedAt: string,
+  options: { tombstoneWhenUnassigned: boolean },
 ): StoredRecord {
-  const next: StoredRecord = { ...record, updatedAt };
-  if (Array.isArray(record.studentIds)) {
-    next.studentIds = record.studentIds.filter((id) => id !== studentId);
-  }
-  if (Array.isArray(record.targetAssignments)) {
-    next.targetAssignments = record.targetAssignments.filter(
+  const hasStudentMembership = includesStudent(record.studentIds, studentId);
+  const hasTargetAssignment =
+    Array.isArray(record.targetAssignments) &&
+    record.targetAssignments.some(
       (assignment) =>
-        !assignment ||
-        typeof assignment !== "object" ||
-        (assignment as Record<string, unknown>).studentId !== studentId,
+        assignment !== null &&
+        typeof assignment === "object" &&
+        (assignment as Record<string, unknown>).studentId === studentId,
     );
+  if (!hasStudentMembership && !hasTargetAssignment) return record;
+
+  const remainingStudentIds = Array.isArray(record.studentIds)
+    ? record.studentIds.filter((id) => id !== studentId)
+    : null;
+  const remainingTargetAssignments = Array.isArray(record.targetAssignments)
+    ? record.targetAssignments.filter(
+        (assignment) =>
+          !assignment ||
+          typeof assignment !== "object" ||
+          (assignment as Record<string, unknown>).studentId !== studentId,
+      )
+    : null;
+  const hasRemainingAssignment =
+    (remainingStudentIds?.length ?? 0) > 0 ||
+    (remainingStudentIds === null &&
+      (remainingTargetAssignments?.length ?? 0) > 0);
+  const next: StoredRecord = {
+    ...record,
+    ...(remainingStudentIds ? { studentIds: remainingStudentIds } : {}),
+    ...(remainingTargetAssignments
+      ? { targetAssignments: remainingTargetAssignments }
+      : {}),
+    updatedAt,
+  };
+  if (!hasRemainingAssignment) {
+    delete next.assignmentMode;
+    delete next.assignmentSnapshotAt;
+    delete next.coverageStatus;
+    if (
+      options.tombstoneWhenUnassigned &&
+      typeof record.deletedAt !== "string"
+    ) {
+      next.deletedAt = updatedAt;
+    }
   }
   return next;
 }
@@ -150,6 +199,48 @@ function filterReferencingRecords(
   );
 }
 
+function latestRecordTimestampMillis(record: StoredRecord): number {
+  const timestamps = [
+    record.createdAt,
+    record.updatedAt,
+    ...(typeof record.deletedAt === "string" ? [record.deletedAt] : []),
+  ];
+  if (
+    timestamps.some((timestamp) => {
+      return (
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(timestamp) ||
+        Number.isNaN(Date.parse(timestamp))
+      );
+    })
+  ) {
+    throw new Error(
+      "Kalıcı silmeyle ilişkili kayıtlardan birinin UTC zaman çizelgesi geçersiz; silme uygulanmadı.",
+    );
+  }
+  return Math.max(...timestamps.map((timestamp) => Date.parse(timestamp)));
+}
+
+function assertPermanentDeletionChronology(
+  snapshot: DataSnapshot,
+  identifiers: ReadonlySet<string>,
+  timestamp: string,
+): void {
+  const relatedRecords = COLLECTION_NAMES.flatMap((collection) =>
+    snapshot[collection].filter((record) =>
+      containsIdentifier(record, identifiers),
+    ),
+  );
+  if (
+    relatedRecords.some(
+      (record) => Date.parse(timestamp) < latestRecordTimestampMillis(record),
+    )
+  ) {
+    throw new Error(
+      "Kalıcı silme zamanı ilişkili kayıtların son değişiklik zamanından eski; silme uygulanmadı.",
+    );
+  }
+}
+
 export async function permanentlyDeleteArchivedStudent(
   store: LocalDataStore,
   input: {
@@ -158,6 +249,11 @@ export async function permanentlyDeleteArchivedStudent(
     now?: Date;
   },
 ): Promise<StudentDeletionResult> {
+  if (!isStudentPrivacyDeletionRepository(store)) {
+    throw new Error(
+      "Kalıcı silme, ana veriyle kurtarma snapshot'larını tek işlemde temizleyebilen bir veri deposu gerektirir.",
+    );
+  }
   const initial = await store.readSnapshot();
   const impact = previewPermanentStudentDeletion(initial, input.studentId);
   const student = initial.students.find(
@@ -179,19 +275,10 @@ export async function permanentlyDeleteArchivedStudent(
     throw new Error("Kalıcı silme için geçerli bir zaman gerekli.");
   }
   const timestamp = now.toISOString();
-  let removedEntityCount = 0;
-  if (!isRecoverySnapshotRepository(store)) {
-    throw new Error(
-      "Kalıcı silme, öğrenci verisi içeren kurtarma snapshot'larını güvenle temizleyebilen bir veri deposu gerektirir.",
-    );
-  }
-  const purgedRecoverySnapshotCount =
-    await store.deleteRecoverySnapshotsContainingStudent(input.studentId);
-
-  await store.transaction(
-    "readwrite",
-    COLLECTION_NAMES,
+  const atomicDeletion = await store.transactionWithStudentRecoveryPurge(
+    input.studentId,
     async (transaction) => {
+      let removedEntityCount = 0;
       const snapshot = createEmptySnapshot();
       await Promise.all(
         COLLECTION_NAMES.map(async (collection) => {
@@ -256,6 +343,17 @@ export async function permanentlyDeleteArchivedStudent(
           removedIds.add(link.id);
         }
       }
+      for (const link of snapshot.valueEvidenceLinks) {
+        if (
+          link.studentId === input.studentId ||
+          (typeof link.observationId === "string" &&
+            removedIds.has(link.observationId))
+        ) {
+          removedIds.add(link.id);
+        }
+      }
+
+      assertPermanentDeletionChronology(snapshot, removedIds, timestamp);
 
       const next = createEmptySnapshot();
       next.academicYears = [...snapshot.academicYears];
@@ -299,11 +397,27 @@ export async function permanentlyDeleteArchivedStudent(
               removedIds.has(record.observationId)
             ),
         );
+      next.valueEvidenceLinks = snapshot.valueEvidenceLinks.filter(
+        (record) =>
+          !removedIds.has(record.id) &&
+          record.studentId !== input.studentId &&
+          !(
+            typeof record.observationId === "string" &&
+            removedIds.has(record.observationId)
+          ),
+      );
       next.activities = snapshot.activities.map((record) =>
-        removeStudentAssignments(record, input.studentId, timestamp),
+        removeStudentAssignments(record, input.studentId, timestamp, {
+          tombstoneWhenUnassigned: true,
+        }),
       );
       next.plans = snapshot.plans.map((record) =>
-        removeStudentAssignments(record, input.studentId, timestamp),
+        removeStudentAssignments(record, input.studentId, timestamp, {
+          // Yıllık/aylık/haftalık kaynak planlar çocuk ataması taşımadan da
+          // anlamlıdır. Günlük çocuk-özel örnek ise son muhatabı silinince
+          // canlı plan gibi görünmemeli; provenansı korunarak tombstone olur.
+          tombstoneWhenUnassigned: record.planType === "daily",
+        }),
       );
       const deletedEvidenceIdentifiers = new Set(removedIds);
       deletedEvidenceIdentifiers.delete(input.studentId);
@@ -348,12 +462,14 @@ export async function permanentlyDeleteArchivedStudent(
           );
         }
       }
+      return { impact: currentImpact, removedEntityCount };
     },
   );
 
   return {
-    ...impact,
-    removedEntityCount,
-    purgedRecoverySnapshotCount,
+    ...atomicDeletion.result.impact,
+    removedEntityCount: atomicDeletion.result.removedEntityCount,
+    purgedRecoverySnapshotCount:
+      atomicDeletion.purgedRecoverySnapshotCount,
   };
 }

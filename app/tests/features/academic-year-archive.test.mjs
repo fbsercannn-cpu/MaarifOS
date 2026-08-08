@@ -126,6 +126,36 @@ function seededYear() {
     academicYearId: year1,
     classroomId: class1,
   });
+  snapshot.valueEvidenceLinks.push({
+    ...base,
+    id: "00000000-0000-4000-8000-000000000308",
+    academicYearId: year1,
+    classroomId: class1,
+    observationId: "00000000-0000-4000-8000-000000000307",
+    studentId: student,
+    planId: "00000000-0000-4000-8000-000000000305",
+    activityId: "00000000-0000-4000-8000-000000000306",
+    evidenceRole: "supports",
+    targetValueCode: "D4",
+    targetIndicatorCode: "D4.1.1",
+    teacherRationale: "Arşivlenecek nesnel gözlem bu eylem bağını destekliyor.",
+    confirmationMethod: "teacher-confirmed",
+    confirmationScope: "observation-to-value-action-link",
+    confirmedByActorKind: "local-teacher-identity",
+    confirmedByActorId: "00000000-0000-4000-8000-000000000309",
+    confirmedAt: "2026-09-01T08:00:00.000Z",
+    provenance: {
+      contentPackId: "maarifos-tymm-6072-2026-2027-v3",
+      contentPackVersion: "3.0.0",
+      contentReleaseId: "tymm-6072-2026-09-v3",
+      contentManifestDigest: `sha256:${"a".repeat(64)}`,
+      appliedActivityTemplateId: "tymm6072-sep-fair-sharing",
+      appliedValuesDesignId: "tymm6072-sep-fair-sharing:values:v1",
+      appliedValuesDesignVersion: "1.0.0",
+      appliedValuesDesignDigest: `sha256:${"b".repeat(64)}`,
+    },
+    supersedesLinkId: null,
+  });
   return snapshot;
 }
 
@@ -137,6 +167,7 @@ test("eğitim yılı kapanışında eğitimsel kayıtları değiştirmeden salt-
     observations: before.observations,
     activities: before.activities,
     plans: before.plans,
+    valueEvidenceLinks: before.valueEvidenceLinks,
   };
 
   const first = await archiveAcademicYear(store, {
@@ -158,6 +189,7 @@ test("eğitim yılı kapanışında eğitimsel kayıtları değiştirmeden salt-
       observations: afterFirst.observations,
       activities: afterFirst.activities,
       plans: afterFirst.plans,
+      valueEvidenceLinks: afterFirst.valueEvidenceLinks,
     },
     educationBefore,
   );
@@ -170,6 +202,7 @@ test("eğitim yılı kapanışında eğitimsel kayıtları değiştirmeden salt-
   assert.equal(afterFirst.settings[0].deletedAt, "2027-06-30T14:00:00.000Z");
   assert.equal(afterFirst.auditLogs.length, 1);
   assert.equal(first.observationCount, 1);
+  assert.equal(first.valueEvidenceLinkCount, 1);
   assert.deepEqual(second, first);
   assert.deepEqual(afterSecond, afterFirst);
 });
@@ -260,6 +293,10 @@ test("uzun dönem öğrenci arşivi bütün yılları toplar ve başka çocuğun
   );
   assert.ok(
     archive.observations.every((record) => record.studentIds.includes(student)),
+  );
+  assert.deepEqual(
+    archive.valueEvidenceLinks.map((record) => record.id),
+    ["00000000-0000-4000-8000-000000000308"],
   );
 });
 

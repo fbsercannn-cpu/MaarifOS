@@ -1,5 +1,7 @@
 # Haricî Yapay Zekâ Analiz Paketi Standardı
 
+> **Kanonik durum notu (4 Ağustos 2026):** Aşağıdaki eski paket taslağındaki gerçek ad, baş harf ve medya seçenekleri iptal edilmiştir. Güncel bağlayıcı kural [`MAARIFOS_V1_KANONIK_URUN_SARTNAMESI.md`](./MAARIFOS_V1_KANONIK_URUN_SARTNAMESI.md) §13’tür: dış aktarım yalnız sistem takma adı kullanır, medya ve doğrudan tanımlayıcı içermez; geri alınan yanıt öğretmen önizlemesi ve onayı olmadan plana yazılmaz.
+
 > **Durum notu:** Bu belge hedef paket standardını tanımlar. Güncel uygulama güvenli metin paylaşımı ve haricî geri bildirim kaydının bir bölümünü destekler; aşağıdaki dizin/manifest/medya paketinin tamamı uygulanmış kabul edilmez. Kanonik durum için [`../STATUS.md`](../STATUS.md) dosyasına bakın. MaarifOS haricî bir yapay zekâ API'sine otomatik veri göndermez.
 
 ## Amaç

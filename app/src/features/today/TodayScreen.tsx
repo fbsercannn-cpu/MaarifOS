@@ -11,6 +11,7 @@ import {
   PersonIcon,
   PlusIcon,
   ReaderIcon,
+  StarIcon,
   TargetIcon,
 } from "@radix-ui/react-icons";
 
@@ -38,6 +39,7 @@ export interface TodayScreenActions {
   onOpenActivityEvidence: (activityId: string) => void | Promise<void>;
   onCompleteCurrentActivity: () => void | Promise<void>;
   onOpenPlanFlow: () => void;
+  onOpenPremiumPlans: () => void;
   onOpenPlanItem: (item: TodayPlanItem) => void;
   onOpenPendingObservation: () => void;
 }
@@ -98,8 +100,10 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
     educationalWritesDisabled,
     dataBusy,
     updateReady,
+    updateVersion,
     pendingObservationCount,
     planEvidenceDetailsEnabled,
+    premiumPlanCenterEnabled,
   } = model;
   const configuredClassroom = configuredClassroomFromToday(workspace);
   const focusActivity = focusActivityFromToday(workspace);
@@ -179,10 +183,14 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
             <MagicWandIcon />
           </span>
           <span className="update-ready-copy">
-            <strong id="update-ready-title">Yeni sürüm hazır</strong>
-            <small>Kaydınızı tamamladıysanız güvenle güncelleyin.</small>
+            <strong id="update-ready-title">MaarifOS {updateVersion} hazır</strong>
+            <small>Bekleyen kayıtlarınız önce bu cihazda doğrulanır; sonra güvenle güncellenir.</small>
           </span>
-          <button type="button" onClick={actions.onApplyReadyUpdate}>
+          <button
+            type="button"
+            disabled={dataBusy}
+            onClick={actions.onApplyReadyUpdate}
+          >
             Şimdi güncelle
           </button>
         </section>
@@ -236,6 +244,20 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
           </span>
         </button>
       </section>
+
+      {premiumPlanCenterEnabled ? (
+        <section className="premium-entry-card" aria-labelledby="premium-entry-title">
+          <span className="premium-entry-icon" aria-hidden="true"><StarIcon /></span>
+          <span className="premium-entry-copy">
+            <small>Kapalı pilot · TYMM 2024 · 60–72 ay</small>
+            <strong id="premium-entry-title">Plan Kütüphanesi</strong>
+            <span>Pedagojik lensi seçin, yıllık omurgayı sınıfa ekleyin ve etkinliği günlük plana taşıyın.</span>
+          </span>
+          <button type="button" onClick={actions.onOpenPremiumPlans}>
+            Önizlemeyi aç <ChevronRightIcon aria-hidden="true" />
+          </button>
+        </section>
+      ) : null}
 
       <section className="home-children" aria-labelledby="home-children-title">
         <div className="home-section-heading">

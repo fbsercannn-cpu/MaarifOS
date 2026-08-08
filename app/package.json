@@ -1,15 +1,15 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "check:runtime": "node scripts/check-mobile-runtime.mjs",
     "update:runtime-lock": "node scripts/update-mobile-runtime-lock.mjs",
     "test:auth": "node --test tests/auth/*.test.mjs",
     "test:migration": "node --test tests/features/*.test.mjs",
-    "test:data": "node scripts/run-runtime-tests.mjs tests/core/backup.spec.ts",
-    "test:runtime:core": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/core/backup.spec.ts tests/error-taxonomy.spec.ts tests/storage-health.spec.ts tests/alpha-capabilities.spec.ts tests/release-update.spec.ts",
+    "test:data": "node scripts/run-runtime-tests.mjs tests/core/backup.spec.ts tests/core/premium-license-backup.spec.ts tests/core/recovery-privacy-race.spec.ts",
+    "test:runtime:core": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/core/backup.spec.ts tests/core/premium-license-backup.spec.ts tests/core/recovery-privacy-race.spec.ts tests/error-taxonomy.spec.ts tests/storage-health.spec.ts tests/alpha-capabilities.spec.ts tests/release-update.spec.ts",
     "test:runtime:flow-a": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/maarifos-data-flow.spec.ts --grep=\"çocuk ekleme|cihaz verisi|bozuk yedek|ikinci sekmedeki\"",
     "test:runtime:flow-b": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/maarifos-data-flow.spec.ts --grep=\"ana sayfadaki|profil fotoğrafı|her çocuk için|Hediye Alpha\"",
     "test:runtime:ui": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/mobile-runtime.spec.ts tests/persistence-security-ui.spec.ts tests/academic-year-preparation-ui.spec.ts tests/attendance-membership-ui.spec.ts tests/attendance-events-ui.spec.ts tests/storage-health-ui.spec.ts",
@@ -25,7 +25,7 @@
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "quality:gate": "npm run check:runtime && npm run lint && npm run test:typecheck && npm run test:auth && npm run test:coverage && npm run test:runtime && npm run test:pwa && npm run build && npm run check:bundle && npm run test:browser-smoke && npm run test:sites && npm run test:pwa:production",
     "test:quality": "npm run quality:gate",
-    "predev": "npm run check:runtime",
+    "predev": "npm run check:runtime && node scripts/prepare-premium-preview.mjs",
     "dev": "vite",
     "prebuild": "npm run check:runtime",
     "build": "tsc && vite build && node scripts/prepare-sites-build.mjs"

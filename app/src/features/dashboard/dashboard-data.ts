@@ -394,7 +394,9 @@ export async function loadDashboardState(
   await migrateLegacyAttendanceRecords(store, initialSnapshot);
   await migrateLegacyClassroomScopes(store);
   let snapshot = await store.readSnapshot();
-  const attendanceCivilDate = civilDateInIstanbul(new Date());
+  const attendanceCivilDate = isCivilDate(fallback.attendanceCivilDate)
+    ? fallback.attendanceCivilDate
+    : civilDateInIstanbul(new Date());
 
   if (snapshot.students.length === 0) {
     const legacy = readLegacyState();

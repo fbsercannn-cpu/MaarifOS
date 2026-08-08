@@ -17,6 +17,7 @@ test("Hediye Alpha yalnız doğrulanmış çekirdek kabiliyetleri açar", () => 
     googleAuth: false,
     curriculumCatalogBrowser: false,
     planEvidenceDetails: false,
+    premiumPlanCenter: false,
     portfolio: false,
     aiFeedback: false,
     documentCenter: false,

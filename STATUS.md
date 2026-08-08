@@ -1,7 +1,7 @@
 # MaarifOS kanonik yetenek durumu
 
-**Sürüm:** 0.7.0
-**Durum tarihi:** 3 Ağustos 2026
+**Sürüm:** 0.8.0
+**Durum tarihi:** 8 Ağustos 2026
 **Kapsam:** Bu dosya çalışan ürün kabiliyetinin tek kanonik özetidir. `PROJECT.md`
 ürün niyetini, `docs/ROADMAP.md` gelecek sırayı anlatır; menü adları ve plan
 başlıkları bitmiş özellik kanıtı değildir.
@@ -36,13 +36,18 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 | Günlük yoklama | `IMPLEMENTED` | `Geldi / Geç geldi / Gelmedi` günlük kaydı sınıf üyeliğinden bağımsızdır. Giriş, çıkış, erken ayrılma, kısmi gün ve mazeret olayları; neden, öğretmen notu, geri alma, yeniden yükleme ve öğrenci geçmişi uçtan uca korunur. Olaylar şifreli yedek/restore kapsamındadır ve olay alanı bulunmayan N-1 kayıtları geriye uyumlu okunur. | `app/src/core/domain/attendance.ts`; `app/src/features/dashboard/dashboard-data.ts`; `app/src/features/attendance/attendance-history.ts`; `attendance-membership`, `attendance-events`, `attendance-history`, `core/backup` ve runtime kullanıcı akışı testleri |
 | Plansız hızlı gözlem | `IMPLEMENTED` | Ham metin değişmeden saklanır; öğrenci seçimi ve taslak geri kazanımı vardır. | evidence flow/runtime testleri |
 | Plan → etkinlik → kanıt | `IMPLEMENTED` | D1 zinciri ve öğretmen onaylı program bağı vardır; Alpha ana menüsünde ikincildir. | planning/evidence testleri |
+| Değerler Pedagojisi Anayasası ve D1–D20 çekirdeği | `PARTIAL` | Makine-okunur anayasa, resmî Ek-14 kaynak zinciri, plan sözleşmeleri, altı rollü değişmez karar sözleşmesi ve iki dönemlik authored hedef profili çalışır. Gerçek altı rol kararı ve tamamlanmış Eylül–Haziran içerik seti olmadan yayımlanmış model sayılmaz. | `docs/DEGERLER_PEDAGOJISI_ANAYASASI.md`; values sözleşme/katalog/insan-inceleme testleri |
+| 2026–2027 değerler yayın hedef profili ve Ekim referans blueprint'i | `HIDDEN` | On ay/iki dönem/108 etkinlik authored hedef sözleşmesi; iki dönemde ana değerler üzerinden D1–D20, 18/18/18 çatı ve ay bazlı kültürel köprü adayları için strict contract testlerinden geçer. Bu bir gerçek release doğrulaması değildir. Ekim yalnız 12 etkinliklik planlanmış referanstır; gelecek dokuz ayın gerçek içerik dosyaları, release-set manifesti ve insan kararları henüz yoktur. | `docs/DEGERLER_2026_2027_YILLIK_MATRIS.md`; annual release-set ve October reference testleri |
+| Premium Plan Merkezi · Eylül v3 | `HIDDEN` | Geliştirme bayrağı altındaki teknik dikey dilimdir; durum `machine_validated_pending_human_review`, iç pilot ve satışa kapalıdır. | premium content/manifest, runtime hash, plan akışı ve mobil smoke testleri |
+| Öğretmen onaylı değer kanıtı · veri şeması v5 | `HIDDEN` | Ham gözlemden otomatik ahlak sonucu üretmez; ayrı değer bağı, düzeltme/tombstone geçmişi ve yedek/restore çalışır. İnsan uzman ve sınıf pilotu tamamlanmamıştır. | `valueEvidenceLinks`, v5 migration/backup, öğretmen editörü testleri |
 | TYMM 2024 kataloğu | `IMPLEMENTED` | 2024 okul öncesi kataloğu sürüm ve bütünlük özetiyle saklanır. | curriculum catalog testleri |
 | Eski MEB kataloğu | `PARTIAL` | Yalnız desteklenen kısım vardır; tam resmî katalog diye sunulmaz. | katalog kaynak/sürüm görünürlüğü |
 | Çocuk zaman çizelgesi | `PARTIAL` | Kanıt ve yoklama kayıtları vardır; tüm medya/çıktı türlerinin birleşik görünümü tamam değildir. | öğrenci dosyası/runtime |
 | Portfolyo seçkisi | `PARTIAL` | Mevcut kanıt üzerinden seçim ve ayrı yansıtma alanları vardır; PDF/medya paketi tamam değildir. | portfolio testleri |
 | Profil fotoğrafı | `IMPLEMENTED` | Küçük profil fotoğrafı yerel öğrenci kaydında tutulur. | student profile testleri |
 | Genel medya/blob deposu | `SCHEMA_ONLY` | Fotoğraf/video belge yönetimi henüz kullanıcıya hazır değildir. | Blob/thumbnail/kota/backup kapısı |
-| PDF ve resmî belge merkezi | `PLANNED` | Çalışan PDF üretimi yoktur; arayüz “Paylaşım taslakları / Dışa aktarımlar” dilini kullanır. | PDF izolasyon ve önizleme testleri |
+| Genel PDF ve resmî belge merkezi | `PLANNED` | Alpha genel belge merkezi henüz çalışmaz; arayüz “Paylaşım taslakları / Dışa aktarımlar” dilini kullanır. | PDF izolasyon ve önizleme testleri |
+| Premium plan PDF/DOCX çıktısı | `HIDDEN` | Exact entitlement ile eşleşen premium plan için yerel PDF/DOCX üretimi vardır; üretim entitlement servisi ve insan içerik incelemesi tamamlanmadan görünür değildir. | premium export, entitlement ve dosya imzası testleri |
 | Analiz dışa aktarımı | `PARTIAL` | Öğretmen kontrollü metin dışa aktarımı vardır; çok dosyalı MD+JSON+medya paketi tamam değildir. | `docs/AI_EXPORT_SPEC.md` uyum kapısı |
 | Bildirim/hatırlatıcı motoru | `SCHEMA_ONLY` | Kural ve kullanıcı yüzeyi tamamlanmadan bildirim vaadi gösterilmez. | permission, threshold ve offline testleri |
 | Şifreli JSON yedek | `IMPLEMENTED` | Parolalı AES-256-GCM yedek, doğrulama ve atomik restore vardır. | backup/crypto/runtime testleri |
@@ -54,9 +59,13 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 
 ## Geçerli kalite hükmü
 
-`3 Ağustos 2026` tarihinde `app/npm run test:quality` kanonik kapısı yerel kilitli
-bağımlılıklarla eksiksiz geçti. Bu hüküm gerçek cihaz filosu veya öğretmen pilotu
-kanıtı yerine geçmez.
+`8 Ağustos 2026` değerler/premium/v5 değişiklikleri ile yıllık authored profil,
+altı rollü insan-inceleme sözleşmesi ve Ekim frozen referans blueprint'i
+bütünleşik `quality:gate` koşusundan geçti: korunan runtime, lint, typecheck,
+auth, coverage, tüm runtime veri/UI akışları, PWA, production build, bundle
+bütçesi, Chromium ve WebKit mobil smoke, Sites ve çevrim dışı production PWA
+kapıları birlikte yeşildir. Bu hüküm gerçek cihaz filosu, insan uzman kurulu
+veya öğretmen pilotu kanıtı yerine geçmez.
 
 - Korunan mobil runtime bütünlük kontrolü zorunludur.
 - Domain, migration, backup, PWA, offline ve production build testleri tek kalite

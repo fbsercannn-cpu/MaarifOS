@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "maarifos-premium-plan-catalog",
+  "catalogStatus": "design_contract_not_for_sale",
+  "academicRelease": "2026-2027",
+  "currency": "TRY",
+  "trial": {
+    "durationSeconds": 259200,
+    "paymentCardRequired": false,
+    "autoRenew": false,
+    "activationRequiresOnline": true,
+    "scope": "one_selected_sku",
+    "packageSwitchLimit": 1,
+    "eligibility": "once_per_teacher_per_academic_release",
+    "sampleExportLimit": 0,
+    "bulkExportAllowed": false,
+    "aiPromptExportAllowed": false,
+    "demoUsesSyntheticData": true,
+    "userOwnedDataRemainsAccessibleAfterExpiry": true
+  },
+  "pricing": {
+    "singlePackage": {
+      "salePriceMinor": 145300,
+      "referencePriceMinor": 200000,
+      "referencePriceDisplayAllowed": false,
+      "referencePriceRequiresEvidence": true,
+      "discountMinor": 54700,
+      "discountBasisPoints": 2735,
+      "deviceLimit": 1
+    },
+    "allEightBundle": {
+      "salePriceMinor": 599900,
+      "referencePriceMinor": 1000000,
+      "referencePriceDisplayAllowed": false,
+      "referencePriceRequiresEvidence": true,
+      "discountMinor": 400100,
+      "discountBasisPoints": 4001,
+      "deviceLimit": 1
+    },
+    "institutionSinglePackagePerTeacherTiers": [
+      {
+        "minimumTeacherCount": 1,
+        "maximumTeacherCount": 4,
+        "pricePerTeacherMinor": 145300
+      },
+      {
+        "minimumTeacherCount": 5,
+        "maximumTeacherCount": 9,
+        "pricePerTeacherMinor": 129900
+      },
+      {
+        "minimumTeacherCount": 10,
+        "maximumTeacherCount": 19,
+        "pricePerTeacherMinor": 114900
+      },
+      {
+        "minimumTeacherCount": 20,
+        "maximumTeacherCount": null,
+        "pricePerTeacherMinor": 99900
+      }
+    ],
+    "institutionAllEightBundle": {
+      "pricePerTeacherMinor": 599900,
+      "volumeDiscountAllowed": false,
+      "refundMode": "whole_order_only"
+    },
+    "upgrade": {
+      "fromSingleToAllEightWithinDays": 30,
+      "creditMinor": 145300,
+      "payableMinor": 454600
+    },
+    "taxInclusive": true,
+    "legalAndAccountingApprovalRequired": true
+  },
+  "licensePolicy": {
+    "provisional": true,
+    "subscription": false,
+    "autoRenew": false,
+    "purchasedReleaseArchiveAccess": "permanent",
+    "contentUpdates": "through_academic_release_support_window",
+    "newAcademicReleaseRequiresNewEntitlement": true,
+    "teacherOwnsAssignedEntitlementWhenInstitutionPays": true,
+    "teacherPlansRemainWithTeacherAfterLeavingInstitution": true,
+    "institutionRetainsApprovedImmutableArchive": true,
+    "concurrentDeviceLimit": 1,
+    "childDataSentToLicenseService": false
+  },
+  "externalAiPolicy": {
+    "embeddedModelOrApi": false,
+    "workflow": "manual_export_and_validated_import",
+    "identifierMode": "system_alias_only",
+    "mediaAllowed": false,
+    "teacherPreviewAndApprovalRequired": true,
+    "preserveRawEditedAndIntegratedVersions": true
+  },
+  "skus": [
+    {
+      "sku": "TYMM-3648",
+      "displayName": "TYMM 2024 · 36–48 Ay",
+      "programProfile": "tymm_2024",
+      "ageProfile": "36-48",
+      "releaseStatus": "planned",
+      "catalogGate": "verify_full_program_component_scope"
+    },
+    {
+      "sku": "TYMM-4860",
+      "displayName": "TYMM 2024 · 48–60 Ay",
+      "programProfile": "tymm_2024",
+      "ageProfile": "48-60",
+      "releaseStatus": "planned",
+      "catalogGate": "verify_full_program_component_scope"
+    },
+    {
+      "sku": "TYMM-6072",
+      "displayName": "TYMM 2024 · 60–72 Ay",
+      "programProfile": "tymm_2024",
+      "ageProfile": "60-72",
+      "releaseStatus": "internal_pilot_vertical_slice",
+      "saleAllowed": false,
+      "pilotAccessMode": "single_use_staff_code",
+      "pilotPeriod": "2026-09-07/2026-09-30",
+      "pilotActivityCount": 2,
+      "pilotLensIds": [
+        "guided-play",
+        "belonging-family-weave",
+        "accessible-participation",
+        "prepared-environment",
+        "emotion-relationship-coregulation",
+        "plan-act-reflect"
+      ],
+      "catalogGate": "verify_full_program_component_scope"
+    },
+    {
+      "sku": "TYMM-MIXED",
+      "displayName": "TYMM 2024 · Karma Yaş",
+      "programProfile": "tymm_2024",
+      "ageProfile": "mixed",
+      "releaseStatus": "planned",
+      "catalogGate": "three_explicit_age_branches_required"
+    },
+    {
+      "sku": "ECE24-3648",
+      "displayName": "EÇE/2024 · 36–48 Ay",
+      "programProfile": "meb_2024_ece",
+      "ageProfile": "36-48",
+      "ageProfileNature": "maarifos_content_adaptation",
+      "releaseStatus": "blocked_by_catalog",
+      "catalogGate": "ece24_catalog_must_be_complete"
+    },
+    {
+      "sku": "ECE24-4860",
+      "displayName": "EÇE/2024 · 48–60 Ay",
+      "programProfile": "meb_2024_ece",
+      "ageProfile": "48-60",
+      "ageProfileNature": "maarifos_content_adaptation",
+      "releaseStatus": "blocked_by_catalog",
+      "catalogGate": "ece24_catalog_must_be_complete"
+    },
+    {
+      "sku": "ECE24-6072",
+      "displayName": "EÇE/2024 · 60–72 Ay",
+      "programProfile": "meb_2024_ece",
+      "ageProfile": "60-72",
+      "ageProfileNature": "maarifos_content_adaptation",
+      "releaseStatus": "blocked_by_catalog",
+      "catalogGate": "ece24_catalog_must_be_complete"
+    },
+    {
+      "sku": "ECE24-MIXED",
+      "displayName": "EÇE/2024 · Karma Yaş",
+      "programProfile": "meb_2024_ece",
+      "ageProfile": "mixed",
+      "ageProfileNature": "maarifos_content_adaptation",
+      "releaseStatus": "blocked_by_catalog",
+      "catalogGate": "ece24_catalog_complete_and_three_age_branches_required"
+    }
+  ],
+  "bundles": [
+    {
+      "bundleId": "BUNDLE-ALL-8",
+      "displayName": "Tam Paket",
+      "grants": [
+        "TYMM-3648",
+        "TYMM-4860",
+        "TYMM-6072",
+        "TYMM-MIXED",
+        "ECE24-3648",
+        "ECE24-4860",
+        "ECE24-6072",
+        "ECE24-MIXED"
+      ],
+      "releaseStatus": "planned_after_all_sku_gates"
+    }
+  ],
+  "lensSelectionPolicy": {
+    "includedWithEveryEntitledSku": true,
+    "primaryLensCount": 1,
+    "maximumSupportingLensCount": 2,
+    "lensesAreOfficialCurricula": false
+  },
+  "lenses": [
+    {
+      "id": "guided-play",
+      "displayName": "Çocuk Girişimli ve Rehberli Oyun",
+      "evidenceGrade": "B",
+      "inspiration": "developmentally_appropriate_practice"
+    },
+    {
+      "id": "nature-outdoor",
+      "displayName": "Doğa Temelli Açık Hava Öğrenme",
+      "evidenceGrade": "B-C",
+      "inspiration": "forest_school_principles"
+    },
+    {
+      "id": "atelier-documentation",
+      "displayName": "Araştırma, Atölye ve Pedagojik Dokümantasyon",
+      "evidenceGrade": "C",
+      "inspiration": "reggio_emilia_approach"
+    },
+    {
+      "id": "prepared-environment",
+      "displayName": "Hazırlanmış Çevre ve Bağımsız Çalışma",
+      "evidenceGrade": "B",
+      "inspiration": "montessori_principles"
+    },
+    {
+      "id": "plan-act-reflect",
+      "displayName": "Planla–Uygula–Değerlendir Etkin Öğrenme",
+      "evidenceGrade": "B",
+      "inspiration": "highscope_principles"
+    },
+    {
+      "id": "belonging-family-weave",
+      "displayName": "Aidiyet–İlişki–Aile Dokuması",
+      "evidenceGrade": "C",
+      "inspiration": "te_whariki_principles"
+    },
+    {
+      "id": "three-phase-project",
+      "displayName": "Üç Aşamalı Çocuk Araştırma Projesi",
+      "evidenceGrade": "B-C",
+      "inspiration": "project_approach"
+    },
+    {
+      "id": "play-nature-connectedness",
+      "displayName": "Oyun–Doğa–Bağlantılılık",
+      "evidenceGrade": "C",
+      "inspiration": "froebelian_principles"
+    },
+    {
+      "id": "rhythm-story-natural-material",
+      "displayName": "Ritim–Hikâye–Taklit–Doğal Malzeme",
+      "evidenceGrade": "C",
+      "inspiration": "waldorf_steiner_observable_practices"
+    },
+    {
+      "id": "loose-parts",
+      "displayName": "Açık Uçlu Taşınabilir Malzemeler",
+      "evidenceGrade": "C",
+      "inspiration": "loose_parts_play"
+    },
+    {
+      "id": "managed-challenge",
+      "displayName": "Yönetilen Meydan Okuma ve Risk–Fayda",
+      "evidenceGrade": "B-C",
+      "inspiration": "risky_play_risk_benefit"
+    },
+    {
+      "id": "scientific-inquiry",
+      "displayName": "Sor–Gözle–Dene–Açıkla Bilimsel Sorgulama",
+      "evidenceGrade": "A-B",
+      "inspiration": "early_science_inquiry"
+    },
+    {
+      "id": "integrated-early-stem",
+      "displayName": "Oyunla Bütünleşik Erken STEM",
+      "evidenceGrade": "B",
+      "inspiration": "integrated_early_stem"
+    },
+    {
+      "id": "design-make-improve",
+      "displayName": "Tasarla–Yap–Dene–İyileştir",
+      "evidenceGrade": "C",
+      "inspiration": "maker_tinkering"
+    },
+    {
+      "id": "multiple-access-expression",
+      "displayName": "Çoklu Erişim ve İfade Tasarımı",
+      "evidenceGrade": "B-C",
+      "inspiration": "universal_design_for_learning"
+    },
+    {
+      "id": "accessible-participation",
+      "displayName": "Erişilebilir Katılım ve Destekleyici İletişim",
+      "evidenceGrade": "A-B",
+      "inspiration": "inclusive_early_childhood_education"
+    },
+    {
+      "id": "emotion-relationship-coregulation",
+      "displayName": "Duygu, İlişki ve Eş Düzenleme",
+      "evidenceGrade": "A",
+      "inspiration": "social_emotional_learning"
+    },
+    {
+      "id": "music-movement-improvisation",
+      "displayName": "Müzik–Hareket–Söz–Doğaçlama",
+      "evidenceGrade": "B-C",
+      "inspiration": "orff_schulwerk_principles"
+    },
+    {
+      "id": "song-listening-local-melody",
+      "displayName": "Şarkı–Dinleme–Yerel Ezgi",
+      "evidenceGrade": "B-C",
+      "inspiration": "kodaly_concept_principles"
+    },
+    {
+      "id": "embodied-rhythm",
+      "displayName": "Bedenle Ritim ve Müziksel Hareket",
+      "evidenceGrade": "B-C",
+      "inspiration": "dalcroze_eurhythmics_principles"
+    },
+    {
+      "id": "story-drama-enactment",
+      "displayName": "Masal–Yaratıcı Drama–Canlandırma",
+      "evidenceGrade": "B",
+      "inspiration": "storytelling_creative_drama"
+    },
+    {
+      "id": "local-culture-community",
+      "displayName": "Yerel Kültür–Aile Bilgisi–Topluluk",
+      "evidenceGrade": "B",
+      "inspiration": "place_based_culturally_responsive_learning"
+    },
+    {
+      "id": "movement-balance-physical-literacy",
+      "displayName": "Hareket, Denge ve Bedensel Yetkinlik",
+      "evidenceGrade": "A",
+      "inspiration": "physical_literacy"
+    },
+    {
+      "id": "interactive-reading-emergent-literacy",
+      "displayName": "Etkileşimli Okuma ve Filizlenen Okuryazarlık",
+      "evidenceGrade": "A",
+      "inspiration": "interactive_reading_emergent_literacy"
+    }
+  ],
+  "mandatoryCoreLayers": [
+    "values_first_erdem_value_action_trace",
+    "respect_responsibility_justice_triple_check",
+    "all_20_tymm_values_term_coverage_and_four_per_month",
+    "turkish_islamic_cultural_grounding_with_child_dignity",
+    "restorative_action_without_moral_belief_or_ritual_scoring",
+    "developmentally_and_contextually_appropriate",
+    "child_agency",
+    "play_intentional_teaching_balance",
+    "raw_observation_separate_from_interpretation",
+    "multiple_evidence_and_documentation",
+    "inclusive_access_and_participation",
+    "sensory_and_communication_accessibility",
+    "multilingual_home_language_respect",
+    "culturally_responsive_anti_bias_representation",
+    "gender_stereotype_avoidance",
+    "safe_relationship_coregulation_trauma_sensitivity",
+    "family_partnership_local_context",
+    "risk_benefit_hygiene_allergy_emergency",
+    "privacy_media_permission_and_rights",
+    "no_diagnosis_moral_label_or_unsupported_mastery_claim",
+    "teacher_reflection_informs_next_plan"
+  ]
+}

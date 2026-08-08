@@ -53,7 +53,8 @@ export function useBrowserRouter(): BrowserRouterState {
         return;
       }
       const method = options?.replace ? "replaceState" : "pushState";
-      window.history[method](routeHistoryState(next.id), "", next.path);
+      const nextUrl = `${next.path}${window.location.search}${window.location.hash}`;
+      window.history[method](routeHistoryState(next.id), "", nextUrl);
       setRoute(next);
     },
     [],

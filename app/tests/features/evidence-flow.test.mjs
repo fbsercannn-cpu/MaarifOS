@@ -206,6 +206,56 @@ test("D1 plan-etkinlik-ham gözlem-onaylı bağ-kaynaklı taslak zincirini eksik
   assert.equal(draft.draft.evidenceCitations[0].rawText, undefined);
 });
 
+test("genel gözlem yakalama puan, kalıcı etiket ve hassas veriyi hiçbir alandan yazamaz", async () => {
+  const store = activeStore();
+  await createEvidenceChain(store);
+  const attempts = [
+    { rawText: "Saygısı: 95 olarak kaydedildi." },
+    { rawText: "Karakter açısından mükemmeldir." },
+    { rawText: "Fâtiha okudu." },
+    { rawText: "Alerjisi için ilaç kullandı." },
+    { rawText: "Mahrem bölgesinden söz etti." },
+    { rawText: "Ailesinin velayet davası konuşuldu." },
+    {
+      rawText: "Çocuk iki taşı yan yana koydu.",
+      childQuote: "Fâtiha okudum.",
+    },
+    {
+      rawText: "Çocuk iki taşı yan yana koydu.",
+      context: "Ailesinin sağlık durumu konuşulurken.",
+    },
+  ];
+
+  for (const [index, attempt] of attempts.entries()) {
+    const before = await store.readSnapshot();
+    await assert.rejects(
+      captureImmutableRawObservation(store, {
+        observationId: `00000000-0000-4000-8000-${String(420 + index).padStart(12, "0")}`,
+        studentId: student,
+        planId,
+        activityId,
+        observedAt: "2026-09-01T07:10:00.000Z",
+        now: new Date("2026-09-01T07:11:00.000Z"),
+        ...attempt,
+      }),
+      /puan|karakter|kişisel inanç|hassas kişisel bilgi/i,
+    );
+    assert.deepEqual(await store.readSnapshot(), before);
+  }
+
+  const exactSafeText = "  Arkadaşının inancına saygı gösterdi.  ";
+  const safe = await captureImmutableRawObservation(store, {
+    observationId: "00000000-0000-4000-8000-000000000430",
+    studentId: student,
+    planId,
+    activityId,
+    rawText: exactSafeText,
+    observedAt: "2026-09-01T07:12:00.000Z",
+    now: new Date("2026-09-01T07:13:00.000Z"),
+  });
+  assert.equal(safe.observation.rawText, exactSafeText);
+});
+
 test("ham gözlemin üzerine yazmayı ve TYMM planına MEB 2024 bağlantısını reddeder", async () => {
   const store = activeStore();
   const chain = await createEvidenceChain(store);

@@ -15,6 +15,7 @@ class MemoryStore {
 
   constructor(snapshot) {
     this.snapshot = structuredClone(snapshot);
+    this.afterReadSnapshot = null;
   }
 
   async transaction(mode, collections, task) {
@@ -42,7 +43,13 @@ class MemoryStore {
   }
 
   async readSnapshot() {
-    return structuredClone(this.snapshot);
+    const result = structuredClone(this.snapshot);
+    if (this.afterReadSnapshot) {
+      const hook = this.afterReadSnapshot;
+      this.afterReadSnapshot = null;
+      await hook(this.snapshot);
+    }
+    return result;
   }
 
   close() {}
@@ -235,6 +242,7 @@ test("kurum dosyası açık seçimle ad, okul kodu ve yakın telefonunu içerir"
     observations: store.snapshot.observations,
     observationRevisions: [],
     evidenceCurriculumLinks: [],
+    valueEvidenceLinks: [],
     activityReferences: [],
     planReferences: [],
     mediaAssets: [],
@@ -268,6 +276,7 @@ test("gözlemler kapalıyken portfolyo kaynak ham gözlemini sızdırmaz", () =>
     observations: store.snapshot.observations,
     observationRevisions: [],
     evidenceCurriculumLinks: [],
+    valueEvidenceLinks: [],
     activityReferences: [],
     planReferences: [],
     mediaAssets: [],
@@ -283,6 +292,186 @@ test("gözlemler kapalıyken portfolyo kaynak ham gözlemini sızdırmaz", () =>
   assert.doesNotMatch(dossier.text, /Blokları üç farklı biçimde denedi/);
   assert.deepEqual(dossier.includedEntityIds.observations, []);
   assert.match(dossier.text, /Farklı çözüm yollarını denedi/);
+});
+
+test("dosya manifesti yalnız aynı çocuğun canlı değer kanıt bağını içerir", () => {
+  const store = dossierStore();
+  const activeLinkId = "00000000-0000-4000-8000-000000000739";
+  const tombstonedLinkId = "00000000-0000-4000-8000-000000000740";
+  const otherStudentLinkId = "00000000-0000-4000-8000-000000000741";
+  const archive = {
+    archiveVersion: 1,
+    generatedAt: "2027-01-20T10:00:00.000Z",
+    studentId,
+    student: store.snapshot.students[0],
+    enrollments: store.snapshot.students[0].enrollments,
+    academicYears: store.snapshot.academicYears,
+    classrooms: store.snapshot.classrooms,
+    attendanceRecords: store.snapshot.attendanceRecords,
+    observations: store.snapshot.observations,
+    observationRevisions: [],
+    evidenceCurriculumLinks: [],
+    valueEvidenceLinks: [
+      {
+        id: activeLinkId,
+        academicYearId,
+        classroomId,
+        studentId,
+        observationId,
+        civilDate: "2026-09-16",
+        deletedAt: null,
+      },
+      {
+        id: tombstonedLinkId,
+        academicYearId,
+        classroomId,
+        studentId,
+        observationId,
+        civilDate: "2026-09-16",
+        deletedAt: "2026-09-20T08:00:00.000Z",
+      },
+      {
+        id: otherStudentLinkId,
+        academicYearId,
+        classroomId,
+        studentId: "00000000-0000-4000-8000-000000000799",
+        observationId,
+        civilDate: "2026-09-16",
+        deletedAt: null,
+      },
+    ],
+    activityReferences: [],
+    planReferences: [],
+    mediaAssets: [],
+    portfolioSelections: store.snapshot.portfolioSelections,
+    reportDrafts: [],
+    externalFeedback: [],
+  };
+
+  const dossier = buildStudentDossier(archive, baseOptions);
+  assert.deepEqual(dossier.includedEntityIds.valueEvidenceLinks, [activeLinkId]);
+  assert.doesNotMatch(dossier.text, /değeri kazandı|puan|rozet/iu);
+});
+
+test("bireysel dosya çok çocuklu gözlemi ve ona bağlı portfolyo metnini dışarı çıkarmaz", async () => {
+  const store = dossierStore();
+  const otherStudentId = "00000000-0000-4000-8000-000000000743";
+  const groupObservationId = "00000000-0000-4000-8000-000000000744";
+  const groupPortfolioId = "00000000-0000-4000-8000-000000000745";
+  store.snapshot.students.push({
+    ...structuredClone(store.snapshot.students[0]),
+    id: otherStudentId,
+    displayName: "Ece Başka Çocuk",
+    firstName: "Ece",
+    lastName: "Başka Çocuk",
+  });
+  store.snapshot.observations.push({
+    ...structuredClone(store.snapshot.observations[0]),
+    id: groupObservationId,
+    studentIds: [studentId, otherStudentId],
+    rawText: "Ece Başka Çocuk, Ada ile birlikte kule kurdu.",
+    context: "Ece'nin bireysel paylaşımı",
+    childQuote: "Ece: Bu benim özel fikrim.",
+  });
+  store.snapshot.portfolioSelections.push({
+    ...structuredClone(store.snapshot.portfolioSelections[0]),
+    id: groupPortfolioId,
+    itemId: groupObservationId,
+    teacherCaption: "Ece Başka Çocuk ile ortak grup kaydı.",
+  });
+
+  const { dossier } = await createStudentDossier(store, {
+    studentId,
+    options: baseOptions,
+    now: new Date("2027-01-20T10:00:00.000Z"),
+  });
+
+  assert.doesNotMatch(dossier.text, /Ece Başka Çocuk|Ece'nin|özel fikrim/);
+  assert.equal(
+    dossier.includedEntityIds.observations.includes(groupObservationId),
+    false,
+  );
+  assert.equal(
+    dossier.includedEntityIds.portfolioSelections.includes(groupPortfolioId),
+    false,
+  );
+});
+
+test("dosya preimage okumasından sonra öğrenci silinirse stale paket ve metin üretilmez", async () => {
+  const store = dossierStore();
+  store.afterReadSnapshot = async (snapshot) => {
+    snapshot.students = snapshot.students.filter((record) => record.id !== studentId);
+    snapshot.observations = snapshot.observations.filter(
+      (record) => !record.studentIds?.includes(studentId),
+    );
+  };
+
+  await assert.rejects(
+    createStudentDossier(store, {
+      studentId,
+      options: baseOptions,
+      now: new Date("2027-01-20T10:00:00.000Z"),
+    }),
+    /kaynak kayıtlar değişti; dosya oluşturulmadı/,
+  );
+  assert.equal(store.snapshot.students.some((record) => record.id === studentId), false);
+  assert.deepEqual(store.snapshot.exportPackages, []);
+});
+
+test("dosya preimage okumasından sonra değer kanıt zinciri değişirse paket yazılmaz", async () => {
+  const store = dossierStore();
+  store.afterReadSnapshot = async (snapshot) => {
+    snapshot.valueEvidenceLinks.push({
+      id: "00000000-0000-4000-8000-000000000742",
+      academicYearId,
+      classroomId,
+      studentId,
+      observationId,
+      createdAt: "2027-01-20T09:59:00.000Z",
+      updatedAt: "2027-01-20T09:59:00.000Z",
+      civilDate: "2027-01-20",
+      deletedAt: null,
+      schemaVersion: 1,
+    });
+  };
+
+  await assert.rejects(
+    createStudentDossier(store, {
+      studentId,
+      options: baseOptions,
+      now: new Date("2027-01-20T10:00:00.000Z"),
+    }),
+    /kaynak kayıtlar değişti; dosya oluşturulmadı/,
+  );
+  assert.equal(store.snapshot.valueEvidenceLinks.length, 1);
+  assert.deepEqual(store.snapshot.exportPackages, []);
+});
+
+test("dosya zamanı dahil edilen kayıt veya kapsam zaman çizgisinden eskiyse paket yazılmaz", async () => {
+  for (const mutate of [
+    (snapshot) => {
+      snapshot.observations[0].updatedAt = "2027-01-20T10:01:00.000Z";
+    },
+    (snapshot) => {
+      snapshot.classrooms[0].updatedAt = "2027-01-20T10:01:00.000Z";
+    },
+  ]) {
+    const store = dossierStore();
+    mutate(store.snapshot);
+    const before = await store.readSnapshot();
+
+    await assert.rejects(
+      createStudentDossier(store, {
+        studentId,
+        options: baseOptions,
+        now: new Date("2027-01-20T10:00:00.000Z"),
+      }),
+      /son değişiklik zamanından eski|canlılık penceresi dışında/,
+    );
+
+    assert.deepEqual(await store.readSnapshot(), before);
+    assert.deepEqual(store.snapshot.exportPackages, []);
+  }
 });
 
 test("haricî AI geri bildirimi değişmez metin, hash ve toplu özet işaretleriyle saklanır", async () => {

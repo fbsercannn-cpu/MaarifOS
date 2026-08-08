@@ -133,6 +133,7 @@ import {
   PlanCreationFlow,
   type PlanCreationCommand,
 } from "./features/planning";
+import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -211,6 +212,12 @@ import { COLLECTION_NAMES } from "./core/domain/model";
 const ClassroomScreen = lazy(() =>
   import("./features/classroom/ClassroomScreen").then((module) => ({
     default: module.ClassroomScreen,
+  })),
+);
+
+const PremiumPlanCenterScreen = lazy(() =>
+  import("./features/premium-plans/PremiumPlanCenterScreen.tsx").then((module) => ({
+    default: module.PremiumPlanCenterScreen,
   })),
 );
 
@@ -581,6 +588,7 @@ type AppSurface =
   | "documents"
   | "release-notes"
   | "plan-flow"
+  | "premium-plans"
   | "evidence-flow";
 
 const APP_HISTORY_MARKER = "__maarifOSSurface";
@@ -599,6 +607,7 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
     candidate === "documents" ||
     candidate === "release-notes" ||
     candidate === "plan-flow" ||
+    candidate === "premium-plans" ||
     candidate === "evidence-flow"
     ? candidate
     : null;
@@ -1925,6 +1934,13 @@ export default function Prototype() {
   const { device, native } = useMobileDevice();
   const { bottomInset } = useKeyboardInsets();
   const { route, navigate } = useBrowserRouter();
+  const premiumPilotPreviewEnabled =
+    isCapabilityEnabled("premiumPlanCenter") ||
+    (import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get("premiumPilot") === "1");
+  const internalStaffExportEnabled =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("premiumPilot") === "1";
   const store = useMemo(() => new IndexedDbDataStore(), []);
   const backupService = useMemo(
     () => new BackupService(store, { appVersion: CURRENT_RELEASE.version }),
@@ -2040,6 +2056,9 @@ export default function Prototype() {
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
+  const [premiumDailyTemplate, setPremiumDailyTemplate] =
+    useState<PremiumDailyTemplateSelection | null>(null);
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
     useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
@@ -2311,6 +2330,8 @@ export default function Prototype() {
     ? "evidence-flow"
     : planFlowOpen
       ? "plan-flow"
+      : premiumPlanOpen
+        ? "premium-plans"
       : studentShareOpen
         ? "student-share"
         : studentDeletionCandidate
@@ -4662,6 +4683,7 @@ export default function Prototype() {
     }
     keyboard.hide();
     setPlanFlowOpen(false);
+    setPremiumDailyTemplate(null);
     setEvidenceFlowRequest(null);
     const returnFocusTarget = d1ReturnFocusRef.current;
     d1ReturnFocusRef.current = null;
@@ -4690,6 +4712,7 @@ export default function Prototype() {
     setDocumentsOpen(restorableSurface === "documents");
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
+    setPremiumPlanOpen(restorableSurface === "premium-plans");
     setEvidenceFlowRequest(evidenceRequest);
     setStudentActionsOpenId(null);
   }, []);
@@ -4793,7 +4816,7 @@ export default function Prototype() {
     surfaceTransitionRef.current = null;
   }, [activeSurface, native]);
 
-  const openPlanFlow = () => {
+  const openPlanFlow = (initialTemplate?: PremiumDailyTemplateSelection) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Plan oluşturma güvenlik için kapalı.",
@@ -4805,7 +4828,10 @@ export default function Prototype() {
       setAnnouncement("Plan oluşturmadan önce sınıfınızı kurun.");
       return;
     }
-    if (educationalWriteNotice) {
+    const futurePremiumPreparation =
+      configuredClassroom.operationalStatus === "preparation" &&
+      initialTemplate !== undefined;
+    if (educationalWriteNotice && !futurePremiumPreparation) {
       setClassroomOpen(true);
       setAnnouncement(educationalWriteNotice);
       return;
@@ -4821,6 +4847,8 @@ export default function Prototype() {
         : null;
     surfaceTransitionRef.current = "plan-flow";
     setPlansOpen(false);
+    setPremiumPlanOpen(false);
+    setPremiumDailyTemplate(initialTemplate ?? null);
     setPlanFlowOpen(true);
   };
 
@@ -5005,11 +5033,12 @@ export default function Prototype() {
     const result = await enqueuePersistence(
       async () => {
         const created = await createPlanWithActivity(store, {
-          civilDate: todayWorkspace.civilDate,
           ...command,
           curriculumProfile,
         });
-        await setTodayActivityStatus(store, created.activity.id, "in_progress");
+        if (command.civilDate === currentCivilDate) {
+          await setTodayActivityStatus(store, created.activity.id, "in_progress");
+        }
         return created;
       },
       {
@@ -5019,6 +5048,16 @@ export default function Prototype() {
       },
     );
     const refreshed = await refreshD1Workspaces();
+    if (command.civilDate !== currentCivilDate) {
+      const activity = result.activity;
+      surfaceTransitionRef.current = null;
+      setPlanFlowOpen(false);
+      setPremiumDailyTemplate(null);
+      setAnnouncement(
+        `${activity.title} ${command.civilDate} tarihi için planlandı. Etkinlik ve gözlem, plan gününde başlatılabilir.`,
+      );
+      return;
+    }
     const activity = refreshed.evidence.activities.find(
       (item) => item.id === result.activity.id,
     );
@@ -5252,10 +5291,23 @@ export default function Prototype() {
     );
   };
 
-  const applyReadyUpdate = () => {
-    setUpdateReady(false);
-    setAnnouncement("MaarifOS güncelleniyor.");
-    window.dispatchEvent(new CustomEvent("maarifos:apply-update"));
+  const applyReadyUpdate = async () => {
+    if (dataBusy) return;
+    setDataBusy(true);
+    setAnnouncement("Bekleyen kayıtlar doğrulanıyor.");
+    try {
+      await flushPendingWrites();
+      setUpdateReady(false);
+      setAnnouncement("Kayıtlar doğrulandı; MaarifOS güncelleniyor.");
+      window.dispatchEvent(new CustomEvent("maarifos:apply-update"));
+    } catch {
+      setUpdateReady(true);
+      setAnnouncement(
+        "Güncelleme bekletildi; önce bekleyen kaydın bu cihaza yazıldığını doğrulayın.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
   };
 
   const retryPersistence = () => {
@@ -5397,8 +5449,10 @@ export default function Prototype() {
                 educationalWritesDisabled,
                 dataBusy,
                 updateReady,
+                updateVersion: CURRENT_RELEASE.version,
                 pendingObservationCount: evidenceWorkspace.pendingObservations.length,
                 planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
+                premiumPlanCenterEnabled: premiumPilotPreviewEnabled,
               }}
               actions={{
                 onOpenSettings: () => setProfileOpen(true),
@@ -5415,7 +5469,16 @@ export default function Prototype() {
                 onOpenStudentObservation: openStudentObservation,
                 onOpenActivityEvidence: openActivityEvidence,
                 onCompleteCurrentActivity: completeCurrentActivity,
-                onOpenPlanFlow: openPlanFlow,
+                onOpenPlanFlow: () => openPlanFlow(),
+                onOpenPremiumPlans: () => {
+                  if (!configuredClassroom?.curriculumProfile) {
+                    setClassroomOpen(true);
+                    setAnnouncement("Plan Kütüphanesi için önce sınıf program profilini tamamlayın.");
+                    return;
+                  }
+                  surfaceTransitionRef.current = "premium-plans";
+                  setPremiumPlanOpen(true);
+                },
                 onOpenPlanItem: (item) => {
                   setPlansOpen(true);
                   setAnnouncement(`${item.title} plan kaydı açıldı.`);
@@ -5815,7 +5878,7 @@ export default function Prototype() {
           </span>
           <ChevronRightIcon aria-hidden="true" />
         </button>
-        <button className="sheet-primary plans-create-button" type="button" onClick={openPlanFlow} disabled={educationalWritesDisabled}>
+        <button className="sheet-primary plans-create-button" type="button" onClick={() => openPlanFlow()} disabled={educationalWritesDisabled}>
           <PlusIcon aria-hidden="true" /> Günlük plan oluştur
         </button>
         {todayWorkspace.planItems.length > 0 ? (
@@ -8317,8 +8380,42 @@ export default function Prototype() {
               curriculumProfile={configuredClassroom.curriculumProfile}
               students={students}
               onCreate={createPlanAndStart}
+              initialTemplate={premiumDailyTemplate ?? undefined}
               onClose={() => void closeD1Flow()}
             />
+          </Dialog.Content>
+        </Dialog.Root>
+      ) : null}
+
+      {premiumPlanOpen && premiumPilotPreviewEnabled && configuredClassroom?.curriculumProfile ? (
+        <Dialog.Root
+          open
+          onOpenChange={(open) => {
+            if (!open) setPremiumPlanOpen(false);
+          }}
+        >
+          <Dialog.Overlay className="d1-flow-overlay" />
+          <Dialog.Content className="d1-flow-layer" key="premium-plan-center">
+            <Dialog.Title className="sr-only">Plan Kütüphanesi</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Kapalı premium pilotun yıllık plan, pedagojik lens ve etkinlik seçimi.
+            </Dialog.Description>
+            <Suspense fallback={<div className="premium-loading">Plan Kütüphanesi açılıyor…</div>}>
+              <PremiumPlanCenterScreen
+                store={store}
+                curriculumProfile={configuredClassroom.curriculumProfile}
+                ageGroup={configuredClassroom.ageGroup ?? ""}
+                internalStaffExportEnabled={internalStaffExportEnabled}
+                valueEvidenceWritesDisabled={
+                  writesBlocked || educationalWritesDisabled
+                }
+                onClose={() => setPremiumPlanOpen(false)}
+                onUseActivity={(selection) => {
+                  setPremiumPlanOpen(false);
+                  openPlanFlow(selection);
+                }}
+              />
+            </Suspense>
           </Dialog.Content>
         </Dialog.Root>
       ) : null}

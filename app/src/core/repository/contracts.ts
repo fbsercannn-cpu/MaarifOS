@@ -78,6 +78,23 @@ export interface RecoverySnapshotRepository {
   deleteRecoverySnapshotsContainingStudent(studentId: string): Promise<number>;
 }
 
+export interface StudentRecoveryPurgeResult<T> {
+  result: T;
+  purgedRecoverySnapshotCount: number;
+}
+
+/**
+ * Kalıcı öğrenci silme ile öğrenciyi içeren kurtarma snapshot'larını aynı
+ * dayanıklı işlemde sonuçlandırır. Task ya da snapshot taraması hata verirse
+ * ana koleksiyonlar ve kurtarma deposu birlikte geri alınmalıdır.
+ */
+export interface StudentPrivacyDeletionRepository {
+  transactionWithStudentRecoveryPurge<T>(
+    studentId: string,
+    task: (transaction: DataTransaction) => Promise<T>,
+  ): Promise<StudentRecoveryPurgeResult<T>>;
+}
+
 export interface ClassroomDataQueryRepository {
   listStudentsByClassroom(classroomId: string): Promise<StudentRecord[]>;
   listAttendanceByClassroomDate(
@@ -106,5 +123,14 @@ export function isRecoverySnapshotRepository(
     typeof candidate.getRecoverySnapshot === "function" &&
     typeof candidate.deleteRecoverySnapshot === "function" &&
     typeof candidate.deleteRecoverySnapshotsContainingStudent === "function"
+  );
+}
+
+export function isStudentPrivacyDeletionRepository(
+  store: LocalDataStore,
+): store is LocalDataStore & StudentPrivacyDeletionRepository {
+  const candidate = store as Partial<StudentPrivacyDeletionRepository>;
+  return (
+    typeof candidate.transactionWithStudentRecoveryPurge === "function"
   );
 }

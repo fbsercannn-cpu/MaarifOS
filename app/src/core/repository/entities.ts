@@ -76,6 +76,75 @@ export interface ObservationRecord extends StoredRecord {
   duplicateOf?: string;
 }
 
+export const VALUE_EVIDENCE_ROLES = [
+  "supports",
+  "contrasts",
+  "context_only",
+] as const;
+
+export type ValueEvidenceRole = (typeof VALUE_EVIDENCE_ROLES)[number];
+
+export const VALUE_EVIDENCE_TARGET_CODES = [
+  "D1",
+  "D2",
+  "D3",
+  "D4",
+  "D5",
+  "D6",
+  "D7",
+  "D8",
+  "D9",
+  "D10",
+  "D11",
+  "D12",
+  "D13",
+  "D14",
+  "D15",
+  "D16",
+  "D17",
+  "D18",
+  "D19",
+  "D20",
+] as const;
+
+export type ValueEvidenceTargetCode =
+  (typeof VALUE_EVIDENCE_TARGET_CODES)[number];
+
+export interface ValueEvidenceProvenanceCapsule {
+  contentPackId: string;
+  contentPackVersion: string;
+  contentReleaseId: string;
+  contentManifestDigest: `sha256:${string}`;
+  appliedActivityTemplateId: string;
+  appliedValuesDesignId: string;
+  appliedValuesDesignVersion: "1.0.0";
+  appliedValuesDesignDigest: `sha256:${string}`;
+}
+
+/**
+ * Bir nesnel gözlem ile plandaki tek bir resmî değer eylemi arasında,
+ * yalnız öğretmenin açık onayıyla kurulan izlenebilir bağ.
+ */
+export interface ValueEvidenceLinkRecord extends StoredRecord {
+  academicYearId: string;
+  classroomId: string;
+  observationId: string;
+  studentId: string;
+  planId: string;
+  activityId: string;
+  evidenceRole: ValueEvidenceRole;
+  targetValueCode: ValueEvidenceTargetCode;
+  targetIndicatorCode: string;
+  teacherRationale: string;
+  confirmationMethod: "teacher-confirmed";
+  confirmationScope: "observation-to-value-action-link";
+  confirmedByActorKind: "local-teacher-identity";
+  confirmedByActorId: string;
+  confirmedAt: string;
+  provenance: ValueEvidenceProvenanceCapsule;
+  supersedesLinkId: string | null;
+}
+
 export interface CalendarEntryRecord extends StoredRecord, CalendarEntry {
   academicYearId?: string;
   classroomId?: string;
@@ -99,6 +168,7 @@ export interface EntityMap {
   calendarEntries: CalendarEntryRecord;
   maarifReferences: StoredRecord;
   evidenceCurriculumLinks: StoredRecord;
+  valueEvidenceLinks: ValueEvidenceLinkRecord;
   portfolioSelections: StoredRecord;
   reportDrafts: StoredRecord;
   externalFeedback: StoredRecord;
@@ -125,6 +195,18 @@ export type EntityRecordGuard<Collection extends CollectionName> = (
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+function isRequiredText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isSha256Digest(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
 }
 
 function isUtcIso(value: unknown): value is string {
@@ -287,6 +369,63 @@ function isObservationRecord(value: unknown): value is ObservationRecord {
   );
 }
 
+export function isValueEvidenceLinkRecord(
+  value: unknown,
+): value is ValueEvidenceLinkRecord {
+  if (!isStoredRecord(value) || value.schemaVersion !== 1) return false;
+
+  const uuidFields = [
+    value.academicYearId,
+    value.classroomId,
+    value.observationId,
+    value.studentId,
+    value.planId,
+    value.activityId,
+    value.confirmedByActorId,
+  ];
+  if (!uuidFields.every(isUuid)) return false;
+  if (
+    value.supersedesLinkId !== null &&
+    !isUuid(value.supersedesLinkId)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.evidenceRole !== "string" ||
+    !(VALUE_EVIDENCE_ROLES as readonly string[]).includes(value.evidenceRole) ||
+    typeof value.targetValueCode !== "string" ||
+    !(VALUE_EVIDENCE_TARGET_CODES as readonly string[]).includes(
+      value.targetValueCode,
+    ) ||
+    typeof value.targetIndicatorCode !== "string" ||
+    !new RegExp(`^${value.targetValueCode}\\.[1-9]\\d*\\.[1-9]\\d*$`).test(
+      value.targetIndicatorCode,
+    ) ||
+    !isRequiredText(value.teacherRationale) ||
+    value.teacherRationale.trim().length > 1_000 ||
+    value.confirmationMethod !== "teacher-confirmed" ||
+    value.confirmationScope !== "observation-to-value-action-link" ||
+    value.confirmedByActorKind !== "local-teacher-identity" ||
+    !isUtcIso(value.confirmedAt)
+  ) {
+    return false;
+  }
+
+  const provenance = value.provenance;
+  return (
+    isObject(provenance) &&
+    isRequiredText(provenance.contentPackId) &&
+    isRequiredText(provenance.contentPackVersion) &&
+    isRequiredText(provenance.contentReleaseId) &&
+    isSha256Digest(provenance.contentManifestDigest) &&
+    isRequiredText(provenance.appliedActivityTemplateId) &&
+    isRequiredText(provenance.appliedValuesDesignId) &&
+    provenance.appliedValuesDesignVersion === "1.0.0" &&
+    isSha256Digest(provenance.appliedValuesDesignDigest)
+  );
+}
+
 function isCalendarEntryRecord(value: unknown): value is CalendarEntryRecord {
   return (
     isStoredRecord(value) &&
@@ -327,6 +466,7 @@ export const ENTITY_RECORD_GUARDS = {
   calendarEntries: isCalendarEntryRecord,
   maarifReferences: isStoredRecord,
   evidenceCurriculumLinks: isStoredRecord,
+  valueEvidenceLinks: isValueEvidenceLinkRecord,
   portfolioSelections: isStoredRecord,
   reportDrafts: isStoredRecord,
   externalFeedback: isStoredRecord,
@@ -385,6 +525,7 @@ export function createEmptyEntitySnapshot(): EntitySnapshot {
     calendarEntries: [],
     maarifReferences: [],
     evidenceCurriculumLinks: [],
+    valueEvidenceLinks: [],
     portfolioSelections: [],
     reportDrafts: [],
     externalFeedback: [],

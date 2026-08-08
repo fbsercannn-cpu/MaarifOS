@@ -1,5 +1,7 @@
 # Hediye Alpha kapalı pilot protokolü
 
+> **Kanonik kapsam notu (4 Ağustos 2026):** Bu belge çekirdek veri güvenliği alpha protokolüdür. Premium plan ürünü için ilk içerik pilotu TYMM 2024’ün dört yaş paketini, en az 12 öğretmeni, 2 kurumu ve en az dört okul haftasını kapsar; ayrıntılar [`MAARIFOS_V1_KANONIK_URUN_SARTNAMESI.md`](./MAARIFOS_V1_KANONIK_URUN_SARTNAMESI.md) §17’dedir.
+
 Bu belge gerçek öğretmen kanıtının yerine geçmez. Pilot uygulanıp imzalı sonuç
 tablosu oluşmadan MaarifOS için geniş pilot veya üretim `GO` kararı verilemez.
 

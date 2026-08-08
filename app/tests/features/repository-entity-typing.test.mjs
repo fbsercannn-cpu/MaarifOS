@@ -8,6 +8,11 @@ import {
   createEmptyEntitySnapshot,
   isEntityRecord,
 } from "../../src/core/repository/entities.ts";
+import {
+  INDEXED_DB_MIGRATIONS,
+  MAARIFOS_DATABASE_VERSION,
+  VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
+} from "../../src/core/repository/indexed-db-definitions.ts";
 
 const base = {
   createdAt: "2026-09-02T06:00:00.000Z",
@@ -20,6 +25,38 @@ const base = {
 const academicYearId = "00000000-0000-4000-8000-000000000901";
 const classroomId = "00000000-0000-4000-8000-000000000902";
 const studentId = "00000000-0000-4000-8000-000000000903";
+const observationId = "00000000-0000-4000-8000-000000000905";
+
+const valueEvidenceLink = {
+  ...base,
+  id: "00000000-0000-4000-8000-000000000910",
+  academicYearId,
+  classroomId,
+  observationId,
+  studentId,
+  planId: "00000000-0000-4000-8000-000000000911",
+  activityId: "00000000-0000-4000-8000-000000000912",
+  evidenceRole: "supports",
+  targetValueCode: "D4",
+  targetIndicatorCode: "D4.1.1",
+  teacherRationale: "Gözlemdeki somut paylaşma eylemi bu bağı destekliyor.",
+  confirmationMethod: "teacher-confirmed",
+  confirmationScope: "observation-to-value-action-link",
+  confirmedByActorKind: "local-teacher-identity",
+  confirmedByActorId: "00000000-0000-4000-8000-000000000913",
+  confirmedAt: "2026-09-02T06:05:00.000Z",
+  provenance: {
+    contentPackId: "maarifos-tymm-6072-2026-2027-v3",
+    contentPackVersion: "3.0.0",
+    contentReleaseId: "tymm-6072-2026-09-v3",
+    contentManifestDigest: `sha256:${"a".repeat(64)}`,
+    appliedActivityTemplateId: "tymm6072-sep-fair-sharing",
+    appliedValuesDesignId: "tymm6072-sep-fair-sharing:values:v1",
+    appliedValuesDesignVersion: "1.0.0",
+    appliedValuesDesignDigest: `sha256:${"b".repeat(64)}`,
+  },
+  supersedesLinkId: null,
+};
 
 const records = {
   academicYears: {
@@ -53,13 +90,14 @@ const records = {
   },
   observations: {
     ...base,
-    id: "00000000-0000-4000-8000-000000000905",
+    id: observationId,
     academicYearId,
     classroomId,
     studentIds: [studentId],
     rawText: "Kurgu nesnel gözlem notu.",
     observedAt: "2026-09-02T06:00:00.000Z",
   },
+  valueEvidenceLinks: valueEvidenceLink,
   calendarEntries: {
     ...base,
     id: "00000000-0000-4000-8000-000000000906",
@@ -73,11 +111,78 @@ const records = {
   },
 };
 
-test("EntityMap ile modellenen altı koleksiyon ortak registry guard'ından geçer", () => {
+test("EntityMap ile modellenen koleksiyonlar ortak registry guard'ından geçer", () => {
   for (const [collection, record] of Object.entries(records)) {
     assert.equal(isEntityRecord(collection, record), true, collection);
     assert.doesNotThrow(() => assertEntityRecord(collection, record));
   }
+});
+
+test("değer kanıt bağı guard'ı kimlik, rol, hedef, onay ve provenance alanlarında fail-closed davranır", () => {
+  const invalidLinks = [
+    { ...valueEvidenceLink, schemaVersion: 2 },
+    { ...valueEvidenceLink, planId: "geçersiz" },
+    { ...valueEvidenceLink, evidenceRole: "proves_character" },
+    { ...valueEvidenceLink, targetValueCode: "D21" },
+    { ...valueEvidenceLink, targetIndicatorCode: "D14.1.1" },
+    { ...valueEvidenceLink, teacherRationale: " " },
+    { ...valueEvidenceLink, teacherRationale: "a".repeat(1_001) },
+    { ...valueEvidenceLink, confirmedAt: "2026-09-02 09:05" },
+    { ...valueEvidenceLink, confirmationMethod: "machine-inferred" },
+    { ...valueEvidenceLink, supersedesLinkId: "geçersiz" },
+    {
+      ...valueEvidenceLink,
+      provenance: {
+        ...valueEvidenceLink.provenance,
+        contentManifestDigest: "a".repeat(64),
+      },
+    },
+    {
+      ...valueEvidenceLink,
+      provenance: {
+        ...valueEvidenceLink.provenance,
+        appliedValuesDesignVersion: "2.0.0",
+      },
+    },
+  ];
+
+  assert.ok(
+    invalidLinks.every(
+      (record) => !isEntityRecord("valueEvidenceLinks", record),
+    ),
+  );
+});
+
+test("IndexedDB v5 değer kanıt deposunu beş non-unique indeksle tanımlar", () => {
+  assert.equal(MAARIFOS_DATABASE_VERSION, 5);
+  assert.equal(INDEXED_DB_MIGRATIONS.at(-1)?.toVersion, 5);
+  assert.deepEqual(
+    VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS.map((definition) => ({
+      name: definition.name,
+      keyPath: definition.keyPath,
+      unique: definition.options?.unique ?? false,
+    })),
+    [
+      { name: "by-classroom", keyPath: "classroomId", unique: false },
+      {
+        name: "by-academic-year-classroom",
+        keyPath: ["academicYearId", "classroomId"],
+        unique: false,
+      },
+      { name: "by-observation", keyPath: "observationId", unique: false },
+      { name: "by-student", keyPath: "studentId", unique: false },
+      {
+        name: "by-target-key",
+        keyPath: [
+          "observationId",
+          "activityId",
+          "targetValueCode",
+          "targetIndicatorCode",
+        ],
+        unique: false,
+      },
+    ],
+  );
 });
 
 test("registry bütün koleksiyonları kapsar ve açık koleksiyonları StoredRecord olarak doğrular", () => {

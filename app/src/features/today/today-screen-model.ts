@@ -43,8 +43,10 @@ export interface TodayScreenModel {
   educationalWritesDisabled: boolean;
   dataBusy: boolean;
   updateReady: boolean;
+  updateVersion: string;
   pendingObservationCount: number;
   planEvidenceDetailsEnabled: boolean;
+  premiumPlanCenterEnabled: boolean;
 }
 
 export const TODAY_ACTIVITY_STATUS_LABELS: Readonly<

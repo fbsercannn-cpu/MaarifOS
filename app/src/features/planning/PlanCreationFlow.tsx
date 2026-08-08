@@ -17,6 +17,11 @@ import {
 import type { DashboardStudent as Student } from "../dashboard/dashboard-data";
 import type { CurriculumProfileSnapshot } from "../evidence/evidence-flow";
 import {
+  createPremiumDailyFlowDraft,
+  type PremiumDailyFlowBlockDraft,
+  type PremiumDailyTemplateSelection,
+} from "../premium-plans/domain.ts";
+import {
   CURRICULUM_TARGET_KIND_LABELS,
   curriculumAgeBandFromLabel,
   curriculumTargetsForProfile,
@@ -65,6 +70,7 @@ function createFlowHeader(title: string, step: string, onClose: () => void) {
 }
 
 export type PlanCreationCommand = {
+  civilDate: string;
   planId: string;
   activityId: string;
   planTitle: string;
@@ -74,6 +80,9 @@ export type PlanCreationCommand = {
   curriculumTargets: CurriculumTargetSnapshot[];
   assignmentMode: CurriculumAssignmentMode;
   studentIds: string[];
+  premiumSource?: PremiumDailyTemplateSelection;
+  premiumDailyFlowBlocks?: PremiumDailyFlowBlockDraft[];
+  premiumAlternativeActivated?: boolean;
 };
 
 export function PlanCreationScreen({
@@ -84,6 +93,7 @@ export function PlanCreationScreen({
   curriculumProfile,
   students,
   onCreate,
+  initialTemplate,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -92,15 +102,30 @@ export function PlanCreationScreen({
   curriculumProfile: CurriculumProfileSnapshot;
   students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
+  initialTemplate?: PremiumDailyTemplateSelection;
 }) {
   const [ids] = useState(() => ({
     planId: crypto.randomUUID(),
     activityId: crypto.randomUUID(),
   }));
-  const [planTitle, setPlanTitle] = useState("Günlük öğrenme planı");
-  const [activityTitle, setActivityTitle] = useState("");
+  const [planTitle, setPlanTitle] = useState(
+    initialTemplate?.planTitle ?? "Günlük öğrenme planı",
+  );
+  const [activityTitle, setActivityTitle] = useState(
+    initialTemplate?.activityTitle ?? "",
+  );
   const [startTime, setStartTime] = useState(defaultStartTime);
   const [endTime, setEndTime] = useState(defaultEndTime);
+  const [planCivilDate, setPlanCivilDate] = useState(
+    initialTemplate?.activitySnapshot.recommendedCivilDate ?? civilDate,
+  );
+  const [premiumDailyFlowBlocks, setPremiumDailyFlowBlocks] = useState<
+    PremiumDailyFlowBlockDraft[]
+  >(() =>
+    initialTemplate ? createPremiumDailyFlowDraft(initialTemplate.fullDayFlow) : [],
+  );
+  const [premiumAlternativeActivated, setPremiumAlternativeActivated] =
+    useState(false);
   const [suggestionArea, setSuggestionArea] =
     useState<PreschoolActivityArea>("all");
   const curriculumAgeBand = curriculumAgeBandFromLabel(ageGroup);
@@ -114,7 +139,12 @@ export function PlanCreationScreen({
   );
   const [targetQuery, setTargetQuery] = useState("");
   const [targetDomain, setTargetDomain] = useState("");
-  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>(() => {
+    const initialCodes = new Set(initialTemplate?.targetCodes ?? []);
+    return availableTargets
+      .filter((target) => initialCodes.has(target.referenceCode))
+      .map((target) => target.id);
+  });
   const [assignmentMode, setAssignmentMode] =
     useState<CurriculumAssignmentMode>("whole-class");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -164,6 +194,46 @@ export function PlanCreationScreen({
       ? students.map((student) => student.id)
       : selectedStudentIds;
   const assignmentCount = selectedTargets.length * assignedStudentIds.length;
+  const planDateInPremiumWeek =
+    !initialTemplate ||
+    (planCivilDate >= initialTemplate.weekSnapshot.periodStart &&
+      planCivilDate <= initialTemplate.weekSnapshot.periodEnd);
+  const premiumDailyFlowValid =
+    !initialTemplate ||
+    (premiumDailyFlowBlocks.length === 10 &&
+      premiumDailyFlowBlocks.every(
+        (block) =>
+          Number.isInteger(block.durationMinutes) &&
+          block.durationMinutes >= 5 &&
+          block.durationMinutes <= 240 &&
+          block.transitionNote.length <= 500 &&
+          block.teacherNote.length <= 1_000,
+      ));
+  const resolvedPremiumActivityTitle =
+    initialTemplate &&
+    premiumAlternativeActivated &&
+    activityTitle === initialTemplate.activitySnapshot.title
+      ? initialTemplate.alternativeActivitySnapshot.title
+      : activityTitle;
+  const resolvedPremiumPlanTitle =
+    initialTemplate &&
+    premiumAlternativeActivated &&
+    planTitle === initialTemplate.planTitle
+      ? `${initialTemplate.alternativeActivitySnapshot.title} planı`
+      : planTitle;
+  const selectPremiumApplication = (useAlternative: boolean) => {
+    setPremiumAlternativeActivated(useAlternative);
+    if (!initialTemplate) return;
+    const template = useAlternative
+      ? initialTemplate.alternativeActivitySnapshot
+      : initialTemplate.activitySnapshot;
+    const templateCodes = new Set(template.curriculumTargetCodes);
+    setSelectedTargetIds(
+      availableTargets
+        .filter((target) => templateCodes.has(target.referenceCode))
+        .map((target) => target.id),
+    );
+  };
 
   const save = async () => {
     if (
@@ -171,6 +241,8 @@ export function PlanCreationScreen({
       !activityTitle.trim() ||
       selectedTargets.length === 0 ||
       assignedStudentIds.length === 0 ||
+      !planDateInPremiumWeek ||
+      !premiumDailyFlowValid ||
       busy
     ) return;
     setBusy(true);
@@ -178,13 +250,17 @@ export function PlanCreationScreen({
     try {
       await onCreate({
         ...ids,
-        planTitle,
-        activityTitle,
+        civilDate: planCivilDate,
+        planTitle: resolvedPremiumPlanTitle,
+        activityTitle: resolvedPremiumActivityTitle,
         startTime,
         ...(endTime ? { endTime } : {}),
         curriculumTargets: selectedTargets,
         assignmentMode,
         studentIds: assignedStudentIds,
+        ...(initialTemplate ? { premiumSource: initialTemplate } : {}),
+        ...(initialTemplate ? { premiumDailyFlowBlocks } : {}),
+        ...(initialTemplate ? { premiumAlternativeActivated } : {}),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Plan kaydedilemedi.");
@@ -197,12 +273,12 @@ export function PlanCreationScreen({
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">Bugünün uygulama kaydı</span>
-          <h1>Bir etkinlik ve bir program hedefi seçin.</h1>
-          <p>İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz.</p>
+          <h1>{initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
+          <p>{initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
         </div>
 
         <section className="d1-context-card" aria-label="Plan bağlamı">
-          <span>{formatTurkishCivilDate(civilDate)}</span>
+          <span>{formatTurkishCivilDate(planCivilDate)}</span>
           <strong>{curriculumDisplayLabel(curriculumProfile)}</strong>
           <em>
             {curriculumProfile.officialCatalogVerified
@@ -210,6 +286,171 @@ export function PlanCreationScreen({
               : "Sınıf için seçilen program"}
           </em>
         </section>
+
+        {initialTemplate ? (
+          <>
+            <section className="premium-template-source" aria-label="Premium plan kaynağı">
+              <StarIcon aria-hidden="true" />
+              <span>
+                <strong>Plan Kütüphanesi’nden hazırlandı</strong>
+                <small>{initialTemplate.contentPack.displayName} · {initialTemplate.weekSnapshot.dateRange} · Öğretmen incelemesi gerekli</small>
+              </span>
+            </section>
+            <section className="premium-daily-flow-preview" aria-labelledby="premium-daily-flow-title">
+              <div>
+                <span className="d1-kicker">Tam gün planı</span>
+                <h2 id="premium-daily-flow-title">10 blok otomatik yerleşti</h2>
+                <p>Seçilen etkinlik ilgili bloğa, haftanın alternatifi isteğe bağlı seçenek olarak eklenir.</p>
+              </div>
+              <fieldset className="premium-alternative-choice">
+                <legend>Bu günlük planda uygulanacak etkinlik</legend>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!premiumAlternativeActivated}
+                  onPointerUp={() => {
+                    selectPremiumApplication(false);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      selectPremiumApplication(false);
+                    }
+                  }}
+                >
+                  <span>
+                    <strong>Ana etkinliği uygula</strong>
+                    <small>{initialTemplate.activitySnapshot.title}</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={premiumAlternativeActivated}
+                  onPointerUp={() => {
+                    selectPremiumApplication(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      selectPremiumApplication(true);
+                    }
+                  }}
+                >
+                  <span>
+                    <strong>Haftanın alternatifini bunun yerine uygula</strong>
+                    <small>
+                      {initialTemplate.alternativeActivitySnapshot.title} · Yerine geçtiği ana etkinlik: {initialTemplate.activitySnapshot.title}
+                    </small>
+                  </span>
+                </button>
+                <p>
+                  {premiumAlternativeActivated
+                    ? "Öğretmen seçimi kayda alınır; hedef önerileri alternatif için yenilenir ve kaydetmeden önce değiştirilebilir."
+                    : "Alternatif yalnız aday olarak kalır ve uygulanmış sayılmaz."}
+                </p>
+              </fieldset>
+              <ol>
+                {initialTemplate.fullDayFlow.map((block, index) => {
+                  const selected = initialTemplate.activitySnapshot.flowSlot === block.id;
+                  const alternative = initialTemplate.alternativeActivitySnapshot.flowSlot === block.id;
+                  const applied = premiumAlternativeActivated ? alternative : selected;
+                  const teacherBlock = premiumDailyFlowBlocks[index];
+                  return (
+                    <li key={block.id} className={applied ? "is-selected" : selected ? "is-replaced" : ""}>
+                      <span>{index + 1}</span>
+                      <div>
+                        <strong>{block.title}</strong>
+                        {selected ? (
+                          <em>
+                            {initialTemplate.activitySnapshot.title}
+                            {premiumAlternativeActivated ? " · alternatifle değiştirildi" : " · uygulanacak"}
+                          </em>
+                        ) : null}
+                        {alternative ? (
+                          <small>
+                            Alternatif: {initialTemplate.alternativeActivitySnapshot.title}
+                            {premiumAlternativeActivated ? " · uygulanacak" : " · aday"}
+                          </small>
+                        ) : null}
+                        {teacherBlock ? (
+                          <details className="premium-flow-block-editor">
+                            <summary>Bloğu düzenle · {teacherBlock.durationMinutes} dk</summary>
+                            <label htmlFor={`premium-block-status-${block.id}`}>Uygulama durumu</label>
+                            <select
+                              id={`premium-block-status-${block.id}`}
+                              value={teacherBlock.status}
+                              onChange={(event) =>
+                                setPremiumDailyFlowBlocks((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === block.id
+                                      ? {
+                                          ...candidate,
+                                          status: event.target.value as PremiumDailyFlowBlockDraft["status"],
+                                        }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="planned">Planlandı</option>
+                              <option value="optional">İsteğe bağlı</option>
+                              <option value="skipped">Bu gün uygulanmayacak</option>
+                            </select>
+                            <label htmlFor={`premium-block-duration-${block.id}`}>Süre (dakika)</label>
+                            <KeyboardInput
+                              id={`premium-block-duration-${block.id}`}
+                              inputMode="numeric"
+                              value={String(teacherBlock.durationMinutes)}
+                              onChange={(event) => {
+                                const durationMinutes = Number(event.target.value.replace(/\D/g, ""));
+                                setPremiumDailyFlowBlocks((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === block.id
+                                      ? { ...candidate, durationMinutes }
+                                      : candidate,
+                                  ),
+                                );
+                              }}
+                            />
+                            <label htmlFor={`premium-block-transition-${block.id}`}>Geçiş notu</label>
+                            <KeyboardInput
+                              id={`premium-block-transition-${block.id}`}
+                              value={teacherBlock.transitionNote}
+                              onChange={(event) =>
+                                setPremiumDailyFlowBlocks((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === block.id
+                                      ? { ...candidate, transitionNote: event.target.value }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                            />
+                            <label htmlFor={`premium-block-note-${block.id}`}>Öğretmen notu</label>
+                            <KeyboardInput
+                              id={`premium-block-note-${block.id}`}
+                              value={teacherBlock.teacherNote}
+                              onChange={(event) =>
+                                setPremiumDailyFlowBlocks((current) =>
+                                  current.map((candidate) =>
+                                    candidate.id === block.id
+                                      ? { ...candidate, teacherNote: event.target.value }
+                                      : candidate,
+                                  ),
+                                )
+                              }
+                            />
+                          </details>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          </>
+        ) : null}
 
         <section className="plan-ideas" aria-labelledby="plan-ideas-title">
           <div className="plan-ideas-heading">
@@ -291,6 +532,20 @@ export function PlanCreationScreen({
                 id="d1-plan-title"
                 value={planTitle}
                 onChange={(event) => setPlanTitle(event.target.value)}
+                autoComplete="off"
+              />
+              {!planDateInPremiumWeek ? (
+                <p className="d1-error" role="alert">
+                  Premium plan tarihi {initialTemplate?.weekSnapshot.dateRange} içinde olmalıdır.
+                </p>
+              ) : null}
+              <label htmlFor="d1-plan-date">Plan tarihi</label>
+              <KeyboardInput
+                id="d1-plan-date"
+                value={planCivilDate}
+                onChange={(event) => setPlanCivilDate(event.target.value)}
+                placeholder="YYYY-AA-GG"
+                inputMode="numeric"
                 autoComplete="off"
               />
               <div className="d1-form-grid">
@@ -446,10 +701,12 @@ export function PlanCreationScreen({
             !planTitle.trim() ||
             !activityTitle.trim() ||
             selectedTargets.length === 0 ||
-            assignedStudentIds.length === 0
+            assignedStudentIds.length === 0 ||
+            !planDateInPremiumWeek ||
+            !premiumDailyFlowValid
           }
         >
-          {busy ? "Kaydediliyor…" : "Planı kaydet ve etkinliği başlat"}
+          {busy ? "Kaydediliyor…" : initialTemplate ? "Tam gün planını kaydet ve etkinliği başlat" : "Planı kaydet ve etkinliği başlat"}
         </button>
       </div>
     </MobileScroll>
@@ -465,6 +722,7 @@ export function PlanCreationFlow({
   students,
   onCreate,
   onClose,
+  initialTemplate,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -474,6 +732,7 @@ export function PlanCreationFlow({
   students: Student[];
   onCreate: (command: PlanCreationCommand) => Promise<void>;
   onClose: () => void;
+  initialTemplate?: PremiumDailyTemplateSelection;
 }) {
   const initial = useMemo<FlowScreen>(
     () => ({
@@ -490,6 +749,7 @@ export function PlanCreationFlow({
           curriculumProfile={curriculumProfile}
           students={students}
           onCreate={onCreate}
+          initialTemplate={initialTemplate}
         />
       ),
     }),
@@ -502,6 +762,7 @@ export function PlanCreationFlow({
       students,
       onClose,
       onCreate,
+      initialTemplate,
     ],
   );
 
