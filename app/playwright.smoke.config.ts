@@ -19,5 +19,9 @@ export default defineConfig({
     command: `node ./scripts/prepare-premium-preview.mjs && node ./node_modules/vite/bin/vite.js --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
+    env: {
+      VITE_PREMIUM_PREVIEW_URL:
+        "/premium-preview-cache/tymm-6072-2026-09-v3.json",
+    },
   },
 });
