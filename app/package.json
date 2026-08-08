@@ -6,6 +6,7 @@
   "scripts": {
     "check:runtime": "node scripts/check-mobile-runtime.mjs",
     "update:runtime-lock": "node scripts/update-mobile-runtime-lock.mjs",
+    "test:runtime-lock": "node --test tests/runtime-integrity.test.mjs",
     "test:auth": "node --test tests/auth/*.test.mjs",
     "test:migration": "node --test tests/features/*.test.mjs",
     "test:data": "node scripts/run-runtime-tests.mjs tests/core/backup.spec.ts tests/core/premium-license-backup.spec.ts tests/core/recovery-privacy-race.spec.ts",
@@ -23,7 +24,7 @@
     "test:coverage": "node --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=65 --test-coverage-functions=85 --test tests/features/*.test.mjs",
     "test:browser-smoke": "playwright test --config=playwright.smoke.config.ts",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
-    "quality:gate": "npm run check:runtime && npm run lint && npm run test:typecheck && npm run test:auth && npm run test:coverage && npm run test:runtime && npm run test:pwa && npm run build && npm run check:bundle && npm run test:browser-smoke && npm run test:sites && npm run test:pwa:production",
+    "quality:gate": "npm run test:runtime-lock && npm run check:runtime && npm run lint && npm run test:typecheck && npm run test:auth && npm run test:coverage && npm run test:runtime && npm run test:pwa && npm run build && npm run check:bundle && npm run test:browser-smoke && npm run test:sites && npm run test:pwa:production",
     "test:quality": "npm run quality:gate",
     "predev": "npm run check:runtime && node scripts/prepare-premium-preview.mjs",
     "dev": "vite",
