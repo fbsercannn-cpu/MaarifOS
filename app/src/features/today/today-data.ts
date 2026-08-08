@@ -34,6 +34,8 @@ import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-o
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
 export type TodayActivityStatus = "planned" | "in_progress" | "completed";
+export type TodayPlanItemKind = "activity" | "premium-flow-block";
+export type TodayFlowBlockStatus = "planned" | "optional" | "skipped";
 export type AcademicYearOperationalStatus =
   | "active"
   | "preparation"
@@ -89,12 +91,24 @@ export type ClassroomContext =
 export interface TodayPlanItem {
   id: string;
   title: string;
-  startTime: string;
+  kind: TodayPlanItemKind;
+  startTime?: string;
   endTime?: string;
   subject?: string;
   curriculumConnection?: string;
   status: TodayActivityStatus;
   evidenceCount: number;
+  planId?: string;
+  activityId?: string;
+  activityTitle?: string;
+  flowBlockId?: string;
+  flowBlockStatus?: TodayFlowBlockStatus;
+  durationMinutes?: number;
+  purpose?: string;
+  flexibilityNote?: string;
+  transitionNote?: string;
+  teacherNote?: string;
+  canCaptureEvidence: boolean;
 }
 
 export interface TodayWorkspace {
@@ -288,6 +302,7 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
   return {
     id: record.id,
     title: record.title.trim(),
+    kind: "activity",
     startTime: record.startTime,
     ...(typeof record.endTime === "string" ? { endTime: record.endTime } : {}),
     ...(typeof record.subject === "string" && record.subject.trim()
@@ -298,11 +313,188 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
       : {}),
     status,
     evidenceCount: Math.max(0, storedCount),
+    ...(typeof record.planId === "string" ? { planId: record.planId } : {}),
+    activityId: record.id,
+    activityTitle: record.title.trim(),
+    canCaptureEvidence: true,
   };
 }
 
-export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
-  const civilDate = civilDateInIstanbul(now);
+interface PremiumFlowBlockRecord {
+  id: string;
+  title: string;
+  purpose?: string;
+  flexibilityNote?: string;
+  status: TodayFlowBlockStatus;
+  durationMinutes: number;
+  transitionNote?: string;
+  teacherNote?: string;
+  selectedActivityTemplateIds: string[];
+  alternativeActivityTemplateIds: string[];
+  appliedActivityTemplateIds: string[];
+}
+
+function optionalRecordText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function recordStringIds(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function premiumFlowBlocksFromPlan(
+  plan: StoredRecord,
+  civilDate: string,
+): PremiumFlowBlockRecord[] | null {
+  if (
+    plan.planType !== "daily" ||
+    plan.civilDate !== civilDate ||
+    typeof plan.deletedAt === "string" ||
+    !plan.premiumDailyFlowSnapshot ||
+    typeof plan.premiumDailyFlowSnapshot !== "object" ||
+    Array.isArray(plan.premiumDailyFlowSnapshot)
+  ) {
+    return null;
+  }
+  const snapshot = plan.premiumDailyFlowSnapshot as Record<string, unknown>;
+  if (snapshot.planCivilDate !== civilDate || !Array.isArray(snapshot.blocks)) {
+    return null;
+  }
+  const parsed: PremiumFlowBlockRecord[] = [];
+  for (const candidate of snapshot.blocks) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return null;
+    }
+    const block = candidate as Record<string, unknown>;
+    const id = optionalRecordText(block.id);
+    const title = optionalRecordText(block.title);
+    const status = block.status;
+    const durationMinutes = block.durationMinutes;
+    const selectedActivityTemplateIds = recordStringIds(
+      block.selectedActivityTemplateIds,
+    );
+    const alternativeActivityTemplateIds = recordStringIds(
+      block.alternativeActivityTemplateIds,
+    );
+    const appliedActivityTemplateIds = recordStringIds(
+      block.appliedActivityTemplateIds,
+    );
+    if (
+      !id ||
+      !title ||
+      (status !== "planned" && status !== "optional" && status !== "skipped") ||
+      !Number.isInteger(durationMinutes) ||
+      (durationMinutes as number) < 5 ||
+      (durationMinutes as number) > 240 ||
+      !selectedActivityTemplateIds ||
+      !alternativeActivityTemplateIds ||
+      !appliedActivityTemplateIds
+    ) {
+      return null;
+    }
+    parsed.push({
+      id,
+      title,
+      ...(optionalRecordText(block.purpose)
+        ? { purpose: optionalRecordText(block.purpose) }
+        : {}),
+      ...(optionalRecordText(block.flexibilityNote)
+        ? { flexibilityNote: optionalRecordText(block.flexibilityNote) }
+        : {}),
+      status,
+      durationMinutes: durationMinutes as number,
+      ...(optionalRecordText(block.transitionNote)
+        ? { transitionNote: optionalRecordText(block.transitionNote) }
+        : {}),
+      ...(optionalRecordText(block.teacherNote)
+        ? { teacherNote: optionalRecordText(block.teacherNote) }
+        : {}),
+      selectedActivityTemplateIds,
+      alternativeActivityTemplateIds,
+      appliedActivityTemplateIds,
+    });
+  }
+  return parsed.length === 10 && new Set(parsed.map((block) => block.id)).size === 10
+    ? parsed
+    : null;
+}
+
+function activityTemplateId(item: TodayPlanItem, record: StoredRecord): string | null {
+  if (item.activityId !== record.id) return null;
+  return typeof record.appliedActivityTemplateId === "string"
+    ? record.appliedActivityTemplateId
+    : null;
+}
+
+function premiumFlowItemsFromPlan(
+  plan: StoredRecord,
+  blocks: readonly PremiumFlowBlockRecord[],
+  activityPairs: readonly { record: StoredRecord; item: TodayPlanItem }[],
+): { items: TodayPlanItem[]; consumedActivityIds: Set<string> } {
+  const planActivityPairs = activityPairs.filter(
+    ({ record }) => record.planId === plan.id,
+  );
+  const consumedActivityIds = new Set<string>();
+  const planAppliedTemplateId =
+    typeof plan.appliedActivityTemplateId === "string"
+      ? plan.appliedActivityTemplateId
+      : null;
+
+  const items = blocks.map((block) => {
+    const scheduledTemplateIds = new Set([
+      ...block.selectedActivityTemplateIds,
+      ...block.alternativeActivityTemplateIds,
+      ...block.appliedActivityTemplateIds,
+    ]);
+    const activityPair = planActivityPairs.find(({ record, item }) => {
+      if (consumedActivityIds.has(item.id)) return false;
+      const templateId = activityTemplateId(item, record) ?? planAppliedTemplateId;
+      return templateId !== null && scheduledTemplateIds.has(templateId);
+    });
+    if (activityPair) consumedActivityIds.add(activityPair.item.id);
+    const activity = activityPair?.item;
+    const canCaptureEvidence = Boolean(activity && block.status !== "skipped");
+    return {
+      id: activity?.id ?? `premium-flow:${plan.id}:${block.id}`,
+      title: block.title,
+      kind: "premium-flow-block" as const,
+      ...(activity?.startTime ? { startTime: activity.startTime } : {}),
+      ...(activity?.endTime ? { endTime: activity.endTime } : {}),
+      ...(activity?.subject ? { subject: activity.subject } : {}),
+      ...(activity?.curriculumConnection
+        ? { curriculumConnection: activity.curriculumConnection }
+        : {}),
+      status: activity?.status ?? "planned",
+      evidenceCount: activity?.evidenceCount ?? 0,
+      planId: plan.id,
+      ...(activity?.activityId ? { activityId: activity.activityId } : {}),
+      ...(activity?.title ? { activityTitle: activity.title } : {}),
+      flowBlockId: block.id,
+      flowBlockStatus: block.status,
+      durationMinutes: block.durationMinutes,
+      ...(block.purpose ? { purpose: block.purpose } : {}),
+      ...(block.flexibilityNote
+        ? { flexibilityNote: block.flexibilityNote }
+        : {}),
+      ...(block.transitionNote ? { transitionNote: block.transitionNote } : {}),
+      ...(block.teacherNote ? { teacherNote: block.teacherNote } : {}),
+      canCaptureEvidence,
+    };
+  });
+
+  return { items, consumedActivityIds };
+}
+
+export function resolvePlanDayWorkspace(
+  snapshot: DataSnapshot,
+  civilDate: string,
+): TodayWorkspace {
+  if (!isCivilDate(civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
   const classroom = classroomContext(snapshot, civilDate);
   const scope = resolveActiveClassroomScope(snapshot);
   const scopedActivities = scope
@@ -312,10 +504,40 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
           recordBelongsToClassroomScope(record, scope),
       )
     : [];
-  const basePlanItems = scopedActivities
-    .map((record) => activityFromRecord(record, civilDate))
-    .filter((item): item is TodayPlanItem => item !== null)
-    .sort((left, right) => left.startTime.localeCompare(right.startTime) || left.id.localeCompare(right.id));
+  const activityPairs = scopedActivities
+    .map((record) => ({ record, item: activityFromRecord(record, civilDate) }))
+    .filter(
+      (pair): pair is { record: StoredRecord; item: TodayPlanItem } =>
+        pair.item !== null,
+    );
+  const consumedActivityIds = new Set<string>();
+  const premiumFlowItems = scope
+    ? snapshot.plans
+        .filter((record) => recordBelongsToClassroomScope(record, scope))
+        .sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) ||
+            left.id.localeCompare(right.id),
+        )
+        .flatMap((plan) => {
+          const blocks = premiumFlowBlocksFromPlan(plan, civilDate);
+          if (!blocks) return [];
+          const projection = premiumFlowItemsFromPlan(plan, blocks, activityPairs);
+          for (const activityId of projection.consumedActivityIds) {
+            consumedActivityIds.add(activityId);
+          }
+          return projection.items;
+        })
+    : [];
+  const unconsumedActivityItems = activityPairs
+    .map(({ item }) => item)
+    .filter((item) => !consumedActivityIds.has(item.id))
+    .sort(
+      (left, right) =>
+        (left.startTime ?? "99:99").localeCompare(right.startTime ?? "99:99") ||
+        left.id.localeCompare(right.id),
+    );
+  const basePlanItems = [...premiumFlowItems, ...unconsumedActivityItems];
   const todayObservations = scope
     ? snapshot.observations.filter(
         (record) =>
@@ -339,7 +561,9 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   }
   const planItems = basePlanItems.map((item) => ({
     ...item,
-    evidenceCount: evidenceCountByActivity.get(item.id) ?? item.evidenceCount,
+    evidenceCount: item.activityId
+      ? (evidenceCountByActivity.get(item.activityId) ?? item.evidenceCount)
+      : item.evidenceCount,
   }));
   const todayObservationIds = new Set(
     structuredTodayObservations.map((record) => record.id),
@@ -368,7 +592,10 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   return {
     civilDate,
     classroom,
-    currentActivity: planItems.find((item) => item.status === "in_progress") ?? null,
+    currentActivity:
+      planItems.find(
+        (item) => item.status === "in_progress" && item.canCaptureEvidence,
+      ) ?? null,
     planItems,
     pendingEvidenceLinks: structuredTodayObservations.filter(
       (record) => !linkedObservationIds.has(record.id),
@@ -376,6 +603,21 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
     linkedLearningGoalCount: linkedGoals.size,
     datedEvidenceCount: structuredTodayObservations.length,
   };
+}
+
+export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
+  return resolvePlanDayWorkspace(snapshot, civilDateInIstanbul(now));
+}
+
+export async function loadPlanDayWorkspace(
+  store: LocalDataStore,
+  options: { civilDate: string; now?: Date },
+): Promise<TodayWorkspace> {
+  if (!isCivilDate(options.civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  await migrateLegacyClassroomScopes(store, { now: options.now });
+  return resolvePlanDayWorkspace(await store.readSnapshot(), options.civilDate);
 }
 
 export async function loadTodayWorkspace(

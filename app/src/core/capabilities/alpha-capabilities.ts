@@ -34,7 +34,7 @@ export const ALPHA_CAPABILITIES = Object.freeze({
   appLock: true,
   googleAuth: false,
   curriculumCatalogBrowser: false,
-  planEvidenceDetails: false,
+  planEvidenceDetails: true,
   premiumPlanCenter: false,
   portfolio: false,
   aiFeedback: false,

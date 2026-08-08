@@ -18,10 +18,10 @@ import {
 import { Carousel } from "../../mobile/Carousel.tsx";
 import type { TodayPlanItem } from "./today-data.ts";
 import {
-  TODAY_ACTIVITY_STATUS_LABELS,
   compactTodayProgramLabel,
   configuredClassroomFromToday,
   focusActivityFromToday,
+  todayPlanItemStatusLabel,
   todayCatalogDisplayLabel,
   type TodayScreenModel,
   type TodayStudentCard,
@@ -107,6 +107,11 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
   } = model;
   const configuredClassroom = configuredClassroomFromToday(workspace);
   const focusActivity = focusActivityFromToday(workspace);
+  const premiumFlowBlockCount = workspace.planItems.filter(
+    (item) => item.kind === "premium-flow-block",
+  ).length;
+  const standaloneActivityCount =
+    workspace.planItems.length - premiumFlowBlockCount;
 
   return (
     <main
@@ -249,12 +254,12 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
         <section className="premium-entry-card" aria-labelledby="premium-entry-title">
           <span className="premium-entry-icon" aria-hidden="true"><StarIcon /></span>
           <span className="premium-entry-copy">
-            <small>Kapalı pilot · TYMM 2024 · 60–72 ay</small>
+            <small>Premium · TYMM 2024 · 60–72 ay</small>
             <strong id="premium-entry-title">Plan Kütüphanesi</strong>
-            <span>Pedagojik lensi seçin, yıllık omurgayı sınıfa ekleyin ve etkinliği günlük plana taşıyın.</span>
+            <span>Yıllık, aylık ve haftalık planları görün; günlük akışa taşıyın, değerlendirin ve belge alın.</span>
           </span>
           <button type="button" onClick={actions.onOpenPremiumPlans}>
-            Önizlemeyi aç <ChevronRightIcon aria-hidden="true" />
+            Planları aç <ChevronRightIcon aria-hidden="true" />
           </button>
         </section>
       ) : null}
@@ -355,15 +360,20 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                   <p className="section-eyebrow">
                     {focusActivity.status === "in_progress"
                       ? "Sınıfta şimdi"
-                      : "Sıradaki etkinlik"}
+                      : focusActivity.kind === "premium-flow-block"
+                        ? "Sıradaki akış adımı"
+                        : "Sıradaki etkinlik"}
                   </p>
                   <span className="status-label">
-                    {TODAY_ACTIVITY_STATUS_LABELS[focusActivity.status]}
+                    {todayPlanItemStatusLabel(focusActivity)}
                   </span>
                 </div>
                 <h2 id="current-work-title">{focusActivity.title}</h2>
                 <p className="current-time">
-                  {focusActivity.startTime}
+                  {focusActivity.startTime ??
+                    (focusActivity.durationMinutes
+                      ? `${focusActivity.durationMinutes} dk`
+                      : "Akış sırası")}
                   {focusActivity.endTime ? `–${focusActivity.endTime}` : ""}
                   {focusActivity.subject ? ` · ${focusActivity.subject}` : ""}
                 </p>
@@ -371,28 +381,34 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                   <div className="current-meta-row">
                     <TargetIcon aria-hidden="true" />
                     <span>
-                      {focusActivity.curriculumConnection ??
+                      {focusActivity.activityTitle ??
+                        focusActivity.purpose ??
+                        focusActivity.curriculumConnection ??
                         `${focusActivity.subject ?? "Planlı etkinlik"} · Program bağlantısı`}
                     </span>
                   </div>
-                  <div className="current-evidence-row">
-                    <ReaderIcon aria-hidden="true" />
-                    <span>{focusActivity.evidenceCount} öğrenme kanıtı</span>
-                  </div>
+                  {focusActivity.activityId ? (
+                    <div className="current-evidence-row">
+                      <ReaderIcon aria-hidden="true" />
+                      <span>{focusActivity.evidenceCount} öğrenme kanıtı</span>
+                    </div>
+                  ) : null}
                 </div>
-                <button
-                  className="primary-evidence-button"
-                  type="button"
-                  onClick={() =>
-                    void actions.onOpenActivityEvidence(focusActivity.id)
-                  }
-                  disabled={dataBusy || educationalWritesDisabled}
-                >
-                  <PlusIcon aria-hidden="true" />{" "}
-                  {focusActivity.status === "planned"
-                    ? "Etkinliği başlat"
-                    : "Hızlı gözlem ekle"}
-                </button>
+                {focusActivity.activityId && focusActivity.canCaptureEvidence ? (
+                  <button
+                    className="primary-evidence-button"
+                    type="button"
+                    onClick={() =>
+                      void actions.onOpenActivityEvidence(focusActivity.activityId!)
+                    }
+                    disabled={dataBusy || educationalWritesDisabled}
+                  >
+                    <PlusIcon aria-hidden="true" />{" "}
+                    {focusActivity.status === "planned"
+                      ? "Etkinliği başlat"
+                      : "Hızlı gözlem ekle"}
+                  </button>
+                ) : null}
                 {focusActivity.status === "in_progress" ? (
                   <button
                     className="secondary-text-button"
@@ -417,18 +433,20 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                     ? "Kayıtlı bir plan olduğunda sıradaki etkinlik ve öğrenme kanıtları burada görünür."
                     : "Sınıf adı, yaş grubu, program ve kalıcı çalışma düzenini belirleyerek başlayın."}
                 </p>
-                <button
-                  className="empty-primary"
-                  type="button"
-                  onClick={
-                    configuredClassroom
-                      ? actions.onOpenPlanFlow
-                      : actions.onOpenClassroom
-                  }
-                  disabled={educationalWritesDisabled}
-                >
-                  {configuredClassroom ? "Günlük plan oluştur" : "Sınıfı kur"}
-                </button>
+                {!configuredClassroom || !educationalWritesDisabled ? (
+                  <button
+                    className="empty-primary"
+                    type="button"
+                    onClick={
+                      configuredClassroom
+                        ? actions.onOpenPlanFlow
+                        : actions.onOpenClassroom
+                    }
+                    disabled={educationalWritesDisabled}
+                  >
+                    {configuredClassroom ? "Günlük plan oluştur" : "Sınıfı kur"}
+                  </button>
+                ) : null}
               </>
             )}
           </section>
@@ -440,7 +458,13 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                 <h2 id="today-plan-title">Günün planı</h2>
               </div>
               <span className="today-plan-count">
-                {workspace.planItems.length} etkinlik
+                {premiumFlowBlockCount > 0
+                  ? `${premiumFlowBlockCount} akış adımı${
+                      standaloneActivityCount > 0
+                        ? ` · ${standaloneActivityCount} etkinlik`
+                        : ""
+                    }`
+                  : `${standaloneActivityCount} etkinlik`}
               </span>
             </div>
             {workspace.planItems.length > 0 ? (
@@ -448,7 +472,9 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                 {workspace.planItems.map((item, index) => (
                   <button
                     className={`activity-row is-${
-                      item.status === "in_progress"
+                      item.flowBlockStatus === "skipped"
+                        ? "skipped is-next"
+                        : item.status === "in_progress"
                         ? "current"
                         : item.status === "completed"
                           ? "completed"
@@ -459,7 +485,8 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                     onClick={() => actions.onOpenPlanItem(item)}
                   >
                     <span className="activity-marker" aria-hidden="true">
-                      {item.status === "completed" ? (
+                      {item.status === "completed" &&
+                      item.flowBlockStatus !== "skipped" ? (
                         <CheckCircledIcon />
                       ) : (
                         index + 1
@@ -468,14 +495,22 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                     <span className="activity-copy">
                       <strong>{item.title}</strong>
                       <small>
-                        {item.startTime} ·{" "}
-                        <b>{TODAY_ACTIVITY_STATUS_LABELS[item.status]}</b>
+                        {item.startTime ??
+                          (item.durationMinutes
+                            ? `${item.durationMinutes} dk`
+                            : "Akış sırası")} ·{" "}
+                        <b>{todayPlanItemStatusLabel(item)}</b>
                       </small>
+                      {item.activityTitle && item.activityTitle !== item.title ? (
+                        <small>Etkinlik: {item.activityTitle}</small>
+                      ) : null}
                     </span>
                     <span className="activity-evidence">
-                      {item.evidenceCount > 0
+                      {item.activityId && item.evidenceCount > 0
                         ? `${item.evidenceCount} kanıt`
-                        : "Henüz kanıt yok"}
+                        : item.activityId
+                          ? "Henüz kanıt yok"
+                          : `${item.durationMinutes ?? 0} dk`}
                     </span>
                     <ChevronRightIcon aria-hidden="true" />
                   </button>

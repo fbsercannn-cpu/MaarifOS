@@ -24,11 +24,6 @@ import type {
 import type { AttendanceRecord } from "../domain/attendance";
 import { canonicalJson } from "../backup/canonical-json";
 import {
-  recoverySnapshotMetadata,
-  validateRecoveryRetentionLimit,
-  verifyRecoverySnapshotRecord,
-} from "./recovery-snapshot";
-import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
   SCOPE_INDEX_DEFINITIONS,
@@ -476,6 +471,11 @@ export class IndexedDbDataStore
     snapshot: RecoverySnapshotRecord,
     options: { retentionLimit?: number } = {},
   ): Promise<RecoverySnapshotMetadata> {
+    const {
+      recoverySnapshotMetadata,
+      validateRecoveryRetentionLimit,
+      verifyRecoverySnapshotRecord,
+    } = await import("./recovery-snapshot");
     const verified = await verifyRecoverySnapshotRecord(snapshot);
     const retentionLimit = validateRecoveryRetentionLimit(
       options.retentionLimit,
@@ -534,6 +534,8 @@ export class IndexedDbDataStore
   }
 
   async listRecoverySnapshots(): Promise<RecoverySnapshotMetadata[]> {
+    const { recoverySnapshotMetadata, verifyRecoverySnapshotRecord } =
+      await import("./recovery-snapshot");
     const snapshots = await this.readAllRecoverySnapshots();
     const verified = await Promise.all(
       snapshots.map((snapshot) => verifyRecoverySnapshotRecord(snapshot)),
@@ -550,6 +552,9 @@ export class IndexedDbDataStore
   async getRecoverySnapshot(
     id: string,
   ): Promise<RecoverySnapshotRecord | null> {
+    const { verifyRecoverySnapshotRecord } = await import(
+      "./recovery-snapshot"
+    );
     validUuid(id, "Kurtarma snapshot kimliği");
     const database = await this.openRecoveryDatabase();
     const nativeTransaction = database.transaction(

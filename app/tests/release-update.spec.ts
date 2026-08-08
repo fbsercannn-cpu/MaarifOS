@@ -53,12 +53,12 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.8.0");
-  await expect(updateDialog).toContainText("8 Ağustos 2026");
+  await expect(updateDialog).toContainText("Sürüm 0.9.0");
+  await expect(updateDialog).toContainText("9 Ağustos 2026");
   await expect(updateDialog).toContainText(
-    "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
+    "Öğretmen planı, değerlendirmesi ve belgeleri birbirine bağlandı",
   );
-  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.8.0");
+  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.9.0");
   await expect(updateDialog).toContainText("Kayıtlarınız korundu");
   await updateDialog.getByRole("button", {
     name: "Harika, başlayalım",
@@ -74,13 +74,13 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.8.0");
-  await expect(settings).toContainText("8 Ağustos 2026");
+  await expect(settings).toContainText("MaarifOS 0.9.0");
+  await expect(settings).toContainText("9 Ağustos 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "Saygı, sorumluluk ve adalet merkezli Değerler Pedagojisi altyapısı",
+    "Yıllık omurga, Eylül aylık planı, haftalar ve 10 bloklu günlük akış",
   );
 });
 
@@ -99,8 +99,8 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", as
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.8.0");
-  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.8.0");
+  await expect(updateDialog).toContainText("Sürüm 0.9.0");
+  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.9.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({

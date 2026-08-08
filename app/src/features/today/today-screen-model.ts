@@ -4,6 +4,7 @@ import type { DashboardStudent } from "../dashboard/dashboard-data.ts";
 import type {
   ClassroomContext,
   TodayActivityStatus,
+  TodayPlanItem,
   TodayWorkspace,
 } from "./today-data.ts";
 
@@ -66,12 +67,27 @@ export function configuredClassroomFromToday(
 }
 
 export function focusActivityFromToday(workspace: TodayWorkspace) {
+  const actionableItems = workspace.planItems.filter(
+    (item) => item.activityId && item.canCaptureEvidence,
+  );
   return (
     workspace.currentActivity ??
-    workspace.planItems.find((item) => item.status === "planned") ??
+    actionableItems.find((item) => item.status === "planned") ??
+    actionableItems[0] ??
     workspace.planItems[0] ??
     null
   );
+}
+
+export function todayPlanItemStatusLabel(item: TodayPlanItem): string {
+  if (item.flowBlockStatus === "skipped") return "Atlandı";
+  if (item.status === "in_progress" || item.status === "completed") {
+    return TODAY_ACTIVITY_STATUS_LABELS[item.status];
+  }
+  if (item.flowBlockStatus === "optional") return "İsteğe bağlı";
+  return item.kind === "premium-flow-block"
+    ? "Planlandı"
+    : TODAY_ACTIVITY_STATUS_LABELS.planned;
 }
 
 export function createTodayStudentCards(

@@ -1,7 +1,8 @@
 # MaarifOS Okul Öncesi — V1 Kanonik Ürün Şartnamesi
 
-**Belge sürümü:** 1.0
-**Karar tarihi:** 4 Ağustos 2026
+**Belge sürümü:** 1.1
+**İlk karar tarihi:** 4 Ağustos 2026
+**Son değişiklik:** 8 Ağustos 2026 — yalnız kurucu iç testi için iki cihazlı STAFF istisnası
 **Durum:** Ürün, içerik, tasarım ve kabul testleri için bağlayıcı ana şartname
 **Ürün vaadi:** MEB uyumlu, uygulamaya hazır ve eksiksiz okul öncesi plan sistemi
 
@@ -85,6 +86,8 @@ Deneme, öğretmen hesabı için eğitim-öğretim yılı başına bir kez veril
 ### 5.2 Tek cihaz ilkesi
 
 Öğretmen ve kurum yetkilisi hesabı aynı anda tek cihazda etkindir. Yeni cihazda giriş yapıldığında kullanıcıya önceki cihazın lisansının devre dışı bırakılacağı açıkça sorulur. Kullanıcı onaylarsa oturum aktarılır.
+
+Dar kurucu iç test istisnasında, grant istemcide `staff-code` olarak kalırken yalnız Lisans API'deki `FOUNDER` politikası aynı anda en fazla **iki kayıtlı cihaz** bağlayabilir. Bu iki slot yalnız ürün sahibi ile Emine Öğretmen'in gerçek telefon kabul testi içindir; üçüncü cihaz sunucuda reddedilir ve cihaz değişimi yetkili admin reseti gerektirir. İstisna `purchased`, deneme, promosyon, kurum veya diğer STAFF haklarına yayılmaz; ücretli premium için tek cihaz ilkesi, mağaza doğrulaması ve satın alma kapısı aynen korunur. Frontend özellik bayrağı, gömülü kod veya yerel sayaç lisans yetkisi sayılmaz; erişim P-256 cihaz bağı ve ES256 imzalı entitlement ile sunucuda doğrulanır. Ayrıntılı karar: [`ADR_FOUNDER_PREMIUM_TWO_DEVICE.md`](ADR_FOUNDER_PREMIUM_TWO_DEVICE.md).
 
 ### 5.3 Hesap kurtarma
 

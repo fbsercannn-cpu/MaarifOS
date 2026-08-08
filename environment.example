@@ -2,3 +2,11 @@
 VITE_APP_NAME=MaarifOS
 VITE_DEFAULT_LOCALE=tr-TR
 VITE_DEFAULT_TIMEZONE=Europe/Istanbul
+
+# Kurucu premium erişimi yalnız bu dört production build değeri birlikte ve
+# birbirleriyle uyumlu olduğunda açılır. Origin/issuer kanonik HTTPS olmalı;
+# trusted keys yalnız public P-256 JWK içermeli, private anahtar asla buraya yazılmamalıdır.
+VITE_PREMIUM_LICENSE_API_ORIGIN=
+VITE_PREMIUM_LICENSE_ISSUER=
+VITE_PREMIUM_LICENSE_AUDIENCE=maarifos-pwa
+VITE_PREMIUM_LICENSE_TRUSTED_KEYS_JSON=

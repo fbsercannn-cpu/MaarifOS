@@ -1,7 +1,9 @@
 import type {
   PremiumActivityTemplate,
+  PremiumAnnualMonth,
   PremiumContentPack,
   PremiumFullDayFlowBlock,
+  PremiumLensPreferenceSnapshot,
   PremiumMonthlyPlan,
   PremiumPlanWeek,
 } from "./domain.ts";
@@ -14,9 +16,27 @@ import {
   valueDefinitionByCode,
   type ValueCode,
 } from "../values/values-constitution.ts";
+import { premiumPilotLensById } from "./lens-catalog.ts";
+import type {
+  InstalledPremiumPlanExportSource,
+  PremiumPlanExportDailyPlan,
+} from "./export-read-model.ts";
+import {
+  PREMIUM_MONTHLY_PROGRAM_CRITERIA,
+  PREMIUM_MONTHLY_TEACHER_CRITERIA,
+  type PremiumMonthlyCriterionStatus,
+  type PremiumMonthlyEvaluation,
+  type PremiumWeeklyEvaluation,
+} from "./plan-service.ts";
 
 export type PremiumPlanExportFormat = "pdf" | "word";
 export type PremiumPlanExportAccess = VerifiedPremiumAccess;
+
+export interface PremiumPlanExportWeek extends PremiumPlanWeek {
+  sourceRecordId: string;
+  dailyPlans: readonly PremiumPlanExportDailyPlan[];
+  evaluations: readonly PremiumWeeklyEvaluation[];
+}
 
 export interface PremiumPlanExportDocument {
   format: PremiumPlanExportFormat;
@@ -27,9 +47,16 @@ export interface PremiumPlanExportDocument {
   academicRelease: string;
   contentPackId: string;
   contentPackVersion: string;
+  valuesMappingStatus: PremiumContentPack["valuesMappingStatus"];
+  annualPlanTitle: string;
+  annualPlanRecordId: string;
+  monthlyPlanRecordId: string;
+  annualMonths: readonly PremiumAnnualMonth[];
+  lensPreference: PremiumLensPreferenceSnapshot;
   monthlyPlan: PremiumMonthlyPlan;
+  monthlyEvaluations: readonly PremiumMonthlyEvaluation[];
   fullDayFlow: readonly PremiumFullDayFlowBlock[];
-  weeks: readonly PremiumPlanWeek[];
+  weeks: readonly PremiumPlanExportWeek[];
   activities: readonly PremiumActivityTemplate[];
   teacherReviewNotice: string;
 }
@@ -46,12 +73,39 @@ export interface PremiumPlanExportParagraph {
   text: string;
   style: "title" | "heading1" | "heading2" | "body" | "bullet" | "meta";
   pageBreakBefore?: boolean;
+  forcePageBreakBefore?: boolean;
+  keepWithNext?: boolean;
+}
+
+interface PremiumPlanPdfTextStyle {
+  font: string;
+  color: string;
+  lineHeight: number;
+  gap: number;
+}
+
+export interface PremiumPlanPdfPageItem {
+  paragraphIndex: number;
+  text: string;
+  style: PremiumPlanExportParagraph["style"];
+  lines: readonly string[];
+  font: string;
+  color: string;
+  lineHeight: number;
+  gap: number;
+  height: number;
+}
+
+export interface PremiumPlanPdfPageLayout {
+  items: readonly PremiumPlanPdfPageItem[];
+  usedHeight: number;
 }
 
 const encoder = new TextEncoder();
 
 export function preparePremiumPlanExportDocument(
   pack: PremiumContentPack,
+  source: InstalledPremiumPlanExportSource,
   access: PremiumPlanExportAccess,
   format: PremiumPlanExportFormat,
 ): PremiumPlanExportDocument {
@@ -63,22 +117,56 @@ export function preparePremiumPlanExportDocument(
   if (format !== "pdf" && format !== "word") {
     throw new Error("Dışa aktarma biçimi PDF veya Word olmalıdır.");
   }
+  const installedIdentity = source.contentPackSnapshot;
+  if (
+    installedIdentity.id !== pack.id ||
+    installedIdentity.version !== pack.version ||
+    installedIdentity.contentReleaseId !== pack.contentReleaseId ||
+    installedIdentity.manifestDigest !== pack.manifestDigest ||
+    installedIdentity.sku !== pack.sku ||
+    installedIdentity.academicRelease !== pack.academicRelease ||
+    installedIdentity.valuesMappingStatus !== source.valuesMappingStatus
+  ) {
+    throw new Error(
+      "Belge yalnız seçili paketle aynı kimlik ve sürümü taşıyan kurulmuş plan kaydından hazırlanabilir.",
+    );
+  }
   const extension = format === "pdf" ? "pdf" : "docx";
+  const monthlyPlan = {
+    ...structuredClone(source.monthlyPlan.sourceSnapshot),
+    title: source.monthlyPlan.teacherTitle,
+  };
+  const weeks = source.weeks.map((week) => ({
+    ...structuredClone(week.sourceSnapshot),
+    title: week.teacherTitle,
+    sourceRecordId: week.recordId,
+    dailyPlans: structuredClone(week.dailyPlans),
+    evaluations: structuredClone(week.evaluations),
+  }));
   return {
     format,
     fileName: `MaarifOS_TYMM_6072_Eylul_2026_v${pack.version}.${extension}`,
-    title: pack.monthlyPlan.title,
+    title: monthlyPlan.title,
     programLabel: "TYMM 2024",
     ageLabel: "60–72 ay",
     academicRelease: pack.academicRelease,
-    contentPackId: pack.id,
-    contentPackVersion: pack.version,
-    monthlyPlan: structuredClone(pack.monthlyPlan),
-    fullDayFlow: structuredClone(pack.fullDayFlow),
-    weeks: structuredClone(pack.weeks),
-    activities: structuredClone(pack.activities),
+    contentPackId: installedIdentity.id,
+    contentPackVersion: installedIdentity.version,
+    valuesMappingStatus: source.valuesMappingStatus,
+    annualPlanTitle: source.annualPlan.teacherTitle,
+    annualPlanRecordId: source.annualPlan.recordId,
+    monthlyPlanRecordId: source.monthlyPlan.recordId,
+    annualMonths: structuredClone(source.annualPlan.annualMonths),
+    lensPreference: structuredClone(source.lensPreference),
+    monthlyPlan,
+    monthlyEvaluations: structuredClone(source.monthlyPlan.evaluations ?? []),
+    fullDayFlow: structuredClone(source.monthlyPlan.fullDayFlow),
+    weeks,
+    activities: source.weeks.flatMap((week) =>
+      structuredClone(week.activitySnapshots),
+    ),
     teacherReviewNotice:
-      "Bu belge öğretmenin sınıf bağlamına göre incelemesi ve gerektiğinde uyarlaması için hazırlanmıştır.",
+      "Bu belge öğretmenin sınıf bağlamına göre kurduğu plan zincirinden hazırlanmıştır; kaydedilmiş günlük uyarlamalar ile haftalık ve aylık öğretmen değerlendirmeleri varsa aynen eklenir.",
   };
 }
 
@@ -94,6 +182,28 @@ function addList(
 
 function valueLabel(code: ValueCode): string {
   return `${code} ${valueDefinitionByCode(code).officialName}`;
+}
+
+function lensLabel(lensId: string): string {
+  const lens = premiumPilotLensById(lensId);
+  return lens ? `${lens.displayName} (${lens.id})` : lensId;
+}
+
+function dailyBlockStatusLabel(
+  status: PremiumPlanExportDailyPlan["dailyFlow"]["blocks"][number]["status"],
+): string {
+  if (status === "optional") return "isteğe bağlı";
+  if (status === "skipped") return "uygulanmayacak";
+  return "planlandı";
+}
+
+function nextPlanDecisionLabel(
+  decision: PremiumWeeklyEvaluation["nextPlanDecision"],
+): string {
+  if (decision === "adapt") return "Uyarlayarak sürdür";
+  if (decision === "replace") return "Başka yolla değiştir";
+  if (decision === "observe-more") return "Ek gözlem gerekli";
+  return "Aynen sürdür";
 }
 
 function addActivityValuesDesign(
@@ -158,8 +268,222 @@ function addActivityValuesDesign(
   });
 }
 
+function addPersistedDailyPlans(
+  target: PremiumPlanExportParagraph[],
+  week: PremiumPlanExportWeek,
+): void {
+  if (week.dailyPlans.length === 0) return;
+  target.push({
+    text: "Öğretmenin kaydettiği günlük planlar",
+    style: "heading2",
+  });
+  week.dailyPlans.forEach((dailyPlan) => {
+    target.push({
+      text: `${dailyPlan.civilDate} · ${dailyPlan.planTitle}`,
+      style: "heading2",
+    });
+    target.push({
+      text: `Plan kayıt kimliği: ${dailyPlan.recordId} · Etkinlik kayıt kimliği: ${dailyPlan.activityRecordId}`,
+      style: "meta",
+    });
+    target.push({
+      text: `Öğretmenin etkinlik başlığı: ${dailyPlan.activityTitle} · Saat: ${dailyPlan.startTime}${
+        dailyPlan.endTime ? `–${dailyPlan.endTime}` : ""
+      }`,
+      style: "body",
+    });
+    target.push({
+      text: `Kaynak şablon: ${dailyPlan.sourceActivityTemplateId} · Uygulanan şablon: ${dailyPlan.appliedActivityTemplateId} · ${dailyPlan.appliedActivityTemplateTitle}`,
+      style: "meta",
+    });
+    if (dailyPlan.alternativeActivated) {
+      target.push({
+        text: "Öğretmen bu günlük planda haftanın alternatif etkinliğini uygulamak üzere seçti.",
+        style: "body",
+      });
+    }
+    addList(
+      target,
+      "Öğretmenin seçtiği program hedefleri",
+      dailyPlan.curriculumTargetCodes,
+    );
+    target.push({ text: "Kaydedilmiş 10 bloklu günlük akış", style: "heading2" });
+    dailyPlan.dailyFlow.blocks.forEach((block, index) => {
+      target.push({
+        text: `${index + 1}. ${block.title} · ${dailyBlockStatusLabel(block.status)} · ${block.durationMinutes} dakika`,
+        style: "body",
+      });
+      if (block.transitionNote) {
+        target.push({
+          text: `Öğretmenin geçiş notu: ${block.transitionNote}`,
+          style: "body",
+        });
+      }
+      if (block.teacherNote) {
+        target.push({
+          text: `Öğretmenin blok notu: ${block.teacherNote}`,
+          style: "body",
+        });
+      }
+    });
+    target.push({
+      text: `Günlük planın tarihsel yaklaşım tercihi: ${lensLabel(
+        dailyPlan.lensPreference.teacherPreferredLensId,
+      )}${
+        dailyPlan.lensPreference.teacherPreferredSupportingLensIds.length > 0
+          ? ` · Destekleyici: ${dailyPlan.lensPreference.teacherPreferredSupportingLensIds.map(lensLabel).join(", ")}`
+          : ""
+      }`,
+      style: "meta",
+    });
+  });
+}
+
+function addPersistedWeeklyEvaluations(
+  target: PremiumPlanExportParagraph[],
+  week: PremiumPlanExportWeek,
+): void {
+  if (week.evaluations.length === 0) return;
+  target.push({
+    text: "Kaydedilmiş haftalık öğretmen değerlendirmeleri",
+    style: "heading2",
+  });
+  week.evaluations.forEach((evaluation, index) => {
+    target.push({
+      text: `${index + 1}. değerlendirme · ${evaluation.createdAt}`,
+      style: "heading2",
+    });
+    target.push({
+      text: `Değerlendirme kayıt kimliği: ${evaluation.id}`,
+      style: "meta",
+    });
+    target.push({
+      text: `Kanıt özeti: ${evaluation.evidenceSummary}`,
+      style: "body",
+    });
+    target.push({
+      text: `Öğretmen değerlendirmesi: ${evaluation.reflection}`,
+      style: "body",
+    });
+    target.push({
+      text: `Sonraki plan kararı: ${nextPlanDecisionLabel(evaluation.nextPlanDecision)}`,
+      style: "body",
+    });
+    target.push({
+      text: `Bağlı ham gözlem kimlikleri: ${evaluation.observationIds.join(", ")}`,
+      style: "meta",
+    });
+    if (evaluation.nextPlanTargetPlanId) {
+      target.push({
+        text: `Kararın taşındığı sonraki plan kaydı: ${evaluation.nextPlanTargetPlanId}`,
+        style: "meta",
+      });
+    }
+  });
+}
+
+function monthlyCriterionStatusLabel(
+  status: PremiumMonthlyCriterionStatus,
+): string {
+  if (status === "observed-working") return "İşleyen yön olarak gözlendi";
+  if (status === "needs-adjustment") return "Uyarlama gerekiyor";
+  return "Bu ay gözlenmedi / değerlendirilmedi";
+}
+
+function addPersistedMonthlyEvaluations(
+  target: PremiumPlanExportParagraph[],
+  evaluations: readonly PremiumMonthlyEvaluation[],
+): void {
+  evaluations.forEach((evaluation, index) => {
+    target.push({
+      text: `Kaydedilmiş aylık öğretmen değerlendirmesi ${index + 1}`,
+      style: "heading1",
+      pageBreakBefore: true,
+    });
+    target.push({
+      text: `Değerlendirme kaydı: ${evaluation.id} · Aylık plan: ${evaluation.monthlyPlanId} · ${evaluation.createdAt}`,
+      style: "meta",
+    });
+    target.push({
+      text: `MEB kaynak izi: ${evaluation.mebProvenance.programTitle} (${evaluation.mebProvenance.sourceVersion}) · s. ${evaluation.mebProvenance.evaluationPages} · ${evaluation.mebProvenance.annex}, s. ${evaluation.mebProvenance.annexPage}`,
+      style: "meta",
+    });
+
+    target.push({ text: "1. Çocuklar yönünden değerlendirme", style: "heading2" });
+    target.push({
+      text:
+        evaluation.children.evidenceState === "insufficient-evidence"
+          ? "Kanıt durumu: Yetersiz kanıt. Sistem kesin beceri hükmü üretmedi."
+          : "Kanıt durumu: Öğretmen seçili kaynakları yeterli kanıt olarak işaretledi; otomatik beceri puanı veya hükmü üretilmedi.",
+      style: "body",
+    });
+    const coverage = evaluation.children.coverage;
+    target.push({
+      text: `Kapsam: ${coverage.observationCount} gözlem · ${coverage.anecdotalObservationCount} anekdot · ${coverage.distinctCivilDateCount} farklı gün · ${coverage.distinctWeekCount} farklı hafta · ${coverage.distinctStudentCount} farklı çocuk · ${coverage.distinctEnvironmentCount} farklı ortam · ${coverage.programLinkedObservationCount} program bağlantılı gözlem · ${coverage.curriculumLinkCount} öğretmen onaylı program bağı · aktif sınıf temsili ${coverage.coveredActiveStudentCount}/${coverage.activeStudentCount}`,
+      style: "meta",
+    });
+    if (coverage.uncoveredActiveStudentIds.length > 0) {
+      target.push({
+        text: `${coverage.uncoveredActiveStudentIds.length} aktif çocuk seçili kanıtta henüz temsil edilmiyor. Teknik kimlik izi kayıt verisinde korunur.`,
+        style: "meta",
+      });
+    }
+    if (evaluation.children.narrative) {
+      target.push({
+        text: `Öğretmenin çocuklar yönü notu: ${evaluation.children.narrative}`,
+        style: "body",
+      });
+    }
+    target.push({
+      text: `Kaynak gözlem kimlikleri: ${evaluation.children.observationIds.length > 0 ? evaluation.children.observationIds.join(", ") : "Seçilmedi"}`,
+      style: "meta",
+    });
+    target.push({
+      text: `Kaynak program bağı kimlikleri: ${evaluation.children.curriculumLinkIds.length > 0 ? evaluation.children.curriculumLinkIds.join(", ") : "Seçilmedi"}`,
+      style: "meta",
+    });
+
+    target.push({ text: "2. Program yönünden değerlendirme", style: "heading2" });
+    target.push({ text: evaluation.program.narrative, style: "body" });
+    const programLabels = new Map(
+      PREMIUM_MONTHLY_PROGRAM_CRITERIA.map((criterion) => [
+        criterion.id,
+        criterion.label,
+      ]),
+    );
+    evaluation.program.criteria.forEach((response) => {
+      target.push({
+        text: `${programLabels.get(response.criterionId) ?? response.criterionId} — ${monthlyCriterionStatusLabel(response.status)}`,
+        style: "bullet",
+      });
+    });
+
+    target.push({ text: "3. Öğretmen yönünden değerlendirme", style: "heading2" });
+    target.push({ text: evaluation.teacher.narrative, style: "body" });
+    const teacherLabels = new Map(
+      PREMIUM_MONTHLY_TEACHER_CRITERIA.map((criterion) => [
+        criterion.id,
+        criterion.label,
+      ]),
+    );
+    evaluation.teacher.criteria.forEach((response) => {
+      target.push({
+        text: `${teacherLabels.get(response.criterionId) ?? response.criterionId} — ${monthlyCriterionStatusLabel(response.status)}`,
+        style: "bullet",
+      });
+    });
+    target.push({
+      text: `Sonraki ay için öğretmen önerisi: ${evaluation.nextMonthRecommendation}`,
+      style: "body",
+    });
+    target.push({
+      text: "Uygulama durumu: Henüz uygulanmadı. Ekim planı yayımlanmadığı için öneri otomatik olarak bir plana işlenmedi; gelecekte öğretmen incelemesiyle ele alınacak karar kuyruğunda korunuyor.",
+      style: "meta",
+    });
+  });
+}
+
 export function buildPremiumPlanExportParagraphs(
-  pack: PremiumContentPack,
   document: PremiumPlanExportDocument,
 ): PremiumPlanExportParagraph[] {
   const paragraphs: PremiumPlanExportParagraph[] = [
@@ -173,18 +497,43 @@ export function buildPremiumPlanExportParagraphs(
       style: "meta",
     },
     {
-      text: pack.valuesMappingStatus === "legacy-unmapped"
+      text: document.valuesMappingStatus === "legacy-unmapped"
         ? "Değer tasarımı: Eski içerik sürümünde değer snapshot'ı bulunmuyor; geriye dönük eşleme üretilmedi."
         : "Değer tasarımı: Makine doğrulamalı; altı rollü insan uzman incelemesi bekliyor.",
       style: "meta",
     },
+    {
+      text: `Yıllık plan: ${document.annualPlanTitle} · Kayıt zinciri: yıllık ${document.annualPlanRecordId} · aylık ${document.monthlyPlanRecordId}`,
+      style: "meta",
+    },
+    {
+      text: `Haftalık kayıtlar: ${document.weeks
+        .map((week) => `${week.id}→${week.sourceRecordId}`)
+        .join(" · ")}`,
+      style: "meta",
+    },
+    {
+      text: `Öğretmenin yaklaşım tercihi: ${lensLabel(
+        document.lensPreference.teacherPreferredLensId,
+      )}${
+        document.lensPreference.teacherPreferredSupportingLensIds.length > 0
+          ? ` · Destekleyici: ${document.lensPreference.teacherPreferredSupportingLensIds.map(lensLabel).join(", ")}`
+          : ""
+      }`,
+      style: "meta",
+    },
     { text: document.teacherReviewNotice, style: "body" },
-    { text: "Yıllık plan omurgası", style: "heading1", pageBreakBefore: true },
+    {
+      text: "Yıllık plan omurgası",
+      style: "heading1",
+      pageBreakBefore: true,
+      forcePageBreakBefore: true,
+    },
   ];
 
-  pack.annualMonths.forEach((month) => {
+  document.annualMonths.forEach((month) => {
     paragraphs.push({ text: `${month.monthKey} · ${month.title}`, style: "heading2" });
-    paragraphs.push({ text: month.purpose, style: "body" });
+    paragraphs.push({ text: month.purpose, style: "body", keepWithNext: true });
     paragraphs.push({
       text: month.releaseStatus === "internal-review-ready"
         ? "İçerik durumu: Makine doğrulaması tamamlandı; altı rollü insan uzman incelemesi bekliyor"
@@ -210,7 +559,7 @@ export function buildPremiumPlanExportParagraphs(
   paragraphs.push({ text: "10 bloklu tam gün akışı", style: "heading1", pageBreakBefore: true });
   document.fullDayFlow.forEach((block, index) => {
     paragraphs.push({ text: `${index + 1}. ${block.title}`, style: "heading2" });
-    paragraphs.push({ text: block.purpose, style: "body" });
+    paragraphs.push({ text: block.purpose, style: "body", keepWithNext: true });
     paragraphs.push({ text: `Esneklik: ${block.flexibilityNote}`, style: "meta" });
   });
 
@@ -220,7 +569,7 @@ export function buildPremiumPlanExportParagraphs(
       style: "heading1",
       pageBreakBefore: true,
     });
-    paragraphs.push({ text: week.purpose, style: "body" });
+    paragraphs.push({ text: week.purpose, style: "body", keepWithNext: true });
     paragraphs.push({ text: `Araştırma sorusu: ${week.inquiryQuestion}`, style: "body" });
     addList(paragraphs, "Gözlem odağı", week.observationFocus);
     paragraphs.push({ text: `Aile katılımı: ${week.familyParticipation}`, style: "body" });
@@ -235,6 +584,7 @@ export function buildPremiumPlanExportParagraphs(
         paragraphs.push({
           text: `${activity.recommendedCivilDate} · ${activity.durationMinutes} dakika · ${activity.environment}`,
           style: "meta",
+          keepWithNext: true,
         });
         paragraphs.push({ text: activity.shortDescription, style: "body" });
         addActivityValuesDesign(paragraphs, activity);
@@ -256,7 +606,10 @@ export function buildPremiumPlanExportParagraphs(
         paragraphs.push({ text: `Geçiş desteği: ${activity.transitionSupport}`, style: "body" });
         paragraphs.push({ text: `Öğretmen yansıtması: ${activity.reflectionPrompt}`, style: "body" });
       });
+    addPersistedDailyPlans(paragraphs, week);
+    addPersistedWeeklyEvaluations(paragraphs, week);
   });
+  addPersistedMonthlyEvaluations(paragraphs, document.monthlyEvaluations ?? []);
   return paragraphs;
 }
 
@@ -402,6 +755,222 @@ function createImagePdf(images: readonly Uint8Array[]): Uint8Array {
   return joinBytes(parts);
 }
 
+const PREMIUM_PLAN_PDF_TEXT_STYLES: Readonly<
+  Record<PremiumPlanExportParagraph["style"], PremiumPlanPdfTextStyle>
+> = {
+  title: {
+    font: '700 52px "Premium Export Roboto", Arial, sans-serif',
+    color: "#392458",
+    lineHeight: 66,
+    gap: 28,
+  },
+  heading1: {
+    font: '700 38px "Premium Export Roboto", Arial, sans-serif',
+    color: "#4f3475",
+    lineHeight: 50,
+    gap: 22,
+  },
+  heading2: {
+    font: '700 28px "Premium Export Roboto", Arial, sans-serif',
+    color: "#5c4085",
+    lineHeight: 38,
+    gap: 14,
+  },
+  body: {
+    font: '400 25px "Premium Export Roboto", Arial, sans-serif',
+    color: "#242027",
+    lineHeight: 36,
+    gap: 12,
+  },
+  bullet: {
+    font: '400 24px "Premium Export Roboto", Arial, sans-serif',
+    color: "#242027",
+    lineHeight: 35,
+    gap: 8,
+  },
+  meta: {
+    font: '400 22px "Premium Export Roboto", Arial, sans-serif',
+    color: "#6b6470",
+    lineHeight: 32,
+    gap: 10,
+  },
+};
+
+const PDF_SECTION_BREAK_MINIMUM_FILL_RATIO = 0.42;
+
+function splitLongPdfWord(
+  word: string,
+  font: string,
+  maxWidth: number,
+  measureTextWidth: (text: string, font: string) => number,
+): string[] {
+  if (measureTextWidth(word, font) <= maxWidth) return [word];
+  const pieces: string[] = [];
+  let piece = "";
+  for (const character of word) {
+    const candidate = piece + character;
+    if (piece && measureTextWidth(candidate, font) > maxWidth) {
+      pieces.push(piece);
+      piece = character;
+    } else {
+      piece = candidate;
+    }
+  }
+  if (piece) pieces.push(piece);
+  return pieces.length > 0 ? pieces : [word];
+}
+
+function wrapPremiumPlanPdfText(
+  text: string,
+  font: string,
+  maxWidth: number,
+  measureTextWidth: (text: string, font: string) => number,
+): string[] {
+  const words = text
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => splitLongPdfWord(word, font, maxWidth, measureTextWidth));
+  const lines: string[] = [];
+  let line = "";
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && measureTextWidth(candidate, font) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.length > 0 ? lines : [""];
+}
+
+function shouldKeepPdfParagraphWithNext(
+  paragraph: PremiumPlanExportParagraph,
+): boolean {
+  return paragraph.keepWithNext === true
+    || paragraph.style === "heading1"
+    || paragraph.style === "heading2";
+}
+
+function splitOversizedPdfItem(
+  item: PremiumPlanPdfPageItem,
+  contentHeight: number,
+): PremiumPlanPdfPageItem[] {
+  if (item.height <= contentHeight) return [item];
+  const maxLinesPerPage = Math.max(
+    1,
+    Math.floor((contentHeight - item.gap) / item.lineHeight),
+  );
+  const chunks: string[][] = [];
+  for (let index = 0; index < item.lines.length; index += maxLinesPerPage) {
+    chunks.push(item.lines.slice(index, index + maxLinesPerPage));
+  }
+  const lastChunk = chunks.at(-1);
+  const previousChunk = chunks.at(-2);
+  if (lastChunk?.length === 1 && previousChunk && previousChunk.length > 2) {
+    lastChunk.unshift(previousChunk.pop()!);
+  }
+  return chunks.map((lines) => ({
+    ...item,
+    lines,
+    height: lines.length * item.lineHeight + item.gap,
+  }));
+}
+
+export function paginatePremiumPlanExportParagraphs(
+  paragraphs: readonly PremiumPlanExportParagraph[],
+  measureTextWidth: (text: string, font: string) => number,
+  contentWidth: number,
+  contentHeight: number,
+): PremiumPlanPdfPageLayout[] {
+  if (contentWidth <= 0 || contentHeight <= 0) {
+    throw new Error("PDF içerik alanı pozitif ölçülere sahip olmalıdır.");
+  }
+  const items = paragraphs.map((paragraph, paragraphIndex) => {
+    const style = PREMIUM_PLAN_PDF_TEXT_STYLES[paragraph.style];
+    const text = paragraph.style === "bullet" ? `• ${paragraph.text}` : paragraph.text;
+    const lines = wrapPremiumPlanPdfText(
+      text,
+      style.font,
+      contentWidth,
+      measureTextWidth,
+    );
+    return {
+      paragraphIndex,
+      text,
+      style: paragraph.style,
+      lines,
+      font: style.font,
+      color: style.color,
+      lineHeight: style.lineHeight,
+      gap: style.gap,
+      height: lines.length * style.lineHeight + style.gap,
+    } satisfies PremiumPlanPdfPageItem;
+  });
+
+  const groups: PremiumPlanPdfPageItem[][] = [];
+  for (let index = 0; index < items.length;) {
+    const group = [items[index]!];
+    let tailIndex = index;
+    while (
+      tailIndex + 1 < items.length
+      && shouldKeepPdfParagraphWithNext(paragraphs[tailIndex]!)
+      && paragraphs[tailIndex + 1]?.pageBreakBefore !== true
+    ) {
+      tailIndex += 1;
+      group.push(items[tailIndex]!);
+    }
+    groups.push(group);
+    index = tailIndex + 1;
+  }
+
+  const pages: { items: PremiumPlanPdfPageItem[]; usedHeight: number }[] = [];
+  let page = { items: [] as PremiumPlanPdfPageItem[], usedHeight: 0 };
+  const finishPage = () => {
+    if (page.items.length > 0) pages.push(page);
+    page = { items: [], usedHeight: 0 };
+  };
+  const placeItem = (item: PremiumPlanPdfPageItem) => {
+    splitOversizedPdfItem(item, contentHeight).forEach((chunk) => {
+      if (page.items.length > 0 && page.usedHeight + chunk.height > contentHeight) {
+        finishPage();
+      }
+      page.items.push(chunk);
+      page.usedHeight += chunk.height;
+    });
+  };
+
+  groups.forEach((group) => {
+    const firstParagraph = paragraphs[group[0]!.paragraphIndex]!;
+    if (firstParagraph.pageBreakBefore && page.items.length > 0) {
+      const pageIsSubstantiallyFilled = page.usedHeight
+        >= contentHeight * PDF_SECTION_BREAK_MINIMUM_FILL_RATIO;
+      if (firstParagraph.forcePageBreakBefore || pageIsSubstantiallyFilled) {
+        finishPage();
+      }
+    }
+    const groupHeight = group.reduce((sum, item) => sum + item.height, 0);
+    if (
+      groupHeight <= contentHeight
+      && page.items.length > 0
+      && page.usedHeight + groupHeight > contentHeight
+    ) {
+      finishPage();
+    }
+    if (groupHeight <= contentHeight) {
+      group.forEach((item) => {
+        page.items.push(item);
+        page.usedHeight += item.height;
+      });
+    } else {
+      group.forEach(placeItem);
+    }
+  });
+  finishPage();
+  return pages.length > 0 ? pages : [{ items: [], usedHeight: 0 }];
+}
+
 export async function createPremiumPlanPdf(
   paragraphs: readonly PremiumPlanExportParagraph[],
 ): Promise<Uint8Array> {
@@ -418,7 +987,6 @@ export async function createPremiumPlanPdf(
   const margin = 100;
   const bottomContentLimit = canvas.height - 170;
   const contentWidth = canvas.width - margin * 2;
-  let y = margin;
   let pageNumber = 1;
 
   const beginPage = () => {
@@ -426,7 +994,6 @@ export async function createPremiumPlanPdf(
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#5c4085";
     context.fillRect(0, 0, canvas.width, 24);
-    y = margin;
   };
   const finishPage = () => {
     context.fillStyle = "#6b6470";
@@ -436,60 +1003,47 @@ export async function createPremiumPlanPdf(
     context.textAlign = "left";
     images.push(base64Bytes(canvas.toDataURL("image/jpeg", 0.9)));
     pageNumber += 1;
-    beginPage();
-  };
-  const wrap = (text: string, maxWidth: number): string[] => {
-    const words = text.split(/\s+/).filter(Boolean);
-    const lines: string[] = [];
-    let line = "";
-    words.forEach((word) => {
-      const candidate = line ? `${line} ${word}` : word;
-      if (line && context.measureText(candidate).width > maxWidth) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = candidate;
-      }
-    });
-    if (line) lines.push(line);
-    return lines.length > 0 ? lines : [""];
   };
 
-  beginPage();
-  paragraphs.forEach((paragraph) => {
-    if (paragraph.pageBreakBefore && y > margin + 40) finishPage();
-    const style = {
-      title: { font: '700 52px "Premium Export Roboto", Arial, sans-serif', color: "#392458", line: 66, gap: 28 },
-      heading1: { font: '700 38px "Premium Export Roboto", Arial, sans-serif', color: "#4f3475", line: 50, gap: 22 },
-      heading2: { font: '700 28px "Premium Export Roboto", Arial, sans-serif', color: "#5c4085", line: 38, gap: 14 },
-      body: { font: '400 25px "Premium Export Roboto", Arial, sans-serif', color: "#242027", line: 36, gap: 12 },
-      bullet: { font: '400 24px "Premium Export Roboto", Arial, sans-serif', color: "#242027", line: 35, gap: 8 },
-      meta: { font: '400 22px "Premium Export Roboto", Arial, sans-serif', color: "#6b6470", line: 32, gap: 10 },
-    }[paragraph.style];
-    context.font = style.font;
-    const text = paragraph.style === "bullet" ? `• ${paragraph.text}` : paragraph.text;
-    const lines = wrap(text, contentWidth);
-    const requiredHeight = lines.length * style.line + style.gap;
-    if (y + requiredHeight > bottomContentLimit) finishPage();
-    context.font = style.font;
-    context.fillStyle = style.color;
-    lines.forEach((line) => {
-      context.fillText(line, margin, y);
-      y += style.line;
+  const pages = paginatePremiumPlanExportParagraphs(
+    paragraphs,
+    (text, font) => {
+      context.font = font;
+      return context.measureText(text).width;
+    },
+    contentWidth,
+    bottomContentLimit - margin,
+  );
+  pages.forEach((page) => {
+    beginPage();
+    let y = margin;
+    page.items.forEach((item) => {
+      context.font = item.font;
+      context.fillStyle = item.color;
+      item.lines.forEach((line) => {
+        context.fillText(line, margin, y);
+        y += item.lineHeight;
+      });
+      y += item.gap;
     });
-    y += style.gap;
+    finishPage();
   });
-  finishPage();
   return createImagePdf(images);
 }
 
 export async function generatePremiumPlanExportFile(
   pack: PremiumContentPack,
+  source: InstalledPremiumPlanExportSource,
   access: PremiumPlanExportAccess,
   format: PremiumPlanExportFormat,
 ): Promise<PremiumPlanExportFile> {
-  const exportDocument = preparePremiumPlanExportDocument(pack, access, format);
-  const paragraphs = buildPremiumPlanExportParagraphs(pack, exportDocument);
+  const exportDocument = preparePremiumPlanExportDocument(
+    pack,
+    source,
+    access,
+    format,
+  );
+  const paragraphs = buildPremiumPlanExportParagraphs(exportDocument);
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
     : await createPremiumPlanPdf(paragraphs);

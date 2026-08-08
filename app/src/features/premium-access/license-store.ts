@@ -76,8 +76,11 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 
 export class IndexedDbPremiumEntitlementStore implements PremiumEntitlementStore {
   private databasePromise: Promise<IDBDatabase> | null = null;
+  private readonly databaseName: string;
 
-  constructor(private readonly databaseName = PREMIUM_LICENSE_DATABASE_NAME) {}
+  constructor(databaseName = PREMIUM_LICENSE_DATABASE_NAME) {
+    this.databaseName = databaseName;
+  }
 
   private database(): Promise<IDBDatabase> {
     this.databasePromise ??= openDatabase(this.databaseName);
@@ -148,8 +151,11 @@ export class IndexedDbPremiumEntitlementStore implements PremiumEntitlementStore
 
 export class IndexedDbPremiumDeviceIdentityStore implements PremiumDeviceIdentityStore {
   private databasePromise: Promise<IDBDatabase> | null = null;
+  private readonly databaseName: string;
 
-  constructor(private readonly databaseName = PREMIUM_LICENSE_DATABASE_NAME) {}
+  constructor(databaseName = PREMIUM_LICENSE_DATABASE_NAME) {
+    this.databaseName = databaseName;
+  }
 
   private database(): Promise<IDBDatabase> {
     this.databasePromise ??= openDatabase(this.databaseName);
@@ -200,5 +206,16 @@ export class IndexedDbPremiumDeviceIdentityStore implements PremiumDeviceIdentit
   close(): void {
     void this.databasePromise?.then((database) => database.close());
     this.databasePromise = null;
+  }
+}
+
+export async function hasStoredPremiumEntitlement(
+  providedStore?: PremiumEntitlementStore,
+): Promise<boolean> {
+  const store = providedStore ?? new IndexedDbPremiumEntitlementStore();
+  try {
+    return (await store.load()) !== null;
+  } finally {
+    if (!providedStore) store.close();
   }
 }

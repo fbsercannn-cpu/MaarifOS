@@ -1,0 +1,5 @@
+private-assets/
+.wrangler/
+.dev.vars*
+.secrets/
+coverage/

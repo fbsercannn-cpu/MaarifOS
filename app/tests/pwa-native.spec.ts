@@ -30,7 +30,7 @@ async function createPortfolioObservation(page: Page, text: string) {
       .click();
     await page.getByRole("button", { name: /FAB\.1\b/ }).first().click();
     await page
-      .getByRole("button", { name: "Planı kaydet ve etkinliği başlat" })
+      .getByRole("button", { name: "Planı kaydet" })
       .click();
   }
   await page

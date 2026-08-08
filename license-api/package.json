@@ -1,0 +1,12 @@
+{
+  "name": "maarifos-founder-license-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "stage": "node ./scripts/stage-private-assets.mjs",
+    "test": "npm run stage && node --test ./test/*.test.mjs",
+    "smoke": "node ./scripts/local-smoke.mjs",
+    "test:local-worker": "npm run stage && node ./scripts/local-worker-e2e.mjs"
+  }
+}

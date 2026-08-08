@@ -44,6 +44,7 @@ export interface VerifiedPremiumAccess {
   readonly [VERIFIED_ACCESS_MARK]: true;
   readonly status: PremiumAccessStatus;
   readonly source: "signed-entitlement" | "development-preview";
+  readonly claims: PremiumEntitlementClaims | null;
   readonly entitlementId: string;
   readonly deviceKeyThumbprint: string;
   readonly grant: PremiumEntitlementGrant;
@@ -239,7 +240,7 @@ function parseClaims(value: Record<string, unknown>): PremiumEntitlementClaims {
   if (!Array.isArray(value.grants) || value.grants.length === 0 || value.grants.length > 20) {
     throw new Error("Premium entitlement en az bir ve en fazla yirmi grant taşımalıdır.");
   }
-  const grants = value.grants.map(parseGrant);
+  const grants = Object.freeze(value.grants.map(parseGrant));
   const uniqueGrants = new Set(
     grants.map((grant) => `${grant.sku}\u0000${grant.contentReleaseId}`),
   );
@@ -322,6 +323,7 @@ function accessForGrant(
     [VERIFIED_ACCESS_MARK]: true as const,
     status,
     source: "signed-entitlement" as const,
+    claims,
     entitlementId: claims.entitlementId,
     deviceKeyThumbprint: claims.deviceKeyThumbprint,
     grant,
@@ -489,6 +491,7 @@ export function createDevelopmentPreviewAccess(input: {
     [VERIFIED_ACCESS_MARK]: true as const,
     status: "active" as const,
     source: "development-preview" as const,
+    claims: null,
     entitlementId: "development-preview",
     deviceKeyThumbprint: "development-preview",
     grant: Object.freeze({

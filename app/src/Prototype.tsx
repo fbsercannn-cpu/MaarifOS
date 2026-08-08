@@ -51,41 +51,47 @@ import {
 } from "./mobile";
 import {
   AppLockSession,
-  BackupService,
-  DATA_SCHEMA_VERSION,
-  IndexedDbDataStore,
-  OBSERVATION_TAXONOMY_VERSION_V2,
-  ageInMonthsOn,
   assertAppLockAttemptState,
   assertAppLockConfig,
-  civilDateInIstanbul,
-  composeStudentDisplayName,
   createAppLockConfig,
-  formatStudentPhone,
   initialAppLockAttemptState,
-  isCapabilityEnabled,
-  isEncryptedBackupEnvelope,
-  normalizeTurkishSearchText,
-  backupReminderState,
-  inspectStorageHealth,
-  readLastSuccessfulEncryptedBackup,
-  recordSuccessfulEncryptedBackup,
-  splitStudentDisplayName,
-  visiblePrimaryNavigation,
   type AppLockAttemptState,
   type AppLockConfig,
-  type AttendanceEvent,
-  type AttendanceRecord,
-  type BackupEnvelope,
-  type CalendarEntry,
-  type CalendarEntryStatus,
-  type CalendarEntryType,
-  type RecoverySnapshotMetadata,
-  type RestoreMode,
-  type StorageHealthState,
+} from "./core/security/app-lock";
+import { DATA_SCHEMA_VERSION } from "./core/backup/schema-version";
+import { isEncryptedBackupEnvelope } from "./core/backup/encrypted-backup";
+import type { BackupEnvelope, RestoreMode } from "./core/backup/schema";
+import { IndexedDbDataStore } from "./core/repository/indexed-db";
+import type { RecoverySnapshotMetadata } from "./core/repository/contracts";
+import { OBSERVATION_TAXONOMY_VERSION_V2 } from "./core/domain/observation-taxonomy";
+import { civilDateInIstanbul, type AttendanceEvent, type AttendanceRecord } from "./core/domain/attendance";
+import type {
+  CalendarEntry,
+  CalendarEntryStatus,
+  CalendarEntryType,
+} from "./core/domain/calendar";
+import {
+  ageInMonthsOn,
+  composeStudentDisplayName,
+  formatStudentPhone,
+  normalizeTurkishSearchText,
+  splitStudentDisplayName,
   type StudentContact,
-  type StoredRecord,
-} from "./core";
+} from "./core/domain/student";
+import type { StoredRecord } from "./core/domain/model";
+import {
+  isCapabilityEnabled,
+  visiblePrimaryNavigation,
+} from "./core/capabilities/alpha-capabilities";
+import {
+  backupReminderState,
+  readLastSuccessfulEncryptedBackup,
+  recordSuccessfulEncryptedBackup,
+} from "./core/storage/backup-reminder";
+import {
+  inspectStorageHealth,
+  type StorageHealthState,
+} from "./core/storage/storage-health";
 import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type AuthState } from "./auth";
 import {
   dashboardAttendanceCounts,
@@ -107,12 +113,14 @@ import { classifyApplicationError } from "./core/errors";
 import {
   TodayScreen,
   createTodayStudentCards,
+  todayPlanItemStatusLabel,
 } from "./features/today";
 import { ClassroomToolsSheets } from "./features/classroom/ClassroomToolsSheets";
 import {
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
   createPlanWithActivity,
+  updateScheduledPlanWithActivity,
   CURRICULUM_PROGRAM_LABELS,
   type CurriculumProfileSnapshot,
 } from "./features/evidence/evidence-flow";
@@ -129,11 +137,27 @@ import {
   type QuickObservationType,
 } from "./features/evidence/quick-observation";
 import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
+import type { AnecdoteExportFormat } from "./features/anecdote/export-document.ts";
+import type { AnecdoteFormWorkspace } from "./features/anecdote/anecdote-form.ts";
 import {
   PlanCreationFlow,
   type PlanCreationCommand,
+  type PlanUpdateCommand,
+  loadScheduledPlanEditDraft,
+  loadScheduledPlanWorkspace,
+  type ScheduledPlanEditDraft,
+  type ScheduledPlanSummary,
+  type ScheduledPlanWorkspace,
 } from "./features/planning";
+import { FounderPremiumActivationPanel } from "./features/premium-plans/FounderPremiumActivationPanel.tsx";
 import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
+import {
+  activatePremiumFounderAccess,
+  loadStoredPremiumFounderAccess,
+  premiumFounderConfigurationFromEnvironment,
+  type PremiumFounderAccessResult,
+  type PremiumFounderConfiguration,
+} from "./features/premium-access/founder-client.ts";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -161,11 +185,11 @@ import {
 import {
   academicYearOperationalNotice,
   academicYearOperationalStatus,
+  loadPlanDayWorkspace,
   loadTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
   transitionAcademicYearConfiguration,
-  type TodayActivityStatus,
   type TodayWorkspace,
 } from "./features/today/today-data";
 import type { ClassroomScheduleKind } from "./core/domain/classroom";
@@ -193,14 +217,13 @@ import {
   type StudentDeletionImpact,
 } from "./features/students/student-lifecycle";
 import {
-  createStudentDossier,
-  listExternalAiFeedback,
-  saveExternalAiFeedback,
+  dossierPrivacyDefaults,
+  isExternalAiDossierDestination,
   type DossierAudience,
   type DossierDestination,
   type DossierIdentityMode,
   type ExternalAiFeedback,
-} from "./features/reports/student-dossier";
+} from "./features/reports/student-dossier-contract.ts";
 import {
   acknowledgeCurrentRelease,
   CURRENT_RELEASE,
@@ -218,6 +241,12 @@ const ClassroomScreen = lazy(() =>
 const PremiumPlanCenterScreen = lazy(() =>
   import("./features/premium-plans/PremiumPlanCenterScreen.tsx").then((module) => ({
     default: module.PremiumPlanCenterScreen,
+  })),
+);
+
+const AnecdoteCenterPanel = lazy(() =>
+  import("./features/anecdote/AnecdoteCenterPanel.tsx").then((module) => ({
+    default: module.AnecdoteCenterPanel,
   })),
 );
 
@@ -384,6 +413,8 @@ const emptyAcademicCalendar: AcademicCalendarWorkspace = {
   entries: [],
 };
 
+const emptyScheduledPlanWorkspace: ScheduledPlanWorkspace = { plans: [] };
+
 const initialCalendarEntryForm: CalendarEntryFormState = {
   entryType: "general_note",
   title: "",
@@ -472,12 +503,6 @@ function isSupportedCurriculumProgram(
     value as (typeof supportedCurriculumPrograms)[number],
   );
 }
-
-const activityStatusLabels: Record<TodayActivityStatus, string> = {
-  planned: "Sıradaki",
-  in_progress: "Uygulanıyor",
-  completed: "Tamamlandı",
-};
 
 function compactProgramLabel(program: string | undefined): string {
   if (program === "Türkiye Yüzyılı Maarif Modeli") return "TYMM";
@@ -646,6 +671,19 @@ function downloadText(fileName: string, contents: string) {
   const url = URL.createObjectURL(
     new Blob(["\uFEFF", contents], { type: "text/plain;charset=utf-8" }),
   );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadBytes(fileName: string, mimeType: string, bytes: Uint8Array) {
+  const blobBytes = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const url = URL.createObjectURL(new Blob([blobBytes], { type: mimeType }));
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = fileName;
@@ -1012,6 +1050,8 @@ function EvidenceCaptureScreen({
   const [rawText, setRawText] = useState("");
   const [context, setContext] = useState("");
   const [childQuote, setChildQuote] = useState("");
+  const [legacyDetailsReviewRequired, setLegacyDetailsReviewRequired] =
+    useState(false);
   const [observationType, setObservationType] =
     useState<QuickObservationType>("quick-note");
   const [categories, setCategories] = useState<QuickObservationCategory[]>([]);
@@ -1186,6 +1226,7 @@ function EvidenceCaptureScreen({
     setRawText("");
     setContext("");
     setChildQuote("");
+    setLegacyDetailsReviewRequired(false);
     setObservationType("quick-note");
     setCategories([]);
     setDraftStatus("loading");
@@ -1196,6 +1237,9 @@ function EvidenceCaptureScreen({
         setRawText(draft.rawText);
         setContext(draft.context);
         setChildQuote(draft.childQuote);
+        setLegacyDetailsReviewRequired(
+          Boolean(draft.context.trim() || draft.childQuote.trim()),
+        );
         setObservationType(draft.observationType);
         setCategories(
           draft.observationTaxonomyVersion ===
@@ -1209,6 +1253,7 @@ function EvidenceCaptureScreen({
         );
         setDraftStatus("saved");
       } else {
+        setLegacyDetailsReviewRequired(false);
         setDraftStatus("ready");
       }
     } catch {
@@ -1310,13 +1355,34 @@ function EvidenceCaptureScreen({
     setRawText((current) => (current.trim() ? `${current.trim()} ${starter}` : starter));
   };
 
+  const isChildQuoteObservation = observationType === "child-quote";
+  const observationQuestion = isChildQuoteObservation
+    ? "Çocuğun aynen sözü neydi?"
+    : "Ne yaptı veya ne söyledi?";
+  const observationPlaceholder = isChildQuoteObservation
+    ? "Çocuğun sözünü değiştirmeden yazın."
+    : "… sırasında … yaptı / söyledi.";
+  const observationGuidance = isChildQuoteObservation
+    ? "Çocuğun sözünü yorum eklemeden ve düzeltmeden yazın."
+    : "Gördüğünüz ve duyduğunuz olayı yorum eklemeden yazın.";
+  const discardLegacyDetails = () => {
+    setContext("");
+    setChildQuote("");
+    setLegacyDetailsReviewRequired(false);
+  };
+
   const save = async () => {
     const singleReady = selectionMode === "single" && Boolean(studentId);
     const groupReady =
       selectionMode === "selected-children" &&
       groupStudentIds.length >= 2 &&
       groupConfirmed;
-    if ((!singleReady && !groupReady) || !rawText.trim() || busy) return;
+    if (
+      (!singleReady && !groupReady) ||
+      !rawText.trim() ||
+      legacyDetailsReviewRequired ||
+      busy
+    ) return;
     setBusy(true);
     setError("");
     try {
@@ -1417,41 +1483,86 @@ function EvidenceCaptureScreen({
               <div className="quick-note-label-row">
                 <div>
                   <span className="d1-kicker">2 · Yaz</span>
-                  <label id="quick-note-heading" htmlFor="d1-observation-text">Ne yaptı veya ne söyledi?</label>
+                  <label id="quick-note-heading" htmlFor="d1-observation-text">
+                    {observationQuestion}
+                  </label>
                 </div>
                 <small>{rawText.length.toLocaleString("tr-TR")} karakter</small>
               </div>
               <KeyboardTextarea
                 id="d1-observation-text"
-                aria-label="Ne oldu?"
+                aria-label={isChildQuoteObservation ? "Çocuğun aynen sözü" : "Ne oldu?"}
                 value={rawText}
                 onChange={(event) => setRawText(event.target.value)}
-                placeholder="… sırasında … yaptı / söyledi."
+                placeholder={observationPlaceholder}
                 rows={6}
                 aria-describedby="quick-observation-guidance"
               />
               <p id="quick-observation-guidance">
-                Gördüğünüz ve duyduğunuz olayı yorum eklemeden yazın.
+                {observationGuidance}
               </p>
-              <Carousel
-                className="quick-starter-row"
-                contentClassName="quick-starter-track"
-                ariaLabel="Tarafsız cümle başlangıçları"
-              >
-                {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
-                  <button type="button" key={starter.id} onClick={() => applyStarter(starter.text)}>
-                    {starter.text}
-                  </button>
-                ))}
-              </Carousel>
+              {!isChildQuoteObservation ? (
+                <Carousel
+                  className="quick-starter-row"
+                  contentClassName="quick-starter-track"
+                  ariaLabel="Tarafsız cümle başlangıçları"
+                >
+                  {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
+                    <button type="button" key={starter.id} onClick={() => applyStarter(starter.text)}>
+                      {starter.text}
+                    </button>
+                  ))}
+                </Carousel>
+              ) : null}
             </section>
+
+            {legacyDetailsReviewRequired ? (
+              <section
+                className="quick-legacy-review"
+                aria-labelledby="quick-legacy-review-heading"
+                data-testid="quick-legacy-review"
+              >
+                <strong id="quick-legacy-review-heading">
+                  Bu eski taslakta ayrıca kaydedilmiş ayrıntılar var
+                </strong>
+                <p>
+                  Artık bu bilgiler yeniden sorulmuyor. Görmeden onaylamamanız için
+                  kaydetmeden önce korumayı veya çıkarmayı seçin.
+                </p>
+                <dl>
+                  {context.trim() ? (
+                    <div>
+                      <dt>Eski bağlam</dt>
+                      <dd>{context}</dd>
+                    </div>
+                  ) : null}
+                  {childQuote.trim() ? (
+                    <div>
+                      <dt>Eski çocuk sözü</dt>
+                      <dd>{childQuote}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <div className="quick-legacy-actions">
+                  <button
+                    type="button"
+                    onClick={() => setLegacyDetailsReviewRequired(false)}
+                  >
+                    Kayda dahil et
+                  </button>
+                  <button type="button" onClick={discardLegacyDetails}>
+                    Bu kayıttan çıkar
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
             <details className="quick-details">
               <summary>
                 <span>
                   <ReaderIcon aria-hidden="true" />
                   <strong>İstersen ayrıntı ekle</strong>
-                  <small>Tür, alan, bağlam ve çocuk sözü</small>
+                  <small>Yalnız gerekiyorsa tür ve alan seçin</small>
                 </span>
                 <ChevronDownIcon aria-hidden="true" />
               </summary>
@@ -1484,22 +1595,6 @@ function EvidenceCaptureScreen({
                     </button>
                   ))}
                 </div>
-                <label htmlFor="d1-observation-context">Bağlam / ne sırasında?</label>
-                <KeyboardInput
-                  id="d1-observation-context"
-                  value={context}
-                  onChange={(event) => setContext(event.target.value)}
-                  placeholder="Örn. Fen merkezinde küçük grup çalışması"
-                  autoComplete="off"
-                />
-                <label htmlFor="d1-observation-quote">Çocuğun sözü</label>
-                <KeyboardTextarea
-                  id="d1-observation-quote"
-                  value={childQuote}
-                  onChange={(event) => setChildQuote(event.target.value)}
-                  placeholder="Çocuğun kendi cümlesini değiştirmeden yazın."
-                  rows={3}
-                />
               </div>
             </details>
 
@@ -1528,6 +1623,7 @@ function EvidenceCaptureScreen({
             disabled={
               busy ||
               !rawText.trim() ||
+              legacyDetailsReviewRequired ||
               (selectionMode === "single"
                 ? !studentId
                 : groupStudentIds.length < 2 || !groupConfirmed)
@@ -1729,7 +1825,7 @@ function AssessmentScreen({
         assessmentLevel,
         [target.id],
       );
-      flow.replace(createCompletionScreen(observation, actions));
+      flow.replace(createCompletionScreen(observation, target, actions));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Değerlendirme taslağı kaydedilemedi.");
       setBusy(false);
@@ -1801,9 +1897,11 @@ function AssessmentScreen({
 
 function CompletionScreen({
   observation,
+  target,
   actions,
 }: {
   observation: EvidenceObservationSummary;
+  target: CurriculumTargetSnapshot;
   actions: EvidenceFlowActions;
 }) {
   return (
@@ -1816,7 +1914,11 @@ function CompletionScreen({
         <section className="d1-context-card">
           <strong>Öğretmen incelemesi bekliyor</strong>
           <span>1 gözlem notuna atıf</span>
-          <em>Program referansı öğretmen beyanı · resmî katalogda doğrulanmadı</em>
+          <em>
+            {target.officialCatalogVerified
+              ? `${target.referenceCode} · resmî katalog kaynağı doğrulandı`
+              : "Program referansı öğretmen beyanı · resmî katalogda doğrulanmadı"}
+          </em>
         </section>
         <button
           className="d1-primary"
@@ -1874,6 +1976,7 @@ function createAssessmentScreen(
 
 function createCompletionScreen(
   observation: EvidenceObservationSummary,
+  target: CurriculumTargetSnapshot,
   actions: EvidenceFlowActions,
 ): FlowScreen {
   return {
@@ -1885,7 +1988,9 @@ function createCompletionScreen(
         "Hazır",
         () => void actions.close(),
       ),
-    render: () => <CompletionScreen observation={observation} actions={actions} />,
+    render: () => (
+      <CompletionScreen observation={observation} target={target} actions={actions} />
+    ),
   };
 }
 
@@ -1938,14 +2043,38 @@ export default function Prototype() {
     isCapabilityEnabled("premiumPlanCenter") ||
     (import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get("premiumPilot") === "1");
+  const premiumFounderConfigurationState = useMemo<{
+    configuration: PremiumFounderConfiguration | null;
+    error: string;
+  }>(() => {
+    try {
+      return {
+        configuration: premiumFounderConfigurationFromEnvironment(),
+        error: "",
+      };
+    } catch {
+      return {
+        configuration: null,
+        error: "Kurucu Premium yapılandırması geçersiz. Ücretli premium erişimi etkilenmedi.",
+      };
+    }
+  }, []);
   const internalStaffExportEnabled =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("premiumPilot") === "1";
   const store = useMemo(() => new IndexedDbDataStore(), []);
-  const backupService = useMemo(
-    () => new BackupService(store, { appVersion: CURRENT_RELEASE.version }),
-    [store],
-  );
+  const backupServicePromiseRef = useRef<
+    Promise<import("./core/backup/backup-service").BackupService> | null
+  >(null);
+  const getBackupService = useCallback(() => {
+    backupServicePromiseRef.current ??= import(
+      "./core/backup/backup-service"
+    ).then(
+      ({ BackupService }) =>
+        new BackupService(store, { appVersion: CURRENT_RELEASE.version }),
+    );
+    return backupServicePromiseRef.current;
+  }, [store]);
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingWriteCountRef = useRef(0);
@@ -2029,6 +2158,8 @@ export default function Prototype() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [academicCalendar, setAcademicCalendar] =
     useState<AcademicCalendarWorkspace>(emptyAcademicCalendar);
+  const [scheduledPlanWorkspace, setScheduledPlanWorkspace] =
+    useState<ScheduledPlanWorkspace>(emptyScheduledPlanWorkspace);
   const [calendarMonth, setCalendarMonth] = useState("2026-09");
   const [calendarSelectedDate, setCalendarSelectedDate] =
     useState("2026-09-07");
@@ -2038,6 +2169,13 @@ export default function Prototype() {
   const [academicYearTransitionConfirmed, setAcademicYearTransitionConfirmed] =
     useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [anecdoteWorkspace, setAnecdoteWorkspace] =
+    useState<AnecdoteFormWorkspace>({
+      forms: [],
+      incompleteCount: 0,
+      reviewRequiredCount: 0,
+      readyCount: 0,
+    });
   const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
@@ -2053,10 +2191,27 @@ export default function Prototype() {
   const [classExportNameMode, setClassExportNameMode] =
     useState<"preferred" | "registered">("preferred");
   const [todayWorkspace, setTodayWorkspace] = useState<TodayWorkspace>(emptyTodayWorkspace);
+  const [selectedPlanDayWorkspace, setSelectedPlanDayWorkspace] =
+    useState<TodayWorkspace | null>(null);
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [scheduledPlanEditDraft, setScheduledPlanEditDraft] =
+    useState<ScheduledPlanEditDraft | null>(null);
+  const [futurePlanNotice, setFuturePlanNotice] = useState<{
+    planId: string;
+    civilDate: string;
+    activityTitle: string;
+  } | null>(null);
   const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
+  const [premiumFounderAccess, setPremiumFounderAccess] =
+    useState<PremiumFounderAccessResult | null>(null);
+  const [premiumFounderBusy, setPremiumFounderBusy] = useState(
+    premiumFounderConfigurationState.configuration !== null,
+  );
+  const [premiumFounderError, setPremiumFounderError] = useState(
+    premiumFounderConfigurationState.error,
+  );
   const [premiumDailyTemplate, setPremiumDailyTemplate] =
     useState<PremiumDailyTemplateSelection | null>(null);
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
@@ -2086,7 +2241,7 @@ export default function Prototype() {
       includeObservations: true,
       includePortfolio: true,
       includeExternalFeedback: true,
-      personalDataApprovedForAi: true,
+      personalDataApprovedForAi: false,
     });
   const [externalFeedbackForm, setExternalFeedbackForm] =
     useState<ExternalFeedbackFormState>({
@@ -2220,6 +2375,18 @@ export default function Prototype() {
       ),
     [academicCalendar.entries, calendarSelectedDate],
   );
+  const selectedScheduledPlans = useMemo(
+    () =>
+      scheduledPlanWorkspace.plans.filter(
+        (plan) => plan.civilDate === calendarSelectedDate,
+      ),
+    [calendarSelectedDate, scheduledPlanWorkspace.plans],
+  );
+  const displayedPlanWorkspace = selectedPlanDayWorkspace ?? todayWorkspace;
+  const displayedPlanIsToday = displayedPlanWorkspace.civilDate === currentCivilDate;
+  const displayedScheduledPlan = scheduledPlanWorkspace.plans.find(
+    (plan) => plan.civilDate === displayedPlanWorkspace.civilDate,
+  ) ?? null;
   const currentActivity = todayWorkspace.currentActivity;
   const focusActivity = currentActivity
     ?? todayWorkspace.planItems.find((item) => item.status === "planned")
@@ -2503,16 +2670,73 @@ export default function Prototype() {
   }, []);
 
   const refreshD1Workspaces = async () => {
-    const [today, evidence, calendar] = await Promise.all([
+    const [today, evidence, calendar, scheduledPlans] = await Promise.all([
       loadTodayWorkspace(store),
       loadEvidenceWorkspace(store),
       loadAcademicCalendar(store),
+      loadScheduledPlanWorkspace(store),
     ]);
     setTodayWorkspace(today);
     setEvidenceWorkspace(evidence);
     setAcademicCalendar(calendar);
-    return { today, evidence, calendar };
+    setScheduledPlanWorkspace(scheduledPlans);
+    return { today, evidence, calendar, scheduledPlans };
   };
+
+  const refreshAnecdoteDocuments = useCallback(async () => {
+    const { loadAnecdoteFormWorkspace } = await import(
+      "./features/anecdote/anecdote-form.ts"
+    );
+    const workspace = await loadAnecdoteFormWorkspace(store);
+    setAnecdoteWorkspace(workspace);
+    return workspace;
+  }, [store]);
+
+  useEffect(() => {
+    if (!documentsOpen || persistenceState.phase !== "ready") return undefined;
+    let cancelled = false;
+    void import("./features/anecdote/anecdote-form.ts")
+      .then(({ loadAnecdoteFormWorkspace }) => loadAnecdoteFormWorkspace(store))
+      .then((workspace) => {
+        if (!cancelled) setAnecdoteWorkspace(workspace);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAnnouncement(
+            "Anekdot formları okunamadı; cihazdaki kayıtlar değiştirilmedi.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [documentsOpen, persistenceState.phase, store]);
+
+  useEffect(() => {
+    const configuration = premiumFounderConfigurationState.configuration;
+    if (!configuration) return undefined;
+    let cancelled = false;
+    setPremiumFounderBusy(true);
+    void loadStoredPremiumFounderAccess({ configuration })
+      .then((result) => {
+        if (cancelled) return;
+        setPremiumFounderAccess(result);
+        setPremiumFounderError("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPremiumFounderAccess(null);
+        setPremiumFounderError(
+          "Bu cihazdaki eski premium yetkisi doğrulanamadı. Kodu yeniden kullanarak güvenle etkinleştirebilirsiniz.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setPremiumFounderBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [premiumFounderConfigurationState.configuration]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2529,10 +2753,11 @@ export default function Prototype() {
       loadTodayWorkspace(store),
       loadEvidenceWorkspace(store),
       loadAcademicCalendar(store),
+      loadScheduledPlanWorkspace(store),
       loadAppLockSetting(store),
-      backupService.listRecoverySnapshots(),
+      getBackupService().then((service) => service.listRecoverySnapshots()),
     ])
-      .then(([state, workspace, evidence, calendar, lockSetting, snapshots]) => {
+      .then(([state, workspace, evidence, calendar, scheduledPlans, lockSetting, snapshots]) => {
         if (cancelled) return;
         setStudents(state.students);
         setArchivedStudents(state.archivedStudents);
@@ -2541,6 +2766,7 @@ export default function Prototype() {
         setTodayWorkspace(workspace);
         setEvidenceWorkspace(evidence);
         setAcademicCalendar(calendar);
+        setScheduledPlanWorkspace(scheduledPlans);
         setRecoverySnapshots(snapshots);
         if (lockSetting) {
           appLockSessionRef.current = new AppLockSession(
@@ -2617,7 +2843,7 @@ export default function Prototype() {
     applyPersistenceState,
     hydrationAttempt,
     markPersistenceFailure,
-    backupService,
+    getBackupService,
     store,
   ]);
 
@@ -3042,6 +3268,7 @@ export default function Prototype() {
     setSecureBackupError("");
     try {
       await flushPendingWrites();
+      const backupService = await getBackupService();
       const envelope = await backupService.exportEncryptedBackup(passphrase);
       const serialized = backupService.serializeEncryptedBackup(envelope);
       await backupService.parseAndDecryptBackup(serialized, passphrase);
@@ -3129,6 +3356,7 @@ export default function Prototype() {
         );
         setAnnouncement("Şifreli yedek seçildi; parola bekleniyor.");
       } else {
+        const backupService = await getBackupService();
         const envelope = await backupService.parseAndVerifyBackup(source);
         setPendingRestore({
           fileName: file.name,
@@ -3167,6 +3395,7 @@ export default function Prototype() {
     setDataBusy(true);
     setSecureBackupError("");
     try {
+      const backupService = await getBackupService();
       const envelope = await backupService.parseAndDecryptBackup(
         pendingRestore.source,
         passphrase,
@@ -3212,6 +3441,7 @@ export default function Prototype() {
     setSecureBackupError("");
     try {
       await flushPendingWrites();
+      const backupService = await getBackupService();
       const { report, recovery } = await enqueuePersistence(
         async () => {
           const recovery = await backupService.createRecoverySnapshot(
@@ -3245,6 +3475,7 @@ export default function Prototype() {
         restoredWorkspace,
         restoredEvidence,
         restoredCalendar,
+        restoredScheduledPlans,
         restoredLockSetting,
         snapshots,
       ] = await Promise.all([
@@ -3252,6 +3483,7 @@ export default function Prototype() {
         loadTodayWorkspace(store),
         loadEvidenceWorkspace(store),
         loadAcademicCalendar(store),
+        loadScheduledPlanWorkspace(store),
         loadAppLockSetting(store),
         backupService.listRecoverySnapshots(),
       ]);
@@ -3263,6 +3495,7 @@ export default function Prototype() {
       setTodayWorkspace(restoredWorkspace);
       setEvidenceWorkspace(restoredEvidence);
       setAcademicCalendar(restoredCalendar);
+      setScheduledPlanWorkspace(restoredScheduledPlans);
       setRecoverySnapshots(snapshots);
       if (restoredLockSetting) {
         appLockSessionRef.current = new AppLockSession(
@@ -3686,7 +3919,12 @@ export default function Prototype() {
     setPortfolioEditor({
       observationId: observation.id,
       teacherCaption: existing?.teacherCaption ?? "",
-      childReflection: existing?.childReflection ?? observation.childQuote ?? "",
+      childReflection:
+        existing?.childReflection ??
+        observation.childQuote ??
+        (observation.observationType === "child-quote"
+          ? observation.rawText
+          : ""),
       familyContribution: existing?.familyContribution ?? "",
       selectedBy: existing?.selectedBy ?? "teacher-child",
     });
@@ -4103,7 +4341,7 @@ export default function Prototype() {
     }
   };
 
-  const openAcademicCalendar = async () => {
+  const openAcademicCalendar = async (requestedDate?: string) => {
     if (!configuredClassroom) {
       setClassroomOpen(true);
       setAnnouncement("Takvimi açmadan önce sınıfınızı kurun.");
@@ -4112,13 +4350,21 @@ export default function Prototype() {
     setDataBusy(true);
     setCalendarError("");
     try {
-      const calendar = await loadAcademicCalendar(store);
+      const [calendar, scheduledPlans] = await Promise.all([
+        loadAcademicCalendar(store),
+        loadScheduledPlanWorkspace(store),
+      ]);
       const preferredDate =
-        attendanceCivilDate >= configuredClassroom.academicYearStart &&
+        requestedDate &&
+        requestedDate >= configuredClassroom.academicYearStart &&
+        requestedDate <= configuredClassroom.academicYearEnd
+          ? requestedDate
+          : attendanceCivilDate >= configuredClassroom.academicYearStart &&
         attendanceCivilDate <= configuredClassroom.academicYearEnd
           ? attendanceCivilDate
           : configuredClassroom.academicYearStart;
       setAcademicCalendar(calendar);
+      setScheduledPlanWorkspace(scheduledPlans);
       setCalendarSelectedDate(preferredDate);
       setCalendarMonth(preferredDate.slice(0, 7));
       setPlansOpen(false);
@@ -4129,6 +4375,68 @@ export default function Prototype() {
         reason instanceof Error
           ? reason.message
           : "Eğitim takvimi açılamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const openTodayPlans = () => {
+    setSelectedPlanDayWorkspace(null);
+    setPlansOpen(true);
+  };
+
+  const viewScheduledPlanFlow = async (plan: ScheduledPlanSummary) => {
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      const workspace = await loadPlanDayWorkspace(store, {
+        civilDate: plan.civilDate,
+      });
+      setSelectedPlanDayWorkspace(workspace);
+      setCalendarOpen(false);
+      setPlansOpen(true);
+      setAnnouncement(`${formatTurkishCivilDate(plan.civilDate)} günlük akışı açıldı.`);
+    } catch (reason) {
+      setCalendarError(
+        reason instanceof Error ? reason.message : "Kayıtlı günlük akış açılamadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const editScheduledPlan = async (plan: ScheduledPlanSummary) => {
+    if (writesBlocked) {
+      setCalendarError(
+        "Cihaz verileri yazmaya hazır değil. Plan düzenleme güvenlik için kapalı.",
+      );
+      return;
+    }
+    if (!plan.editable) {
+      setCalendarError(plan.editBlockReason ?? "Bu günlük plan düzenlenemez.");
+      return;
+    }
+    setDataBusy(true);
+    setCalendarError("");
+    try {
+      const draft = await loadScheduledPlanEditDraft(store, {
+        planId: plan.planId,
+      });
+      d1ReturnFocusRef.current ??=
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      setScheduledPlanEditDraft(draft);
+      setPremiumDailyTemplate(null);
+      setCalendarOpen(false);
+      setPlansOpen(false);
+      surfaceTransitionRef.current = "plan-flow";
+      setPlanFlowOpen(true);
+      setAnnouncement(`${draft.planTitle} düzenlemeye açıldı.`);
+    } catch (reason) {
+      setCalendarError(
+        reason instanceof Error ? reason.message : "Günlük plan düzenlemeye açılamadı.",
       );
     } finally {
       setDataBusy(false);
@@ -4295,9 +4603,7 @@ export default function Prototype() {
       ...current,
       periodStart: configuredClassroom.academicYearStart,
       periodEnd: configuredClassroom.academicYearEnd,
-      identityMode: "full",
-      includeContacts: true,
-      personalDataApprovedForAi: true,
+      ...dossierPrivacyDefaults(current.destination),
     }));
     setAiWorkspacePrompt("");
     setExternalFeedbackForm((current) => ({
@@ -4308,6 +4614,9 @@ export default function Prototype() {
       teacherNote: "",
     }));
     try {
+      const { listExternalAiFeedback } = await import(
+        "./features/reports/student-dossier"
+      );
       const snapshot = await store.readSnapshot();
       setExternalFeedback(
         listExternalAiFeedback(snapshot, selectedProfileStudent.id),
@@ -4329,6 +4638,9 @@ export default function Prototype() {
     setStudentShareBusy(true);
     setStudentShareError("");
     try {
+      const { createStudentDossier } = await import(
+        "./features/reports/student-dossier"
+      );
       const result = await enqueuePersistence(() =>
         createStudentDossier(store, {
           studentId: selectedProfileStudent.id,
@@ -4408,6 +4720,9 @@ export default function Prototype() {
     setStudentShareBusy(true);
     setStudentShareError("");
     try {
+      const { listExternalAiFeedback, saveExternalAiFeedback } = await import(
+        "./features/reports/student-dossier"
+      );
       await enqueuePersistence(() =>
         saveExternalAiFeedback(store, {
           studentId: selectedProfileStudent.id,
@@ -4656,7 +4971,12 @@ export default function Prototype() {
     setDataBusy(true);
     try {
       await enqueuePersistence(
-        () => setTodayActivityStatus(store, currentActivity.id, "completed"),
+        () =>
+          setTodayActivityStatus(
+            store,
+            currentActivity.activityId ?? currentActivity.id,
+            "completed",
+          ),
         {
           failureDetail:
             "Etkinlik durumu bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
@@ -4684,6 +5004,7 @@ export default function Prototype() {
     keyboard.hide();
     setPlanFlowOpen(false);
     setPremiumDailyTemplate(null);
+    setScheduledPlanEditDraft(null);
     setEvidenceFlowRequest(null);
     const returnFocusTarget = d1ReturnFocusRef.current;
     d1ReturnFocusRef.current = null;
@@ -4849,7 +5170,63 @@ export default function Prototype() {
     setPlansOpen(false);
     setPremiumPlanOpen(false);
     setPremiumDailyTemplate(initialTemplate ?? null);
+    setScheduledPlanEditDraft(null);
     setPlanFlowOpen(true);
+  };
+
+  const premiumPlanEntryEnabled =
+    premiumPilotPreviewEnabled ||
+    premiumFounderConfigurationState.configuration !== null ||
+    premiumFounderAccess !== null;
+
+  const openPremiumPlans = () => {
+    if (
+      premiumFounderConfigurationState.configuration &&
+      !premiumFounderAccess &&
+      !internalStaffExportEnabled &&
+      !isCapabilityEnabled("premiumPlanCenter")
+    ) {
+      setProfileOpen(true);
+      setAnnouncement(
+        "Plan Kütüphanesi için bu telefonda Kurucu Premium kodunu etkinleştirin.",
+      );
+      return;
+    }
+    if (!configuredClassroom?.curriculumProfile) {
+      setClassroomOpen(true);
+      setAnnouncement(
+        "Plan Kütüphanesi için önce sınıf program profilini tamamlayın.",
+      );
+      return;
+    }
+    setProfileOpen(false);
+    surfaceTransitionRef.current = "premium-plans";
+    setPremiumPlanOpen(true);
+  };
+
+  const activateFounderPremium = async (code: string) => {
+    const configuration = premiumFounderConfigurationState.configuration;
+    if (!configuration || premiumFounderBusy) return;
+    setPremiumFounderBusy(true);
+    setPremiumFounderError("");
+    try {
+      const result = await activatePremiumFounderAccess({
+        code,
+        appVersion: CURRENT_RELEASE.version,
+        configuration,
+      });
+      setPremiumFounderAccess(result);
+      setAnnouncement(
+        "Kurucu Premium bu telefonda etkinleştirildi. Planlar ve belgeler çevrimdışı kullanım için hazır.",
+      );
+    } catch {
+      setPremiumFounderAccess(null);
+      setPremiumFounderError(
+        "Kod doğrulanamadı. İnternet bağlantısını, kodu ve iki cihaz hakkının dolu olup olmadığını kontrol edin.",
+      );
+    } finally {
+      setPremiumFounderBusy(false);
+    }
   };
 
   const openActivityEvidence = async (
@@ -5025,6 +5402,120 @@ export default function Prototype() {
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
 
+  const saveAnecdoteDocumentDraft = async (
+    observationId: string,
+    values: {
+      observedLocation: string;
+      observerGeneralAssessment: string;
+    },
+  ) => {
+    if (educationalWriteNotice) throw new Error(educationalWriteNotice);
+    if (writesBlocked) {
+      throw new Error(
+        "Cihaz verileri yazmaya hazır değil; anekdot taslağı güvenlik için kaydedilmedi.",
+      );
+    }
+    setDataBusy(true);
+    try {
+      const { saveAnecdoteFormDraft } = await import(
+        "./features/anecdote/anecdote-form.ts"
+      );
+      await enqueuePersistence(
+        () =>
+          saveAnecdoteFormDraft(store, {
+            observationId,
+            ...values,
+          }),
+        {
+          failureDetail:
+            "Anekdot formu taslağı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
+          successDetail: "Anekdot formu taslağı bu cihazda korundu.",
+        },
+      );
+      await refreshAnecdoteDocuments();
+      setAnnouncement("Anekdot formu taslağı bu cihazda korundu.");
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const approveAnecdoteDocument = async (
+    observationId: string,
+    values: {
+      observedLocation: string;
+      observerGeneralAssessment: string;
+    },
+  ) => {
+    if (educationalWriteNotice) throw new Error(educationalWriteNotice);
+    if (writesBlocked) {
+      throw new Error(
+        "Cihaz verileri yazmaya hazır değil; anekdot onayı güvenlik için kaydedilmedi.",
+      );
+    }
+    setDataBusy(true);
+    try {
+      const { approveAnecdoteForm, saveAnecdoteFormDraft } = await import(
+        "./features/anecdote/anecdote-form.ts"
+      );
+      await enqueuePersistence(
+        async () => {
+          await saveAnecdoteFormDraft(store, {
+            observationId,
+            ...values,
+          });
+          return approveAnecdoteForm(store, { observationId });
+        },
+        {
+          failureDetail:
+            "Anekdot formu onaylanamadı. Ham gözlem ve önceki taslak korundu.",
+          successDetail:
+            "Anekdot formu öğretmen incelemesiyle belgeye hazırlandı.",
+        },
+      );
+      await refreshAnecdoteDocuments();
+      setAnnouncement(
+        "Anekdot formu öğretmen incelemesiyle PDF ve Word çıktısına hazırlandı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const downloadAnecdoteDocument = async (
+    observationId: string,
+    format: AnecdoteExportFormat,
+  ) => {
+    const refreshed = await refreshAnecdoteDocuments();
+    const form = refreshed.forms.find(
+      (candidate) => candidate.observationId === observationId,
+    );
+    if (!form) throw new Error("Dışa aktarılacak anekdot formu bulunamadı.");
+    const { generateAnecdoteExportFile } = await import(
+      "./features/anecdote/export-document.ts"
+    );
+    const file = await generateAnecdoteExportFile(form, format);
+    downloadBytes(file.fileName, file.mimeType, file.bytes);
+    setAnnouncement(
+      format === "pdf"
+        ? "Anekdot Kayıt Formu PDF olarak indirildi."
+        : "Anekdot Kayıt Formu düzenlenebilir Word belgesi olarak indirildi.",
+    );
+  };
+
+  const openAnecdoteCurriculumLink = (observationId: string) => {
+    const observation = allEvidenceObservations.find(
+      (candidate) => candidate.id === observationId,
+    );
+    if (!observation) {
+      setAnnouncement(
+        "Anekdot gözleminin program bağlantısı açılamadı; gözlem arşivini kontrol edin.",
+      );
+      return;
+    }
+    setDocumentsOpen(false);
+    openPendingObservation(observation);
+  };
+
   const createPlanAndStart = async (command: PlanCreationCommand) => {
     if (!configuredClassroom?.curriculumProfile) {
       throw new Error("Sınıfın program profili tamamlanmalıdır.");
@@ -5053,6 +5544,12 @@ export default function Prototype() {
       surfaceTransitionRef.current = null;
       setPlanFlowOpen(false);
       setPremiumDailyTemplate(null);
+      setScheduledPlanEditDraft(null);
+      setFuturePlanNotice({
+        planId: result.plan.id,
+        civilDate: command.civilDate,
+        activityTitle: String(activity.title),
+      });
       setAnnouncement(
         `${activity.title} ${command.civilDate} tarihi için planlandı. Etkinlik ve gözlem, plan gününde başlatılabilir.`,
       );
@@ -5066,6 +5563,33 @@ export default function Prototype() {
     setPlanFlowOpen(false);
     setEvidenceFlowRequest({ activity });
     setAnnouncement(`${activity.title} başladı. İlk gözlem notunu ekleyebilirsiniz.`);
+  };
+
+  const updateFuturePlan = async (command: PlanUpdateCommand) => {
+    const result = await enqueuePersistence(
+      () => updateScheduledPlanWithActivity(store, command),
+      {
+        failureDetail:
+          "Gelecek günlük plan güncellenemedi. Önceki kayıt bu cihazda korundu.",
+        successDetail:
+          "Gelecek günlük plan ve gerçek etkinliği aynı işlemde güncellendi.",
+      },
+    );
+    await refreshD1Workspaces();
+    setSelectedPlanDayWorkspace(
+      await loadPlanDayWorkspace(store, { civilDate: command.civilDate }),
+    );
+    surfaceTransitionRef.current = null;
+    setPlanFlowOpen(false);
+    setScheduledPlanEditDraft(null);
+    setFuturePlanNotice({
+      planId: result.plan.id,
+      civilDate: command.civilDate,
+      activityTitle: String(result.activity.title),
+    });
+    setAnnouncement(
+      `${result.activity.title} planı güncellendi. Kimlik ve kaynak zinciri korundu.`,
+    );
   };
 
   const evidenceFlowActions: EvidenceFlowActions = {
@@ -5262,7 +5786,7 @@ export default function Prototype() {
       return;
     }
     if (id === "plans") {
-      setPlansOpen(true);
+      openTodayPlans();
       return;
     }
     if (id === "documents") {
@@ -5452,7 +5976,7 @@ export default function Prototype() {
                 updateVersion: CURRENT_RELEASE.version,
                 pendingObservationCount: evidenceWorkspace.pendingObservations.length,
                 planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
-                premiumPlanCenterEnabled: premiumPilotPreviewEnabled,
+                premiumPlanCenterEnabled: premiumPlanEntryEnabled,
               }}
               actions={{
                 onOpenSettings: () => setProfileOpen(true),
@@ -5470,17 +5994,9 @@ export default function Prototype() {
                 onOpenActivityEvidence: openActivityEvidence,
                 onCompleteCurrentActivity: completeCurrentActivity,
                 onOpenPlanFlow: () => openPlanFlow(),
-                onOpenPremiumPlans: () => {
-                  if (!configuredClassroom?.curriculumProfile) {
-                    setClassroomOpen(true);
-                    setAnnouncement("Plan Kütüphanesi için önce sınıf program profilini tamamlayın.");
-                    return;
-                  }
-                  surfaceTransitionRef.current = "premium-plans";
-                  setPremiumPlanOpen(true);
-                },
+                onOpenPremiumPlans: openPremiumPlans,
                 onOpenPlanItem: (item) => {
-                  setPlansOpen(true);
+                  openTodayPlans();
                   setAnnouncement(`${item.title} plan kaydı açıldı.`);
                 },
                 onOpenPendingObservation: () => openPendingObservation(),
@@ -5517,7 +6033,48 @@ export default function Prototype() {
             <span>{item.label}</span>
           </button>
         ))}
+        {allEvidenceObservations.some(
+          (observation) => observation.observationType === "anecdotal",
+        ) ? (
+          <button
+            type="button"
+            className={documentsOpen ? "is-active" : undefined}
+            onClick={() => setDocumentsOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={documentsOpen}
+          >
+            <ArchiveIcon aria-hidden="true" />
+            <span>Belgeler</span>
+          </button>
+        ) : null}
       </nav>
+
+      {futurePlanNotice ? (
+        <aside className="future-plan-notice" role="status" data-testid="future-plan-notice">
+          <span>
+            <strong>{futurePlanNotice.activityTitle}</strong>
+            <small>{formatTurkishCivilDate(futurePlanNotice.civilDate)} için cihazda kayıtlı</small>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const targetDate = futurePlanNotice.civilDate;
+              setFuturePlanNotice(null);
+              void openAcademicCalendar(targetDate);
+            }}
+          >
+            Takvimde gör
+          </button>
+          <button
+            type="button"
+            className="future-plan-notice-dismiss"
+            aria-label="Plan bildirimini kapat"
+            onClick={() => setFuturePlanNotice(null)}
+          >
+            <Cross2Icon aria-hidden="true" />
+          </button>
+        </aside>
+      ) : null}
 
       <BottomSheet
         open={captureMenuOpen}
@@ -5576,7 +6133,7 @@ export default function Prototype() {
             <ReaderIcon aria-hidden="true" />
             <span>
               <strong>Etkinlik planla</strong>
-              <small>Fikir seç → hedef seç → başlat</small>
+              <small>Fikir seç → hedef seç → planı kaydet</small>
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
@@ -5654,7 +6211,7 @@ export default function Prototype() {
 
           <div className="settings-grid">
             <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
-              <input
+              <KeyboardInput
                 id="academic-year-start"
                 type="date"
                 value={classroomForm.academicYearStart}
@@ -5665,7 +6222,7 @@ export default function Prototype() {
               />
             </label>
             <label htmlFor="academic-year-end">Eğitim yılı bitişi
-              <input
+              <KeyboardInput
                 id="academic-year-end"
                 type="date"
                 value={classroomForm.academicYearEnd}
@@ -5782,7 +6339,7 @@ export default function Prototype() {
 
           <div className="settings-grid">
             <label htmlFor="schedule-start">Başlangıç
-              <input
+              <KeyboardInput
                 id="schedule-start"
                 type="time"
                 value={classroomForm.startTime}
@@ -5796,7 +6353,7 @@ export default function Prototype() {
               />
             </label>
             <label htmlFor="schedule-end">Bitiş
-              <input
+              <KeyboardInput
                 id="schedule-end"
                 type="time"
                 value={classroomForm.endTime}
@@ -5861,15 +6418,16 @@ export default function Prototype() {
         open={plansOpen}
         onOpenChange={(open) => {
           setPlansOpen(open);
+          if (!open) setSelectedPlanDayWorkspace(null);
         }}
-        title="Bugünün planı"
-        description={`${formatTurkishCivilDate(todayWorkspace.civilDate)} · Kayıtlı etkinlikler`}
+        title={displayedPlanIsToday ? "Bugünün planı" : "Seçili günün planı"}
+        description={`${formatTurkishCivilDate(displayedPlanWorkspace.civilDate)} · ${displayedPlanWorkspace.planItems.some((item) => item.kind === "premium-flow-block") ? "Kayıtlı günlük akış" : "Kayıtlı etkinlikler"}`}
         snap={0.78}
       >
         <button
           className="plans-calendar-button"
           type="button"
-          onClick={() => void openAcademicCalendar()}
+          onClick={() => void openAcademicCalendar(displayedPlanWorkspace.civilDate)}
         >
           <CalendarIcon aria-hidden="true" />
           <span>
@@ -5878,22 +6436,71 @@ export default function Prototype() {
           </span>
           <ChevronRightIcon aria-hidden="true" />
         </button>
-        <button className="sheet-primary plans-create-button" type="button" onClick={() => openPlanFlow()} disabled={educationalWritesDisabled}>
-          <PlusIcon aria-hidden="true" /> Günlük plan oluştur
-        </button>
-        {todayWorkspace.planItems.length > 0 ? (
+        {!displayedPlanIsToday && displayedScheduledPlan?.editable ? (
+          <button
+            className="sheet-primary plans-edit-button"
+            type="button"
+            onClick={() => void editScheduledPlan(displayedScheduledPlan)}
+            disabled={dataBusy || writesBlocked}
+          >
+            <Pencil1Icon aria-hidden="true" /> Gelecek planı düzenle
+          </button>
+        ) : null}
+        {displayedPlanIsToday ? (
+          <button className="sheet-primary plans-create-button" type="button" onClick={() => openPlanFlow()} disabled={educationalWritesDisabled}>
+            <PlusIcon aria-hidden="true" /> Günlük plan oluştur
+          </button>
+        ) : null}
+        {displayedPlanWorkspace.planItems.length > 0 ? (
           <div className="activity-list">
-            {todayWorkspace.planItems.map((item, index) => (
+            {displayedPlanWorkspace.planItems.map((item, index) => (
               <button
-                className={`activity-row is-${item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`}
+                className={`activity-row is-${item.flowBlockStatus === "skipped" ? "skipped is-next" : item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`}
                 type="button"
                 key={item.id}
-                onClick={() => void openActivityEvidence(item.id)}
-                disabled={educationalWritesDisabled}
+                onClick={() => {
+                  if (displayedPlanIsToday && item.activityId && item.canCaptureEvidence) {
+                    void openActivityEvidence(item.activityId);
+                    return;
+                  }
+                  setAnnouncement(
+                    `${item.title}: ${item.purpose ?? "Günlük akış adımı"}`,
+                  );
+                }}
+                disabled={
+                  (Boolean(item.activityId && item.canCaptureEvidence) &&
+                    educationalWritesDisabled) ||
+                  (!displayedPlanIsToday && Boolean(item.activityId))
+                }
               >
-                <span className="activity-marker" aria-hidden="true">{item.status === "completed" ? <CheckCircledIcon /> : index + 1}</span>
-                <span className="activity-copy"><strong>{item.title}</strong><small>{item.startTime} · <b>{activityStatusLabels[item.status]}</b></small></span>
-                <span className="activity-evidence">{item.status === "planned" ? "Başlat" : "Gözlem ekle"}</span>
+                <span className="activity-marker" aria-hidden="true">{item.status === "completed" && item.flowBlockStatus !== "skipped" ? <CheckCircledIcon /> : index + 1}</span>
+                <span className="activity-copy">
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.startTime ?? (item.durationMinutes ? `${item.durationMinutes} dk` : "Akış sırası")} · <b>{todayPlanItemStatusLabel(item)}</b>
+                  </small>
+                  {item.activityTitle && item.activityTitle !== item.title ? (
+                    <small>Etkinlik: {item.activityTitle}</small>
+                  ) : null}
+                  {item.purpose ? <small>{item.purpose}</small> : null}
+                  {item.transitionNote ? (
+                    <small>Geçiş: {item.transitionNote}</small>
+                  ) : null}
+                  {item.teacherNote ? (
+                    <small>Öğretmen notu: {item.teacherNote}</small>
+                  ) : null}
+                </span>
+                <span className="activity-evidence">
+                  {displayedPlanIsToday && item.activityId && item.canCaptureEvidence
+                    ? item.status === "planned"
+                      ? "Başlat"
+                      : "Gözlem ekle"
+                    : item.activityId
+                      ? "Planlı etkinlik"
+                    : item.flowBlockStatus === "skipped"
+                      ? "Atlandı"
+                      : "Akış adımı"}
+                </span>
               </button>
             ))}
           </div>
@@ -5975,6 +6582,9 @@ export default function Prototype() {
                   entry.startDate <= day.civilDate &&
                   entry.endDate >= day.civilDate,
               );
+              const scheduledPlans = scheduledPlanWorkspace.plans.filter(
+                (plan) => plan.civilDate === day.civilDate,
+              );
               return (
                 <button
                   type="button"
@@ -5987,11 +6597,12 @@ export default function Prototype() {
                       : "",
                     official.length > 0 ? "has-official" : "",
                     entries.length > 0 ? "has-entry" : "",
+                    scheduledPlans.length > 0 ? "has-plan" : "",
                   ].filter(Boolean).join(" ")}
                   aria-selected={day.civilDate === calendarSelectedDate}
                   aria-label={`${formatTurkishCivilDate(day.civilDate)}${
-                    official.length + entries.length > 0
-                      ? `, ${official.length + entries.length} kayıt`
+                    official.length + entries.length + scheduledPlans.length > 0
+                      ? `, ${official.length + entries.length + scheduledPlans.length} kayıt`
                       : ""
                   }`}
                   onClick={() => {
@@ -6017,7 +6628,8 @@ export default function Prototype() {
               </div>
               <span>
                 {selectedOfficialCalendarEvents.length +
-                  selectedTeacherCalendarEntries.length}{" "}
+                  selectedTeacherCalendarEntries.length +
+                  selectedScheduledPlans.length}{" "}
                 kayıt
               </span>
             </header>
@@ -6074,6 +6686,42 @@ export default function Prototype() {
                   >
                     <TrashIcon aria-hidden="true" />
                   </button>
+                </div>
+              </article>
+            ))}
+
+            {selectedScheduledPlans.map((plan) => (
+              <article
+                className={`calendar-scheduled-plan ${plan.integrityStatus === "invalid" ? "has-integrity-warning" : ""}`}
+                key={plan.planId}
+                data-testid="calendar-scheduled-plan"
+              >
+                <div>
+                  <span>Kayıtlı günlük plan</span>
+                  <strong>{plan.planTitle}</strong>
+                  <p>{plan.flowBlockCount > 0 ? `${plan.flowBlockCount} akış bloğu` : "Günlük plan"} · {plan.persistedActivityCount} uygulanacak etkinlik</p>
+                  <small>{plan.activityTitle}</small>
+                  {plan.integrityStatus === "invalid" ? (
+                    <em>{plan.editBlockReason}</em>
+                  ) : null}
+                </div>
+                <div className="calendar-plan-actions">
+                  <button
+                    type="button"
+                    onClick={() => void viewScheduledPlanFlow(plan)}
+                    disabled={dataBusy}
+                  >
+                    Akışı gör
+                  </button>
+                  {plan.editable ? (
+                    <button
+                      type="button"
+                      onClick={() => void editScheduledPlan(plan)}
+                      disabled={dataBusy || writesBlocked}
+                    >
+                      <Pencil1Icon aria-hidden="true" /> Düzenle
+                    </button>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -6157,10 +6805,26 @@ export default function Prototype() {
         onOpenChange={(open) => {
           setDocumentsOpen(open);
         }}
-        title="Paylaşım taslakları"
-        description="Yalnız öğretmenin seçtiği kapsamla hazırlanan metin dışa aktarımları"
+        title="Belgeler"
+        description="Resmî formlar ve yalnız öğretmenin seçtiği kapsamla hazırlanan dışa aktarımlar"
         snap={0.82}
       >
+        <Suspense
+          fallback={
+            <div className="route-loading" role="status">
+              Anekdot belgeleri hazırlanıyor…
+            </div>
+          }
+        >
+          <AnecdoteCenterPanel
+            workspace={anecdoteWorkspace}
+            busy={dataBusy}
+            onSave={saveAnecdoteDocumentDraft}
+            onApprove={approveAnecdoteDocument}
+            onDownload={downloadAnecdoteDocument}
+            onCompleteCurriculumLink={openAnecdoteCurriculumLink}
+          />
+        </Suspense>
         <section className="documents-coming-soon">
           <span aria-hidden="true"><ArchiveIcon /></span>
           <small>Öğretmen denetimli çalışma alanı</small>
@@ -7424,11 +8088,22 @@ export default function Prototype() {
             <section className="student-share-privacy">
               <CheckCircledIcon aria-hidden="true" />
               <div>
-                <strong>Tam öğrenci dosyası hazırlanır</strong>
-                <p>
-                  Ad soyad, okul numarası, yakın bilgileri ve seçili eğitim
-                  kayıtları maskelenmeden kullanılır.
-                </p>
+                <strong>
+                  {isExternalAiDossierDestination(studentShareForm.destination)
+                    ? "Kimliksiz analiz paketi hazırlanır"
+                    : "Tam öğrenci dosyası hazırlanır"}
+                </strong>
+                {isExternalAiDossierDestination(studentShareForm.destination) ? (
+                  <p>
+                    Yalnız sistem takma adı kullanılır; ad, okul numarası,
+                    yakınlar ve telefonlar pakete eklenmez.
+                  </p>
+                ) : (
+                  <p>
+                    Ad soyad, okul numarası, yakın bilgileri ve seçili eğitim
+                    kayıtları maskelenmeden kullanılır.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -7448,9 +8123,7 @@ export default function Prototype() {
                         setStudentShareForm((current) => ({
                           ...current,
                           destination,
-                          identityMode: "full",
-                          includeContacts: true,
-                          personalDataApprovedForAi: true,
+                          ...dossierPrivacyDefaults(destination),
                         }))
                       }
                     >
@@ -7514,12 +8187,23 @@ export default function Prototype() {
             <section className="student-share-section">
               <div className="student-share-section-heading">
                 <span className="d1-kicker">2 · Kimlik ve içerik</span>
-                <h3>Tam kimlik ve kayıtlar</h3>
+                <h3>
+                  {isExternalAiDossierDestination(studentShareForm.destination)
+                    ? "Takma ad ve eğitim kayıtları"
+                    : "Tam kimlik ve kayıtlar"}
+                </h3>
               </div>
-              <p>
-                Varsayılan dosya; öğrenci kimliği, yakınlar, telefonlar, devam,
-                gözlem, portfolyo ve kayıtlı geri bildirimleri içerir.
-              </p>
+              {isExternalAiDossierDestination(studentShareForm.destination) ? (
+                <p>
+                  Analiz paketi devam, gözlem, portfolyo ve kayıtlı geri
+                  bildirimleri sistem takma adıyla içerir.
+                </p>
+              ) : (
+                <p>
+                  Varsayılan dosya; öğrenci kimliği, yakınlar, telefonlar,
+                  devam, gözlem, portfolyo ve kayıtlı geri bildirimleri içerir.
+                </p>
+              )}
               <details className="quick-details student-share-options">
                 <summary>
                   <span>
@@ -7536,7 +8220,15 @@ export default function Prototype() {
                     ["includeObservations", "Tarihli gözlemler"],
                     ["includePortfolio", "Portfolyo seçkileri"],
                     ["includeExternalFeedback", "Kayıtlı AI geri bildirimleri"],
-                  ] as const).map(([field, label]) => (
+                  ] as const)
+                    .filter(
+                      ([field]) =>
+                        field !== "includeContacts" ||
+                        !isExternalAiDossierDestination(
+                          studentShareForm.destination,
+                        ),
+                    )
+                    .map(([field, label]) => (
                     <label key={field}>
                       <input
                         type="checkbox"
@@ -7550,7 +8242,7 @@ export default function Prototype() {
                       />
                       {label}
                     </label>
-                  ))}
+                    ))}
                 </div>
               </details>
               <button
@@ -7887,12 +8579,25 @@ export default function Prototype() {
             </button>
           </section>
 
+          {premiumFounderConfigurationState.configuration ||
+          premiumFounderAccess ||
+          premiumFounderConfigurationState.error ? (
+            <FounderPremiumActivationPanel
+              access={premiumFounderAccess?.access ?? null}
+              busy={premiumFounderBusy}
+              configured={premiumFounderConfigurationState.configuration !== null}
+              error={premiumFounderError}
+              onActivate={activateFounderPremium}
+              onOpenPlans={openPremiumPlans}
+            />
+          ) : null}
+
           <section className="local-vault-card" aria-label="Cihazdaki veri durumu">
             <span className="security-icon"><LockClosedIcon aria-hidden="true" /></span>
             <span>
               <strong>
                 {appLockSetting
-                  ? "Cihaz verileri uygulama kilidiyle korunuyor"
+                  ? "MaarifOS erişimi PIN ile kilitli"
                   : "Veriler bu cihazda saklanıyor"}
               </strong>
               <small>{dataStatus}</small>
@@ -7906,8 +8611,8 @@ export default function Prototype() {
                 <h3 id="app-lock-heading">Uygulama kilidi</h3>
                 <p>
                   {appLockSetting
-                    ? "Arka plana geçince veya 5 dakika işlem yapılmayınca MaarifOS kilitlenir."
-                    : "En az 6 karakterlik PIN ile çocuk verilerini uygulama açılışında koruyun."}
+                    ? "Arka plana geçince veya 5 dakika işlem yapılmayınca MaarifOS kilitlenir. Bu PIN cihaz depolamasını şifrelemez."
+                    : "En az 6 karakterlik PIN ile uygulama erişimini sınırlayın; cihaz ekran kilidini de açık tutun."}
                 </p>
               </div>
               <span className="optional-badge">
@@ -7943,7 +8648,7 @@ export default function Prototype() {
               >
                 <label htmlFor="app-lock-pin">
                   Uygulama PIN’i
-                  <input
+                  <KeyboardInput
                     id="app-lock-pin"
                     type="password"
                     value={appLockPin}
@@ -7956,7 +8661,7 @@ export default function Prototype() {
                 </label>
                 <label htmlFor="app-lock-pin-confirm">
                   PIN’i doğrula
-                  <input
+                  <KeyboardInput
                     id="app-lock-pin-confirm"
                     type="password"
                     value={appLockPinConfirm}
@@ -8134,7 +8839,7 @@ export default function Prototype() {
             <div className="secure-secret-form secure-secret-form--backup">
               <label htmlFor="backup-password">
                 Yedek parolası
-                <input
+                <KeyboardInput
                   id="backup-password"
                   type="password"
                   value={backupPassword}
@@ -8146,7 +8851,7 @@ export default function Prototype() {
               </label>
               <label htmlFor="backup-password-confirm">
                 Parolayı doğrula
-                <input
+                <KeyboardInput
                   id="backup-password-confirm"
                   type="password"
                   value={backupPasswordConfirm}
@@ -8203,7 +8908,7 @@ export default function Prototype() {
                     <span>Şifreli yedek · içerik henüz açılmadı</span>
                     <label htmlFor="restore-password">
                       Yedek parolası
-                      <input
+                      <KeyboardInput
                         id="restore-password"
                         type="password"
                         value={restorePassword}
@@ -8366,28 +9071,33 @@ export default function Prototype() {
           <Dialog.Overlay className="d1-flow-overlay" />
           <Dialog.Content className="d1-flow-layer" key="plan-flow">
             <Dialog.Title className="sr-only">
-              Günlük plan oluşturma
+              {scheduledPlanEditDraft ? "Günlük plan düzenleme" : "Günlük plan oluşturma"}
             </Dialog.Title>
             <Dialog.Description className="sr-only">
-              Günlük planı ve ilk etkinliği oluşturun. Escape tuşuyla
-              kapatabilirsiniz.
+              {scheduledPlanEditDraft
+                ? "Gelecek tarihli günlük planın başlık, saat ve öğretmen akış notlarını düzenleyin."
+                : "Günlük planı ve ilk etkinliği oluşturun."} Escape tuşuyla kapatabilirsiniz.
             </Dialog.Description>
             <PlanCreationFlow
-              civilDate={todayWorkspace.civilDate}
+              civilDate={scheduledPlanEditDraft?.civilDate ?? todayWorkspace.civilDate}
               defaultStartTime={configuredClassroom.schedule.startTime}
               defaultEndTime={configuredClassroom.schedule.endTime}
               ageGroup={configuredClassroom.ageGroup ?? ""}
               curriculumProfile={configuredClassroom.curriculumProfile}
               students={students}
               onCreate={createPlanAndStart}
+              onUpdate={updateFuturePlan}
               initialTemplate={premiumDailyTemplate ?? undefined}
+              initialEdit={scheduledPlanEditDraft ?? undefined}
               onClose={() => void closeD1Flow()}
             />
           </Dialog.Content>
         </Dialog.Root>
       ) : null}
 
-      {premiumPlanOpen && premiumPilotPreviewEnabled && configuredClassroom?.curriculumProfile ? (
+      {premiumPlanOpen &&
+      (premiumPilotPreviewEnabled || premiumFounderAccess) &&
+      configuredClassroom?.curriculumProfile ? (
         <Dialog.Root
           open
           onOpenChange={(open) => {
@@ -8398,14 +9108,22 @@ export default function Prototype() {
           <Dialog.Content className="d1-flow-layer" key="premium-plan-center">
             <Dialog.Title className="sr-only">Plan Kütüphanesi</Dialog.Title>
             <Dialog.Description className="sr-only">
-              Kapalı premium pilotun yıllık plan, pedagojik lens ve etkinlik seçimi.
+              Yıllık, aylık, haftalık ve günlük premium planlar; pedagojik yaklaşım,
+              değerlendirme ve belge çıktıları.
             </Dialog.Description>
             <Suspense fallback={<div className="premium-loading">Plan Kütüphanesi açılıyor…</div>}>
               <PremiumPlanCenterScreen
                 store={store}
                 curriculumProfile={configuredClassroom.curriculumProfile}
                 ageGroup={configuredClassroom.ageGroup ?? ""}
+                contentPack={premiumFounderAccess?.pack ?? null}
                 internalStaffExportEnabled={internalStaffExportEnabled}
+                premiumAccess={
+                  premiumFounderAccess?.access.status === "active" &&
+                  premiumFounderAccess.access.canUsePremiumContent
+                    ? premiumFounderAccess.access
+                    : null
+                }
                 valueEvidenceWritesDisabled={
                   writesBlocked || educationalWritesDisabled
                 }
@@ -8486,7 +9204,7 @@ export default function Prototype() {
               </Dialog.Description>
               <label htmlFor="app-unlock-pin">
                 Uygulama PIN’i
-                <input
+                <KeyboardInput
                   id="app-unlock-pin"
                   type="password"
                   value={appUnlockPin}

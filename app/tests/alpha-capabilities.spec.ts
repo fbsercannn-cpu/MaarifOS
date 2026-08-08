@@ -16,7 +16,7 @@ test("Hediye Alpha yalnız doğrulanmış çekirdek kabiliyetleri açar", () => 
     appLock: true,
     googleAuth: false,
     curriculumCatalogBrowser: false,
-    planEvidenceDetails: false,
+    planEvidenceDetails: true,
     premiumPlanCenter: false,
     portfolio: false,
     aiFeedback: false,
@@ -29,6 +29,7 @@ test("Hediye Alpha yalnız doğrulanmış çekirdek kabiliyetleri açar", () => 
   });
 
   expect(isCapabilityEnabled("attendanceV2")).toBe(true);
+  expect(isCapabilityEnabled("planEvidenceDetails")).toBe(true);
   expect(isCapabilityEnabled("portfolio")).toBe(false);
   expect(Object.keys(ALPHA_CAPABILITIES)).toEqual(CAPABILITY_IDS);
 });

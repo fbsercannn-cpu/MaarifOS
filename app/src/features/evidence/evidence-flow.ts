@@ -32,6 +32,7 @@ import { parsePedagogicalRawObservationText } from "../values/value-plan-models.
 import {
   resolveLocalTeacherIdentity,
 } from "./local-teacher-identity.ts";
+import { scheduledPlanIntegrityIssue } from "../planning/scheduled-plan-workspace.ts";
 
 export {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
@@ -87,6 +88,20 @@ export interface CapturedEvidenceResult {
 
 export interface AssessmentDraftResult {
   draft: StoredRecord;
+}
+
+export interface UpdateScheduledPlanCommand {
+  planId: string;
+  activityId: string;
+  expectedPlanUpdatedAt: string;
+  expectedActivityUpdatedAt: string;
+  civilDate: string;
+  planTitle: string;
+  activityTitle: string;
+  startTime: string;
+  endTime?: string;
+  premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+  now?: Date;
 }
 
 const UUID_PATTERN =
@@ -660,6 +675,219 @@ export async function createPlanWithActivity(
     },
   );
   if (!result) throw new Error("Plan ve etkinlik kaydedilemedi.");
+  return result;
+}
+
+export async function updateScheduledPlanWithActivity(
+  store: LocalDataStore,
+  input: UpdateScheduledPlanCommand,
+): Promise<PlanActivityResult> {
+  const planId = validUuid(input.planId, "Plan");
+  const activityId = validUuid(input.activityId, "Etkinlik");
+  if (!isCivilDate(input.civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  if (!isLocalTime(input.startTime) || (input.endTime && !isLocalTime(input.endTime))) {
+    throw new Error("Etkinlik saatleri SS:DD biçiminde olmalıdır.");
+  }
+  if (input.endTime && input.startTime >= input.endTime) {
+    throw new Error("Etkinlik bitiş saati başlangıç saatinden sonra olmalıdır.");
+  }
+  const planTitle = requiredText(input.planTitle, "Plan başlığı");
+  const activityTitle = requiredText(input.activityTitle, "Etkinlik başlığı");
+  const now = input.now ?? new Date();
+  if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
+  const today = civilDateInIstanbul(now);
+  const timestamp = now.toISOString();
+  let result: PlanActivityResult | null = null;
+
+  await store.transaction(
+    "readwrite",
+    [
+      "academicYears",
+      "classrooms",
+      "settings",
+      "students",
+      "plans",
+      "activities",
+      "observations",
+    ],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [academicYears, plans, activities, observations] = await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("plans"),
+        transaction.getAll("activities"),
+        transaction.getAll("observations"),
+      ]);
+      const plan = plans.find(
+        (record) =>
+          record.id === planId &&
+          record.planType === "daily" &&
+          typeof record.deletedAt !== "string" &&
+          sameScope(record, scope),
+      );
+      if (!plan) {
+        throw new Error("Düzenlenecek günlük plan etkin sınıfta bulunamadı.");
+      }
+      const planActivities = activities.filter(
+        (record) =>
+          record.planId === plan.id &&
+          typeof record.deletedAt !== "string" &&
+          sameScope(record, scope),
+      );
+      const activity = planActivities.length === 1 && planActivities[0].id === activityId
+        ? planActivities[0]
+        : null;
+      if (!activity) {
+        throw new Error("Düzenleme için plana bağlı tek bir gerçek etkinlik bulunmalıdır.");
+      }
+      if (
+        plan.updatedAt !== input.expectedPlanUpdatedAt ||
+        activity.updatedAt !== input.expectedActivityUpdatedAt
+      ) {
+        throw new Error(
+          "Plan başka bir ekranda değiştirildi. Güncel kaydı yeniden açıp düzenleyin.",
+        );
+      }
+      if (
+        activity.civilDate !== plan.civilDate ||
+        Date.parse(plan.updatedAt) > now.getTime() ||
+        Date.parse(activity.updatedAt) > now.getTime()
+      ) {
+        throw new Error(
+          activity.civilDate !== plan.civilDate
+            ? "Plan ile gerçek etkinliğin kayıtlı tarihleri uyuşmuyor."
+            : "Kayıt zamanı planın son değişiklik zamanından eski olamaz.",
+        );
+      }
+      if (
+        plan.civilDate <= today ||
+        input.civilDate <= today ||
+        plan.coverageStatus !== "planned" ||
+        activity.status !== "planned"
+      ) {
+        throw new Error("Yalnız henüz başlamamış gelecek tarihli planlar düzenlenebilir.");
+      }
+      if (
+        observations.some(
+          (observation) =>
+            typeof observation.deletedAt !== "string" &&
+            sameScope(observation, scope) &&
+            (observation.planId === plan.id || observation.activityId === activity.id),
+        )
+      ) {
+        throw new Error("Gözlem kanıtı bulunan planlar geriye dönük değiştirilemez.");
+      }
+      const academicYear = academicYears.find(
+        (record) =>
+          record.id === scope.academicYearId &&
+          typeof record.deletedAt !== "string",
+      );
+      if (
+        !academicYear ||
+        !isCivilDate(String(academicYear.startDate)) ||
+        !isCivilDate(String(academicYear.endDate)) ||
+        input.civilDate < String(academicYear.startDate) ||
+        input.civilDate > String(academicYear.endDate)
+      ) {
+        throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
+      }
+      const integrityIssue = scheduledPlanIntegrityIssue({
+        plan,
+        activity,
+        plans,
+        scope,
+      });
+      if (integrityIssue) throw new Error(integrityIssue);
+
+      const sourceWeeklyPlan = typeof plan.sourceWeeklyPlanId === "string"
+        ? plans.find(
+            (record) =>
+              record.id === plan.sourceWeeklyPlanId &&
+              record.planType === "weekly" &&
+              typeof record.deletedAt !== "string" &&
+              sameScope(record, scope),
+          )
+        : null;
+      if (
+        sourceWeeklyPlan &&
+        (input.civilDate < String(sourceWeeklyPlan.periodStart) ||
+          input.civilDate > String(sourceWeeklyPlan.periodEnd))
+      ) {
+        throw new Error("Plan tarihi kayıtlı kaynak haftanın dışına taşınamaz.");
+      }
+
+      let premiumDailyFlowSnapshot = plan.premiumDailyFlowSnapshot;
+      if (premiumDailyFlowSnapshot !== undefined) {
+        if (
+          !premiumDailyFlowSnapshot ||
+          typeof premiumDailyFlowSnapshot !== "object" ||
+          Array.isArray(premiumDailyFlowSnapshot) ||
+          !Array.isArray((premiumDailyFlowSnapshot as Record<string, unknown>).blocks) ||
+          !input.premiumDailyFlowBlocks
+        ) {
+          throw new Error("Kayıtlı tam gün akışı düzenleme için doğrulanamadı.");
+        }
+        const existingBlocks = (premiumDailyFlowSnapshot as Record<string, unknown>)
+          .blocks as Array<Record<string, unknown>>;
+        if (
+          input.premiumDailyFlowBlocks.length !== existingBlocks.length ||
+          input.premiumDailyFlowBlocks.some(
+            (block, index) =>
+              block.id !== existingBlocks[index]?.id ||
+              !["planned", "optional", "skipped"].includes(block.status) ||
+              !Number.isInteger(block.durationMinutes) ||
+              block.durationMinutes < 5 ||
+              block.durationMinutes > 240 ||
+              typeof block.transitionNote !== "string" ||
+              block.transitionNote.length > 500 ||
+              typeof block.teacherNote !== "string" ||
+              block.teacherNote.length > 1_000,
+          )
+        ) {
+          throw new Error("Tam gün akışındaki öğretmen düzenlemeleri geçersiz.");
+        }
+        premiumDailyFlowSnapshot = {
+          ...(premiumDailyFlowSnapshot as Record<string, unknown>),
+          planCivilDate: input.civilDate,
+          blocks: existingBlocks.map((block, index) => ({
+            ...block,
+            status: input.premiumDailyFlowBlocks![index].status,
+            durationMinutes: input.premiumDailyFlowBlocks![index].durationMinutes,
+            transitionNote: input.premiumDailyFlowBlocks![index].transitionNote.trim(),
+            teacherNote: input.premiumDailyFlowBlocks![index].teacherNote.trim(),
+          })),
+        };
+      } else if (input.premiumDailyFlowBlocks?.length) {
+        throw new Error("Standart günlük plana premium akış blokları eklenemez.");
+      }
+
+      const updatedPlan: StoredRecord = {
+        ...plan,
+        title: planTitle,
+        civilDate: input.civilDate,
+        updatedAt: timestamp,
+        ...(premiumDailyFlowSnapshot !== undefined
+          ? { premiumDailyFlowSnapshot }
+          : {}),
+      };
+      const updatedActivity: StoredRecord = {
+        ...activity,
+        title: activityTitle,
+        startTime: input.startTime,
+        civilDate: input.civilDate,
+        updatedAt: timestamp,
+      };
+      if (input.endTime) updatedActivity.endTime = input.endTime;
+      else delete updatedActivity.endTime;
+
+      await transaction.putMany("plans", [updatedPlan]);
+      await transaction.putMany("activities", [updatedActivity]);
+      result = { plan: updatedPlan, activity: updatedActivity };
+    },
+  );
+  if (!result) throw new Error("Plan ve etkinlik değişiklikleri kaydedilemedi.");
   return result;
 }
 

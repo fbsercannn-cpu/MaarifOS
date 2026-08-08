@@ -1,3 +1,11 @@
+const PREMIUM_LICENSE_API_ORIGIN =
+  /* @maarifos-sites-build:premium-license-api-origin */ null;
+
+const CONNECT_SOURCES = [
+  "'self'",
+  ...(PREMIUM_LICENSE_API_ORIGIN === null ? [] : [PREMIUM_LICENSE_API_ORIGIN]),
+];
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -8,7 +16,7 @@ const CONTENT_SECURITY_POLICY = [
   "font-src 'self'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
-  "connect-src 'self'",
+  `connect-src ${CONNECT_SOURCES.join(" ")}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "form-action 'self'",
@@ -36,16 +44,28 @@ function withSecurityHeaders(response) {
   });
 }
 
+function isReservedNetworkPath(pathname) {
+  return ["/api", "/auth"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export default {
   async fetch(request, env) {
     const response = await env.ASSETS.fetch(request);
     const acceptsHtml = request.headers.get("accept")?.includes("text/html");
+    const requestUrl = new URL(request.url);
 
-    if (response.status !== 404 || !acceptsHtml || !["GET", "HEAD"].includes(request.method)) {
+    if (
+      response.status !== 404 ||
+      !acceptsHtml ||
+      !["GET", "HEAD"].includes(request.method) ||
+      isReservedNetworkPath(requestUrl.pathname)
+    ) {
       return withSecurityHeaders(response);
     }
 
-    const indexUrl = new URL(request.url);
+    const indexUrl = requestUrl;
     indexUrl.pathname = "/index.html";
     indexUrl.search = "";
     return withSecurityHeaders(

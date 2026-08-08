@@ -46,6 +46,7 @@ import {
   samePremiumLensPreference,
   type PremiumLensPreferenceSnapshot,
 } from "../../features/premium-plans/domain";
+import { parsePremiumMonthlyEvaluation } from "../../features/premium-plans/plan-service";
 import {
   assertValueEvidenceSourceObservationPolicy,
   parseTeacherEvidenceRationale,
@@ -55,15 +56,31 @@ import {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
   LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
 } from "../../features/evidence/local-teacher-identity";
+import {
+  ANECDOTE_FORM_LEGACY_SCHEMA_VERSION,
+  ANECDOTE_FORM_REPORT_TYPE,
+  ANECDOTE_FORM_SCHEMA_VERSION,
+  approvalSealMatchesCurrentSources,
+  isAnecdoteFormDraftRecord,
+} from "../../features/anecdote/anecdote-form";
+import {
+  DATA_SCHEMA_VERSION,
+  IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
+  LEGACY_DATA_SCHEMA_VERSION,
+  PREVIOUS_DATA_SCHEMA_VERSION,
+  SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
+} from "./schema-version";
+
+export {
+  DATA_SCHEMA_VERSION,
+  IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
+  LEGACY_DATA_SCHEMA_VERSION,
+  PREVIOUS_DATA_SCHEMA_VERSION,
+  SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
+} from "./schema-version";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
-export const LEGACY_DATA_SCHEMA_VERSION = 1;
-export const SECOND_PREVIOUS_DATA_SCHEMA_VERSION = 2;
-export const PREVIOUS_DATA_SCHEMA_VERSION = 3;
-export const IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION = 4;
-export const DATA_SCHEMA_VERSION = 5;
-
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   backupVersion: typeof BACKUP_VERSION;
@@ -324,6 +341,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "premiumFullDayFlow",
     "teacherReviewRequired",
     "monthlyReflection",
+    "monthlyEvaluations",
     "weeklyEvaluations",
     "nextPlanDecisionRequired",
     "previousWeekEvaluationId",
@@ -444,6 +462,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "reviewStatus",
     "reviewedByUserId",
     "reviewedAt",
+    "approvalSeal",
     "generationMode",
     "referenceVerificationStatus",
   ],
@@ -1947,6 +1966,8 @@ function assertBackupRelationships(
         !Array.isArray(plan.premiumFullDayFlow) ||
         plan.premiumFullDayFlow.length !== 10 ||
         plan.teacherReviewRequired !== true ||
+        (plan.monthlyEvaluations !== undefined &&
+          !Array.isArray(plan.monthlyEvaluations)) ||
         typeof plan.periodStart !== "string" ||
         typeof plan.periodEnd !== "string" ||
         !plan.periodStart.startsWith(`${plan.monthKey}-`) ||
@@ -1968,6 +1989,31 @@ function assertBackupRelationships(
         typeof plan.nextPlanDecisionRequired !== "boolean")
     ) {
       throw new Error(`plans/${plan.id} haftalık plan sözleşmesine uymuyor.`);
+    }
+    if (plan.planType === "monthly" && Array.isArray(plan.monthlyEvaluations)) {
+      const evaluationIds = new Set<string>();
+      let previousCreatedAt: string | null = null;
+      for (const [index, candidate] of plan.monthlyEvaluations.entries()) {
+        const evaluation = parsePremiumMonthlyEvaluation(
+          candidate,
+          `plans/${plan.id} aylık değerlendirme ${index + 1}`,
+        );
+        if (
+          evaluationIds.has(evaluation.id) ||
+          evaluation.monthlyPlanId !== plan.id ||
+          evaluation.periodStart !== plan.periodStart ||
+          evaluation.periodEnd !== plan.periodEnd ||
+          !recordWasVisibleAt(plan, evaluation.createdAt) ||
+          (previousCreatedAt !== null &&
+            evaluation.createdAt < previousCreatedAt)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirme kimlik, dönem veya kronoloji sözleşmesine uymuyor.`,
+          );
+        }
+        evaluationIds.add(evaluation.id);
+        previousCreatedAt = evaluation.createdAt;
+      }
     }
     if (plan.planType === "weekly") {
       const weekSnapshot = isRecord(plan.premiumWeekSnapshot)
@@ -2744,6 +2790,207 @@ function assertBackupRelationships(
   const observationsById = new Map(
     payload.observations.map((observation) => [observation.id, observation]),
   );
+  const curriculumLinksById = new Map(
+    payload.evidenceCurriculumLinks.map((link) => [link.id, link]),
+  );
+  for (const plan of payload.plans) {
+    if (plan.planType !== "monthly" || !Array.isArray(plan.monthlyEvaluations)) {
+      continue;
+    }
+    const planScope = planScopes.get(plan.id) ?? null;
+    const planProfile = isRecord(plan.curriculumProfileSnapshot)
+      ? plan.curriculumProfileSnapshot
+      : null;
+    for (const [index, candidate] of plan.monthlyEvaluations.entries()) {
+      const evaluation = parsePremiumMonthlyEvaluation(
+        candidate,
+        `plans/${plan.id} aylık değerlendirme ${index + 1}`,
+      );
+      const evaluationCreatedAt = evaluation.createdAt;
+      const selectedObservationIds = new Set(
+        evaluation.children.observationIds,
+      );
+      const selectedStudentIds = new Set<string>();
+      const civilDates = new Set<string>();
+      const weeklyPlanIds = new Set<string>();
+      const environments = new Set<string>();
+      let anecdotalObservationCount = 0;
+      for (const observationId of evaluation.children.observationIds) {
+        const observation = observationsById.get(observationId);
+        const observationScope = observation
+          ? observationScopes.get(observation.id) ?? null
+          : null;
+        const daily =
+          observation && typeof observation.planId === "string"
+            ? plansById.get(observation.planId)
+            : undefined;
+        const observedAt =
+          observation && typeof observation.observedAt === "string"
+            ? observation.observedAt
+            : observation?.createdAt;
+        const dailyScope = daily ? planScopes.get(daily.id) ?? null : null;
+        const sourceWeekly =
+          daily && typeof daily.sourceWeeklyPlanId === "string"
+            ? plansById.get(daily.sourceWeeklyPlanId)
+            : undefined;
+        const sourceWeeklyScope = sourceWeekly
+          ? planScopes.get(sourceWeekly.id) ?? null
+          : null;
+        if (
+          !observation ||
+          observation.rawTextImmutable !== true ||
+          !recordWasVisibleAt(observation, evaluationCreatedAt) ||
+          !isValidUtcIso(observedAt) ||
+          Date.parse(observedAt) > Date.parse(evaluationCreatedAt) ||
+          !isCivilDate(observation.civilDate) ||
+          observation.civilDate < evaluation.periodStart ||
+          observation.civilDate > evaluation.periodEnd ||
+          !daily ||
+          daily.planType !== "daily" ||
+          daily.sourceMonthlyPlanId !== plan.id ||
+          !recordWasVisibleAt(daily, evaluationCreatedAt) ||
+          !sourceWeekly ||
+          sourceWeekly.planType !== "weekly" ||
+          sourceWeekly.monthlyPlanId !== plan.id ||
+          !recordWasVisibleAt(sourceWeekly, evaluationCreatedAt) ||
+          !planScope ||
+          !observationScope ||
+          !dailyScope ||
+          !sourceWeeklyScope ||
+          !scopesMatch(planScope, observationScope) ||
+          !scopesMatch(planScope, dailyScope) ||
+          !scopesMatch(planScope, sourceWeeklyScope)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi bilinmeyen, tarih dışı veya kapsam dışı gözleme bağlı.`,
+          );
+        }
+        parseTeacherWeeklyValuesNarrative(
+          observation.rawText,
+          `plans/${plan.id} aylık değerlendirmesine bağlı ham gözlem`,
+        );
+        civilDates.add(observation.civilDate);
+        if (typeof daily.sourceWeeklyPlanId === "string") {
+          weeklyPlanIds.add(daily.sourceWeeklyPlanId);
+        }
+        if (observation.observationType === "anecdotal") {
+          anecdotalObservationCount += 1;
+        }
+        if (Array.isArray(observation.studentIds)) {
+          observation.studentIds.forEach((studentId) => {
+            if (typeof studentId === "string") selectedStudentIds.add(studentId);
+          });
+        }
+        const activity =
+          typeof observation.activityId === "string"
+            ? activitiesById.get(observation.activityId)
+            : undefined;
+        const appliedTemplate = activity && isRecord(
+          activity.appliedActivityTemplateSnapshot,
+        )
+          ? activity.appliedActivityTemplateSnapshot
+          : activity && isRecord(activity.sourceActivityTemplateSnapshot)
+            ? activity.sourceActivityTemplateSnapshot
+            : null;
+        const environment =
+          appliedTemplate && typeof appliedTemplate.environment === "string"
+            ? appliedTemplate.environment.trim()
+            : activity && typeof activity.environment === "string"
+              ? activity.environment.trim()
+              : "";
+        if (environment) environments.add(environment);
+      }
+
+      const observationsWithSelectedLink = new Set<string>();
+      for (const linkId of evaluation.children.curriculumLinkIds) {
+        const link = curriculumLinksById.get(linkId);
+        const linkScope = link
+          ? validatedRecordScope(
+              link,
+              "evidenceCurriculumLinks",
+              classroomsById,
+            )
+          : null;
+        if (
+          !link ||
+          !recordWasVisibleAt(link, evaluationCreatedAt) ||
+          link.confirmationMethod !== "teacher-confirmed" ||
+          typeof link.observationId !== "string" ||
+          !selectedObservationIds.has(link.observationId) ||
+          !isValidUtcIso(link.confirmedAt) ||
+          Date.parse(link.confirmedAt) > Date.parse(evaluationCreatedAt) ||
+          !planProfile ||
+          link.framework !== planProfile.framework ||
+          link.catalogId !== planProfile.catalogId ||
+          link.sourceVersion !== planProfile.sourceVersion ||
+          !planScope ||
+          !linkScope ||
+          !scopesMatch(planScope, linkScope)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi izlenemeyen öğretmen onaylı program bağı taşıyor.`,
+          );
+        }
+        observationsWithSelectedLink.add(link.observationId);
+      }
+      if (
+        evaluation.children.observationIds.some(
+          (observationId) => !observationsWithSelectedLink.has(observationId),
+        )
+      ) {
+        throw new Error(
+          `plans/${plan.id} aylık değerlendirmesinde program bağı olmayan seçili gözlem var.`,
+        );
+      }
+
+      for (const studentId of evaluation.children.coverage.activeStudentIds) {
+        const student = studentsById.get(studentId);
+        const allowedScopes = studentScopes.get(studentId) ?? [];
+        if (
+          !student ||
+          !recordWasVisibleAt(student, evaluationCreatedAt) ||
+          !planScope ||
+          !allowedScopes.some((scope) => scopesMatch(planScope, scope))
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi izlenemeyen aktif sınıf çocuğu kimliği taşıyor.`,
+          );
+        }
+      }
+      const coveredActiveStudentIds =
+        evaluation.children.coverage.activeStudentIds.filter((studentId) =>
+          selectedStudentIds.has(studentId),
+        );
+      const uncoveredActiveStudentIds =
+        evaluation.children.coverage.activeStudentIds.filter(
+          (studentId) => !selectedStudentIds.has(studentId),
+        );
+      const expectedCoverage = {
+        observationCount: evaluation.children.observationIds.length,
+        anecdotalObservationCount,
+        programLinkedObservationCount: observationsWithSelectedLink.size,
+        curriculumLinkCount: evaluation.children.curriculumLinkIds.length,
+        distinctCivilDateCount: civilDates.size,
+        distinctWeekCount: weeklyPlanIds.size,
+        distinctStudentCount: selectedStudentIds.size,
+        distinctEnvironmentCount: environments.size,
+        activeStudentCount:
+          evaluation.children.coverage.activeStudentIds.length,
+        coveredActiveStudentCount: coveredActiveStudentIds.length,
+        activeStudentIds: evaluation.children.coverage.activeStudentIds,
+        coveredActiveStudentIds,
+        uncoveredActiveStudentIds,
+      };
+      if (
+        canonicalJson(expectedCoverage) !==
+        canonicalJson(evaluation.children.coverage)
+      ) {
+        throw new Error(
+          `plans/${plan.id} aylık değerlendirmesinin kanıt kapsam özeti kaynak kayıtlarla uyuşmuyor.`,
+        );
+      }
+    }
+  }
   for (const plan of payload.plans) {
     if (plan.planType !== "weekly" || !Array.isArray(plan.weeklyEvaluations)) {
       continue;
@@ -3387,6 +3634,191 @@ function assertBackupRelationships(
   }
 
   for (const draft of payload.reportDrafts) {
+    if (draft.reportType === ANECDOTE_FORM_REPORT_TYPE) {
+      const draftScope = validatedRecordScope(
+        draft,
+        "reportDrafts",
+        classroomsById,
+      );
+      const observationId = Array.isArray(draft.selectedObservationIds)
+        ? draft.selectedObservationIds[0]
+        : undefined;
+      const observation =
+        typeof observationId === "string"
+          ? observationsById.get(observationId)
+          : undefined;
+      const observationScope = observation
+        ? observationScopes.get(observation.id) ?? null
+        : null;
+      const observationStudentIds =
+        observation && Array.isArray(observation.studentIds)
+          ? observation.studentIds
+          : [];
+      const sections = isRecord(draft.editableSections)
+        ? draft.editableSections
+        : null;
+      const approvedLinkIds =
+        sections && Array.isArray(sections.approvedCurriculumLinkIds)
+          ? sections.approvedCurriculumLinkIds
+          : [];
+      const approvedProgramSources =
+        sections && Array.isArray(sections.approvedProgramSources)
+          ? sections.approvedProgramSources
+          : [];
+      const activeLinks = observation
+        ? (linksByObservation.get(observation.id) ?? []).filter(
+            (link) =>
+              typeof link.deletedAt !== "string" &&
+              link.confirmationMethod === "teacher-confirmed",
+          )
+        : [];
+      const activeLinkIds = activeLinks.map((link) => link.id);
+      const activeProgramSourceKeys = new Set(
+        activeLinks.map(
+          (link) =>
+            `${String(link.framework)}\u0000${String(link.catalogId)}\u0000${String(link.sourceVersion)}`,
+        ),
+      );
+      const approvedProgramSourceKeys = new Set(
+        approvedProgramSources
+          .filter((source) => isRecord(source))
+          .map(
+            (source) =>
+              `${String(source.framework)}\u0000${String(source.catalogId)}\u0000${String(source.sourceVersion)}`,
+          ),
+      );
+      const generalEvaluationSource =
+        sections && typeof sections.generalEvaluationSourceDraftId === "string"
+          ? payload.reportDrafts.find(
+              (candidate) =>
+                candidate.id === sections.generalEvaluationSourceDraftId,
+            )
+          : null;
+      const generalEvaluationSourceValid =
+        !sections || sections.generalEvaluationSourceDraftId === null ||
+        (generalEvaluationSource?.reportType === "evidence-assessment" &&
+          Array.isArray(generalEvaluationSource.observationIds) &&
+          generalEvaluationSource.observationIds.includes(observationId) &&
+          Array.isArray(generalEvaluationSource.studentIds) &&
+          generalEvaluationSource.studentIds.length === 1 &&
+          generalEvaluationSource.studentIds[0] ===
+            (Array.isArray(draft.studentIds) ? draft.studentIds[0] : undefined) &&
+          typeof generalEvaluationSource.teacherAssessmentText === "string" &&
+          generalEvaluationSource.teacherAssessmentText.trim() ===
+            String(sections.observerGeneralAssessment).trim());
+      const allLinksOfficial =
+        activeLinks.length > 0 &&
+        activeLinks.every(
+          (link) =>
+            link.referenceOrigin === "official-catalog" &&
+            link.officialCatalogVerified === true,
+        );
+      const expectedReferenceStatus = allLinksOfficial
+        ? "official-catalog-verified"
+        : "teacher-declared-unverified";
+      const pendingReviewValid =
+        draft.status === "draft" &&
+        draft.reviewStatus === "pending" &&
+        draft.reviewedByUserId === null &&
+        draft.reviewedAt === null &&
+        (draft.approvalSeal === undefined || draft.approvalSeal === null) &&
+        approvedLinkIds.length === 0 &&
+        approvedProgramSources.length === 0;
+      const approvedReviewValid =
+        draft.schemaVersion === ANECDOTE_FORM_SCHEMA_VERSION &&
+        draft.status === "ready" &&
+        draft.reviewStatus === "approved" &&
+        typeof draft.reviewedByUserId === "string" &&
+        localTeacherIdentity?.teacherUserId === draft.reviewedByUserId &&
+        isValidUtcIso(draft.reviewedAt) &&
+        String(draft.reviewedAt) >= draft.updatedAt &&
+        typeof sections?.observedLocation === "string" &&
+        sections.observedLocation.trim().length > 0 &&
+        typeof sections.observerGeneralAssessment === "string" &&
+        sections.observerGeneralAssessment.trim().length > 0 &&
+        activeLinkIds.length > 0 &&
+        approvedLinkIds.length === activeLinkIds.length &&
+        new Set(approvedLinkIds).size === approvedLinkIds.length &&
+        approvedLinkIds.every((id) => activeLinkIds.includes(id as string)) &&
+        approvedProgramSourceKeys.size === activeProgramSourceKeys.size &&
+        [...approvedProgramSourceKeys].every((key) =>
+          activeProgramSourceKeys.has(key),
+        ) &&
+        Boolean(
+          observation &&
+            approvalSealMatchesCurrentSources(
+              draft.approvalSeal,
+              observation,
+              activeLinks,
+            ),
+        ) &&
+        draft.referenceVerificationStatus === expectedReferenceStatus;
+      const legacyApprovalRequiresReapproval =
+        draft.schemaVersion === ANECDOTE_FORM_LEGACY_SCHEMA_VERSION &&
+        draft.approvalSeal === undefined &&
+        draft.status === "ready" &&
+        draft.reviewStatus === "approved" &&
+        typeof draft.reviewedByUserId === "string" &&
+        localTeacherIdentity?.teacherUserId === draft.reviewedByUserId &&
+        isValidUtcIso(draft.reviewedAt) &&
+        String(draft.reviewedAt) >= draft.updatedAt &&
+        typeof sections?.observedLocation === "string" &&
+        sections.observedLocation.trim().length > 0 &&
+        typeof sections.observerGeneralAssessment === "string" &&
+        sections.observerGeneralAssessment.trim().length > 0 &&
+        activeLinkIds.length > 0 &&
+        approvedLinkIds.length === activeLinkIds.length &&
+        new Set(approvedLinkIds).size === approvedLinkIds.length &&
+        approvedLinkIds.every((id) => activeLinkIds.includes(id as string)) &&
+        approvedProgramSourceKeys.size === activeProgramSourceKeys.size &&
+        [...approvedProgramSourceKeys].every((key) =>
+          activeProgramSourceKeys.has(key),
+        ) &&
+        draft.referenceVerificationStatus === expectedReferenceStatus;
+      if (
+        !isAnecdoteFormDraftRecord(draft) ||
+        !draftScope ||
+        !observation ||
+        !observationScope ||
+        !scopesMatch(draftScope, observationScope) ||
+        observation.observationType !== "anecdotal" ||
+        observation.rawTextImmutable !== true ||
+        typeof observation.rawText !== "string" ||
+        observation.rawText.trim().length === 0 ||
+        draft.periodStart !== observation.civilDate ||
+        draft.periodEnd !== observation.civilDate ||
+        observationStudentIds.length !== 1 ||
+        observationStudentIds[0] !== draft.studentIds[0] ||
+        !studentIds.has(draft.studentIds[0]) ||
+        !sections ||
+        !hasExactKeys(sections, [
+          "approvedCurriculumLinkIds",
+          "approvedProgramSources",
+          "generalEvaluationSourceDraftId",
+          "observedLocation",
+          "observedLocationSource",
+          "observerGeneralAssessment",
+        ]) ||
+        approvedProgramSources.some(
+          (source) =>
+            !isRecord(source) ||
+            !hasExactKeys(source, [
+              "catalogId",
+              "framework",
+              "sourceVersion",
+            ]),
+        ) ||
+        !generalEvaluationSourceValid ||
+        (!pendingReviewValid &&
+          !approvedReviewValid &&
+          !legacyApprovalRequiresReapproval)
+      ) {
+        throw new Error(
+          `reportDrafts/${draft.id} MEB 2024 anekdot formu kaynak, kapsam veya öğretmen onayı sözleşmesine uymuyor.`,
+        );
+      }
+      continue;
+    }
     if (draft.reportType !== "evidence-assessment") {
       const selectedObservationIds = draft.selectedObservationIds;
       const selectedMediaIds = draft.selectedMediaIds;

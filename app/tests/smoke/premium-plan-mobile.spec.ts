@@ -31,7 +31,7 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
   await page.goto("/?premiumPilot=1", { waitUntil: "networkidle" });
   await configurePremiumClassroom(page);
 
-  await page.getByRole("button", { name: "Önizlemeyi aç" }).click();
+  await page.getByRole("button", { name: "Planları aç" }).click();
   const center = page.getByTestId("premium-plan-center");
   await expect(center).toBeVisible();
   const reviewPendingMonth = center.locator(".premium-month-list li.is-review-pending");
@@ -45,8 +45,8 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
     item.scrollWidth > item.clientWidth + 1
   );
   expect(monthListOverflows).toBe(false);
-  await center.getByRole("button", { name: "Yıllık planı sınıfa ekle" }).click();
-  await expect(center.getByText("Yıllık, aylık ve haftalık planlar sınıfa eklendi")).toBeVisible();
+  await center.getByRole("button", { name: "Eylül paketini + yıllık omurgayı ekle" }).click();
+  await expect(center.getByText("Eylül plan paketi ve yıllık omurga sınıfa eklendi")).toBeVisible();
 
   const wordDownloadPromise = page.waitForEvent("download");
   await center.getByTestId("premium-export-word").click();
@@ -77,6 +77,8 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
   await mainActivities.nth(0).getByRole("button", { name: "Tam gün planını hazırla" }).click();
 
   const flow = page.locator(".premium-daily-flow-preview");
+  await expect(page.getByText("Günlük plan hazırlığı", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bugünün uygulama kaydı", { exact: true })).toHaveCount(0);
   await expect(flow.getByRole("heading", { name: "10 blok otomatik yerleşti" })).toBeVisible();
   await expect(flow.locator(":scope > ol > li")).toHaveCount(10);
   await flow.getByRole("radio", { name: /Haftanın alternatifini bunun yerine uygula/ }).click();
@@ -97,7 +99,7 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
   expect(horizontalOverflow).toBe(false);
 
   const savePlan = page.getByRole("button", {
-    name: "Tam gün planını kaydet ve etkinliği başlat",
+    name: "Tam gün planını kaydet",
   });
   await expect(savePlan).toBeEnabled();
   await savePlan.press("Enter");

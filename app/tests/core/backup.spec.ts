@@ -640,8 +640,11 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
     const {
       installPremiumPlanBoard,
       preparePremiumDailyTemplate,
+      recordPremiumMonthlyEvaluation,
       recordPremiumWeeklyEvaluation,
       updatePremiumPlanLensPreferences,
+      PREMIUM_MONTHLY_PROGRAM_CRITERIA,
+      PREMIUM_MONTHLY_TEACHER_CRITERIA,
     } = await import(
       "/src/features/premium-plans/plan-service.ts"
     );
@@ -779,12 +782,101 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
       teacherPreferredSupportingLensIds: ["accessible-participation"],
       now: new Date("2026-09-11T15:00:00.000Z"),
     });
+    const monthlyTarget = alternativeTargets[0];
+    const curriculumLink = await evidence.confirmObservationCurriculumLink(
+      source,
+      {
+        observationId: captured.observation.id,
+        framework: profile.framework,
+        catalogId: profile.catalogId,
+        sourceVersion: profile.sourceVersion,
+        referenceOrigin: profile.referenceOrigin,
+        officialCatalogVerified: profile.officialCatalogVerified,
+        referenceCode: monthlyTarget.referenceCode,
+        referenceTitle: monthlyTarget.referenceTitle,
+        plannedTargetId: monthlyTarget.id,
+        approvedByUserId: "00000000-0000-4000-8000-000000009707",
+        now: new Date("2026-09-11T15:05:00.000Z"),
+      },
+    );
+    const monthlyEvaluation = await recordPremiumMonthlyEvaluation(source, {
+      monthlyPlanId: installed.monthlyPlanId,
+      childEvidenceState: "insufficient-evidence",
+      childNarrative:
+        "Tek haftadaki kayıt tüm ayı temsil etmediği için kanıt yetersiz bırakıldı.",
+      observationIds: [captured.observation.id],
+      curriculumLinkIds: [curriculumLink.id],
+      programCriteria: PREMIUM_MONTHLY_PROGRAM_CRITERIA.map(({ id }) => ({
+        criterionId: id,
+        status: id === "duration-fit" ? "needs-adjustment" : "observed-working",
+      })),
+      programNarrative:
+        "Katılım işledi; süre ve geçiş düzeni sonraki uygulamada uyarlanmalıdır.",
+      teacherCriteria: PREMIUM_MONTHLY_TEACHER_CRITERIA.map(({ id }) => ({
+        criterionId: id,
+        status: id === "time-management" ? "needs-adjustment" : "observed-working",
+      })),
+      teacherNarrative:
+        "Zaman yönetimi ve farklı katılım yollarını yeniden düşündüm.",
+      nextMonthRecommendation:
+        "Farklı gün ve haftalarda kanıt toplamayı sürdürüp geçiş süresini uyarlayacağım.",
+      now: new Date("2026-09-30T13:00:00.000Z"),
+    });
     const backup = await new core.BackupService(source, {
       appVersion: "premium-graph-test",
     }).exportBackup();
     const targetService = new core.BackupService(target, {
       appVersion: "premium-graph-test",
     });
+    const invalidMonthlyCoverage = structuredClone(backup);
+    const invalidCoveragePlan = invalidMonthlyCoverage.payload.plans.find(
+      (record) => record.id === installed.monthlyPlanId,
+    ) as Record<string, unknown> | undefined;
+    const invalidCoverageEvaluation = Array.isArray(
+      invalidCoveragePlan?.monthlyEvaluations,
+    )
+      ? invalidCoveragePlan.monthlyEvaluations[0] as {
+          children?: { coverage?: { activeStudentCount?: number } };
+        }
+      : undefined;
+    if (invalidCoverageEvaluation?.children?.coverage) {
+      invalidCoverageEvaluation.children.coverage.activeStudentCount = 2;
+    }
+    invalidMonthlyCoverage.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidMonthlyCoverage.payload),
+    );
+    let invalidMonthlyCoverageError = "";
+    try {
+      await targetService.parseAndVerifyBackup(invalidMonthlyCoverage);
+    } catch (error) {
+      invalidMonthlyCoverageError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidMonthlySource = structuredClone(backup);
+    const invalidSourcePlan = invalidMonthlySource.payload.plans.find(
+      (record) => record.id === installed.monthlyPlanId,
+    ) as Record<string, unknown> | undefined;
+    const invalidSourceEvaluation = Array.isArray(
+      invalidSourcePlan?.monthlyEvaluations,
+    )
+      ? invalidSourcePlan.monthlyEvaluations[0] as {
+          children?: { curriculumLinkIds?: string[] };
+        }
+      : undefined;
+    if (invalidSourceEvaluation?.children?.curriculumLinkIds) {
+      invalidSourceEvaluation.children.curriculumLinkIds[0] =
+        "00000000-0000-4000-8000-000000009799";
+    }
+    invalidMonthlySource.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidMonthlySource.payload),
+    );
+    let invalidMonthlySourceError = "";
+    try {
+      await targetService.parseAndVerifyBackup(invalidMonthlySource);
+    } catch (error) {
+      invalidMonthlySourceError =
+        error instanceof Error ? error.message : String(error);
+    }
     const doubleSource = structuredClone(backup);
     const doubleSourceAnnual = doubleSource.payload.plans.find(
       (record) => record.id === installed.annualPlanId,
@@ -845,6 +937,7 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
     const restored = await target.readSnapshot();
     const daily = restored.plans.find((record) => record.planType === "daily");
     const annual = restored.plans.find((record) => record.planType === "annual");
+    const monthly = restored.plans.find((record) => record.id === installed.monthlyPlanId);
     const activity = restored.activities.find((record) => record.planId === daily?.id);
     const firstWeekly = restored.plans.find((record) => record.id === firstWeeklyPlanId);
     const nextWeekly = restored.plans.find(
@@ -869,11 +962,18 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
         daily?.premiumDailyFlowSnapshot?.alternativeReplacement?.replacesMainActivityTemplateId,
       flowBlockCount: daily?.premiumDailyFlowSnapshot?.blocks?.length,
       weeklyEvaluationCount: firstWeekly?.weeklyEvaluations?.length,
+      monthlyEvaluationCount: monthly?.monthlyEvaluations?.length,
+      monthlyEvaluationId: monthly?.monthlyEvaluations?.[0]?.id,
+      expectedMonthlyEvaluationId: monthlyEvaluation.id,
+      monthlyRecommendation:
+        monthly?.monthlyEvaluations?.[0]?.nextMonthRecommendation,
       nextPlanDecision: nextWeekly?.nextPlanDecisionContext?.decision,
       rejectedRestorePlanCount: targetAfterRejectedRestore.plans.length,
       legacyLensPlanCount: parsedLegacyLens.payload.plans.length,
       doubleSourceError,
       corruptedFlowError,
+      invalidMonthlyCoverageError,
+      invalidMonthlySourceError,
     };
   }, premiumPlanSource);
 
@@ -889,11 +989,16 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
   expect(result.replacedMainId).toBe(result.sourceTemplateId);
   expect(result.flowBlockCount).toBe(10);
   expect(result.weeklyEvaluationCount).toBe(2);
+  expect(result.monthlyEvaluationCount).toBe(1);
+  expect(result.monthlyEvaluationId).toBe(result.expectedMonthlyEvaluationId);
+  expect(result.monthlyRecommendation).toContain("Farklı gün ve haftalarda");
   expect(result.nextPlanDecision).toBe("adapt");
   expect(result.rejectedRestorePlanCount).toBe(0);
   expect(result.legacyLensPlanCount).toBeGreaterThan(0);
   expect(result.doubleSourceError).toContain("çift kaynaklı");
   expect(result.corruptedFlowError).toContain("premium tam gün akışı geçersiz");
+  expect(result.invalidMonthlyCoverageError).toContain("kanıt kapsamı");
+  expect(result.invalidMonthlySourceError).toContain("program bağı");
   expect(result).toMatchObject({
     annualCount: 1,
     monthlyCount: 1,

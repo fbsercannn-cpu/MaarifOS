@@ -282,6 +282,16 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
     .getByLabel("Ne oldu?")
     .fill("Oyun sırasında üç taşı yan yana dizdi ve arkadaşına sırasını anlattı.");
   await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
+  await expect(page.getByLabel("Bağlam / ne sırasında?", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Çocuğun sözü", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Çocuk sözü", exact: true }).click();
+  await expect(page.getByLabel("Çocuğun aynen sözü", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Çocuğun sözünü yorum eklemeden ve düzeltmeden yazın.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Kısa not", exact: true }).click();
   await page.getByRole("button", { name: /Oyun ve katılım/i }).click();
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
 
@@ -313,7 +323,7 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   await expect(profile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
   await expect(
     profile.getByRole("button", { name: /Program bağlantısını tamamla/ }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(
     profile.locator('input[type="file"][capture="environment"]'),
   ).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
@@ -363,6 +373,9 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   const reloadedProfile = page.getByRole("dialog", { name: `${childName} profili` });
   await expect(reloadedProfile.getByAltText(`${childName} profil fotoğrafı`)).toBeVisible();
   await expect(reloadedProfile.getByText("Uzun gözlem sonu.", { exact: false })).toBeVisible();
+  await expect(
+    reloadedProfile.getByRole("button", { name: /Program bağlantısını tamamla/ }),
+  ).toBeVisible();
 
   const exportDownload = page.waitForEvent("download");
   await reloadedProfile.getByRole("button", { name: "Metin indir" }).click();
@@ -432,7 +445,7 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
   ).toHaveCount(3);
 });
 
-test("Hediye Alpha plan, katalog ve takvim ayrıntılarını ana akıştan gizler", async ({
+test("Hediye Alpha doğrulanmış günlük çalışma yüzeyini açar, ileri modülleri gizler", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
@@ -440,13 +453,19 @@ test("Hediye Alpha plan, katalog ve takvim ayrıntılarını ana akıştan gizle
 
   await expect(page.getByRole("button", { name: "Planlar", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Belgeler", exact: true })).toHaveCount(0);
-  await expect(page.getByTestId("current-work")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Günün planı" })).toHaveCount(0);
+  await expect(page.getByTestId("current-work")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Bugün için plan eklenmedi" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Günlük plan oluştur" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Günün planı" })).toBeVisible();
 
   await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
   const capture = page.getByRole("dialog", { name: "Ne ekleyelim?" });
   await expect(capture.getByRole("button", { name: /Gözlem yaz/ })).toBeVisible();
   await expect(capture.getByRole("button", { name: /Yoklama al/ })).toBeVisible();
-  await expect(capture.getByRole("button", { name: /Etkinlik planla/ })).toHaveCount(0);
+  await expect(capture.getByRole("button", { name: /Etkinlik planla/ })).toBeVisible();
   await expect(capture.getByRole("button", { name: /Takvime not ekle/ })).toHaveCount(0);
 });
