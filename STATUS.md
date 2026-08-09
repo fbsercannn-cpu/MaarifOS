@@ -80,6 +80,23 @@ Tamamlanma marker'ı yalnız HTML, manifest, ikonlar ve aynı-origin derlenmiş
 JavaScript/CSS kaynakları başarıyla kurulduktan sonra yazılır. Noktalı/statik
 görünümlü bilinmeyen rotalar çevrimdışıyken uygulama kabuğuna düşmez.
 
+0.9.1, Sites production sürüm `21` olarak
+`https://maarifos-emine-akis-pusulasi.fbsercannn.chatgpt.site` adresinde
+yayımlandı. Dağıtım `appgdep_6a77e241f54881918c946550a5965597`, doğrulanmış
+kaynak `db07e001cf10f3af06c3bed74a49b9e04d885565` ve 42 dosyalık arşiv karması
+`sha256:36ca05609ac889957fb3ca199a4d63833b1f19a0a51236254eb01f4047bce3ea`
+ile eşleşir. Canlı eski→yeni worker geçişinde güncelleme öncesi çalışan sürüm
+“Çevrim dışı hazır” kaldı; etkinleştirme, derin bağlantı ve ikinci reload sonrası
+0.9.1 hazır kaldı ve yeni uyarı/hata kaydı oluşmadı. Kök, derin uygulama rotaları
+ve fail-closed 404 yanıtları beş güvenlik başlığını taşır. Canlı `sw.js` karması
+yerel production çıktısıyla birebir
+`13962fea3c5ce7bd4eae5486b94ab827858b3f0bc1ccaeb006a2279becc2da64`tır;
+manifest ile altı gerçek JavaScript/CSS kaynağı da bayt düzeyinde eşleşir.
+Sites assets-first yolu statik manifest/SW/JS/CSS yanıtlarına `_headers`
+kurallarını uygulamadığından bu alt kaynaklarda başlık paritesi yoktur; doğru
+MIME ve exact içerik karması korunmakla birlikte bu durum P2 barındırma
+sertleştirmesi olarak açık kalır.
+
 Canonical canlı Lisans API
 `https://maarifos-founder-license-api.otonom-hesaplama.workers.dev` ve uzak D1
 kabulünde iki bağımsız P-256 cihaz kimliği etkinleştirildi, üçüncü cihaz genel
