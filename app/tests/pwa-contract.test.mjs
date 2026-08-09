@@ -211,6 +211,101 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
   assert.equal(skipWaitingCount, 1);
 });
 
+test("service worker hassas kök yolları online ve offline navigasyonda kabukla yanıtlamaz", async () => {
+  const source = await readFile(projectFile("public/sw.js"), "utf8");
+  const listeners = new Map();
+  const offlineShell = new Response("offline-shell", {
+    headers: { "Content-Type": "text/html" },
+  });
+  let online = true;
+  let networkRequestCount = 0;
+  const cache = {
+    match: async () => offlineShell.clone(),
+    put: async () => undefined,
+  };
+  const self = {
+    registration: {
+      scope: "https://example.test/",
+      active: {},
+      navigationPreload: null,
+    },
+    location: { origin: "https://example.test" },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () => [],
+    },
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    skipWaiting: async () => undefined,
+  };
+
+  vm.runInNewContext(source, {
+    AbortController,
+    Headers,
+    Request,
+    Response,
+    Set,
+    URL,
+    caches: {
+      keys: async () => [],
+      open: async () => cache,
+      delete: async () => true,
+    },
+    clearTimeout,
+    fetch: async () => {
+      networkRequestCount += 1;
+      if (!online) throw new TypeError("offline");
+      return new Response("online", {
+        headers: { "Content-Type": "text/html" },
+      });
+    },
+    self,
+    setTimeout,
+  });
+
+  const dispatchNavigation = async (path) => {
+    const responsePromises = [];
+    const waitUntilPromises = [];
+    listeners.get("fetch")({
+      request: {
+        method: "GET",
+        url: `https://example.test${path}`,
+        mode: "navigate",
+        destination: "document",
+        cache: "default",
+        headers: new Headers(),
+      },
+      preloadResponse: Promise.resolve(undefined),
+      respondWith: (promise) => responsePromises.push(Promise.resolve(promise)),
+      waitUntil: (promise) => waitUntilPromises.push(Promise.resolve(promise)),
+    });
+    const responses = await Promise.all(responsePromises);
+    await Promise.all(waitUntilPromises);
+    return responses;
+  };
+
+  for (const path of ["/api", "/api/", "/api/children", "/auth", "/auth/", "/auth/session"]) {
+    online = true;
+    const beforeOnline = networkRequestCount;
+    assert.deepEqual(await dispatchNavigation(path), []);
+    assert.equal(networkRequestCount, beforeOnline, `${path} online iken worker tarafından yakalanmamalı`);
+
+    online = false;
+    const beforeOffline = networkRequestCount;
+    assert.deepEqual(await dispatchNavigation(path), []);
+    assert.equal(networkRequestCount, beforeOffline, `${path} offline iken uygulama kabuğuna düşmemeli`);
+  }
+
+  for (const path of ["/apiary", "/author"]) {
+    online = true;
+    const [onlineResponse] = await dispatchNavigation(path);
+    assert.equal(await onlineResponse.text(), "online");
+
+    online = false;
+    const [offlineResponse] = await dispatchNavigation(path);
+    assert.equal(await offlineResponse.text(), "offline-shell");
+  }
+});
+
 test("PWA girişi doğrulanmış offline durumunu ve kullanıcı kontrollü güncellemeyi yayınlar", async () => {
   const [html, pwa] = await Promise.all([
     readFile(projectFile("index.html"), "utf8"),

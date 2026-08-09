@@ -41,7 +41,7 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 | 2026–2027 değerler yayın hedef profili ve Ekim referans blueprint'i | `HIDDEN` | On ay/iki dönem/108 etkinlik authored hedef sözleşmesi; iki dönemde ana değerler üzerinden D1–D20, 18/18/18 çatı ve ay bazlı kültürel köprü adayları için strict contract testlerinden geçer. Bu bir gerçek release doğrulaması değildir. Ekim yalnız 12 etkinliklik planlanmış referanstır; gelecek dokuz ayın gerçek içerik dosyaları, release-set manifesti ve insan kararları henüz yoktur. | `docs/DEGERLER_2026_2027_YILLIK_MATRIS.md`; annual release-set ve October reference testleri |
 | Premium Plan Merkezi · Eylül v3 | `PARTIAL` | Eylül için yıllık omurga, aylık plan, dört hafta, günlük akış, değerlendirme ve belge zinciri kurucu test erişiminde çalışır. Ekim–Haziran yayımlanmamıştır; içerik varmış gibi gösterilmez ve ticari satışa açık değildir. | premium content/manifest, kalıcı plan, mobil/offline akış ve export testleri |
 | Yıllık premium yayın seti | `PARTIAL` | İmzalı 10 aylık yayın-set sözleşmesi ve immutable çoklu paket cache'i vardır; yalnız gerçek Eylül v3 yayımlı, dokuz ay `pack:null` durumundadır. | annual manifest/cache testleri; lisans API ve ay bazlı UI production entegrasyonu açık |
-| İki cihazlı kurucu premium erişimi | `PARTIAL` | Genel `purchased` tek-cihaz varsayımını değiştirmeyen, P-256 cihaz ispatlı ve ES256 yetkili iki `staff-code` yuvası vardır; üçüncü ve iptal edilmiş eski cihaz reddedilir. | License API/D1 unit + gerçek yerel Wrangler smoke; remote deploy ve iki fiziksel telefon acceptance açık |
+| İki cihazlı kurucu premium erişimi | `PARTIAL` | Genel `purchased` tek-cihaz varsayımını değiştirmeyen, P-256 cihaz ispatlı ve ES256 yetkili iki `staff-code` yuvası vardır; üçüncü ve iptal edilmiş eski cihaz reddedilir. | License API/D1 15/15; canonical HTTPS Worker + uzak D1 canlı kabulünde iki bağımsız cihaz kimliği, üçüncü cihaz reddi ve operator reset doğrulandı; iki fiziksel telefon acceptance açık |
 | Öğretmen onaylı değer kanıtı · veri şeması v5 | `HIDDEN` | Ham gözlemden otomatik ahlak sonucu üretmez; ayrı değer bağı, düzeltme/tombstone geçmişi ve yedek/restore çalışır. İnsan uzman ve sınıf pilotu tamamlanmamıştır. | `valueEvidenceLinks`, v5 migration/backup, öğretmen editörü testleri |
 | TYMM 2024 kataloğu | `IMPLEMENTED` | 2024 okul öncesi kataloğu sürüm ve bütünlük özetiyle saklanır. | curriculum catalog testleri |
 | Eski MEB kataloğu | `PARTIAL` | Yalnız desteklenen kısım vardır; tam resmî katalog diye sunulmaz. | katalog kaynak/sürüm görünürlüğü |
@@ -64,16 +64,22 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 
 ## Geçerli kalite hükmü
 
-`9 Ağustos 2026` tarihinde 0.9.0'ın kesin yayın çalışma ağacı bütünleşik
-`npm run test:quality` kapısından geçti: MARİF ajan ve mobil giriş sözleşmeleri,
+`9 Ağustos 2026` tarihinde 0.9.0 sürüm adayı bütünleşik `npm run test:quality`
+kapısından `318.7 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,
 Founder License API/D1 güvenlik matrisi, korunan runtime, lint, typecheck, auth,
 coverage, backup/restore, tüm runtime veri/UI akışları, PWA, production build,
 bundle bütçesi, Chromium ve WebKit mobil smoke, Sites Worker ve gerçek service
-worker ile çevrim dışı production PWA birlikte yeşildir. Lisans API 14/14,
+worker ile çevrim dışı production PWA birlikte yeşildir. Lisans API 15/15,
 mobil belge/tam plan smoke 6/6, Sites 8/8 ve production PWA 3/3 geçti. Ana
 başlangıç paketi gerçek tembel yükleme ile 173,14 KiB gzip'a indi; 14 JavaScript
-parçasının her biri 180 KiB sınırının altındadır. Bu hüküm gerçek cihaz filosu,
-insan uzman kurulu veya öğretmen pilotu kanıtı yerine geçmez.
+parçasının her biri 180 KiB sınırının altındadır.
+
+Canonical canlı Lisans API
+`https://maarifos-founder-license-api.otonom-hesaplama.workers.dev` ve uzak D1
+kabulünde iki bağımsız P-256 cihaz kimliği etkinleştirildi, üçüncü cihaz genel
+403 yanıtıyla reddedildi ve seçili slot için operator reset doğrulandı. Bu kanıt
+sunucu altyapısını kapatır; iki gerçek fiziksel telefonda kurulu PWA kabulü,
+insan uzman kurulu ve öğretmen pilotu yerine geçmez.
 
 - Korunan mobil runtime bütünlük kontrolü zorunludur.
 - Domain, migration, backup, PWA, offline ve production build testleri tek kalite

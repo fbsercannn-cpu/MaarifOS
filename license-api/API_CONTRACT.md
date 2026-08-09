@@ -2,6 +2,17 @@
 
 This service is deliberately narrow. It accepts device-license metadata only; it never accepts a child, classroom, observation, photo, plan, backup, or free-text education record.
 
+## Deployment identity
+
+- Canonical live API origin and entitlement issuer:
+  `https://maarifos-founder-license-api.otonom-hesaplama.workers.dev`.
+- Production clients must verify the exact issuer above; aliases and redirects
+  do not change the trust identity.
+- The production D1 database is bound as `LICENSE_DB`. Its account-specific
+  `database_id` is Cloudflare-side deployment state and is intentionally absent
+  from checked-in source and examples; it must not be copied into logs or
+  release artifacts.
+
 ## Transport rules
 
 - HTTPS is mandatory outside loopback development.

@@ -344,10 +344,10 @@ async function cacheFirstStaticAsset(event) {
 }
 
 function isSensitivePath(url) {
-  return (
-    url.pathname.startsWith(new URL("api/", scopeUrl).pathname) ||
-    url.pathname.startsWith(new URL("auth/", scopeUrl).pathname)
-  );
+  return ["api", "auth"].some((segment) => {
+    const path = new URL(segment, scopeUrl).pathname;
+    return url.pathname === path || url.pathname.startsWith(`${path}/`);
+  });
 }
 
 function shouldHandleStaticRequest(request, url) {

@@ -25,6 +25,15 @@ const licenseApiRoot = resolve(testDirectory, "..");
 const origin = "https://app.example.test";
 const apiUrl = "https://license.maarifos.example";
 
+test("operator reset Cloudflare D1 REST batch nesnesini kullanır", async () => {
+  const source = await readFile(
+    resolve(licenseApiRoot, "scripts", "deactivate-founder-slot.mjs"),
+    "utf8",
+  );
+  assert.match(source, /body:\s*JSON\.stringify\(\{\s*batch:\s*\[/u);
+  assert.doesNotMatch(source, /body:\s*JSON\.stringify\(\[\s*\{/u);
+});
+
 function randomPin() {
   return String(randomInt(10 ** 5, 10 ** 6));
 }

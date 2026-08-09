@@ -48,60 +48,62 @@ const response = await fetch(endpoint, {
     Authorization: `Bearer ${apiToken}`,
     "Content-Type": "application/json",
   },
-  body: JSON.stringify([
-    {
-      sql: `
-        INSERT INTO founder_device_tombstones (
-          device_thumbprint, entitlement_id, slot, revocation_generation,
-          tombstoned_at_utc, operator_request_id
-        )
-        SELECT device_thumbprint, entitlement_id, slot,
-               revocation_generation + 1, ?, ?
-          FROM founder_device_bindings
-         WHERE slot = ? AND active = 1
-      `,
-      params: [occurredAtUtc, requestId, slot],
-    },
-    {
-      sql: `
-        UPDATE founder_device_bindings
-           SET active = 0,
-               revocation_generation = revocation_generation + 1,
-               last_issued_at_utc = ?,
-               last_operator_request_id = ?
-         WHERE slot = ? AND active = 1
-           AND EXISTS (
-             SELECT 1 FROM founder_device_tombstones
-              WHERE operator_request_id = ? AND slot = ?
+  body: JSON.stringify({
+    batch: [
+      {
+        sql: `
+          INSERT INTO founder_device_tombstones (
+            device_thumbprint, entitlement_id, slot, revocation_generation,
+            tombstoned_at_utc, operator_request_id
+          )
+          SELECT device_thumbprint, entitlement_id, slot,
+                 revocation_generation + 1, ?, ?
+            FROM founder_device_bindings
+           WHERE slot = ? AND active = 1
+        `,
+        params: [occurredAtUtc, requestId, slot],
+      },
+      {
+        sql: `
+          UPDATE founder_device_bindings
+             SET active = 0,
+                 revocation_generation = revocation_generation + 1,
+                 last_issued_at_utc = ?,
+                 last_operator_request_id = ?
+           WHERE slot = ? AND active = 1
+             AND EXISTS (
+               SELECT 1 FROM founder_device_tombstones
+                WHERE operator_request_id = ? AND slot = ?
+             )
+        `,
+        params: [occurredAtUtc, requestId, slot, requestId, slot],
+      },
+      {
+        sql: `
+          INSERT INTO license_audit_events (
+            request_id, occurred_at_utc, civil_date, event_type, result,
+            reason_code, pseudonymous_ip, pseudonymous_device, content_release_id
+          )
+          SELECT ?, ?, ?, 'founder_slot_deactivated', 'success',
+                 'operator-confirmed-tombstoned', NULL, NULL, ?
+           WHERE EXISTS (
+             SELECT 1 FROM founder_device_bindings
+              WHERE slot = ? AND active = 0
+                AND last_issued_at_utc = ? AND last_operator_request_id = ?
            )
-      `,
-      params: [occurredAtUtc, requestId, slot, requestId, slot],
-    },
-    {
-      sql: `
-        INSERT INTO license_audit_events (
-          request_id, occurred_at_utc, civil_date, event_type, result,
-          reason_code, pseudonymous_ip, pseudonymous_device, content_release_id
-        )
-        SELECT ?, ?, ?, 'founder_slot_deactivated', 'success',
-               'operator-confirmed-tombstoned', NULL, NULL, ?
-         WHERE EXISTS (
-           SELECT 1 FROM founder_device_bindings
-            WHERE slot = ? AND active = 0
-              AND last_issued_at_utc = ? AND last_operator_request_id = ?
-         )
-      `,
-      params: [
-        requestId,
-        occurredAtUtc,
-        civilDate,
-        FOUNDER_CONTENT_RELEASE.contentReleaseId,
-        slot,
-        occurredAtUtc,
-        requestId,
-      ],
-    },
-  ]),
+        `,
+        params: [
+          requestId,
+          occurredAtUtc,
+          civilDate,
+          FOUNDER_CONTENT_RELEASE.contentReleaseId,
+          slot,
+          occurredAtUtc,
+          requestId,
+        ],
+      },
+    ],
+  }),
 });
 const payload = await response.json().catch(() => null);
 const tombstoneChanges = Number(payload?.result?.[0]?.meta?.changes ?? 0);

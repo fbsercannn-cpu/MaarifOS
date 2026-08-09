@@ -14,7 +14,7 @@
   },
   "vars": {
     "ALLOWED_ORIGINS": "https://maarifos-emine-akis-pusulasi.fbsercannn.chatgpt.site",
-    "ENTITLEMENT_ISSUER": "https://license.maarifos.example",
+    "ENTITLEMENT_ISSUER": "https://maarifos-founder-license-api.otonom-hesaplama.workers.dev",
     "ENTITLEMENT_AUDIENCE": "maarifos-pwa",
     "ENTITLEMENT_KID": "founder-es256-2026-08",
     "LEGAL_TERMS_VERSION": "founder-staff-2026-08-v1"

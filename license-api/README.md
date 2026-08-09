@@ -16,6 +16,13 @@ This private Worker is independently versioned and remains at SemVer `0.1.0`; th
 - HMAC-pseudonymous IP/device rate limits and minimal UTC + İstanbul civil-date audit.
 - Audited operator slot deactivation, append-only former-device tombstones, and safe inactive-slot reuse by a new device only.
 
+## Live deployment boundary
+
+The canonical live Worker origin and entitlement issuer is
+`https://maarifos-founder-license-api.otonom-hesaplama.workers.dev`. The Worker
+and its remote D1 binding are live; the MaarifOS Sites PWA has not yet been
+deployed, so this infrastructure milestone is not an end-user product release.
+
 ## Local verification
 
 Requirements: current Node.js and a current Wrangler CLI. The service itself has no npm dependencies.
@@ -52,7 +59,13 @@ Remove-Item Env:\MAARIFOS_FOUNDER_PIN
 
 ## D1 provisioning
 
-`wrangler.jsonc` intentionally omits account-specific database IDs. Current Wrangler automatic provisioning creates a persistent local D1 database for `wrangler dev`; on first authenticated deploy it can create the remote binding and write the generated ID back to local configuration. For a separately controlled remote database, use:
+The live `LICENSE_DB` binding is provisioned in Cloudflare, while
+`wrangler.jsonc` intentionally omits the account-specific `database_id`. The
+identifier remains Cloudflare-side deployment state and is not written to this
+source tree. It must not be copied into documentation, logs, or release
+artifacts. Current Wrangler automatic provisioning also creates a persistent
+local D1 database for `wrangler dev`. For a separately controlled replacement
+database, use:
 
 ```powershell
 npx wrangler@4.120.0 d1 create maarifos-founder-license --binding LICENSE_DB --update-config
@@ -61,7 +74,9 @@ npx wrangler@4.120.0 d1 migrations apply maarifos-founder-license --remote
 
 Remote publication order is strict: take/confirm the controlled D1 recovery point, apply and verify migrations `0001` → `0002` → `0003_founder_device_tombstones.sql` on the target remote database, and only then deploy the Worker code that queries the tombstone table. On an existing database, Wrangler applies only pending migrations, but `0003` must report applied before Worker deployment. Do not run the operator reset command against a database that has not applied `0003`.
 
-Do not commit the account-specific ID change unless the repository's deployment policy explicitly permits it.
+The optional `--update-config` command changes local configuration. Do not
+commit its account-specific ID output; the checked-in configuration must remain
+portable and free of account identifiers.
 
 Cloudflare references: [Wrangler automatic provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-provisioning), [D1 Wrangler commands](https://developers.cloudflare.com/d1/wrangler-commands/), and [static asset Worker-first routing](https://developers.cloudflare.com/workers/static-assets/binding/#run_worker_first).
 
@@ -93,7 +108,13 @@ For an authorized deployment, upload the gitignored secret bundle alongside the 
 npx wrangler@4.120.0 deploy --secrets-file .\.secrets\worker-secrets.json
 ```
 
-Before deployment, change `ENTITLEMENT_ISSUER` from the strict contract/test origin to the final canonical HTTPS API origin and set the identical PWA `VITE_PREMIUM_LICENSE_ISSUER`. Add `.secrets/entitlement-trusted-keys.json` public JWK under `ENTITLEMENT_KID` to the PWA trusted key configuration; never copy the private JWK.
+Production `ENTITLEMENT_ISSUER` is exactly
+`https://maarifos-founder-license-api.otonom-hesaplama.workers.dev`. The later
+Sites production build must set the identical value for
+`VITE_PREMIUM_LICENSE_API_ORIGIN` and `VITE_PREMIUM_LICENSE_ISSUER`, then add the
+public JWK from the gitignored `.secrets/entitlement-trusted-keys.json` under
+`ENTITLEMENT_KID` to the PWA trusted-key configuration. Never copy the private
+JWK or any Worker secret into source or a Vite variable.
 
 ## Private asset staging
 
