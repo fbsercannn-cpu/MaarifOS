@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,9 +20,14 @@ import {
   renderStaticAssetHeadersFile,
   validateProductionLicenseApiOrigin,
 } from "../scripts/prepare-sites-build.mjs";
+import {
+  assertNoDeploymentSecrets,
+  stageSitesPackage,
+} from "../scripts/prepare-sites-package.mjs";
 import worker, {
   CONTENT_SECURITY_POLICY,
   SECURITY_HEADERS,
+  createSitesWorker,
   createSecurityHeaders,
 } from "../worker/index.js";
 
@@ -39,6 +54,93 @@ const assertSecurityHeaders = (response, licenseApiOrigin = null) => {
 };
 
 const countOccurrences = (value, target) => value.split(target).length - 1;
+const sha256Bytes = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+const createShellRuntime = (shellBody = "<!doctype html><title>MaarifOS</title>") => {
+  const shellBytes = Buffer.from(shellBody);
+  const opaqueShellBytes = Buffer.from(shellBytes.toString("base64"), "ascii");
+  const shellSha256 = sha256Bytes(opaqueShellBytes);
+  const shellPath = `/assets/maarifos-shell-${shellSha256}.bin`;
+  const calls = [];
+  const requests = [];
+  const env = {
+    ASSETS: {
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        calls.push(`${request.method} ${url.pathname}${url.search}`);
+        requests.push({
+          accept: request.headers.get("accept"),
+          acceptEncoding: request.headers.get("accept-encoding"),
+          pathname: url.pathname,
+        });
+        if (url.pathname === shellPath) {
+          return new Response(opaqueShellBytes, {
+            status: 200,
+            headers: {
+              "Content-Disposition": "attachment; filename=shell.bin",
+              "Content-Type": "application/octet-stream",
+              ETag: '"opaque-shell"',
+              "Last-Modified": "Sat, 01 Jan 2000 00:00:00 GMT",
+              Vary: "Accept-Encoding",
+            },
+          });
+        }
+        return new Response("missing", {
+          status: 404,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      },
+    },
+  };
+  return {
+    calls,
+    env,
+    opaqueShellBytes,
+    requests,
+    shellBytes,
+    shellPath,
+    shellSha256,
+    worker: createSitesWorker({
+      appShellPath: shellPath,
+      appShellSha256: shellSha256,
+    }),
+  };
+};
+
+const snapshotTree = async (root) => {
+  const entries = [];
+  const visit = async (directory, relativeDirectory = "") => {
+    const directoryEntries = await readdir(directory, { withFileTypes: true });
+    directoryEntries.sort((left, right) => left.name.localeCompare(right.name, "en"));
+    for (const entry of directoryEntries) {
+      const relativePath = path.join(relativeDirectory, entry.name);
+      const absolutePath = path.join(directory, entry.name);
+      const stats = await lstat(absolutePath);
+      assert.equal(stats.isSymbolicLink(), false);
+      const metadata = {
+        mode: stats.mode & 0o777,
+        mtimeMs: stats.mtimeMs,
+      };
+      if (entry.isDirectory()) {
+        entries.push({
+          ...metadata,
+          path: relativePath.replaceAll(path.sep, "/"),
+          type: "directory",
+        });
+        await visit(absolutePath, relativePath);
+      } else {
+        entries.push({
+          ...metadata,
+          path: relativePath.replaceAll(path.sep, "/"),
+          sha256: sha256Bytes(await readFile(absolutePath)),
+          type: "file",
+        });
+      }
+    }
+  };
+  await visit(root);
+  return entries;
+};
 
 const assertStaticHeadersFile = (source, licenseApiOrigin = null) => {
   const expectedHeaders = createSecurityHeaders(licenseApiOrigin);
@@ -83,6 +185,12 @@ const importBuiltWorker = async (root) => {
   const workerUrl = pathToFileURL(path.join(root, "dist", "server", "index.js"));
   workerUrl.searchParams.set("case", crypto.randomUUID());
   return import(workerUrl.href);
+};
+
+const importStandaloneWorker = async (workerPath) => {
+  const source = await readFile(workerPath, "utf8");
+  const workerUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}#${crypto.randomUUID()}`;
+  return import(workerUrl);
 };
 
 const staticAssetEnvironment = (body = "asset", status = 200) => ({
@@ -181,32 +289,65 @@ test("serves existing static assets without a fallback", async () => {
   assertSecurityHeaders(response);
 });
 
-test("falls back to the canonical root asset for an unknown app route", async () => {
-  const calls = [];
-  const response = await worker.fetch(
+test("serves a verified opaque shell for an unknown HTML app route", async () => {
+  const runtime = createShellRuntime();
+  const response = await runtime.worker.fetch(
     new Request("https://example.test/flow/step-two?source=share", {
-      headers: { accept: "text/html" },
+      headers: { accept: "application/xhtml+xml, TEXT/HTML; q=0.9" },
     }),
-    {
-      ASSETS: {
-        fetch: async (request) => {
-          const url = new URL(request.url);
-          calls.push(url.pathname + url.search);
-          if (url.pathname === "/") return new Response("app", { status: 200 });
-          if (url.pathname === "/index.html") {
-            return new Response(null, {
-              status: 307,
-              headers: { location: "/" },
-            });
-          }
-          return new Response("missing", { status: 404 });
-        },
-      },
-    },
+    runtime.env,
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(calls, ["/flow/step-two?source=share", "/"]);
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(response.headers.get("content-disposition"), null);
+  assert.equal(response.headers.get("etag"), null);
+  assert.equal(response.headers.get("last-modified"), null);
+  assert.equal(response.headers.get("vary"), null);
+  assert.equal(response.headers.get("cache-control"), "no-cache");
+  assert.equal(Buffer.from(await response.arrayBuffer()).equals(runtime.shellBytes), true);
+  assert.deepEqual(runtime.calls, [
+    "GET /flow/step-two?source=share",
+    `GET ${runtime.shellPath}`,
+  ]);
+  assert.deepEqual(runtime.requests[1], {
+    accept: "application/octet-stream",
+    acceptEncoding: "identity",
+    pathname: runtime.shellPath,
+  });
+  assertSecurityHeaders(response);
+});
+
+test("serves the verified shell at root even when Accept is */*", async () => {
+  const runtime = createShellRuntime();
+  const response = await runtime.worker.fetch(
+    new Request("https://example.test/?native=1", {
+      headers: { accept: "*/*" },
+    }),
+    runtime.env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(await response.text(), runtime.shellBytes.toString("utf8"));
+  assert.deepEqual(runtime.calls, ["GET /?native=1", `GET ${runtime.shellPath}`]);
+  assertSecurityHeaders(response);
+});
+
+test("serves the verified shell at exact /index.html even when Accept is */*", async () => {
+  const runtime = createShellRuntime();
+  const response = await runtime.worker.fetch(
+    new Request("https://example.test/index.html", {
+      headers: { accept: "*/*" },
+    }),
+    runtime.env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-cache");
+  assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+  assert.equal(await response.text(), runtime.shellBytes.toString("utf8"));
+  assert.deepEqual(runtime.calls, ["GET /index.html", `GET ${runtime.shellPath}`]);
   assertSecurityHeaders(response);
 });
 
@@ -235,26 +376,117 @@ test("does not turn missing API or write requests into the app shell", async () 
   }
 });
 
+test("leaves unknown JSON and static asset requests as 404", async () => {
+  for (const request of [
+    new Request("https://example.test/missing.json", {
+      headers: { accept: "application/json" },
+    }),
+    new Request("https://example.test/missing.json", {
+      headers: { accept: "text/html" },
+    }),
+    new Request("https://example.test/assets/missing.js", {
+      headers: { accept: "*/*" },
+    }),
+    new Request("https://example.test/assets/missing", {
+      headers: { accept: "text/html" },
+    }),
+    new Request("https://example.test/missing%2Ejson", {
+      headers: { accept: "text/html" },
+    }),
+  ]) {
+    const runtime = createShellRuntime();
+    const response = await runtime.worker.fetch(request, runtime.env);
+    assert.equal(response.status, 404);
+    assert.equal(runtime.calls.length, 1);
+    assertSecurityHeaders(response);
+  }
+});
+
+test("fails closed when the opaque shell is missing, mismatched, or unconfigured", async () => {
+  const runtime = createShellRuntime();
+  const missingResponse = await runtime.worker.fetch(
+    new Request("https://example.test/", { headers: { accept: "*/*" } }),
+    { ASSETS: { fetch: async () => new Response("missing", { status: 404 }) } },
+  );
+  assert.equal(missingResponse.status, 503);
+  assert.equal(missingResponse.headers.get("cache-control"), "no-store");
+  assertSecurityHeaders(missingResponse);
+
+  const mismatchedWorker = createSitesWorker({
+    appShellPath: runtime.shellPath,
+    appShellSha256: runtime.shellSha256,
+  });
+  const mismatchedResponse = await mismatchedWorker.fetch(
+    new Request("https://example.test/", { headers: { accept: "*/*" } }),
+    {
+      ASSETS: {
+        fetch: async (request) => new Response(
+          new URL(request.url).pathname === runtime.shellPath ? "tampered" : "missing",
+          {
+            status: new URL(request.url).pathname === runtime.shellPath ? 200 : 404,
+            headers: { "Content-Type": "application/octet-stream" },
+          },
+        ),
+      },
+    },
+  );
+  assert.equal(mismatchedResponse.status, 503);
+  assertSecurityHeaders(mismatchedResponse);
+
+  const compressedResponse = await runtime.worker.fetch(
+    new Request("https://example.test/", { headers: { accept: "*/*" } }),
+    {
+      ASSETS: {
+        fetch: async (request) => new Response(
+          new URL(request.url).pathname === runtime.shellPath
+            ? runtime.opaqueShellBytes
+            : "missing",
+          {
+            status: new URL(request.url).pathname === runtime.shellPath ? 200 : 404,
+            headers: { "Content-Encoding": "gzip" },
+          },
+        ),
+      },
+    },
+  );
+  assert.equal(compressedResponse.status, 503);
+  assertSecurityHeaders(compressedResponse);
+
+  const unconfiguredResponse = await worker.fetch(
+    new Request("https://example.test/", { headers: { accept: "*/*" } }),
+    { ASSETS: { fetch: async () => new Response("missing", { status: 404 }) } },
+  );
+  assert.equal(unconfiguredResponse.status, 503);
+  assertSecurityHeaders(unconfiguredResponse);
+});
+
+test("returns headers without a body for a root HEAD request", async () => {
+  const runtime = createShellRuntime();
+  const response = await runtime.worker.fetch(
+    new Request("https://example.test/", {
+      method: "HEAD",
+      headers: { accept: "*/*" },
+    }),
+    runtime.env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-length"), String(runtime.shellBytes.length));
+  assert.equal((await response.arrayBuffer()).byteLength, 0);
+  assert.deepEqual(runtime.calls, ["HEAD /", `GET ${runtime.shellPath}`]);
+  assertSecurityHeaders(response);
+});
+
 test("does not reserve similarly named application routes", async () => {
   for (const pathname of ["/apiary", "/authentication"]) {
-    const calls = [];
-    const response = await worker.fetch(
+    const runtime = createShellRuntime();
+    const response = await runtime.worker.fetch(
       new Request(`https://example.test${pathname}`, { headers: { accept: "text/html" } }),
-      {
-        ASSETS: {
-          fetch: async (request) => {
-            const requestedPath = new URL(request.url).pathname;
-            calls.push(requestedPath);
-            return new Response(requestedPath === "/" ? "app" : "missing", {
-              status: requestedPath === "/" ? 200 : 404,
-            });
-          },
-        },
-      },
+      runtime.env,
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(calls, [pathname, "/"]);
+    assert.deepEqual(runtime.calls, [`GET ${pathname}`, `GET ${runtime.shellPath}`]);
     assertSecurityHeaders(response);
   }
 });
@@ -320,7 +552,9 @@ test("keeps production CSP self-only when the license origin is absent", async (
 test("loads the same production Vite env used by the client build", async () => {
   const root = await createSitesFixture();
   const licenseApiOrigin = "https://license-env.maarif.example";
+  const inheritedLicenseApiOrigin = process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
   try {
+    delete process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
     await writeFile(
       path.join(root, ".env.production"),
       `${PREMIUM_LICENSE_API_ORIGIN_ENV}=${licenseApiOrigin}\n`,
@@ -336,6 +570,11 @@ test("loads the same production Vite env used by the client build", async () => 
     );
     assertSecurityHeaders(response, licenseApiOrigin);
   } finally {
+    if (inheritedLicenseApiOrigin === undefined) {
+      delete process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
+    } else {
+      process.env[PREMIUM_LICENSE_API_ORIGIN_ENV] = inheritedLicenseApiOrigin;
+    }
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -386,6 +625,227 @@ test("rejects invalid license origins and removes any stale deployable Worker", 
     await assert.rejects(access(staleHosting), { code: "ENOENT" });
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stages a deterministic opaque shell without changing the source dist", async () => {
+  const root = await createSitesFixture();
+  const stageOne = `${root}-stage-one`;
+  const stageTwo = `${root}-stage-two`;
+  try {
+    const licenseApiOrigin = "https://license.maarif.example";
+    await mkdir(path.join(root, "dist", "client", "assets"), { recursive: true });
+    await writeFile(
+      path.join(root, "dist", "client", "assets", "app.js"),
+      "console.log('app')",
+      { flag: "wx" },
+    );
+    prepareSitesBuild({
+      root,
+      environment: { [PREMIUM_LICENSE_API_ORIGIN_ENV]: licenseApiOrigin },
+    });
+
+    const sourceIndexPath = path.join(root, "dist", "client", "index.html");
+    const sourceIndexBytes = await readFile(sourceIndexPath);
+    const expectedOpaqueShellBytes = Buffer.from(sourceIndexBytes.toString("base64"), "ascii");
+    const sourceSnapshot = await snapshotTree(path.join(root, "dist"));
+    const resultOne = stageSitesPackage({ root, destination: stageOne });
+    const resultTwo = stageSitesPackage({ root, destination: stageTwo });
+
+    assert.equal(resultOne.shellSha256, sha256Bytes(expectedOpaqueShellBytes));
+    assert.equal(resultOne.shellPath, `/assets/maarifos-shell-${resultOne.shellSha256}.bin`);
+    assert.deepEqual(resultTwo, {
+      destination: path.resolve(stageTwo),
+      shellPath: resultOne.shellPath,
+      shellSha256: resultOne.shellSha256,
+    });
+    assert.equal(path.extname(resultOne.shellPath), ".bin");
+    assert.equal(resultOne.shellPath.endsWith(".html"), false);
+    assert.equal((await readFile(sourceIndexPath)).equals(sourceIndexBytes), true);
+    assert.deepEqual(await snapshotTree(path.join(root, "dist")), sourceSnapshot);
+    assert.deepEqual(await snapshotTree(stageOne), await snapshotTree(stageTwo));
+
+    const stagedIndex = path.join(stageOne, "dist", "client", "index.html");
+    const stagedShell = path.join(stageOne, "dist", "client", resultOne.shellPath.slice(1));
+    await assert.rejects(access(stagedIndex), { code: "ENOENT" });
+    await assert.rejects(
+      access(path.join(root, "dist", "client", resultOne.shellPath.slice(1))),
+      { code: "ENOENT" },
+    );
+    const stagedShellBytes = await readFile(stagedShell);
+    assert.equal(stagedShellBytes.equals(expectedOpaqueShellBytes), true);
+    assert.equal(stagedShellBytes.includes(Buffer.from("<")), false);
+    assert.equal(stagedShellBytes.equals(sourceIndexBytes), false);
+    await access(path.join(stageOne, "dist", "server", "index.js"));
+    await access(path.join(stageOne, "dist", ".openai", "hosting.json"));
+    await access(path.join(stageOne, ".openai", "hosting.json"));
+
+    const stagedWorker = await importStandaloneWorker(
+      path.join(stageOne, "dist", "server", "index.js"),
+    );
+    assert.equal(stagedWorker.SITES_APP_SHELL_PATH, resultOne.shellPath);
+    assert.equal(stagedWorker.SITES_APP_SHELL_SHA256, resultOne.shellSha256);
+    assertSecurityHeaders(
+      new Response(null, { headers: stagedWorker.SECURITY_HEADERS }),
+      licenseApiOrigin,
+    );
+
+    const calls = [];
+    const stagedEnvironment = {
+      ASSETS: {
+        fetch: async (request) => {
+          const url = new URL(request.url);
+          calls.push(`${request.method} ${url.pathname}${url.search}`);
+          if (url.pathname === resultOne.shellPath) {
+            return new Response(stagedShellBytes, {
+              status: 200,
+              headers: {
+                "Content-Disposition": "attachment; filename=shell.bin",
+                "Content-Type": "application/octet-stream",
+              },
+            });
+          }
+          return new Response("missing", { status: 404 });
+        },
+      },
+    };
+
+    for (const [request, expectedCalls] of [
+      [
+        new Request("https://app.example.test/", { headers: { accept: "*/*" } }),
+        ["GET /", `GET ${resultOne.shellPath}`],
+      ],
+      [
+        new Request("https://app.example.test/classroom?native=1", {
+          headers: { accept: "text/html" },
+        }),
+        ["GET /classroom?native=1", `GET ${resultOne.shellPath}`],
+      ],
+      [
+        new Request("https://app.example.test/index.html", {
+          headers: { accept: "*/*" },
+        }),
+        ["GET /index.html", `GET ${resultOne.shellPath}`],
+      ],
+      [
+        new Request("https://app.example.test/", {
+          method: "HEAD",
+          headers: { accept: "*/*" },
+        }),
+        ["HEAD /", `GET ${resultOne.shellPath}`],
+      ],
+    ]) {
+      calls.length = 0;
+      const response = await stagedWorker.default.fetch(request, stagedEnvironment);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
+      assert.equal(response.headers.get("content-disposition"), null);
+      assert.deepEqual(calls, expectedCalls);
+      assertSecurityHeaders(response, licenseApiOrigin);
+    }
+
+    for (const pathname of [
+      "/api",
+      "/api/missing",
+      "/api%2Fmissing",
+      "/auth",
+      "/auth/session",
+    ]) {
+      calls.length = 0;
+      const response = await stagedWorker.default.fetch(
+        new Request(`https://app.example.test${pathname}`, {
+          headers: { accept: "text/html" },
+        }),
+        stagedEnvironment,
+      );
+      assert.equal(response.status, 404);
+      assert.deepEqual(calls, [`GET ${pathname}`]);
+      assertSecurityHeaders(response, licenseApiOrigin);
+    }
+
+    const missingShellResponse = await stagedWorker.default.fetch(
+      new Request("https://app.example.test/", { headers: { accept: "*/*" } }),
+      { ASSETS: { fetch: async () => new Response("missing", { status: 404 }) } },
+    );
+    assert.equal(missingShellResponse.status, 503);
+    assertSecurityHeaders(missingShellResponse, licenseApiOrigin);
+
+    const mismatchedShellResponse = await stagedWorker.default.fetch(
+      new Request("https://app.example.test/", { headers: { accept: "*/*" } }),
+      {
+        ASSETS: {
+          fetch: async (request) => new Response(
+            new URL(request.url).pathname === resultOne.shellPath
+              ? Buffer.from("dGFtcGVyZWQ=", "ascii")
+              : "missing",
+            { status: new URL(request.url).pathname === resultOne.shellPath ? 200 : 404 },
+          ),
+        },
+      },
+    );
+    assert.equal(mismatchedShellResponse.status, 503);
+    assertSecurityHeaders(mismatchedShellResponse, licenseApiOrigin);
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(stageOne, { recursive: true, force: true }),
+      rm(stageTwo, { recursive: true, force: true }),
+    ]);
+  }
+});
+
+test("staging fails closed on secret-bearing files and mismatched hosting metadata", async () => {
+  const secretRoot = await createSitesFixture();
+  const secretStage = `${secretRoot}-stage`;
+  const mismatchRoot = await createSitesFixture();
+  const mismatchStage = `${mismatchRoot}-stage`;
+  try {
+    prepareSitesBuild({ root: secretRoot, environment: {} });
+    await writeFile(path.join(secretRoot, "dist", "client", ".env.production"), "blocked");
+    assert.throws(
+      () => stageSitesPackage({ root: secretRoot, destination: secretStage }),
+      /forbidden secret-bearing path/,
+    );
+    await assert.rejects(access(secretStage), { code: "ENOENT" });
+    await rm(path.join(secretRoot, "dist", "client", ".env.production"), { force: true });
+    await writeFile(
+      path.join(secretRoot, "dist", "client", "unsafe.js"),
+      "const material = '-----BEGIN PRIVATE KEY-----';",
+    );
+    assert.throws(
+      () => stageSitesPackage({ root: secretRoot, destination: secretStage }),
+      /forbidden secret marker/,
+    );
+    await assert.rejects(access(secretStage), { code: "ENOENT" });
+
+    prepareSitesBuild({ root: mismatchRoot, environment: {} });
+    const inProjectStage = path.join(mismatchRoot, "package-stage");
+    assert.throws(
+      () => stageSitesPackage({ root: mismatchRoot, destination: inProjectStage }),
+      /outside the source project/,
+    );
+    await assert.rejects(access(inProjectStage), { code: "ENOENT" });
+    await writeFile(
+      path.join(mismatchRoot, "dist", ".openai", "hosting.json"),
+      "{\"project_id\":\"different\"}",
+    );
+    assert.throws(
+      () => stageSitesPackage({ root: mismatchRoot, destination: mismatchStage }),
+      /must match exactly/,
+    );
+    await assert.rejects(access(mismatchStage), { code: "ENOENT" });
+
+    assert.throws(
+      () => assertNoDeploymentSecrets(path.join(secretRoot, "dist")),
+      /forbidden secret marker/,
+    );
+  } finally {
+    await Promise.all([
+      rm(secretRoot, { recursive: true, force: true }),
+      rm(secretStage, { recursive: true, force: true }),
+      rm(mismatchRoot, { recursive: true, force: true }),
+      rm(mismatchStage, { recursive: true, force: true }),
+    ]);
   }
 });
 

@@ -5,6 +5,7 @@ import path from "node:path";
 export const PROTECTED_RUNTIME_FILE_DESCRIPTORS = Object.freeze([
   { path: "scripts/check-mobile-runtime.mjs", kind: "text" },
   { path: "scripts/prepare-sites-build.mjs", kind: "text" },
+  { path: "scripts/prepare-sites-package.mjs", kind: "text" },
   { path: "scripts/runtime-integrity.mjs", kind: "text" },
   { path: "scripts/update-mobile-runtime-lock.mjs", kind: "text" },
   { path: "index.html", kind: "text" },

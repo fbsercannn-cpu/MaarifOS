@@ -42,6 +42,9 @@ private lisans Worker'ı bağımsız sürümlenir.
   cache imza sınırı ile çıkış/reset sonrası tam premium içerik temizliği güçlendirildi.
 - Lisans API origin'i production CSP'ye yalnız sabit, kanonik HTTPS build değeriyle
   ekleniyor; query/local storage kaynaklı origin kabul edilmiyor.
+- Sites assets-first yönlendirmesinde ana HTML'in Worker güvenlik başlıklarını atlaması
+  engellendi; yayın paketi public `index.html` yerine içerik-karmalı opak kabuk kullanıyor,
+  Worker kabuğu doğrulamadan HTML üretmiyor ve ayrılmış ağ yolları fail-closed kalıyor.
 
 ### Düzeltildi
 

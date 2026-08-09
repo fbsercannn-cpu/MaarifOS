@@ -65,13 +65,13 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 ## Geçerli kalite hükmü
 
 `9 Ağustos 2026` tarihinde 0.9.0 sürüm adayı bütünleşik `npm run test:quality`
-kapısından `316.1 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,
+kapısından `319.5 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,
 Founder License API/D1 güvenlik matrisi, korunan runtime, lint, typecheck, auth,
 coverage, backup/restore, tüm runtime veri/UI akışları, PWA, production build,
 bundle bütçesi, Chromium ve WebKit mobil smoke, Sites Worker ve gerçek service
 worker ile çevrim dışı production PWA birlikte yeşildir. Lisans API 15/15,
-mobil belge/tam plan smoke 6/6, Sites 8/8 ve production PWA 3/3 geçti. Ana
-başlangıç paketi gerçek tembel yükleme ile 173,14 KiB gzip'a indi; 14 JavaScript
+mobil belge/tam plan smoke 6/6, Sites 20/20 ve production PWA 3/3 geçti. Ana
+başlangıç paketi gerçek tembel yükleme ile 173,41 KiB gzip'a indi; 14 JavaScript
 parçasının her biri 180 KiB sınırının altındadır.
 
 Canonical canlı Lisans API
