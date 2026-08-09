@@ -539,6 +539,152 @@ test("seçili çocuk kapsamı bilinmeyen çocuğu atomik olarak reddeder", async
   assert.equal(snapshot.activities.length, 0);
 });
 
+test("anlık gözlem bağlamı açıkken bugünün planı aynı işlemde devam ediyor olarak oluşturulur", async () => {
+  const store = activeStore();
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000489",
+        planType: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "active",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000490",
+        planId: "00000000-0000-4000-8000-000000000489",
+        activityKind: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+  });
+
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planId: "00000000-0000-4000-8000-000000000492",
+    planTitle: "Canlı fen planı",
+    activityId: "00000000-0000-4000-8000-000000000494",
+    activityTitle: "Batar mı, yüzer mi?",
+    startTime: "09:00",
+    curriculumProfile,
+    ...planAssignment,
+    initialActivityStatus: "in_progress",
+    now: new Date("2026-09-01T06:20:00.000Z"),
+  });
+  const snapshot = await store.readSnapshot();
+
+  assert.equal(result.activity.status, "in_progress");
+  assert.equal(snapshot.plans.length, 2);
+  assert.equal(snapshot.activities.length, 2);
+  assert.equal(
+    snapshot.activities.find((record) => record.id === result.activity.id)?.status,
+    "in_progress",
+  );
+});
+
+test("yalnız etkinlik işareti taşıyan sahte anlık bağlam devam eden etkinlik çakışmasını atlatamaz", async () => {
+  const store = activeStore();
+  const spoofedPlanId = "00000000-0000-4000-8000-000000000496";
+  const spoofedActivityId = "00000000-0000-4000-8000-000000000497";
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...base,
+        id: spoofedPlanId,
+        planType: "daily",
+        title: "Normal günlük plan",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: spoofedActivityId,
+        planId: spoofedPlanId,
+        activityKind: "spontaneous-observation",
+        title: "İşareti değiştirilmiş gerçek etkinlik",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planId: "00000000-0000-4000-8000-000000000498",
+      planTitle: "İz bırakmaması gereken plan",
+      activityId: "00000000-0000-4000-8000-000000000499",
+      activityTitle: "İz bırakmaması gereken etkinlik",
+      startTime: "10:30",
+      curriculumProfile,
+      ...planAssignment,
+      initialActivityStatus: "in_progress",
+      now: new Date("2026-09-01T07:30:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+
+  const snapshot = await store.readSnapshot();
+  assert.deepEqual(snapshot.plans.map((record) => record.id), [spoofedPlanId]);
+  assert.deepEqual(snapshot.activities.map((record) => record.id), [spoofedActivityId]);
+});
+
+test("başka gerçek etkinlik sürerken plan ve etkinlik birlikte, iz bırakmadan reddedilir", async () => {
+  const store = activeStore();
+  await store.transaction("readwrite", ["activities"], async (transaction) => {
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000491",
+        title: "Devam eden gerçek etkinlik",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planId: "00000000-0000-4000-8000-000000000493",
+      planTitle: "Reddedilecek plan",
+      activityId: "00000000-0000-4000-8000-000000000495",
+      activityTitle: "Reddedilecek etkinlik",
+      startTime: "10:00",
+      curriculumProfile,
+      ...planAssignment,
+      initialActivityStatus: "in_progress",
+      now: new Date("2026-09-01T06:25:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+  const snapshot = await store.readSnapshot();
+
+  assert.equal(snapshot.plans.length, 0);
+  assert.equal(snapshot.activities.length, 1);
+  assert.equal(snapshot.activities[0].id, "00000000-0000-4000-8000-000000000491");
+});
+
 test("gözlem ve resmî hedef bağı etkinlikte planlanan öğrenci-hedef kapsamından çıkamaz", async () => {
   const store = activeStore();
   await createEvidenceChain(store);

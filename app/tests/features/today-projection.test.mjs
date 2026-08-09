@@ -96,6 +96,17 @@ function configuredSnapshot() {
 
 test("anlık gözlem bağlamını Günün planı ve odak etkinliği projeksiyonuna taşımaz", () => {
   const snapshot = configuredSnapshot();
+  snapshot.plans.push({
+    ...baseRecord,
+    id: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    planType: "spontaneous-observation",
+    title: "Anlık gözlemler",
+    status: "active",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
   snapshot.activities.push(
     {
       ...baseRecord,
@@ -152,6 +163,17 @@ test("anlık gözlem bağlamını Günün planı ve odak etkinliği projeksiyonu
 
 test("yalnız anlık gözlem bağlamı varsa odak etkinliği üretmez", () => {
   const snapshot = configuredSnapshot();
+  snapshot.plans.push({
+    ...baseRecord,
+    id: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    planType: "spontaneous-observation",
+    title: "Anlık gözlemler",
+    status: "active",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
   snapshot.activities.push({
     ...baseRecord,
     id: spontaneousActivityId,
@@ -162,6 +184,8 @@ test("yalnız anlık gözlem bağlamı varsa odak etkinliği üretmez", () => {
     startTime: "10:15",
     status: "in_progress",
     activityKind: "spontaneous-observation",
+    curriculumTargets: [],
+    maarifRefs: [],
   });
 
   const workspace = resolveTodayWorkspace(
@@ -171,6 +195,74 @@ test("yalnız anlık gözlem bağlamı varsa odak etkinliği üretmez", () => {
 
   assert.deepEqual(workspace.planItems, []);
   assert.equal(workspace.currentActivity, null);
+});
+
+test("normal plana bağlı sahte anlık etkinliği Günün planından gizlemez", () => {
+  const snapshot = configuredSnapshot();
+  snapshot.plans.push({
+    ...baseRecord,
+    id: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    planType: "daily",
+    title: "Normal günlük plan",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
+  snapshot.activities.push({
+    ...baseRecord,
+    id: spontaneousActivityId,
+    planId: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    title: "İşareti değiştirilmiş gerçek etkinlik",
+    startTime: "10:15",
+    status: "in_progress",
+    activityKind: "spontaneous-observation",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
+
+  const workspace = resolveTodayWorkspace(
+    snapshot,
+    new Date("2026-09-02T07:30:00.000Z"),
+  );
+
+  assert.deepEqual(workspace.planItems.map((item) => item.id), [spontaneousActivityId]);
+  assert.equal(workspace.currentActivity?.id, spontaneousActivityId);
+});
+
+test("anlık plan türü işareti eksik bağlamı inceleme için normal etkinlik olarak gösterir", () => {
+  const snapshot = configuredSnapshot();
+  snapshot.plans.push({
+    ...baseRecord,
+    id: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    title: "Anlık gözlemler",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
+  snapshot.activities.push({
+    ...baseRecord,
+    id: spontaneousActivityId,
+    planId: spontaneousPlanId,
+    academicYearId,
+    classroomId,
+    title: "Anlık gözlemler",
+    startTime: "10:15",
+    status: "planned",
+    activityKind: "spontaneous-observation",
+    curriculumTargets: [],
+    maarifRefs: [],
+  });
+
+  const workspace = resolveTodayWorkspace(
+    snapshot,
+    new Date("2026-09-02T07:30:00.000Z"),
+  );
+
+  assert.deepEqual(workspace.planItems.map((item) => item.id), [spontaneousActivityId]);
 });
 
 test("gelecek tarihli premium günlük planın 10 bloğunu tek etkinliği çoğaltmadan reload sonrasında korur", async () => {

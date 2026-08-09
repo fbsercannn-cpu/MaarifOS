@@ -220,7 +220,7 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
   }
   await expect(page.getByText("Kurgu dostluk çemberi", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /Takvimi aç/ }).click();
+  await page.getByRole("button", { name: /Sınıf takvimini aç/ }).click();
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await calendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
   const planCard = calendar.getByTestId("calendar-scheduled-plan");
@@ -259,7 +259,7 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
   );
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /Takvimi aç/ }).click();
+  await page.getByRole("button", { name: /Sınıf takvimini aç/ }).click();
   const reloadedCalendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await reloadedCalendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
   await expect(reloadedCalendar.getByTestId("calendar-scheduled-plan")).toHaveCount(0);

@@ -20,7 +20,7 @@ import type { TodayPlanItem } from "./today-data.ts";
 import {
   compactTodayProgramLabel,
   configuredClassroomFromToday,
-  focusActivityFromToday,
+  createTodayControlCenterSummary,
   todayPlanItemStatusLabel,
   todayCatalogDisplayLabel,
   type TodayScreenModel,
@@ -106,7 +106,16 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
     premiumPlanCenterEnabled,
   } = model;
   const configuredClassroom = configuredClassroomFromToday(workspace);
-  const focusActivity = focusActivityFromToday(workspace);
+  const controlSummary = createTodayControlCenterSummary({
+    workspace,
+    attendance,
+    pendingObservationCount,
+  });
+  const focusActivity = controlSummary.plan.item;
+  const planEntryDisabled =
+    focusActivity === null &&
+    configuredClassroom !== null &&
+    (dataBusy || educationalWritesDisabled);
   const premiumFlowBlockCount = workspace.planItems.filter(
     (item) => item.kind === "premium-flow-block",
   ).length;
@@ -168,15 +177,6 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
             </span>
           )}
         </div>
-        <p
-          className={`sync-state ${syncState.className}`}
-          data-testid="persistence-status"
-          role="status"
-          aria-live="polite"
-        >
-          {syncState.icon}
-          {syncState.label}
-        </p>
       </header>
 
       {updateReady ? (
@@ -222,47 +222,151 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
         </section>
       ) : null}
 
-      <section className="daily-summary" aria-label="Günlük özet">
+      <section
+        className="teacher-control"
+        aria-labelledby="teacher-control-title"
+        aria-describedby="teacher-control-description"
+      >
+        <div className="teacher-control-heading">
+          <div>
+            <span className="section-eyebrow">Öğretmen kontrolü</span>
+            <h2 id="teacher-control-title">Şimdi</h2>
+            <p id="teacher-control-description">
+              Sınıfın durumu, sıradaki akış ve tamamlanacak işler.
+            </p>
+          </div>
+          <button
+            className="teacher-control-calendar"
+            type="button"
+            onClick={() => void actions.onOpenCalendar()}
+            aria-label="Sınıf takvimini aç"
+          >
+            <CalendarIcon aria-hidden="true" />
+            Takvim
+          </button>
+        </div>
+
         <button
-          className="summary-action"
+          className="today-priority-card today-priority-card--attendance"
           type="button"
           onClick={actions.onOpenAttendance}
-          disabled={educationalWritesDisabled}
+          disabled={dataBusy || educationalWritesDisabled}
+          aria-label={`Bugünkü devam ${controlSummary.attendance.inClass}/${controlSummary.attendance.expected} çocuk. ${controlSummary.attendance.stateLabel}. ${controlSummary.attendance.detailLabel}`}
+          aria-describedby={
+            educationalWritesDisabled
+              ? "academic-year-mode-copy"
+              : dataBusy
+                ? "today-attendance-busy-reason"
+                : undefined
+          }
         >
-          <PersonIcon aria-hidden="true" />
-          <span>
+          <span className="today-priority-icon" aria-hidden="true">
+            <PersonIcon />
+          </span>
+          <span className="today-priority-copy">
             <small>Bugünkü devam</small>
             <strong>
-              {attendance.present + attendance.late}/{attendance.total} çocuk
+              {controlSummary.attendance.inClass} mevcut ·{" "}
+              {controlSummary.attendance.expected} beklenen
             </strong>
+            <em id={dataBusy ? "today-attendance-busy-reason" : undefined}>
+              {dataBusy
+                ? "Kayıt işlemi tamamlanıyor"
+                : educationalWritesDisabled
+                  ? "Eğitim yılı etkin değil"
+                  : `${controlSummary.attendance.stateLabel} · ${controlSummary.attendance.detailLabel}`}
+            </em>
           </span>
+          <ChevronRightIcon aria-hidden="true" />
         </button>
-        <button
-          className="summary-action"
-          type="button"
-          onClick={() => void actions.onOpenCalendar()}
-        >
-          <CalendarIcon aria-hidden="true" />
-          <span>
-            <small>Sınıf takvimi</small>
-            <strong>Takvimi aç</strong>
-          </span>
-        </button>
-      </section>
 
-      {premiumPlanCenterEnabled ? (
-        <section className="premium-entry-card" aria-labelledby="premium-entry-title">
-          <span className="premium-entry-icon" aria-hidden="true"><StarIcon /></span>
-          <span className="premium-entry-copy">
-            <small>Premium · TYMM 2024 · 60–72 ay</small>
-            <strong id="premium-entry-title">Plan Kütüphanesi</strong>
-            <span>Yıllık, aylık ve haftalık planları görün; günlük akışa taşıyın, değerlendirin ve belge alın.</span>
+        <button
+          className="today-priority-card today-priority-card--plan"
+          type="button"
+          onClick={() => {
+            if (focusActivity) {
+              actions.onOpenPlanItem(focusActivity);
+              return;
+            }
+            if (configuredClassroom) {
+              actions.onOpenPlanFlow();
+              return;
+            }
+            actions.onOpenClassroom();
+          }}
+          disabled={planEntryDisabled}
+          aria-describedby={
+            educationalWritesDisabled && planEntryDisabled
+              ? "academic-year-mode-copy"
+              : dataBusy && planEntryDisabled
+                ? "today-plan-busy-reason"
+                : undefined
+          }
+        >
+          <span className="today-priority-icon" aria-hidden="true">
+            <ReaderIcon />
           </span>
-          <button type="button" onClick={actions.onOpenPremiumPlans}>
-            Planları aç <ChevronRightIcon aria-hidden="true" />
+          <span className="today-priority-copy">
+            <small>{controlSummary.plan.label}</small>
+            <strong>{controlSummary.plan.title}</strong>
+            <em id={dataBusy && planEntryDisabled ? "today-plan-busy-reason" : undefined}>
+              {dataBusy && planEntryDisabled
+                ? "Kayıt işlemi tamamlanıyor"
+                : educationalWritesDisabled && planEntryDisabled
+                  ? "Eğitim yılı etkin değil"
+                  : controlSummary.plan.detail}
+            </em>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
+
+        {controlSummary.priority.count > 0 ? (
+          <button
+            className="today-priority-task is-pending"
+            type="button"
+            onClick={actions.onOpenPendingObservation}
+            disabled={dataBusy || educationalWritesDisabled}
+            aria-describedby={
+              educationalWritesDisabled
+                ? "academic-year-mode-copy"
+                : dataBusy
+                  ? "today-priority-busy-reason"
+                  : undefined
+            }
+          >
+            <ClockIcon aria-hidden="true" />
+            <span>
+              <strong>{controlSummary.priority.title}</strong>
+              <small id={dataBusy ? "today-priority-busy-reason" : undefined}>
+                {dataBusy ? "Kayıt işlemi tamamlanıyor" : controlSummary.priority.detail}
+              </small>
+            </span>
+            <b>Tamamla</b>
+            <ChevronRightIcon aria-hidden="true" />
           </button>
-        </section>
-      ) : null}
+        ) : (
+          <div className="today-priority-task is-complete" role="status">
+            <CheckCircledIcon aria-hidden="true" />
+            <span>
+              <strong>{controlSummary.priority.title}</strong>
+              <small>{controlSummary.priority.detail}</small>
+            </span>
+          </div>
+        )}
+
+        <div
+          className={`sync-state teacher-control-sync ${syncState.className}`}
+          data-testid="persistence-status"
+          role="status"
+          aria-live="polite"
+        >
+          {syncState.icon}
+          <span>
+            <small>Taslak ve cihaz durumu</small>
+            <strong>{syncState.label}</strong>
+          </span>
+        </div>
+      </section>
 
       <section className="home-children" aria-labelledby="home-children-title">
         <div className="home-section-heading">
@@ -346,6 +450,24 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
           </button>
         )}
       </section>
+
+      {premiumPlanCenterEnabled ? (
+        <section
+          className="teacher-control-premium"
+          aria-labelledby="premium-entry-title"
+        >
+          <span className="teacher-control-premium-icon" aria-hidden="true">
+            <StarIcon />
+          </span>
+          <span className="teacher-control-premium-copy">
+            <small>Premium · yıllık · aylık · haftalık · günlük</small>
+            <strong id="premium-entry-title">Plan Kütüphanesi</strong>
+          </span>
+          <button type="button" onClick={actions.onOpenPremiumPlans}>
+            Planları aç <ChevronRightIcon aria-hidden="true" />
+          </button>
+        </section>
+      ) : null}
 
       {planEvidenceDetailsEnabled ? (
         <>

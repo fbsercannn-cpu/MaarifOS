@@ -226,7 +226,7 @@ test("uygulama kilidi oturum parolasını saklamadan erişilebilir modal olarak 
   await expect(lockGate).toBeHidden();
 });
 
-test("Hediye Alpha ana menüsü kısmi plan, belge ve AI vaatlerini gizler", async ({
+test("Ana menü plan ve belge merkezlerini kalıcı gösterir, AI vaatlerini açmaz", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
@@ -235,7 +235,7 @@ test("Hediye Alpha ana menüsü kısmi plan, belge ve AI vaatlerini gizler", asy
   await expect(navigation.getByRole("button", { name: "Bugün", exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Sınıfım", exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Kayıt ekle", exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Planlar", exact: true })).toHaveCount(0);
-  await expect(navigation.getByRole("button", { name: "Belgeler", exact: true })).toHaveCount(0);
+  await expect(navigation.getByRole("button", { name: "Planlar", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Belgeler", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Belgeler" })).toHaveCount(0);
 });

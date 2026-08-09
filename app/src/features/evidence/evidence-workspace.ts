@@ -3,6 +3,7 @@ import { isLocalTime } from "../../core/domain/classroom.ts";
 import {
   recordBelongsToClassroomScope,
   resolveActiveClassroomScope,
+  type ActiveClassroomScope,
 } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import {
@@ -16,12 +17,14 @@ import type {
   CurriculumAssignmentMode,
   CurriculumTargetSnapshot,
 } from "../curriculum/curriculum-catalog.ts";
+import type { PremiumPackAccessReference } from "../premium-access/entitlement.ts";
 import {
   normalizeCurriculumProfile,
   type CurriculumFramework,
   type CurriculumProfileInput,
   type CurriculumProfileSnapshot,
 } from "./evidence-flow.ts";
+import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
 
 export type EvidenceActivityStatus = "planned" | "in_progress" | "completed";
 
@@ -37,7 +40,13 @@ export interface EvidenceActivitySummary {
   curriculumTargets: CurriculumTargetSnapshot[];
   assignedStudentIds: string[];
   assignmentMode: CurriculumAssignmentMode | "legacy-unscoped";
+  contextKind: "planned-activity" | "spontaneous-observation";
+  premiumProvenance?: EvidencePremiumProvenance;
 }
+
+export type EvidencePremiumProvenance =
+  | { status: "verified"; pack: PremiumPackAccessReference }
+  | { status: "invalid"; pack: null };
 
 export interface EvidenceObservationSummary {
   id: string;
@@ -56,6 +65,7 @@ export interface EvidenceObservationSummary {
   curriculumProfile: CurriculumProfileSnapshot;
   plannedCurriculumTargets: CurriculumTargetSnapshot[];
   confirmedCurriculumLinkIds: string[];
+  premiumProvenance?: EvidencePremiumProvenance;
 }
 
 export interface EvidenceWorkspace {
@@ -82,9 +92,65 @@ function profileFromRecord(record: StoredRecord | undefined): CurriculumProfileS
   }
 }
 
+function premiumPackReference(value: unknown): PremiumPackAccessReference | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const keys = [
+    "sku",
+    "contentReleaseId",
+    "id",
+    "version",
+    "manifestDigest",
+    "academicRelease",
+  ] as const;
+  if (keys.some((key) => typeof record[key] !== "string" || !record[key].trim())) {
+    return null;
+  }
+  return {
+    sku: record.sku as string,
+    contentReleaseId: record.contentReleaseId as string,
+    id: record.id as string,
+    version: record.version as string,
+    manifestDigest: record.manifestDigest as string,
+    academicRelease: record.academicRelease as string,
+  };
+}
+
+function samePremiumPack(
+  left: PremiumPackAccessReference,
+  right: PremiumPackAccessReference,
+): boolean {
+  return left.sku === right.sku &&
+    left.contentReleaseId === right.contentReleaseId &&
+    left.id === right.id &&
+    left.version === right.version &&
+    left.manifestDigest === right.manifestDigest &&
+    left.academicRelease === right.academicRelease;
+}
+
+function premiumProvenanceFromRecords(
+  plan: StoredRecord,
+  activity: StoredRecord,
+): EvidencePremiumProvenance | undefined {
+  const hasPremiumMarkers =
+    plan.sourceContentPackSnapshot !== undefined ||
+    plan.sourceWeeklyPlanId !== undefined ||
+    plan.premiumDailyFlowSnapshot !== undefined ||
+    activity.sourceContentPackSnapshot !== undefined ||
+    activity.sourceWeeklyPlanId !== undefined;
+  if (!hasPremiumMarkers) return undefined;
+  const planPack = premiumPackReference(plan.sourceContentPackSnapshot);
+  const activityPack = premiumPackReference(activity.sourceContentPackSnapshot);
+  return planPack && activityPack && samePremiumPack(planPack, activityPack)
+    ? { status: "verified", pack: planPack }
+    : { status: "invalid", pack: null };
+}
+
 function activitySummary(
   activity: StoredRecord,
   plansById: ReadonlyMap<string, StoredRecord>,
+  scopedPlans: readonly StoredRecord[],
+  scope: ActiveClassroomScope,
 ): EvidenceActivitySummary | null {
   const planId = typeof activity.planId === "string" ? activity.planId : "";
   const title = typeof activity.title === "string" ? activity.title.trim() : "";
@@ -126,6 +192,15 @@ function activitySummary(
     activity.assignmentMode === "selected-students"
       ? activity.assignmentMode
       : "legacy-unscoped";
+  const premiumProvenance = premiumProvenanceFromRecords(plan, activity);
+  const contextKind = isAuthenticSpontaneousObservationActivity(
+    activity,
+    scopedPlans,
+    scope,
+    civilDate,
+  )
+    ? "spontaneous-observation"
+    : "planned-activity";
 
   return {
     id: activity.id,
@@ -139,6 +214,8 @@ function activitySummary(
     curriculumTargets,
     assignedStudentIds,
     assignmentMode,
+    contextKind,
+    ...(premiumProvenance ? { premiumProvenance } : {}),
   };
 }
 
@@ -184,7 +261,7 @@ export function resolveEvidenceWorkspace(
         typeof record.deletedAt !== "string" &&
         recordBelongsToClassroomScope(record, scope),
     )
-    .map((record) => activitySummary(record, plansById))
+    .map((record) => activitySummary(record, plansById, scopedPlans, scope))
     .filter((record): record is EvidenceActivitySummary => record !== null);
   const activitiesById = new Map(allActivities.map((record) => [record.id, record]));
   const scopedStudents = snapshot.students.filter(
@@ -250,6 +327,9 @@ export function resolveEvidenceWorkspace(
         curriculumProfile: activity.curriculumProfile,
         plannedCurriculumTargets: activity.curriculumTargets,
         confirmedCurriculumLinkIds: teacherConfirmedLinkIds(scopedLinks, record.id),
+        ...(activity.premiumProvenance
+          ? { premiumProvenance: activity.premiumProvenance }
+          : {}),
       };
     })
     .filter((record): record is EvidenceObservationSummary => record !== null)

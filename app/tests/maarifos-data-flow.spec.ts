@@ -445,14 +445,14 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
   ).toHaveCount(3);
 });
 
-test("Hediye Alpha doğrulanmış günlük çalışma yüzeyini açar, ileri modülleri gizler", async ({
+test("Öğretmenin plan ve belge iş alanları ana navigasyondan erişilir", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
 
-  await expect(page.getByRole("button", { name: "Planlar", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Belgeler", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Planlar", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Belgeler", exact: true })).toBeVisible();
   await expect(page.getByTestId("current-work")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Bugün için plan eklenmedi" }),

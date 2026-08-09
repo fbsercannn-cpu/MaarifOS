@@ -300,6 +300,16 @@ function matchingDrafts(
   );
 }
 
+function matchingIndependentDrafts(
+  drafts: readonly QuickObservationDraft[],
+  selector: Omit<QuickObservationDraftSelector, "studentId">,
+): QuickObservationDraft[] {
+  return matchingDrafts(drafts, selector).filter(
+    (draft) =>
+      draft.batchId === undefined && draft.captureScope === undefined,
+  );
+}
+
 function quickObservationBatchDraft(
   draft: QuickObservationDraft,
   batchId: string,
@@ -338,7 +348,7 @@ export async function loadQuickObservationDraft(
     return null;
   }
   return (
-    matchingDrafts(
+    matchingIndependentDrafts(
       liveStudentDrafts(snapshot.settings, selector.studentId, scope),
       selector,
     )[0] ?? null
@@ -395,7 +405,7 @@ export async function persistQuickObservationDraft(
         { studentId, planId, activityId },
         scope,
       );
-      const existing = matchingDrafts(
+      const existing = matchingIndependentDrafts(
         liveStudentDrafts(settings, studentId, scope),
         {
           planId,
@@ -487,26 +497,43 @@ export async function persistQuickObservationDraftBatch(
         );
       }
 
+      const openDraftsForBatch = settings.filter(
+        (record): record is QuickObservationBatchDraft =>
+          typeof record.deletedAt !== "string" &&
+          isQuickObservationDraftRecord(record) &&
+          quickObservationBatchDraft(record, batchId),
+      );
       const conflictingBatchDraft = settings.find(
         (record) =>
           typeof record.deletedAt !== "string" &&
           isQuickObservationDraftRecord(record) &&
           record.batchId === batchId &&
-          (!studentIds.includes(record.studentId) ||
+          (record.captureScope !== "selected-children" ||
             record.planId !== planId ||
-            record.activityId !== activityId),
+            record.activityId !== activityId ||
+            record.classroomId !== scope.classroomId ||
+            record.academicYearId !== scope.academicYearId ||
+            (record.observationTaxonomyVersion ??
+              OBSERVATION_TAXONOMY_VERSION_V1) !== taxonomyVersion),
       );
       if (conflictingBatchDraft) {
         throw new Error(
           "Toplu gözlem kimliği başka bir açık taslak grubunda kullanılıyor.",
         );
       }
+      if (
+        new Set(openDraftsForBatch.map((draft) => draft.studentId)).size !==
+        openDraftsForBatch.length
+      ) {
+        throw new Error(
+          "Toplu gözlem grubunda aynı çocuk için birden fazla açık taslak bulundu; yazma güvenlik için durduruldu.",
+        );
+      }
 
       drafts = studentIds.map((studentId) => {
-        const existing = matchingDrafts(
-          liveStudentDrafts(settings, studentId, scope),
-          { planId, activityId, taxonomyVersion },
-        )[0];
+        const existing = openDraftsForBatch.find(
+          (draft) => draft.studentId === studentId,
+        );
         return {
           id: existing?.id ?? crypto.randomUUID(),
           settingType: QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
@@ -530,7 +557,14 @@ export async function persistQuickObservationDraftBatch(
           schemaVersion: QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION,
         };
       });
-      await transaction.putMany("settings", drafts);
+      const removedDrafts = openDraftsForBatch
+        .filter((draft) => !studentIds.includes(draft.studentId))
+        .map((draft) => ({
+          ...draft,
+          updatedAt: timestamp,
+          deletedAt: timestamp,
+        }));
+      await transaction.putMany("settings", [...drafts, ...removedDrafts]);
     },
   );
 
@@ -554,7 +588,7 @@ export async function discardQuickObservationDraft(
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
       const settings = await transaction.getAll("settings");
-      const draft = matchingDrafts(
+      const draft = matchingIndependentDrafts(
         liveStudentDrafts(settings, selector.studentId, scope),
         selector,
       )[0];
@@ -612,7 +646,7 @@ export async function finalizeQuickObservationDraft(
       if (!activeStudent(students, studentId, scope)) {
         throw new Error("Hızlı gözlem yalnız etkin sınıftaki çocuğa bağlanabilir.");
       }
-      const draft = matchingDrafts(
+      const draft = matchingIndependentDrafts(
         liveStudentDrafts(settings, studentId, scope),
         selector,
       )[0];

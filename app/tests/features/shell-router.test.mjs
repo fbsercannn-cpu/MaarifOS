@@ -16,7 +16,7 @@ test("route sözleşmesi Hediye Alpha navigasyonundan yalnız ekranları üretir
   assert.deepEqual(
     APP_ROUTES.map(({ id }) => id),
     visiblePrimaryNavigation()
-      .filter(({ id }) => id !== "capture")
+      .filter(({ id }) => id === "today" || id === "classroom")
       .map(({ id }) => id),
   );
   assert.ok(Object.isFrozen(APP_ROUTES));

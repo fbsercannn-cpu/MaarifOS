@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import {
   CalendarIcon,
+  CheckCircledIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   Cross2Icon,
@@ -9,12 +10,16 @@ import {
   MagnifyingGlassIcon,
   PersonIcon,
   PlusIcon,
+  ReaderIcon,
 } from "@radix-ui/react-icons";
+import { KeyboardInput } from "../../mobile";
 import {
   CLASSROOM_STATUS_LABELS,
   classroomRosterStatus,
   classroomScreenDescription,
   classroomStudentDisplayName,
+  createClassroomTaskCenterSummary,
+  resolveClassroomPriorityTask,
   type ClassroomScreenSummary,
   type ClassroomStudentViewModel,
 } from "./classroom-screen-model";
@@ -41,6 +46,7 @@ export interface ClassroomScreenProps {
   renderAvatar?: (student: ClassroomStudentViewModel) => ReactNode;
   onSearchQueryChange: (value: string) => void;
   onOpenAddStudent: () => void;
+  onOpenAttendance: () => void;
   onOpenExport: () => void;
   onOpenProfile: ClassroomAction;
   onOpenObservation: ClassroomAction;
@@ -93,6 +99,7 @@ export function ClassroomScreen({
   renderAvatar,
   onSearchQueryChange,
   onOpenAddStudent,
+  onOpenAttendance,
   onOpenExport,
   onOpenProfile,
   onOpenObservation,
@@ -105,8 +112,67 @@ export function ClassroomScreen({
   const headingId = `${componentId}-heading`;
   const activeStudentsHeadingId = `${componentId}-active-students-heading`;
   const descriptionId = `${componentId}-description`;
+  const taskCenterHeadingId = `${componentId}-task-center-heading`;
+  const priorityDetailId = `${componentId}-priority-detail`;
+  const priorityDisabledReasonId = `${componentId}-priority-disabled-reason`;
   const avatarFor = (student: ClassroomStudentViewModel) =>
     renderAvatar ? renderAvatar(student) : <DefaultStudentAvatar student={student} />;
+  const taskCenter = createClassroomTaskCenterSummary({
+    summary,
+    students: visibleStudents,
+    hasActiveSearch,
+  });
+  const priorityTask = resolveClassroomPriorityTask({
+    summary,
+    students: visibleStudents,
+    hasActiveSearch,
+    educationalWritesDisabled,
+    observationCountFor: getObservationCount,
+  });
+  const priorityActionLabel =
+    priorityTask.kind === "open-attendance"
+      ? priorityTask.actionLabel
+      : priorityTask.kind === "add-student"
+      ? "Çocuk ekle"
+      : priorityTask.kind === "clear-search"
+        ? "Aramayı temizle"
+        : priorityTask.kind === "observe-student"
+          ? "Gözlem ekle"
+          : priorityTask.kind === "review-profile"
+            ? "Dosyayı aç"
+            : "Dökümü denetle";
+  const runPriorityAction = () => {
+    if (priorityTask.kind === "open-attendance") {
+      onOpenAttendance();
+      return;
+    }
+    if (priorityTask.kind === "add-student") {
+      onOpenAddStudent();
+      return;
+    }
+    if (priorityTask.kind === "clear-search") {
+      onSearchQueryChange("");
+      return;
+    }
+    if (priorityTask.kind === "observe-student") {
+      void onOpenObservation(priorityTask.studentId);
+      return;
+    }
+    if (priorityTask.kind === "review-profile") {
+      void onOpenProfile(priorityTask.studentId);
+      return;
+    }
+    onOpenExport();
+  };
+  const priorityActionDisabled =
+    isBusy ||
+    (priorityTask.kind === "open-attendance" && educationalWritesDisabled);
+  const priorityDisabledReason = isBusy
+    ? "Kayıt işlemi tamamlanıyor; eylem birazdan açılacak."
+    : priorityTask.kind === "open-attendance" && educationalWritesDisabled
+      ? educationalWriteNotice ??
+        "Eğitim yılı etkin olmadığı için yoklama değiştirilemez."
+      : null;
 
   return (
     <main
@@ -133,28 +199,105 @@ export function ClassroomScreen({
         </p>
       ) : null}
 
-      <div className="roster-overview" aria-label="Sınıf özeti">
-        <div>
-          <strong>{summary.activeStudentCount}</strong>
-          <span>Aktif çocuk</span>
+      <section
+        className="classroom-command-center"
+        aria-labelledby={taskCenterHeadingId}
+      >
+        <div className="classroom-command-center__heading">
+          <div>
+            <span className="d1-kicker">Öğretmen kontrolü</span>
+            <h2 id={taskCenterHeadingId}>Sınıf görev merkezi</h2>
+          </div>
+          <div className="classroom-command-center__summary" aria-label="Sınıf özeti">
+            <span><strong>{summary.activeStudentCount}</strong> aktif</span>
+            <span><strong>{summary.presentStudentCount}</strong> geldi</span>
+            <span><strong>{archivedStudents.length}</strong> arşiv</span>
+          </div>
         </div>
-        <div>
-          <strong>{summary.presentStudentCount}</strong>
-          <span>Bugün geldi</span>
+
+        <div
+          className="classroom-health-grid"
+          role="status"
+          aria-label="Sınıf yoklama ve kanıt durumu"
+          aria-live="polite"
+        >
+          <article data-state={taskCenter.attendance.state}>
+            <span className="classroom-health-icon" aria-hidden="true">
+              {taskCenter.attendance.state === "ready" ? (
+                <CheckCircledIcon />
+              ) : (
+                <CalendarIcon />
+              )}
+            </span>
+            <div>
+              <small>Bugünün yoklaması</small>
+              <strong>{taskCenter.attendance.title}</strong>
+              <span>{taskCenter.attendance.detail}</span>
+            </div>
+          </article>
+          <article data-state={taskCenter.evidence.state}>
+            <span className="classroom-health-icon" aria-hidden="true">
+              {taskCenter.evidence.state === "ready" ? (
+                <CheckCircledIcon />
+              ) : (
+                <ReaderIcon />
+              )}
+            </span>
+            <div>
+              <small>Kanıt izi</small>
+              <strong>{taskCenter.evidence.title}</strong>
+              <span>{taskCenter.evidence.detail}</span>
+            </div>
+          </article>
         </div>
-        <div>
-          <strong>
-            {summary.observedStudentCount}/{summary.activeStudentCount}
-          </strong>
-          <span>Gözlem izi</span>
+
+        <div className="classroom-priority-task">
+          <span className="classroom-priority-task__icon" aria-hidden="true">
+            {priorityTask.kind === "open-attendance" ? (
+              <CalendarIcon />
+            ) : priorityTask.kind === "export-observations" ||
+            priorityTask.kind === "review-profile" ? (
+              <ReaderIcon />
+            ) : priorityTask.kind === "clear-search" ? (
+              <MagnifyingGlassIcon />
+            ) : priorityTask.kind === "observe-student" ? (
+              <PlusIcon />
+            ) : (
+              <PersonIcon />
+            )}
+          </span>
+          <div aria-live="polite">
+            <small>Sıradaki kritik iş</small>
+            <strong>{priorityTask.title}</strong>
+            <span id={priorityDetailId}>{priorityTask.detail}</span>
+            {priorityDisabledReason ? (
+              <span
+                className="classroom-priority-task__disabled-reason"
+                id={priorityDisabledReasonId}
+              >
+                {priorityDisabledReason}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={runPriorityAction}
+            disabled={priorityActionDisabled}
+            aria-describedby={`${priorityDetailId}${
+              priorityDisabledReason ? ` ${priorityDisabledReasonId}` : ""
+            }`}
+          >
+            {priorityActionLabel}
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
         </div>
-      </div>
+      </section>
 
       <div className="roster-toolbar">
         <label className="roster-search">
           <MagnifyingGlassIcon aria-hidden="true" />
           <span className="classroom-screen__visually-hidden">Öğrenci ara</span>
-          <input
+          <KeyboardInput
             type="search"
             value={searchQuery}
             onChange={(event) => onSearchQueryChange(event.target.value)}
@@ -240,32 +383,44 @@ export function ClassroomScreen({
                           {CLASSROOM_STATUS_LABELS[rosterStatus]} · {observationCount} gözlem
                         </span>
                       </span>
-                      <ChevronRightIcon aria-hidden="true" />
+                      <span className="roster-profile-cta" aria-hidden="true">
+                        <ReaderIcon />
+                        Dosya
+                      </span>
                     </button>
 
-                    <button
-                      className="roster-quick-action"
-                      type="button"
-                      onClick={() => void onOpenObservation(student.id)}
-                      disabled={isBusy || educationalWritesDisabled}
-                      aria-label={`${student.name} için hızlı gözlem`}
-                      aria-describedby={
-                        educationalWritesDisabled ? "academic-year-mode-copy" : undefined
-                      }
+                    <div
+                      className="roster-card-primary-actions"
+                      role="group"
+                      aria-label={`${student.name} hızlı işlemleri`}
                     >
-                      <PlusIcon aria-hidden="true" />
-                    </button>
+                      <button
+                        className="roster-quick-action"
+                        type="button"
+                        onClick={() => void onOpenObservation(student.id)}
+                        disabled={isBusy || educationalWritesDisabled}
+                        aria-label={`${student.name} için gözlem ekle`}
+                        aria-describedby={
+                          educationalWritesDisabled ? "academic-year-mode-copy" : undefined
+                        }
+                      >
+                        <PlusIcon aria-hidden="true" />
+                        Gözlem
+                      </button>
 
-                    <button
-                      className="roster-more-action"
-                      type="button"
-                      onClick={() => onToggleStudentActions(student.id)}
-                      aria-label={`${student.name} için işlemler`}
-                      aria-expanded={actionsOpen}
-                      aria-controls={actionsId}
-                    >
-                      <DotsHorizontalIcon aria-hidden="true" />
-                    </button>
+                      <button
+                        className="roster-more-action"
+                        type="button"
+                        onClick={() => onToggleStudentActions(student.id)}
+                        aria-label={`${student.name} için diğer işlemler`}
+                        aria-expanded={actionsOpen}
+                        aria-pressed={actionsOpen}
+                        aria-controls={actionsId}
+                      >
+                        <DotsHorizontalIcon aria-hidden="true" />
+                        İşlemler
+                      </button>
+                    </div>
                   </div>
 
                   {actionsOpen ? (
@@ -276,19 +431,6 @@ export function ClassroomScreen({
                       aria-label={`${student.name} işlemleri`}
                     >
                       <span>Geçmiş gözlem ve devam kayıtları korunur.</span>
-                      <button
-                        className="roster-action-observe"
-                        type="button"
-                        onClick={() => void onOpenObservation(student.id)}
-                        disabled={isBusy || educationalWritesDisabled}
-                        aria-label={`${student.name} için hızlı gözlem menü işlemi`}
-                        aria-describedby={
-                          educationalWritesDisabled ? "academic-year-mode-copy" : undefined
-                        }
-                      >
-                        <PlusIcon aria-hidden="true" />
-                        Gözlem ekle
-                      </button>
                       <button
                         type="button"
                         onClick={() => void onArchiveStudent(student.id)}

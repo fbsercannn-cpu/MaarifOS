@@ -2,6 +2,8 @@ export const CAPABILITY_IDS = Object.freeze([
   "today",
   "classroom",
   "capture",
+  "planningHub",
+  "recordsHub",
   "attendanceV2",
   "localBackupRestore",
   "appLock",
@@ -29,6 +31,8 @@ export const ALPHA_CAPABILITIES = Object.freeze({
   today: true,
   classroom: true,
   capture: true,
+  planningHub: true,
+  recordsHub: true,
   attendanceV2: true,
   localBackupRestore: true,
   appLock: true,
@@ -50,12 +54,17 @@ export function isCapabilityEnabled(capability: CapabilityId): boolean {
   return ALPHA_CAPABILITIES[capability];
 }
 
-export type AlphaPrimaryNavigationId = "today" | "classroom" | "capture";
+export type AlphaPrimaryNavigationId =
+  | "today"
+  | "classroom"
+  | "capture"
+  | "plans"
+  | "documents";
 
 export interface AlphaPrimaryNavigationItem {
   readonly id: AlphaPrimaryNavigationId;
-  readonly label: "Bugün" | "Sınıfım" | "Kayıt Ekle";
-  readonly capability: AlphaPrimaryNavigationId;
+  readonly label: "Bugün" | "Sınıfım" | "Kayıt Ekle" | "Planlar" | "Belgeler";
+  readonly capability: "today" | "classroom" | "capture" | "planningHub" | "recordsHub";
 }
 
 const ALPHA_PRIMARY_NAVIGATION: readonly AlphaPrimaryNavigationItem[] =
@@ -67,6 +76,12 @@ const ALPHA_PRIMARY_NAVIGATION: readonly AlphaPrimaryNavigationItem[] =
       capability: "classroom",
     }),
     Object.freeze({ id: "capture", label: "Kayıt Ekle", capability: "capture" }),
+    Object.freeze({ id: "plans", label: "Planlar", capability: "planningHub" }),
+    Object.freeze({
+      id: "documents",
+      label: "Belgeler",
+      capability: "recordsHub",
+    }),
   ]);
 
 export function visiblePrimaryNavigation(): readonly AlphaPrimaryNavigationItem[] {

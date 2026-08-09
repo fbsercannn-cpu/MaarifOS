@@ -102,6 +102,74 @@ function weeklyDecisionLabel(decision: PremiumNextPlanDecision): string {
   return "Aynen sürdür";
 }
 
+const PREMIUM_READ_ONLY_REASON_ID = "premium-plan-read-only-reason";
+
+export interface PremiumPlanReadOnlyPresentation {
+  mutationsBlocked: boolean;
+  canReadExistingTeacherPlans: boolean;
+  title: string;
+  reason: string;
+}
+
+export function premiumPlanReadOnlyPresentation(
+  access: VerifiedPremiumAccess | null,
+  premiumContentAllowed: boolean,
+): PremiumPlanReadOnlyPresentation {
+  if (premiumContentAllowed) {
+    return {
+      mutationsBlocked: false,
+      canReadExistingTeacherPlans:
+        access?.canReadExistingTeacherPlans === true,
+      title: "Premium düzenleme etkin",
+      reason: "Premium plan işlemleri bu cihazda doğrulandı.",
+    };
+  }
+
+  const commonReadOnlyDetail = access?.canReadExistingTeacherPlans
+    ? "Mevcut öğretmen planlarınız okunabilir kalır; yeni premium plan, tercih veya değerlendirme kaydı oluşturulmaz."
+    : "Premium planları açmak ve değiştirmek için erişimi yeniden doğrulayın.";
+
+  if (access?.status === "expired") {
+    return {
+      mutationsBlocked: true,
+      canReadExistingTeacherPlans: access.canReadExistingTeacherPlans,
+      title: "Premium erişimin süresi doldu",
+      reason: `${commonReadOnlyDetail} Düzenlemeye devam etmek için premium erişimi yenileyin.`,
+    };
+  }
+  if (access?.status === "refresh-required") {
+    return {
+      mutationsBlocked: true,
+      canReadExistingTeacherPlans: access.canReadExistingTeacherPlans,
+      title: "Premium erişim yenileme bekliyor",
+      reason: `${commonReadOnlyDetail} Cihaz çevrimiçi olduğunda premium erişimi yenileyin.`,
+    };
+  }
+  if (access?.status === "revoked") {
+    return {
+      mutationsBlocked: true,
+      canReadExistingTeacherPlans: access.canReadExistingTeacherPlans,
+      title: "Premium erişim iptal edildi",
+      reason: `${commonReadOnlyDetail} Yeniden etkinleştirme için geçerli bir premium erişim bağlayın.`,
+    };
+  }
+
+  return {
+    mutationsBlocked: true,
+    canReadExistingTeacherPlans:
+      access?.canReadExistingTeacherPlans === true,
+    title: "Premium düzenleme doğrulanamadı",
+    reason: `${commonReadOnlyDetail} Bu işlem için etkin ve bu pakete ait doğrulanmış premium erişim gerekir.`,
+  };
+}
+
+export function assertPremiumPlanMutationAccess(
+  access: VerifiedPremiumAccess | null,
+  pack: PremiumContentPack,
+): asserts access is VerifiedPremiumAccess {
+  assertPremiumPackActionAccess(access, pack, "content");
+}
+
 export interface PremiumPlanCenterScreenProps {
   store: LocalDataStore;
   curriculumProfile: CurriculumProfileSnapshot;
@@ -294,6 +362,14 @@ export function PremiumPlanCenterScreen({
     pack &&
     canPerformPremiumPackAction(effectivePremiumAccess, pack, "export"),
   );
+  const readOnlyPresentation = useMemo(
+    () =>
+      premiumPlanReadOnlyPresentation(
+        effectivePremiumAccess,
+        premiumContentAllowed,
+      ),
+    [effectivePremiumAccess, premiumContentAllowed],
+  );
   const accessPresentation = useMemo(() => {
     if (effectivePremiumAccess?.source === "development-preview") {
       return {
@@ -302,6 +378,14 @@ export function PremiumPlanCenterScreen({
         detail:
           "Bu yerel önizleme yalnız ürün doğrulaması içindir; üretim erişimi imzalı cihaz yetkisiyle açılır.",
         access: "Yerel önizleme",
+      };
+    }
+    if (readOnlyPresentation.mutationsBlocked && effectivePremiumAccess) {
+      return {
+        header: "salt okunur",
+        title: readOnlyPresentation.title,
+        detail: readOnlyPresentation.reason,
+        access: "Salt okunur",
       };
     }
     if (effectivePremiumAccess?.grant.accessMode === "staff-code") {
@@ -337,14 +421,14 @@ export function PremiumPlanCenterScreen({
       detail: "İçeriği kullanmak için bu cihazda geçerli bir premium erişim gerekir.",
       access: "Kilitli",
     };
-  }, [effectivePremiumAccess]);
+  }, [effectivePremiumAccess, readOnlyPresentation]);
 
   const install = async () => {
     if (!pack || busy) return;
     setBusy(true);
     setError("");
     try {
-      assertPremiumPackActionAccess(effectivePremiumAccess, pack, "content");
+      assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       await installPremiumPlanBoard(store, {
         pack,
         curriculumProfile,
@@ -378,6 +462,7 @@ export function PremiumPlanCenterScreen({
     setBusy(true);
     setError("");
     try {
+      assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       await updatePremiumPlanLensPreferences(store, {
         pack,
         teacherPreferredLensId,
@@ -394,7 +479,7 @@ export function PremiumPlanCenterScreen({
   const useActivity = (activityId: string) => {
     if (!pack || !installed) return;
     try {
-      assertPremiumPackActionAccess(effectivePremiumAccess, pack, "content");
+      assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       onUseActivity(
         preparePremiumDailyTemplate(pack, activityId, {
           annualPlanId: installed.annualPlanId,
@@ -523,10 +608,11 @@ export function PremiumPlanCenterScreen({
   };
 
   const saveWeeklyReview = async () => {
-    if (!reviewContext || reviewBusy) return;
+    if (!pack || !reviewContext || reviewBusy) return;
     setReviewBusy(true);
     setReviewMessage("");
     try {
+      assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       const evaluation = await recordPremiumWeeklyEvaluation(store, {
         weeklyPlanId: reviewContext.weeklyPlanId,
         reflection: reviewReflection,
@@ -678,10 +764,11 @@ export function PremiumPlanCenterScreen({
   };
 
   const saveMonthlyReview = async () => {
-    if (!monthlyReviewContext || monthlyReviewBusy) return;
+    if (!pack || !monthlyReviewContext || monthlyReviewBusy) return;
     setMonthlyReviewBusy(true);
     setMonthlyReviewMessage("");
     try {
+      assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       const evaluation = await recordPremiumMonthlyEvaluation(store, {
         monthlyPlanId: monthlyReviewContext.monthlyPlanId,
         childEvidenceState: monthlyEvidenceState,
@@ -751,6 +838,18 @@ export function PremiumPlanCenterScreen({
 
         {busy && !pack ? <p className="premium-loading">İçerik paketi doğrulanıyor…</p> : null}
         {error ? <p className="premium-error" role="alert">{error}</p> : null}
+
+        {pack && readOnlyPresentation.mutationsBlocked ? (
+          <section
+            className="premium-eligibility-warning"
+            id={PREMIUM_READ_ONLY_REASON_ID}
+            role="status"
+            aria-live="polite"
+          >
+            <strong>{readOnlyPresentation.title}</strong>
+            <span>{readOnlyPresentation.reason}</span>
+          </section>
+        ) : null}
 
         {pack ? (
           <>
@@ -837,6 +936,12 @@ export function PremiumPlanCenterScreen({
                     type="button"
                     role="listitem"
                     aria-pressed={teacherPreferredLensId === lens.id}
+                    aria-describedby={
+                      readOnlyPresentation.mutationsBlocked
+                        ? PREMIUM_READ_ONLY_REASON_ID
+                        : undefined
+                    }
+                    disabled={readOnlyPresentation.mutationsBlocked}
                     onClick={() => {
                       setTeacherPreferredLensId(lens.id);
                       setTeacherPreferredSupportingLensIds((current) =>
@@ -865,6 +970,12 @@ export function PremiumPlanCenterScreen({
                         key={lens.id}
                         type="button"
                         aria-pressed={teacherPreferredSupportingLensIds.includes(lens.id)}
+                        aria-describedby={
+                          readOnlyPresentation.mutationsBlocked
+                            ? PREMIUM_READ_ONLY_REASON_ID
+                            : undefined
+                        }
+                        disabled={readOnlyPresentation.mutationsBlocked}
                         onClick={() => toggleSupportingLens(lens.id)}
                       >
                         {lens.displayName}
@@ -876,7 +987,12 @@ export function PremiumPlanCenterScreen({
                 <button
                   className="premium-lens-apply"
                   type="button"
-                  disabled={busy}
+                  aria-describedby={
+                    readOnlyPresentation.mutationsBlocked
+                      ? PREMIUM_READ_ONLY_REASON_ID
+                      : undefined
+                  }
+                  disabled={busy || readOnlyPresentation.mutationsBlocked}
                   onClick={() => void applyLensPreference()}
                 >
                   Yaklaşım tercihini plana kaydet
@@ -1084,7 +1200,16 @@ export function PremiumPlanCenterScreen({
                             <p>{activity.reflectionPrompt}</p>
                           </details>
                           {activity.activityRole === "main" ? (
-                            <button type="button" disabled={!installed || busy || !eligible || !premiumContentAllowed} onClick={() => useActivity(activity.id)}>
+                            <button
+                              type="button"
+                              aria-describedby={
+                                readOnlyPresentation.mutationsBlocked
+                                  ? PREMIUM_READ_ONLY_REASON_ID
+                                  : undefined
+                              }
+                              disabled={!installed || busy || !eligible || !premiumContentAllowed}
+                              onClick={() => useActivity(activity.id)}
+                            >
                               <ReaderIcon aria-hidden="true" /> Tam gün planını hazırla
                             </button>
                           ) : (
@@ -1095,10 +1220,19 @@ export function PremiumPlanCenterScreen({
                     <button
                       className="premium-week-review-button"
                       type="button"
+                      aria-describedby={
+                        readOnlyPresentation.mutationsBlocked
+                          ? PREMIUM_READ_ONLY_REASON_ID
+                          : undefined
+                      }
                       disabled={!installed || reviewBusy}
                       onClick={() => void openWeeklyReview(week.id)}
                     >
-                      {reviewContext?.weekId === week.id ? "Değerlendirmeyi kapat" : "Haftayı kanıtlarla değerlendir"}
+                      {reviewContext?.weekId === week.id
+                        ? "Hafta kayıtlarını kapat"
+                        : readOnlyPresentation.mutationsBlocked
+                          ? "Hafta planını ve değerlendirmeleri incele"
+                          : "Haftayı kanıtlarla değerlendir"}
                     </button>
                     {reviewContext?.weekId === week.id ? (
                       <section className="premium-week-review" aria-label={`${week.title} değerlendirmesi`}>
@@ -1118,6 +1252,12 @@ export function PremiumPlanCenterScreen({
                                     <input
                                       type="checkbox"
                                       checked={reviewObservationIds.includes(observation.id)}
+                                      aria-describedby={
+                                        readOnlyPresentation.mutationsBlocked
+                                          ? PREMIUM_READ_ONLY_REASON_ID
+                                          : undefined
+                                      }
+                                      disabled={readOnlyPresentation.mutationsBlocked}
                                       onChange={(event) =>
                                         setReviewObservationIds((current) =>
                                           event.target.checked
@@ -1138,6 +1278,12 @@ export function PremiumPlanCenterScreen({
                                         type="button"
                                         aria-expanded={editorOpen}
                                         aria-controls={`value-evidence-panel-${observation.id}`}
+                                        aria-describedby={
+                                          readOnlyPresentation.mutationsBlocked
+                                            ? PREMIUM_READ_ONLY_REASON_ID
+                                            : undefined
+                                        }
+                                        disabled={readOnlyPresentation.mutationsBlocked}
                                         onClick={(event) => {
                                           valueEvidenceTriggerRef.current =
                                             event.currentTarget;
@@ -1160,13 +1306,18 @@ export function PremiumPlanCenterScreen({
                                       </small>
                                     )}
                                   </div>
-                                  {editorOpen && observation.studentId ? (
+                                  {editorOpen &&
+                                  observation.studentId &&
+                                  !readOnlyPresentation.mutationsBlocked ? (
                                     <div id={`value-evidence-panel-${observation.id}`}>
                                       <ValueEvidenceLinkEditor
                                         store={store}
                                         observationId={observation.id}
                                         studentId={observation.studentId}
-                                        writesDisabled={valueEvidenceWritesDisabled}
+                                        writesDisabled={
+                                          valueEvidenceWritesDisabled ||
+                                          readOnlyPresentation.mutationsBlocked
+                                        }
                                         onClose={closeValueEvidenceEditor}
                                       />
                                     </div>
@@ -1182,6 +1333,12 @@ export function PremiumPlanCenterScreen({
                         <KeyboardTextarea
                           id={`premium-review-evidence-${week.id}`}
                           value={reviewEvidenceSummary}
+                          aria-describedby={
+                            readOnlyPresentation.mutationsBlocked
+                              ? PREMIUM_READ_ONLY_REASON_ID
+                              : undefined
+                          }
+                          disabled={readOnlyPresentation.mutationsBlocked}
                           onChange={(event) => setReviewEvidenceSummary(event.target.value)}
                           placeholder="Seçilen gözlemlerde ortaklaşan veya ayrışan kanıtları yazın."
                         />
@@ -1189,6 +1346,12 @@ export function PremiumPlanCenterScreen({
                         <KeyboardTextarea
                           id={`premium-review-reflection-${week.id}`}
                           value={reviewReflection}
+                          aria-describedby={
+                            readOnlyPresentation.mutationsBlocked
+                              ? PREMIUM_READ_ONLY_REASON_ID
+                              : undefined
+                          }
+                          disabled={readOnlyPresentation.mutationsBlocked}
                           onChange={(event) => setReviewReflection(event.target.value)}
                           placeholder="Neyin işe yaradığını ve hangi uyarlamanın gerektiğini yazın."
                         />
@@ -1204,6 +1367,12 @@ export function PremiumPlanCenterScreen({
                               type="button"
                               role="radio"
                               aria-checked={reviewDecision === decision}
+                              aria-describedby={
+                                readOnlyPresentation.mutationsBlocked
+                                  ? PREMIUM_READ_ONLY_REASON_ID
+                                  : undefined
+                              }
+                              disabled={readOnlyPresentation.mutationsBlocked}
                               onClick={() => setReviewDecision(decision)}
                             >
                               {label}
@@ -1213,8 +1382,14 @@ export function PremiumPlanCenterScreen({
                         <button
                           className="premium-review-save"
                           type="button"
+                          aria-describedby={
+                            readOnlyPresentation.mutationsBlocked
+                              ? PREMIUM_READ_ONLY_REASON_ID
+                              : undefined
+                          }
                           disabled={
                             reviewBusy ||
+                            readOnlyPresentation.mutationsBlocked ||
                             reviewObservationIds.length === 0 ||
                             !reviewEvidenceSummary.trim() ||
                             !reviewReflection.trim()
@@ -1250,12 +1425,19 @@ export function PremiumPlanCenterScreen({
               <button
                 className="premium-week-review-button"
                 type="button"
-                disabled={!installed || monthlyReviewBusy || !premiumContentAllowed}
+                aria-describedby={
+                  readOnlyPresentation.mutationsBlocked
+                    ? PREMIUM_READ_ONLY_REASON_ID
+                    : undefined
+                }
+                disabled={!installed || monthlyReviewBusy}
                 onClick={() => void openMonthlyReview()}
               >
                 {monthlyReviewContext
-                  ? "Aylık değerlendirmeyi kapat"
-                  : "Eylül ayını kanıtlar ve yansıtmayla değerlendir"}
+                  ? "Aylık değerlendirme kayıtlarını kapat"
+                  : readOnlyPresentation.mutationsBlocked
+                    ? "Aylık planı ve değerlendirmeleri incele"
+                    : "Eylül ayını kanıtlar ve yansıtmayla değerlendir"}
               </button>
               {monthlyReviewContext ? (
                 <section
@@ -1296,6 +1478,12 @@ export function PremiumPlanCenterScreen({
                         type="button"
                         role="radio"
                         aria-checked={monthlyEvidenceState === "insufficient-evidence"}
+                        aria-describedby={
+                          readOnlyPresentation.mutationsBlocked
+                            ? PREMIUM_READ_ONLY_REASON_ID
+                            : undefined
+                        }
+                        disabled={readOnlyPresentation.mutationsBlocked}
                         onClick={() => setMonthlyEvidenceState("insufficient-evidence")}
                       >
                         Kanıt yetersiz
@@ -1304,6 +1492,12 @@ export function PremiumPlanCenterScreen({
                         type="button"
                         role="radio"
                         aria-checked={monthlyEvidenceState === "sufficient-evidence"}
+                        aria-describedby={
+                          readOnlyPresentation.mutationsBlocked
+                            ? PREMIUM_READ_ONLY_REASON_ID
+                            : undefined
+                        }
+                        disabled={readOnlyPresentation.mutationsBlocked}
                         onClick={() => setMonthlyEvidenceState("sufficient-evidence")}
                       >
                         Seçili kanıt yeterli
@@ -1352,7 +1546,15 @@ export function PremiumPlanCenterScreen({
                                 <input
                                   type="checkbox"
                                   checked={selected}
-                                  disabled={observation.curriculumLinks.length === 0}
+                                  aria-describedby={
+                                    readOnlyPresentation.mutationsBlocked
+                                      ? PREMIUM_READ_ONLY_REASON_ID
+                                      : undefined
+                                  }
+                                  disabled={
+                                    observation.curriculumLinks.length === 0 ||
+                                    readOnlyPresentation.mutationsBlocked
+                                  }
                                   onChange={(event) =>
                                     toggleMonthlyObservation(
                                       observation.id,
@@ -1386,6 +1588,12 @@ export function PremiumPlanCenterScreen({
                                       <input
                                         type="checkbox"
                                         checked={monthlyCurriculumLinkIds.includes(link.id)}
+                                        aria-describedby={
+                                          readOnlyPresentation.mutationsBlocked
+                                            ? PREMIUM_READ_ONLY_REASON_ID
+                                            : undefined
+                                        }
+                                        disabled={readOnlyPresentation.mutationsBlocked}
                                         onChange={(event) =>
                                           toggleMonthlyCurriculumLink(
                                             link.id,
@@ -1417,6 +1625,12 @@ export function PremiumPlanCenterScreen({
                     <KeyboardTextarea
                       id="premium-monthly-child-narrative"
                       value={monthlyChildNarrative}
+                      aria-describedby={
+                        readOnlyPresentation.mutationsBlocked
+                          ? PREMIUM_READ_ONLY_REASON_ID
+                          : undefined
+                      }
+                      disabled={readOnlyPresentation.mutationsBlocked}
                       onChange={(event) => setMonthlyChildNarrative(event.target.value)}
                       placeholder="Seçili olay kayıtlarının ortaklaştığı ve ayrıştığı durumları yazın; kanıt yetersizse kesin beceri hükmü kurmayın."
                     />
@@ -1434,6 +1648,12 @@ export function PremiumPlanCenterScreen({
                             <span>{criterion.label}</span>
                             <select
                               value={response?.status ?? "not-observed"}
+                              aria-describedby={
+                                readOnlyPresentation.mutationsBlocked
+                                  ? PREMIUM_READ_ONLY_REASON_ID
+                                  : undefined
+                              }
+                              disabled={readOnlyPresentation.mutationsBlocked}
                               onChange={(event) =>
                                 updateMonthlyProgramCriterion(
                                   criterion.id,
@@ -1457,6 +1677,12 @@ export function PremiumPlanCenterScreen({
                     <KeyboardTextarea
                       id="premium-monthly-program-narrative"
                       value={monthlyProgramNarrative}
+                      aria-describedby={
+                        readOnlyPresentation.mutationsBlocked
+                          ? PREMIUM_READ_ONLY_REASON_ID
+                          : undefined
+                      }
+                      disabled={readOnlyPresentation.mutationsBlocked}
                       onChange={(event) => setMonthlyProgramNarrative(event.target.value)}
                       placeholder="İşleyen ve aksayan yönleri; katılım, uygunluk, süre, ölçme, tutarlılık, çeşitlilik ve materyal açısından yazın."
                     />
@@ -1478,6 +1704,12 @@ export function PremiumPlanCenterScreen({
                             <span>{criterion.label}</span>
                             <select
                               value={response?.status ?? "not-observed"}
+                              aria-describedby={
+                                readOnlyPresentation.mutationsBlocked
+                                  ? PREMIUM_READ_ONLY_REASON_ID
+                                  : undefined
+                              }
+                              disabled={readOnlyPresentation.mutationsBlocked}
                               onChange={(event) =>
                                 updateMonthlyTeacherCriterion(
                                   criterion.id,
@@ -1501,6 +1733,12 @@ export function PremiumPlanCenterScreen({
                     <KeyboardTextarea
                       id="premium-monthly-teacher-narrative"
                       value={monthlyTeacherNarrative}
+                      aria-describedby={
+                        readOnlyPresentation.mutationsBlocked
+                          ? PREMIUM_READ_ONLY_REASON_ID
+                          : undefined
+                      }
+                      disabled={readOnlyPresentation.mutationsBlocked}
                       onChange={(event) => setMonthlyTeacherNarrative(event.target.value)}
                       placeholder="Planlama, ortam, ölçme, farklılaştırma, katılım, materyal, zaman, iletişim, uyum ve fırsat eşitliği kararlarınızı düşünün."
                     />
@@ -1512,6 +1750,12 @@ export function PremiumPlanCenterScreen({
                   <KeyboardTextarea
                     id="premium-monthly-next-recommendation"
                     value={monthlyNextRecommendation}
+                    aria-describedby={
+                      readOnlyPresentation.mutationsBlocked
+                        ? PREMIUM_READ_ONLY_REASON_ID
+                        : undefined
+                    }
+                    disabled={readOnlyPresentation.mutationsBlocked}
                     onChange={(event) => setMonthlyNextRecommendation(event.target.value)}
                     placeholder="Neyi sürdüreceğinizi, neyi uyarlayacağınızı ve hangi yeni kanıtı toplayacağınızı yazın."
                   />
@@ -1519,8 +1763,14 @@ export function PremiumPlanCenterScreen({
                   <button
                     className="premium-review-save"
                     type="button"
+                    aria-describedby={
+                      readOnlyPresentation.mutationsBlocked
+                        ? PREMIUM_READ_ONLY_REASON_ID
+                        : undefined
+                    }
                     disabled={
                       monthlyReviewBusy ||
+                      readOnlyPresentation.mutationsBlocked ||
                       !monthlyProgramNarrative.trim() ||
                       !monthlyTeacherNarrative.trim() ||
                       !monthlyNextRecommendation.trim() ||
@@ -1667,7 +1917,18 @@ export function PremiumPlanCenterScreen({
               ) : (
                 <>
                   <span><strong>Önce Eylül paketini ve yıllık omurgayı sınıfa ekleyin</strong><small>İşlem bir yıllık omurga, yalnız Eylül’e ait bir aylık plan ve dört haftalık kayıt oluşturur; var olan kayıtları değiştirmez.</small></span>
-                  <button type="button" onClick={() => void install()} disabled={!eligible || busy || !premiumContentAllowed}>Eylül paketini + yıllık omurgayı ekle</button>
+                  <button
+                    type="button"
+                    aria-describedby={
+                      readOnlyPresentation.mutationsBlocked
+                        ? PREMIUM_READ_ONLY_REASON_ID
+                        : undefined
+                    }
+                    onClick={() => void install()}
+                    disabled={!eligible || busy || !premiumContentAllowed}
+                  >
+                    Eylül paketini + yıllık omurgayı ekle
+                  </button>
                 </>
               )}
             </section>

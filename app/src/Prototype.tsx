@@ -82,6 +82,7 @@ import type { StoredRecord } from "./core/domain/model";
 import {
   isCapabilityEnabled,
   visiblePrimaryNavigation,
+  type AlphaPrimaryNavigationId,
 } from "./core/capabilities/alpha-capabilities";
 import {
   backupReminderState,
@@ -137,6 +138,8 @@ import {
   type QuickObservationType,
 } from "./features/evidence/quick-observation";
 import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
+import { resolveObservationContext } from "./features/evidence/observation-context";
+import { verifyCommittedObservationRefresh } from "./features/evidence/observation-commit-refresh";
 import type { AnecdoteExportFormat } from "./features/anecdote/export-document.ts";
 import type { AnecdoteFormWorkspace } from "./features/anecdote/anecdote-form.ts";
 import {
@@ -159,10 +162,15 @@ import {
   type PremiumFounderConfiguration,
 } from "./features/premium-access/founder-client.ts";
 import {
+  assertPremiumPackActionAccess,
+  type PremiumPackAccessReference,
+} from "./features/premium-access/entitlement.ts";
+import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
   type EvidenceActivitySummary,
   type EvidenceObservationSummary,
+  type EvidencePremiumProvenance,
   type EvidenceWorkspace,
 } from "./features/evidence/evidence-workspace";
 import {
@@ -385,9 +393,9 @@ type ExternalFeedbackFormState = {
   includeInYearSummary: boolean;
 };
 
-const currentCivilDate = civilDateInIstanbul(new Date());
-const currentCivilYear = Number(currentCivilDate.slice(0, 4));
-const currentCivilMonth = Number(currentCivilDate.slice(5, 7));
+const bootstrapCivilDate = civilDateInIstanbul(new Date());
+const currentCivilYear = Number(bootstrapCivilDate.slice(0, 4));
+const currentCivilMonth = Number(bootstrapCivilDate.slice(5, 7));
 const currentAcademicStartYear =
   currentCivilMonth >= 9 ? currentCivilYear : currentCivilYear - 1;
 const initialClassroomForm: ClassroomFormState = {
@@ -532,6 +540,32 @@ type AttendanceChange = {
   nextEvents: AttendanceEvent[];
 };
 
+function premiumPackReferenceFromUnknown(
+  value: unknown,
+): PremiumPackAccessReference | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const keys = [
+    "sku",
+    "contentReleaseId",
+    "id",
+    "version",
+    "manifestDigest",
+    "academicRelease",
+  ] as const;
+  if (keys.some((key) => typeof record[key] !== "string" || !record[key].trim())) {
+    return null;
+  }
+  return {
+    sku: record.sku as string,
+    contentReleaseId: record.contentReleaseId as string,
+    id: record.id as string,
+    version: record.version as string,
+    manifestDigest: record.manifestDigest as string,
+    academicRelease: record.academicRelease as string,
+  };
+}
+
 
 
 type PendingRestore = {
@@ -601,7 +635,22 @@ type EvidenceFlowRequest = {
   initialStudentId?: string;
 };
 
+type ObservationContextChoice = {
+  activities: EvidenceActivitySummary[];
+  civilDate: string;
+  spontaneousStudentId: string;
+  initialStudentId?: string;
+};
+
+type ObservationRefreshNotice = {
+  activityTitle: string;
+  committedObservationIds: string[];
+  observationCount: number;
+  reason: "read-failed" | "committed-record-missing";
+};
+
 type AppSurface =
+  | "capture-menu"
   | "attendance"
   | "student-profile"
   | "student-share"
@@ -613,6 +662,7 @@ type AppSurface =
   | "documents"
   | "release-notes"
   | "plan-flow"
+  | "premium-gate"
   | "premium-plans"
   | "evidence-flow";
 
@@ -621,7 +671,8 @@ const APP_HISTORY_MARKER = "__maarifOSSurface";
 function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
   if (!state || typeof state !== "object") return null;
   const candidate = (state as Record<string, unknown>)[APP_HISTORY_MARKER];
-  return candidate === "attendance" ||
+  return candidate === "capture-menu" ||
+    candidate === "attendance" ||
     candidate === "student-profile" ||
     candidate === "student-share" ||
     candidate === "student-delete" ||
@@ -632,6 +683,7 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
     candidate === "documents" ||
     candidate === "release-notes" ||
     candidate === "plan-flow" ||
+    candidate === "premium-gate" ||
     candidate === "premium-plans" ||
     candidate === "evidence-flow"
     ? candidate
@@ -778,7 +830,7 @@ type EvidenceFlowActions = {
       categoryIds: QuickObservationCategory[];
       taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
     },
-  ) => Promise<EvidenceObservationSummary>;
+  ) => Promise<void>;
   loadDraft: (
     activity: EvidenceActivitySummary,
     studentId: string,
@@ -1365,6 +1417,32 @@ function EvidenceCaptureScreen({
   const observationGuidance = isChildQuoteObservation
     ? "Çocuğun sözünü yorum eklemeden ve düzeltmeden yazın."
     : "Gördüğünüz ve duyduğunuz olayı yorum eklemeden yazın.";
+  const saveBlockedReason = busy
+    ? "Gözlem bu cihaza kaydediliyor."
+    : selectionMode === "single" && !studentId
+      ? "Önce gözlem yaptığınız çocuğu seçin."
+      : selectionMode === "selected-children" && groupStudentIds.length < 2
+        ? "Toplu gözlem için en az iki çocuk seçin."
+        : selectionMode === "selected-children" && !groupConfirmed
+          ? "Aynı gözlemin seçili çocuklar için geçerli olduğunu onaylayın."
+          : !rawText.trim()
+            ? "Gördüğünüz veya duyduğunuz olayı yazın."
+            : legacyDetailsReviewRequired
+              ? "Eski taslak ayrıntıları için ‘dahil et’ veya ‘çıkar’ seçimini yapın."
+              : "";
+  const saveReady = !saveBlockedReason;
+  const saveStatusLabel =
+    draftStatus === "loading"
+      ? "Taslak yükleniyor."
+      : draftStatus === "saving"
+        ? "Taslak bu cihazda korunuyor."
+        : draftStatus === "error"
+          ? "Taslak otomatik korunamadı; bağlantıyı kontrol edin."
+          : saveReady
+            ? draftStatus === "saved"
+              ? "Taslak bu cihazda korundu · Kaydetmeye hazır."
+              : "Gözlem kaydetmeye hazır."
+            : saveBlockedReason;
   const discardLegacyDetails = () => {
     setContext("");
     setChildQuote("");
@@ -1421,6 +1499,24 @@ function EvidenceCaptureScreen({
     <div className="quick-observation-page">
       <MobileScroll className="d1-flow-scroll quick-observation-scroll">
         <div className="quick-observation-content">
+          <section
+            className={`quick-context-banner quick-context-banner--${activity.contextKind}`}
+            aria-label="Gözlem bağlamı"
+          >
+            <TargetIcon aria-hidden="true" />
+            <span>
+              <strong>
+                {activity.contextKind === "planned-activity"
+                  ? "Plan etkinliğine bağlı gözlem"
+                  : "Plan dışı anlık gözlem"}
+              </strong>
+              <small>
+                {activity.contextKind === "planned-activity"
+                  ? `${activity.startTime} · ${activity.title} · kanıt plan zincirinde korunur`
+                  : "Bugün için uygun gerçek etkinlik bulunmadı; bu kayıt ayrı anlık bağlamda korunur."}
+              </small>
+            </span>
+          </section>
           {eligibleStudents.length === 0 ? (
             <section className="d1-empty-state">
               <strong>Önce sınıfa bir çocuk ekleyin.</strong>
@@ -1444,6 +1540,24 @@ function EvidenceCaptureScreen({
                 ) : (
                   <small>Zorunlu</small>
                 )}
+              </div>
+              <div className="quick-scope-switch" role="group" aria-label="Gözlem kapsamı">
+                <button
+                  type="button"
+                  aria-pressed={selectionMode === "single"}
+                  onClick={() => void chooseSingleMode()}
+                  disabled={busy || draftStatus === "loading"}
+                >
+                  Tek çocuk
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={selectionMode === "selected-children"}
+                  onClick={() => void chooseGroupMode()}
+                  disabled={busy || draftStatus === "loading"}
+                >
+                  Birden çok çocuk
+                </button>
               </div>
               <Carousel
                 className="quick-student-strip"
@@ -1477,6 +1591,41 @@ function EvidenceCaptureScreen({
                   );
                 })}
               </Carousel>
+              {selectionMode === "selected-children" ? (
+                <>
+                  <div className="quick-group-toolbar">
+                    <p>Çocuklara dokunarak kapsamı değiştirin; her kayıt ayrı korunur.</p>
+                    <button
+                      type="button"
+                      onClick={() => void toggleWholeClass()}
+                      disabled={busy || draftStatus === "loading"}
+                    >
+                      {allEligibleStudentsSelected ? "Seçimi temizle" : "Tüm sınıfı seç"}
+                    </button>
+                  </div>
+                  <section className="quick-group-safety" aria-label="Toplu gözlem onayı">
+                    <div>
+                      <CheckCircledIcon aria-hidden="true" />
+                      <span>
+                        <strong>Toplu kayıt, ortak olaylar içindir</strong>
+                        <small>Farklı davranışlar gözlediyseniz tek çocuk modunda ayrı ayrı yazın.</small>
+                      </span>
+                    </div>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={groupConfirmed}
+                      onChange={(event) => setGroupConfirmed(event.target.checked)}
+                      disabled={busy || groupStudentIds.length < 2}
+                    />
+                    <span>
+                      <strong>{groupStudentIds.length} çocuk için aynı gözlem geçerli</strong>
+                      <small>Her çocuk için ayrı, değişmez gözlem kaydı oluşturulur.</small>
+                    </span>
+                  </label>
+                  </section>
+                </>
+              ) : null}
             </section>
 
             <section className="quick-note-card">
@@ -1604,32 +1753,24 @@ function EvidenceCaptureScreen({
         </div>
       </MobileScroll>
       {eligibleStudents.length > 0 ? (
-        <div className="quick-save-dock">
-          <p>
-            <CheckCircledIcon aria-hidden="true" />
-            {draftStatus === "loading"
-              ? "Taslak yükleniyor"
-              : draftStatus === "saving"
-                ? "Taslak kaydediliyor"
-                : draftStatus === "saved"
-                  ? "Taslak bu cihazda korundu"
-                  : draftStatus === "error"
-                    ? "Taslak kaydedilemedi"
-                    : "Not yazmaya hazır"}
+        <div
+          className={`quick-save-dock${saveReady ? " is-ready" : " is-blocked"}${draftStatus === "error" ? " is-error" : ""}`}
+        >
+          <p id="quick-save-readiness" role="status">
+            {saveReady ? (
+              <CheckCircledIcon aria-hidden="true" />
+            ) : (
+              <ClockIcon aria-hidden="true" />
+            )}
+            {saveStatusLabel}
           </p>
           <button
             type="button"
             onClick={() => void save()}
-            disabled={
-              busy ||
-              !rawText.trim() ||
-              legacyDetailsReviewRequired ||
-              (selectionMode === "single"
-                ? !studentId
-                : groupStudentIds.length < 2 || !groupConfirmed)
-            }
+            disabled={!saveReady}
+            aria-describedby="quick-save-readiness"
           >
-            <LockClosedIcon aria-hidden="true" />
+            <CheckCircledIcon aria-hidden="true" />
             {busy
               ? "Kaydediliyor…"
               : selectionMode === "selected-children" &&
@@ -2177,6 +2318,8 @@ export default function Prototype() {
       readyCount: 0,
     });
   const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
+  const [observationContextChoice, setObservationContextChoice] =
+    useState<ObservationContextChoice | null>(null);
   const [newStudentName, setNewStudentName] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentAddOpen, setStudentAddOpen] = useState(false);
@@ -2202,8 +2345,13 @@ export default function Prototype() {
     planId: string;
     civilDate: string;
     activityTitle: string;
+    refreshRequired?: boolean;
   } | null>(null);
+  const [observationRefreshNotice, setObservationRefreshNotice] =
+    useState<ObservationRefreshNotice | null>(null);
+  const [observationRefreshBusy, setObservationRefreshBusy] = useState(false);
   const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
   const [premiumFounderAccess, setPremiumFounderAccess] =
     useState<PremiumFounderAccessResult | null>(null);
   const [premiumFounderBusy, setPremiumFounderBusy] = useState(
@@ -2323,6 +2471,107 @@ export default function Prototype() {
       })
     : null;
   const educationalWritesDisabled = educationalWriteNotice !== null;
+  const premiumMutationAllowed =
+    premiumPilotPreviewEnabled ||
+    internalStaffExportEnabled ||
+    isCapabilityEnabled("premiumPlanCenter") ||
+    (premiumFounderAccess?.access.status === "active" &&
+      premiumFounderAccess.access.canUsePremiumContent === true);
+  const assertPremiumMutationAccessNow = (
+    targetPack: PremiumPackAccessReference | null =
+      premiumFounderAccess?.pack ?? null,
+  ) => {
+    if (!targetPack) {
+      throw new Error(
+        "Premium kaynağın içerik paketi doğrulanamadı; değişiklik güvenlik için uygulanmadı.",
+      );
+    }
+    if (
+      premiumPilotPreviewEnabled ||
+      internalStaffExportEnabled ||
+      isCapabilityEnabled("premiumPlanCenter")
+    ) {
+      return;
+    }
+    if (!premiumFounderAccess) {
+      throw new Error("Premium işlem için etkin erişim gerekiyor.");
+    }
+    assertPremiumPackActionAccess(
+      premiumFounderAccess.access,
+      targetPack,
+      "content",
+      new Date(),
+    );
+  };
+  const premiumPackForEvidence = (
+    provenance: EvidencePremiumProvenance | undefined,
+  ): PremiumPackAccessReference | null | undefined =>
+    provenance?.status === "verified"
+      ? provenance.pack
+      : provenance?.status === "invalid"
+        ? null
+        : undefined;
+  type EducationalWriteGuard = {
+    allowPreparationForCivilDate?: string;
+  };
+  const evidenceMutationGuards = (
+    provenance: EvidencePremiumProvenance | undefined,
+  ): {
+    educationalWrite: EducationalWriteGuard;
+    premiumPack?: PremiumPackAccessReference | null;
+  } => {
+    const premiumPack = premiumPackForEvidence(provenance);
+    return {
+      educationalWrite: {},
+      ...(premiumPack !== undefined ? { premiumPack } : {}),
+    };
+  };
+  const assertEducationalWriteAllowedForContext = (
+    classroom: Extract<TodayWorkspace["classroom"], { status: "configured" }> | null,
+    guard: EducationalWriteGuard,
+    now: Date,
+  ) => {
+    if (!classroom) {
+      throw new Error(
+        "Eğitimsel kayıt için etkin ve arşivlenmemiş sınıf bulunmalıdır.",
+      );
+    }
+    const status = academicYearOperationalStatus(
+      classroom.academicYearStart,
+      classroom.academicYearEnd,
+      civilDateInIstanbul(now),
+    );
+    if (status === "active") return;
+    const preparationDate = guard.allowPreparationForCivilDate;
+    if (
+      status === "preparation" &&
+      preparationDate !== undefined &&
+      preparationDate >= classroom.academicYearStart &&
+      preparationDate <= classroom.academicYearEnd
+    ) {
+      return;
+    }
+    throw new Error(
+      academicYearOperationalNotice({
+        status,
+        startDate: classroom.academicYearStart,
+        endDate: classroom.academicYearEnd,
+      }) ?? "Eğitim yılı yeni kayıt için etkin değildir.",
+    );
+  };
+  const assertEducationalWriteAllowedAtCommit = async (
+    guard: EducationalWriteGuard,
+  ) => {
+    const now = new Date();
+    const liveWorkspace = await loadTodayWorkspace(store, { now });
+    assertEducationalWriteAllowedForContext(
+      liveWorkspace.classroom.status === "configured"
+        ? liveWorkspace.classroom
+        : null,
+      guard,
+      now,
+    );
+  };
   const classroomFormOperationalNotice = useMemo(() => {
     if (!classroomForm.academicYearStart || !classroomForm.academicYearEnd) {
       return null;
@@ -2383,7 +2632,8 @@ export default function Prototype() {
     [calendarSelectedDate, scheduledPlanWorkspace.plans],
   );
   const displayedPlanWorkspace = selectedPlanDayWorkspace ?? todayWorkspace;
-  const displayedPlanIsToday = displayedPlanWorkspace.civilDate === currentCivilDate;
+  const displayedPlanIsToday =
+    displayedPlanWorkspace.civilDate === attendanceCivilDate;
   const displayedScheduledPlan = scheduledPlanWorkspace.plans.find(
     (plan) => plan.civilDate === displayedPlanWorkspace.civilDate,
   ) ?? null;
@@ -2499,6 +2749,8 @@ export default function Prototype() {
       ? "plan-flow"
       : premiumPlanOpen
         ? "premium-plans"
+        : premiumGateOpen
+          ? "premium-gate"
       : studentShareOpen
         ? "student-share"
         : studentDeletionCandidate
@@ -2507,6 +2759,8 @@ export default function Prototype() {
         ? "student-profile"
         : attendanceOpen
           ? "attendance"
+          : captureMenuOpen
+            ? "capture-menu"
           : classroomOpen
               ? "classroom"
               : plansOpen
@@ -2555,6 +2809,8 @@ export default function Prototype() {
     options: {
       failureDetail?: string;
       successDetail?: string;
+      educationalWrite?: EducationalWriteGuard;
+      premiumPack?: PremiumPackAccessReference | null;
     } = {},
   ): Promise<Result> => {
     if (!persistenceReadyRef.current) {
@@ -2565,6 +2821,21 @@ export default function Prototype() {
             : "Cihaz verileri güvenli yazma durumunda değil. Yeniden bağlanmayı deneyin.",
         ),
       );
+    }
+
+    try {
+      if (options.educationalWrite) {
+        assertEducationalWriteAllowedForContext(
+          configuredClassroom,
+          options.educationalWrite,
+          new Date(),
+        );
+      }
+      if (options.premiumPack !== undefined) {
+        assertPremiumMutationAccessNow(options.premiumPack);
+      }
+    } catch (reason) {
+      return Promise.reject(reason);
     }
 
     pendingWriteCountRef.current += 1;
@@ -2582,6 +2853,12 @@ export default function Prototype() {
         throw new PersistenceUnavailableError(
           "Önceki yazma işlemi başarısız olduğu için yeni değişiklik uygulanmadı.",
         );
+      }
+      if (options.educationalWrite) {
+        await assertEducationalWriteAllowedAtCommit(options.educationalWrite);
+      }
+      if (options.premiumPack !== undefined) {
+        assertPremiumMutationAccessNow(options.premiumPack);
       }
       return operation();
     });
@@ -3599,6 +3876,7 @@ export default function Prototype() {
           attendanceCompleted: false,
         }),
       {
+        educationalWrite: {},
         failureDetail:
           "Devam değişikliği bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
         successDetail: `${student.name} için devam durumu kaydedildi.`,
@@ -3672,6 +3950,7 @@ export default function Prototype() {
             attendanceCompleted: false,
           }),
         {
+          educationalWrite: {},
           failureDetail:
             "Yoklama ayrıntısı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: `${student.name} için ${ATTENDANCE_EVENT_LABELS[event.type].toLocaleLowerCase("tr-TR")} kaydedildi.`,
@@ -3746,6 +4025,7 @@ export default function Prototype() {
             attendanceCompleted: false,
           }),
         {
+          educationalWrite: {},
           failureDetail:
             "Geri alma işlemi bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: `${student.name} için geri alma kaydedildi.`,
@@ -3790,6 +4070,7 @@ export default function Prototype() {
             attendanceCompleted: true,
           }),
         {
+          educationalWrite: {},
           failureDetail:
             "Devam durumu bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Bugünün devam durumu tamamlandı ve kaydedildi.",
@@ -3937,16 +4218,24 @@ export default function Prototype() {
     setDataBusy(true);
     setPortfolioError("");
     try {
-      await enqueuePersistence(() =>
-        savePortfolioSelection(store, {
-          studentId: selectedProfileStudent.id,
-          observationId: draft.observationId,
-          selected: true,
-          teacherCaption: draft.teacherCaption,
-          childReflection: draft.childReflection,
-          familyContribution: draft.familyContribution,
-          selectedBy: draft.selectedBy,
-        }),
+      await enqueuePersistence(
+        () =>
+          savePortfolioSelection(store, {
+            studentId: selectedProfileStudent.id,
+            observationId: draft.observationId,
+            selected: true,
+            teacherCaption: draft.teacherCaption,
+            childReflection: draft.childReflection,
+            familyContribution: draft.familyContribution,
+            selectedBy: draft.selectedBy,
+          }),
+        {
+          ...evidenceMutationGuards(
+            allEvidenceObservations.find(
+              (item) => item.id === draft.observationId,
+            )?.premiumProvenance,
+          ),
+        },
       );
       await refreshStudentPortfolio(selectedProfileStudent.id);
       keyboard.hide();
@@ -3969,12 +4258,19 @@ export default function Prototype() {
     setDataBusy(true);
     setPortfolioError("");
     try {
-      await enqueuePersistence(() =>
-        savePortfolioSelection(store, {
-          studentId: selectedProfileStudent.id,
-          observationId,
-          selected: false,
-        }),
+      await enqueuePersistence(
+        () =>
+          savePortfolioSelection(store, {
+            studentId: selectedProfileStudent.id,
+            observationId,
+            selected: false,
+          }),
+        {
+          ...evidenceMutationGuards(
+            allEvidenceObservations.find((item) => item.id === observationId)
+              ?.premiumProvenance,
+          ),
+        },
       );
       await refreshStudentPortfolio(selectedProfileStudent.id);
       keyboard.hide();
@@ -4371,6 +4667,7 @@ export default function Prototype() {
       setCalendarOpen(true);
       setAnnouncement("Eğitim takvimi açıldı.");
     } catch (reason) {
+      surfaceTransitionRef.current = null;
       setAnnouncement(
         reason instanceof Error
           ? reason.message
@@ -4383,6 +4680,9 @@ export default function Prototype() {
 
   const openTodayPlans = () => {
     setSelectedPlanDayWorkspace(null);
+    setDocumentsOpen(false);
+    setPremiumGateOpen(false);
+    surfaceTransitionRef.current = "plans";
     setPlansOpen(true);
   };
 
@@ -4410,6 +4710,13 @@ export default function Prototype() {
     if (writesBlocked) {
       setCalendarError(
         "Cihaz verileri yazmaya hazır değil. Plan düzenleme güvenlik için kapalı.",
+      );
+      return;
+    }
+    if (plan.premium && !premiumMutationAllowed) {
+      setPremiumGateOpen(true);
+      setCalendarError(
+        "Bu premium plan salt okunur. Düzenlemek için Premium erişimini yenileyin.",
       );
       return;
     }
@@ -4968,6 +5275,26 @@ export default function Prototype() {
       return;
     }
     if (!currentActivity || writesBlocked) return;
+    const currentEvidenceActivity = evidenceWorkspace.activities.find(
+      (item) =>
+        item.id === (currentActivity.activityId ?? currentActivity.id),
+    );
+    const targetPremiumPack = premiumPackForEvidence(
+      currentEvidenceActivity?.premiumProvenance,
+    );
+    if (currentActivity.kind === "premium-flow-block") {
+      try {
+        assertPremiumMutationAccessNow(targetPremiumPack ?? null);
+      } catch (reason) {
+        setPremiumGateOpen(true);
+        setAnnouncement(
+          reason instanceof Error
+            ? reason.message
+            : "Bu premium plan salt okunur. Etkinliği değiştirmek için Premium erişimini yenileyin.",
+        );
+        return;
+      }
+    }
     setDataBusy(true);
     try {
       await enqueuePersistence(
@@ -4978,6 +5305,10 @@ export default function Prototype() {
             "completed",
           ),
         {
+          educationalWrite: {},
+          ...(currentActivity.kind === "premium-flow-block"
+            ? { premiumPack: targetPremiumPack ?? null }
+            : {}),
           failureDetail:
             "Etkinlik durumu bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: `${currentActivity.title} tamamlandı olarak kaydedildi.`,
@@ -5018,6 +5349,7 @@ export default function Prototype() {
     const restorableSurface =
       surface === "evidence-flow" && !evidenceRequest ? null : surface;
 
+    setCaptureMenuOpen(restorableSurface === "capture-menu");
     setAttendanceOpen(restorableSurface === "attendance");
     setStudentProfileOpen(restorableSurface === "student-profile");
     setStudentShareOpen(restorableSurface === "student-share");
@@ -5033,6 +5365,7 @@ export default function Prototype() {
     setDocumentsOpen(restorableSurface === "documents");
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
+    setPremiumGateOpen(restorableSurface === "premium-gate");
     setPremiumPlanOpen(restorableSurface === "premium-plans");
     setEvidenceFlowRequest(evidenceRequest);
     setStudentActionsOpenId(null);
@@ -5126,7 +5459,8 @@ export default function Prototype() {
 
     const replaceCurrentEntry =
       previousSurface === "plan-flow" ||
-      previousSurface === "evidence-flow";
+      previousSurface === "evidence-flow" ||
+      previousSurface === "premium-gate";
     const method = replaceCurrentEntry ? "replaceState" : "pushState";
     window.history[method](
       appHistoryState(activeSurface),
@@ -5147,6 +5481,13 @@ export default function Prototype() {
     if (!configuredClassroom) {
       setClassroomOpen(true);
       setAnnouncement("Plan oluşturmadan önce sınıfınızı kurun.");
+      return;
+    }
+    if (initialTemplate && !premiumMutationAllowed) {
+      setPremiumGateOpen(true);
+      setAnnouncement(
+        "Premium plan salt okunur. Uygulamak veya değiştirmek için erişimi yenileyin.",
+      );
       return;
     }
     const futurePremiumPreparation =
@@ -5176,19 +5517,34 @@ export default function Prototype() {
 
   const premiumPlanEntryEnabled =
     premiumPilotPreviewEnabled ||
+    internalStaffExportEnabled ||
+    isCapabilityEnabled("premiumPlanCenter") ||
     premiumFounderConfigurationState.configuration !== null ||
     premiumFounderAccess !== null;
 
   const openPremiumPlans = () => {
+    const verifiedAccess = premiumFounderAccess?.access;
+    const canUsePremiumPlans =
+      verifiedAccess?.status === "active" &&
+      verifiedAccess.canUsePremiumContent === true;
+    const canReadExistingPlans =
+      verifiedAccess?.canReadExistingTeacherPlans === true;
     if (
-      premiumFounderConfigurationState.configuration &&
-      !premiumFounderAccess &&
+      !canUsePremiumPlans &&
+      !canReadExistingPlans &&
       !internalStaffExportEnabled &&
+      !premiumPilotPreviewEnabled &&
       !isCapabilityEnabled("premiumPlanCenter")
     ) {
-      setProfileOpen(true);
+      setProfileOpen(false);
+      setPlansOpen(false);
+      setSelectedPlanDayWorkspace(null);
+      surfaceTransitionRef.current = "premium-gate";
+      setPremiumGateOpen(true);
       setAnnouncement(
-        "Plan Kütüphanesi için bu telefonda Kurucu Premium kodunu etkinleştirin.",
+        premiumFounderConfigurationState.configuration
+          ? "Plan Kütüphanesi için bu telefonda Kurucu Premium erişimini etkinleştirin."
+          : "Plan Kütüphanesi erişimi bu sürümde yapılandırılmamış.",
       );
       return;
     }
@@ -5200,6 +5556,9 @@ export default function Prototype() {
       return;
     }
     setProfileOpen(false);
+    setPlansOpen(false);
+    setSelectedPlanDayWorkspace(null);
+    setPremiumGateOpen(false);
     surfaceTransitionRef.current = "premium-plans";
     setPremiumPlanOpen(true);
   };
@@ -5216,9 +5575,19 @@ export default function Prototype() {
         configuration,
       });
       setPremiumFounderAccess(result);
-      setAnnouncement(
-        "Kurucu Premium bu telefonda etkinleştirildi. Planlar ve belgeler çevrimdışı kullanım için hazır.",
-      );
+      setPremiumGateOpen(false);
+      if (configuredClassroom?.curriculumProfile) {
+        surfaceTransitionRef.current = "premium-plans";
+        setPremiumPlanOpen(true);
+        setAnnouncement(
+          "Kurucu Premium bu telefonda etkinleştirildi. Plan Kütüphanesi açıldı ve çevrimdışı kullanım hakkı korundu.",
+        );
+      } else {
+        setClassroomOpen(true);
+        setAnnouncement(
+          "Kurucu Premium etkinleştirildi. Planları açmak için sınıf program profilini tamamlayın.",
+        );
+      }
     } catch {
       setPremiumFounderAccess(null);
       setPremiumFounderError(
@@ -5232,27 +5601,50 @@ export default function Prototype() {
   const openActivityEvidence = async (
     activityId: string,
     initialStudentId?: string,
+    selectedActivity?: EvidenceActivitySummary,
   ) => {
     if (educationalWriteNotice) {
       setClassroomOpen(true);
       setAnnouncement(educationalWriteNotice);
       return;
     }
-    const selected = evidenceWorkspace.activities.find((item) => item.id === activityId);
+    const selected =
+      selectedActivity?.id === activityId
+        ? selectedActivity
+        : evidenceWorkspace.activities.find((item) => item.id === activityId);
     if (!selected) {
       setAnnouncement("Etkinliğin kanıt bağlantısı açılamadı; planı yeniden kontrol edin.");
       return;
+    }
+    const targetPremiumPack = premiumPackForEvidence(selected.premiumProvenance);
+    if (targetPremiumPack !== undefined) {
+      try {
+        assertPremiumMutationAccessNow(targetPremiumPack);
+      } catch (reason) {
+        setPremiumGateOpen(true);
+        setAnnouncement(
+          reason instanceof Error
+            ? reason.message
+            : "Bu premium plan salt okunur. Yeni gözlem eklemek için Premium erişimini yenileyin.",
+        );
+        return;
+      }
     }
     const returnFocusTarget =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     setDataBusy(true);
+    surfaceTransitionRef.current = "evidence-flow";
     try {
       if (selected.status === "planned") {
         await enqueuePersistence(
           () => setTodayActivityStatus(store, selected.id, "in_progress"),
           {
+            educationalWrite: {},
+            ...(targetPremiumPack !== undefined
+              ? { premiumPack: targetPremiumPack }
+              : {}),
             failureDetail:
               "Etkinlik başlatılamadı. Yeni yazmalar güvenlik için durduruldu.",
             successDetail: `${selected.title} uygulanıyor olarak kaydedildi.`,
@@ -5272,6 +5664,7 @@ export default function Prototype() {
       });
       setAnnouncement(`${activity.title} için gözlem notu açıldı.`);
     } catch (reason) {
+      surfaceTransitionRef.current = null;
       setAnnouncement(
         reason instanceof Error ? reason.message : "Etkinlik başlatılamadı; mevcut kayıt korundu.",
       );
@@ -5280,49 +5673,20 @@ export default function Prototype() {
     }
   };
 
-  const openStudentObservation = async (studentId: string) => {
+  const openSpontaneousObservation = async (
+    student: Student,
+    civilDate: string,
+    initialStudentId?: string,
+  ) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Hızlı gözlem güvenlik için kapalı.",
       );
       return;
     }
-    const student = students.find((item) => item.id === studentId);
-    if (!student) {
-      setAnnouncement("Hızlı gözlem yalnız sınıftaki etkin çocuk için açılabilir.");
-      return;
-    }
-    if (!configuredClassroom?.curriculumProfile) {
-      setClassroomOpen(true);
-      setAnnouncement("Hızlı gözlem için önce sınıf ve program kurulumunu tamamlayın.");
-      return;
-    }
-    if (educationalWriteNotice) {
-      setClassroomOpen(true);
-      setAnnouncement(educationalWriteNotice);
-      return;
-    }
-
-    const activeActivity =
-      evidenceWorkspace.activities.find(
-        (activity) =>
-          activity.status === "in_progress" &&
-          (activity.assignedStudentIds.length === 0 ||
-            activity.assignedStudentIds.includes(studentId)),
-      ) ??
-      evidenceWorkspace.activities.find(
-        (activity) =>
-          activity.status === "planned" &&
-          (activity.assignedStudentIds.length === 0 ||
-            activity.assignedStudentIds.includes(studentId)),
-    );
-    if (activeActivity) {
-      await openActivityEvidence(activeActivity.id, studentId);
-      return;
-    }
-
     setDataBusy(true);
     setStudentProfileError("");
+    surfaceTransitionRef.current = "evidence-flow";
     const returnFocusTarget =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -5331,10 +5695,11 @@ export default function Prototype() {
       const context = await enqueuePersistence(
         () =>
           ensureSpontaneousObservationContext(store, {
-            studentId,
-            civilDate: attendanceCivilDate,
+            studentId: student.id,
+            civilDate,
           }),
         {
+          educationalWrite: {},
           failureDetail:
             "Anlık gözlem bağlamı kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: `${student.name} için anlık gözlem alanı hazırlandı.`,
@@ -5352,9 +5717,17 @@ export default function Prototype() {
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
       setPlansOpen(false);
-      setEvidenceFlowRequest({ activity, initialStudentId: studentId });
-      setAnnouncement(`${student.name} için anlık gözlem hazır.`);
+      setEvidenceFlowRequest({
+        activity,
+        ...(initialStudentId ? { initialStudentId } : {}),
+      });
+      setAnnouncement(
+        initialStudentId
+          ? `${student.name} için anlık gözlem hazır.`
+          : "Hızlı gözlem hazır; çocuk veya çocukları seçin.",
+      );
     } catch (reason) {
+      surfaceTransitionRef.current = null;
       setAnnouncement(
         reason instanceof Error
           ? reason.message
@@ -5365,7 +5738,90 @@ export default function Prototype() {
     }
   };
 
+  const openStudentObservation = async (initialStudentId?: string) => {
+    if (writesBlocked) {
+      setAnnouncement(
+        "Cihaz verileri yazmaya hazır değil. Hızlı gözlem güvenlik için kapalı.",
+      );
+      return;
+    }
+    const student = initialStudentId
+      ? students.find((item) => item.id === initialStudentId)
+      : students[0];
+    if (!student) {
+      setAnnouncement(
+        initialStudentId
+          ? "Hızlı gözlem yalnız sınıftaki etkin çocuk için açılabilir."
+          : "Gözlem yazmak için önce Sınıfım bölümünden en az bir çocuk ekleyin.",
+      );
+      return;
+    }
+    if (!configuredClassroom?.curriculumProfile) {
+      setClassroomOpen(true);
+      setAnnouncement("Hızlı gözlem için önce sınıf ve program kurulumunu tamamlayın.");
+      return;
+    }
+    if (educationalWriteNotice) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
+
+    setDataBusy(true);
+    try {
+      const liveEvidence = await loadEvidenceWorkspace(store, { now: new Date() });
+      setEvidenceWorkspace(liveEvidence);
+      const resolution = resolveObservationContext(liveEvidence, {
+        ...(initialStudentId ? { studentId: initialStudentId } : {}),
+      });
+      if (resolution.kind === "use-activity") {
+        setObservationContextChoice(null);
+        setDataBusy(false);
+        await openActivityEvidence(
+          resolution.activity.id,
+          initialStudentId,
+          resolution.activity,
+        );
+        return;
+      }
+      if (resolution.kind === "choose-activity") {
+        keyboard.hide();
+        surfaceTransitionRef.current = "capture-menu";
+        setStudentProfileOpen(false);
+        setObservationContextChoice({
+          activities: resolution.activities,
+          civilDate: liveEvidence.civilDate,
+          spontaneousStudentId: student.id,
+          ...(initialStudentId ? { initialStudentId } : {}),
+        });
+        setCaptureMenuOpen(true);
+        setAnnouncement(
+          "Birden fazla gerçek etkinlik uygun. Gözlemin ait olduğu etkinliği seçin veya plan dışı kaydedin.",
+        );
+        return;
+      }
+      setObservationContextChoice(null);
+      setDataBusy(false);
+      await openSpontaneousObservation(
+        student,
+        liveEvidence.civilDate,
+        initialStudentId,
+      );
+    } catch (reason) {
+      surfaceTransitionRef.current = null;
+      setAnnouncement(
+        reason instanceof Error
+          ? reason.message
+          : "Bugünün plan bağlamı doğrulanamadı; anlık gözlem güvenlik için açılmadı.",
+      );
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
   const openCaptureEntry = () => {
+    surfaceTransitionRef.current = "capture-menu";
+    setObservationContextChoice(null);
     setCaptureMenuOpen(true);
     setAnnouncement("Ne eklemek istediğinizi seçin.");
   };
@@ -5373,6 +5829,11 @@ export default function Prototype() {
   const openPendingObservation = (
     requestedObservation?: EvidenceObservationSummary,
   ) => {
+    if (educationalWriteNotice) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     const pending =
       requestedObservation ??
       evidenceWorkspace.pendingObservations[0];
@@ -5393,12 +5854,17 @@ export default function Prototype() {
       curriculumTargets: pending.plannedCurriculumTargets,
       assignedStudentIds: [pending.studentId],
       assignmentMode: "legacy-unscoped" as const,
+      contextKind: "planned-activity" as const,
+      ...(pending.premiumProvenance
+        ? { premiumProvenance: pending.premiumProvenance }
+        : {}),
     };
     d1ReturnFocusRef.current ??=
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     setStudentProfileOpen(false);
+    surfaceTransitionRef.current = "evidence-flow";
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
 
@@ -5415,6 +5881,10 @@ export default function Prototype() {
         "Cihaz verileri yazmaya hazır değil; anekdot taslağı güvenlik için kaydedilmedi.",
       );
     }
+    const targetPremiumPack = premiumPackForEvidence(
+      allEvidenceObservations.find((item) => item.id === observationId)
+        ?.premiumProvenance,
+    );
     setDataBusy(true);
     try {
       const { saveAnecdoteFormDraft } = await import(
@@ -5427,6 +5897,10 @@ export default function Prototype() {
             ...values,
           }),
         {
+          educationalWrite: {},
+          ...(targetPremiumPack !== undefined
+            ? { premiumPack: targetPremiumPack }
+            : {}),
           failureDetail:
             "Anekdot formu taslağı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Anekdot formu taslağı bu cihazda korundu.",
@@ -5452,6 +5926,10 @@ export default function Prototype() {
         "Cihaz verileri yazmaya hazır değil; anekdot onayı güvenlik için kaydedilmedi.",
       );
     }
+    const targetPremiumPack = premiumPackForEvidence(
+      allEvidenceObservations.find((item) => item.id === observationId)
+        ?.premiumProvenance,
+    );
     setDataBusy(true);
     try {
       const { approveAnecdoteForm, saveAnecdoteFormDraft } = await import(
@@ -5466,6 +5944,10 @@ export default function Prototype() {
           return approveAnecdoteForm(store, { observationId });
         },
         {
+          educationalWrite: {},
+          ...(targetPremiumPack !== undefined
+            ? { premiumPack: targetPremiumPack }
+            : {}),
           failureDetail:
             "Anekdot formu onaylanamadı. Ham gözlem ve önceki taslak korundu.",
           successDetail:
@@ -5503,6 +5985,10 @@ export default function Prototype() {
   };
 
   const openAnecdoteCurriculumLink = (observationId: string) => {
+    if (educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
     const observation = allEvidenceObservations.find(
       (candidate) => candidate.id === observationId,
     );
@@ -5517,29 +6003,75 @@ export default function Prototype() {
   };
 
   const createPlanAndStart = async (command: PlanCreationCommand) => {
+    const requestNow = new Date();
+    const requestOperationalStatus = configuredClassroom
+      ? academicYearOperationalStatus(
+          configuredClassroom.academicYearStart,
+          configuredClassroom.academicYearEnd,
+          civilDateInIstanbul(requestNow),
+        )
+      : null;
+    const futurePremiumPreparation =
+      configuredClassroom !== null &&
+      requestOperationalStatus === "preparation" &&
+      command.premiumSource !== undefined &&
+      command.civilDate >= configuredClassroom.academicYearStart &&
+      command.civilDate <= configuredClassroom.academicYearEnd;
+    if (configuredClassroom && requestOperationalStatus !== "active" && !futurePremiumPreparation) {
+      throw new Error(
+        academicYearOperationalNotice({
+          status: requestOperationalStatus!,
+          startDate: configuredClassroom.academicYearStart,
+          endDate: configuredClassroom.academicYearEnd,
+        }) ?? "Eğitim yılı yeni plan için etkin değildir.",
+      );
+    }
+    if (command.premiumSource) {
+      assertPremiumMutationAccessNow(command.premiumSource.contentPack);
+    }
     if (!configuredClassroom?.curriculumProfile) {
       throw new Error("Sınıfın program profili tamamlanmalıdır.");
     }
     const curriculumProfile = configuredClassroom.curriculumProfile;
+    let commitCivilDate = civilDateInIstanbul(requestNow);
     const result = await enqueuePersistence(
       async () => {
+        const commitNow = new Date();
+        commitCivilDate = civilDateInIstanbul(commitNow);
         const created = await createPlanWithActivity(store, {
           ...command,
           curriculumProfile,
+          now: commitNow,
+          initialActivityStatus:
+            command.civilDate === commitCivilDate ? "in_progress" : "planned",
         });
-        if (command.civilDate === currentCivilDate) {
-          await setTodayActivityStatus(store, created.activity.id, "in_progress");
-        }
         return created;
       },
       {
+        educationalWrite: command.premiumSource
+          ? { allowPreparationForCivilDate: command.civilDate }
+          : {},
+        ...(command.premiumSource
+          ? { premiumPack: command.premiumSource.contentPack }
+          : {}),
         failureDetail:
           "Günlük plan bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
         successDetail: "Günlük plan ve ilk etkinlik bu cihaza kaydedildi.",
       },
     );
-    const refreshed = await refreshD1Workspaces();
-    if (command.civilDate !== currentCivilDate) {
+    let refreshed: Awaited<ReturnType<typeof refreshD1Workspaces>> | null = null;
+    try {
+      refreshed = await refreshD1Workspaces();
+    } catch {
+      refreshed = null;
+    }
+    const refreshedActivity = refreshed?.evidence.activities.find(
+      (item) => item.id === result.activity.id,
+    ) ?? null;
+    const committedReadRequiresRefresh =
+      !refreshed ||
+      (command.civilDate === commitCivilDate && !refreshedActivity);
+    if (command.civilDate !== commitCivilDate || committedReadRequiresRefresh) {
       const activity = result.activity;
       surfaceTransitionRef.current = null;
       setPlanFlowOpen(false);
@@ -5549,36 +6081,97 @@ export default function Prototype() {
         planId: result.plan.id,
         civilDate: command.civilDate,
         activityTitle: String(activity.title),
+        ...(committedReadRequiresRefresh ? { refreshRequired: true } : {}),
       });
       setAnnouncement(
-        `${activity.title} ${command.civilDate} tarihi için planlandı. Etkinlik ve gözlem, plan gününde başlatılabilir.`,
+        committedReadRequiresRefresh
+          ? `${activity.title} cihaza kaydedildi; ekran verileri yenilenemedi. Aynı planı yeniden kaydetmeyin, cihaz verilerini yenileyin.`
+          : `${activity.title} ${command.civilDate} tarihi için planlandı. Etkinlik ve gözlem, plan gününde başlatılabilir.`,
       );
       return;
     }
-    const activity = refreshed.evidence.activities.find(
-      (item) => item.id === result.activity.id,
-    );
-    if (!activity) throw new Error("Kaydedilen etkinlik yeniden açılamadı.");
+    if (!refreshedActivity) {
+      surfaceTransitionRef.current = null;
+      setPlanFlowOpen(false);
+      setPremiumDailyTemplate(null);
+      setScheduledPlanEditDraft(null);
+      setFuturePlanNotice({
+        planId: result.plan.id,
+        civilDate: command.civilDate,
+        activityTitle: String(result.activity.title),
+        refreshRequired: true,
+      });
+      setAnnouncement(
+        `${result.activity.title} cihaza kaydedildi; ekran verileri yenilenemedi. Aynı planı yeniden kaydetmeyin, cihaz verilerini yenileyin.`,
+      );
+      return;
+    }
     surfaceTransitionRef.current = "evidence-flow";
     setPlanFlowOpen(false);
-    setEvidenceFlowRequest({ activity });
-    setAnnouncement(`${activity.title} başladı. İlk gözlem notunu ekleyebilirsiniz.`);
+    setEvidenceFlowRequest({ activity: refreshedActivity });
+    setAnnouncement(`${refreshedActivity.title} başladı. İlk gözlem notunu ekleyebilirsiniz.`);
   };
 
   const updateFuturePlan = async (command: PlanUpdateCommand) => {
+    const scheduledPlan = scheduledPlanWorkspace.plans.find(
+      (plan) => plan.planId === command.planId,
+    );
+    const requestNow = new Date();
+    const requestOperationalStatus = configuredClassroom
+      ? academicYearOperationalStatus(
+          configuredClassroom.academicYearStart,
+          configuredClassroom.academicYearEnd,
+          civilDateInIstanbul(requestNow),
+        )
+      : null;
+    const futurePremiumPreparation =
+      configuredClassroom !== null &&
+      requestOperationalStatus === "preparation" &&
+      scheduledPlan?.premium === true &&
+      command.civilDate >= configuredClassroom.academicYearStart &&
+      command.civilDate <= configuredClassroom.academicYearEnd;
+    if (configuredClassroom && requestOperationalStatus !== "active" && !futurePremiumPreparation) {
+      throw new Error(
+        academicYearOperationalNotice({
+          status: requestOperationalStatus!,
+          startDate: configuredClassroom.academicYearStart,
+          endDate: configuredClassroom.academicYearEnd,
+        }) ?? "Eğitim yılı plan güncellemesi için etkin değildir.",
+      );
+    }
+    let targetPremiumPack: PremiumPackAccessReference | null | undefined;
+    if (scheduledPlan?.premium) {
+      const snapshot = await store.readSnapshot();
+      const storedPlan = snapshot.plans.find((plan) => plan.id === command.planId);
+      targetPremiumPack = premiumPackReferenceFromUnknown(
+        storedPlan?.sourceContentPackSnapshot,
+      );
+      assertPremiumMutationAccessNow(targetPremiumPack);
+    }
     const result = await enqueuePersistence(
       () => updateScheduledPlanWithActivity(store, command),
       {
+        educationalWrite: scheduledPlan?.premium
+          ? { allowPreparationForCivilDate: command.civilDate }
+          : {},
+        ...(scheduledPlan?.premium
+          ? { premiumPack: targetPremiumPack ?? null }
+          : {}),
         failureDetail:
           "Gelecek günlük plan güncellenemedi. Önceki kayıt bu cihazda korundu.",
         successDetail:
           "Gelecek günlük plan ve gerçek etkinliği aynı işlemde güncellendi.",
       },
     );
-    await refreshD1Workspaces();
-    setSelectedPlanDayWorkspace(
-      await loadPlanDayWorkspace(store, { civilDate: command.civilDate }),
-    );
+    let refreshRequired = false;
+    try {
+      await refreshD1Workspaces();
+      setSelectedPlanDayWorkspace(
+        await loadPlanDayWorkspace(store, { civilDate: command.civilDate }),
+      );
+    } catch {
+      refreshRequired = true;
+    }
     surfaceTransitionRef.current = null;
     setPlanFlowOpen(false);
     setScheduledPlanEditDraft(null);
@@ -5586,9 +6179,12 @@ export default function Prototype() {
       planId: result.plan.id,
       civilDate: command.civilDate,
       activityTitle: String(result.activity.title),
+      ...(refreshRequired ? { refreshRequired: true } : {}),
     });
     setAnnouncement(
-      `${result.activity.title} planı güncellendi. Kimlik ve kaynak zinciri korundu.`,
+      refreshRequired
+        ? `${result.activity.title} cihaza güncellendi; ekran verileri yenilenemedi. Aynı değişikliği yeniden kaydetmeyin, cihaz verilerini yenileyin.`
+        : `${result.activity.title} planı güncellendi. Kimlik ve kaynak zinciri korundu.`,
     );
   };
 
@@ -5609,8 +6205,11 @@ export default function Prototype() {
         activityId: activity.id,
         taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
       }),
-    saveDraft: (activity, input) =>
-      enqueuePersistence(
+    saveDraft: (activity, input) => {
+      if (educationalWriteNotice) {
+        return Promise.reject(new Error(educationalWriteNotice));
+      }
+      return enqueuePersistence(
         () =>
           persistQuickObservationDraft(store, {
             ...input,
@@ -5618,12 +6217,15 @@ export default function Prototype() {
             activityId: activity.id,
           }),
         {
+          ...evidenceMutationGuards(activity.premiumProvenance),
           failureDetail:
             "Gözlem taslağı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Gözlem taslağı bu cihazda korundu.",
         },
-      ),
+      );
+    },
     saveDraftBatch: async (activity, input) => {
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
       await enqueuePersistence(
         () =>
           persistQuickObservationDraftBatch(store, {
@@ -5632,6 +6234,7 @@ export default function Prototype() {
             activityId: activity.id,
           }),
         {
+          ...evidenceMutationGuards(activity.premiumProvenance),
           failureDetail:
             "Toplu gözlem taslağı bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Toplu gözlem taslağı bu cihazda korundu.",
@@ -5639,6 +6242,7 @@ export default function Prototype() {
       );
     },
     capture: async (activity, input) => {
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
       const {
         observationId,
         studentId,
@@ -5673,21 +6277,35 @@ export default function Prototype() {
           });
         },
         {
+          ...evidenceMutationGuards(activity.premiumProvenance),
           failureDetail:
             "Gözlem notu bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Gözlem notu değiştirilemez ham kayıt olarak kaydedildi.",
         },
       );
-      const refreshed = await refreshD1Workspaces();
-      const observation = [
-        ...refreshed.evidence.pendingObservations,
-        ...refreshed.evidence.linkedObservations,
-      ].find((item) => item.id === result.observation.id);
-      if (!observation) throw new Error("Kaydedilen gözlem notu yeniden açılamadı.");
+      const refresh = await verifyCommittedObservationRefresh(
+        [result.observation.id],
+        async () => (await refreshD1Workspaces()).evidence,
+      );
+      if (refresh.status === "refresh-required") {
+        setFuturePlanNotice(null);
+        setObservationRefreshNotice({
+          activityTitle: activity.title,
+          committedObservationIds: refresh.committedObservationIds,
+          observationCount: 1,
+          reason: refresh.reason,
+        });
+        setAnnouncement(
+          "Gözlem bu cihaza kaydedildi; ekran verileri yenilenemedi. Aynı gözlemi yeniden kaydetmeyin, cihaz verilerini yenileyin.",
+        );
+        return;
+      }
+      const observation = refresh.observations[0];
+      setObservationRefreshNotice(null);
       setAnnouncement(`${observation.studentName} için gözlem notu kaydedildi.`);
-      return observation;
     },
     captureBatch: async (activity, input) => {
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
       const observedAt = new Date().toISOString();
       const result = await enqueuePersistence(
         async () => {
@@ -5706,18 +6324,37 @@ export default function Prototype() {
           });
         },
         {
+          ...evidenceMutationGuards(activity.premiumProvenance),
           failureDetail:
             "Toplu gözlem notları bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Toplu gözlem, her çocuk için ayrı ham kayıt olarak kaydedildi.",
         },
       );
-      await refreshD1Workspaces();
+      const refresh = await verifyCommittedObservationRefresh(
+        result.observations.map((observation) => observation.id),
+        async () => (await refreshD1Workspaces()).evidence,
+      );
+      if (refresh.status === "refresh-required") {
+        setFuturePlanNotice(null);
+        setObservationRefreshNotice({
+          activityTitle: activity.title,
+          committedObservationIds: refresh.committedObservationIds,
+          observationCount: result.observations.length,
+          reason: refresh.reason,
+        });
+        setAnnouncement(
+          `${result.observations.length} gözlem bu cihaza kaydedildi; ekran verileri yenilenemedi. Aynı gözlemleri yeniden kaydetmeyin, cihaz verilerini yenileyin.`,
+        );
+        return result.observations.length;
+      }
+      setObservationRefreshNotice(null);
       setAnnouncement(
         `${result.observations.length} çocuk için ayrı gözlem notları kaydedildi.`,
       );
       return result.observations.length;
     },
     confirm: async (observation, target) => {
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
       const isPlannedTarget = observation.plannedCurriculumTargets.some(
         (planned) => planned.id === target.id,
       );
@@ -5736,6 +6373,7 @@ export default function Prototype() {
             ...(isPlannedTarget ? { plannedTargetId: target.id } : {}),
           }),
         {
+          ...evidenceMutationGuards(observation.premiumProvenance),
           failureDetail:
             "Program bağlantısı kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Program bağlantısı öğretmen onayıyla kaydedildi.",
@@ -5751,6 +6389,7 @@ export default function Prototype() {
       assessmentLevel,
       assessmentTargetIds,
     ) => {
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
       await enqueuePersistence(
         () =>
           createCitedAssessmentDraft(store, {
@@ -5764,6 +6403,7 @@ export default function Prototype() {
             periodEnd: observation.civilDate,
           }),
         {
+          ...evidenceMutationGuards(observation.premiumProvenance),
           failureDetail:
             "Değerlendirme taslağı kaydedilemedi. Yeni yazmalar durduruldu.",
           successDetail: "Kanıta dayalı değerlendirme taslağı kaydedildi.",
@@ -5774,25 +6414,42 @@ export default function Prototype() {
     },
   };
 
-  const handleNav = (id: string, label: string) => {
+  const handleNav = (id: AlphaPrimaryNavigationId, label: string) => {
     if (id === "capture") {
+      setDocumentsOpen(false);
+      setPlansOpen(false);
+      setPremiumGateOpen(false);
       openCaptureEntry();
       return;
     }
     if (id === "classroom") {
       keyboard.hide();
+      setCaptureMenuOpen(false);
+      setDocumentsOpen(false);
+      setPlansOpen(false);
+      setPremiumGateOpen(false);
       navigate("classroom");
       setAnnouncement("Sınıfım bölümü açıldı.");
       return;
     }
     if (id === "plans") {
+      setCaptureMenuOpen(false);
       openTodayPlans();
       return;
     }
     if (id === "documents") {
+      setCaptureMenuOpen(false);
+      setPlansOpen(false);
+      setPremiumGateOpen(false);
+      surfaceTransitionRef.current = "documents";
       setDocumentsOpen(true);
+      setAnnouncement("Belgeler ve öğretmen kayıtları açıldı.");
       return;
     }
+    setCaptureMenuOpen(false);
+    setDocumentsOpen(false);
+    setPlansOpen(false);
+    setPremiumGateOpen(false);
     navigate("today");
     setAnnouncement(`${label} bölümü seçildi.`);
   };
@@ -5910,6 +6567,8 @@ export default function Prototype() {
                   activeStudentCount: students.length,
                   presentStudentCount: counts.present,
                   observedStudentCount,
+                  attendanceMarkedStudentCount: counts.marked,
+                  attendanceCompleted,
                 }}
                 visibleStudents={visibleStudents}
                 archivedStudents={archivedStudents}
@@ -5936,6 +6595,7 @@ export default function Prototype() {
                   setStudentActionsOpenId(null);
                   setStudentAddOpen(true);
                 }}
+                onOpenAttendance={() => changeAttendanceOpen(true)}
                 onOpenExport={() => {
                   if (classExportStudentIds.length === 0) {
                     setClassExportStudentIds(
@@ -6008,62 +6668,79 @@ export default function Prototype() {
       </RouteFocusBoundary>
 
       <nav className="bottom-nav" aria-label="Ana menü">
-        {visiblePrimaryNavigation().map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className={
-              item.id === "capture"
-                ? "nav-add"
-                : route.id === item.id
-                  ? "is-active"
-                  : ""
-            }
-            onClick={() => handleNav(item.id, item.label)}
-            aria-label={item.id === "capture" ? "Kayıt ekle" : undefined}
-            aria-current={route.id === item.id ? "page" : undefined}
-          >
-            {item.id === "today" ? (
-              <HomeIcon aria-hidden="true" />
-            ) : item.id === "classroom" ? (
-              <PersonIcon aria-hidden="true" />
-            ) : (
-              <PlusIcon aria-hidden="true" />
-            )}
-            <span>{item.label}</span>
-          </button>
-        ))}
-        {allEvidenceObservations.some(
-          (observation) => observation.observationType === "anecdotal",
-        ) ? (
-          <button
-            type="button"
-            className={documentsOpen ? "is-active" : undefined}
-            onClick={() => setDocumentsOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={documentsOpen}
-          >
-            <ArchiveIcon aria-hidden="true" />
-            <span>Belgeler</span>
-          </button>
-        ) : null}
+        {visiblePrimaryNavigation().map((item) => {
+          const active =
+            item.id === "capture"
+              ? captureMenuOpen
+              : item.id === "plans"
+                ? plansOpen || premiumGateOpen || premiumPlanOpen || planFlowOpen || calendarOpen
+                : item.id === "documents"
+                  ? documentsOpen
+                  : route.id === item.id;
+          const controlsDialog =
+            item.id === "capture" || item.id === "plans" || item.id === "documents";
+          return (
+            <button
+              type="button"
+              key={item.id}
+              className={`${item.id === "capture" ? "nav-add" : ""}${active ? " is-active" : ""}`.trim()}
+              onClick={() => handleNav(item.id, item.label)}
+              aria-label={item.id === "capture" ? "Kayıt ekle" : undefined}
+              aria-current={active ? "page" : undefined}
+              aria-haspopup={controlsDialog ? "dialog" : undefined}
+              aria-expanded={controlsDialog ? active : undefined}
+            >
+              {item.id === "today" ? (
+                <HomeIcon aria-hidden="true" />
+              ) : item.id === "classroom" ? (
+                <PersonIcon aria-hidden="true" />
+              ) : item.id === "plans" ? (
+                <ReaderIcon aria-hidden="true" />
+              ) : item.id === "documents" ? (
+                <ArchiveIcon aria-hidden="true" />
+              ) : (
+                <PlusIcon aria-hidden="true" />
+              )}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
       {futurePlanNotice ? (
         <aside className="future-plan-notice" role="status" data-testid="future-plan-notice">
           <span>
             <strong>{futurePlanNotice.activityTitle}</strong>
-            <small>{formatTurkishCivilDate(futurePlanNotice.civilDate)} için cihazda kayıtlı</small>
+            <small>
+              {futurePlanNotice.refreshRequired
+                ? `${formatTurkishCivilDate(futurePlanNotice.civilDate)} için cihazda kayıtlı · ekran yenilemesi gerekli`
+                : `${formatTurkishCivilDate(futurePlanNotice.civilDate)} için cihazda kayıtlı`}
+            </small>
           </span>
           <button
             type="button"
             onClick={() => {
               const targetDate = futurePlanNotice.civilDate;
+              if (futurePlanNotice.refreshRequired) {
+                void refreshD1Workspaces()
+                  .then(() => {
+                    setFuturePlanNotice(null);
+                    setAnnouncement(
+                      "Kaydedilmiş plan yeniden okundu; yinelenen kayıt oluşturulmadı.",
+                    );
+                  })
+                  .catch(() => {
+                    setAnnouncement(
+                      "Plan cihazda kayıtlı. Ekran verileri hâlâ açılamadı; cihaz verilerine yeniden bağlanın.",
+                    );
+                  });
+                return;
+              }
               setFuturePlanNotice(null);
               void openAcademicCalendar(targetDate);
             }}
           >
-            Takvimde gör
+            {futurePlanNotice.refreshRequired ? "Cihaz verilerini yenile" : "Takvimde gör"}
           </button>
           <button
             type="button"
@@ -6076,31 +6753,187 @@ export default function Prototype() {
         </aside>
       ) : null}
 
+      {observationRefreshNotice ? (
+        <aside
+          className="future-plan-notice observation-refresh-notice"
+          role="status"
+          data-testid="observation-refresh-notice"
+        >
+          <span>
+            <strong>
+              {observationRefreshNotice.observationCount.toLocaleString("tr-TR")} gözlem cihazda kayıtlı
+            </strong>
+            <small>
+              {observationRefreshNotice.activityTitle} · {observationRefreshNotice.reason === "read-failed"
+                ? "ekran verileri okunamadı"
+                : "kayıt ekran projeksiyonunda henüz doğrulanamadı"} · yeniden kaydetmeyin
+            </small>
+          </span>
+          <button
+            type="button"
+            disabled={observationRefreshBusy}
+            onClick={() => {
+              const notice = observationRefreshNotice;
+              setObservationRefreshBusy(true);
+              void verifyCommittedObservationRefresh(
+                notice.committedObservationIds,
+                async () => (await refreshD1Workspaces()).evidence,
+              )
+                .then((refresh) => {
+                  if (refresh.status === "verified") {
+                    setObservationRefreshNotice(null);
+                    setAnnouncement(
+                      "Kaydedilmiş gözlemler yeniden okundu; yinelenen kayıt oluşturulmadı.",
+                    );
+                    return;
+                  }
+                  setObservationRefreshNotice((current) =>
+                    current
+                      ? {
+                          ...current,
+                          committedObservationIds:
+                            refresh.committedObservationIds,
+                          reason: refresh.reason,
+                        }
+                      : current,
+                  );
+                  setAnnouncement(
+                    refresh.reason === "read-failed"
+                      ? "Gözlemler cihazda kayıtlı; ekran verileri okunamadı. Aynı gözlemleri yeniden kaydetmeyin, yenilemeyi tekrar deneyin."
+                      : "Gözlemler cihazda kayıtlı ancak ekran projeksiyonunda henüz doğrulanamadı. Aynı gözlemleri yeniden kaydetmeyin, yenilemeyi tekrar deneyin.",
+                  );
+                })
+                .catch(() => {
+                  setAnnouncement(
+                    "Gözlem kimlikleri doğrulanamadı. Kayıtları yeniden oluşturmayın; cihaz verilerine yeniden bağlanıp yenilemeyi tekrar deneyin.",
+                  );
+                })
+                .finally(() => {
+                  setObservationRefreshBusy(false);
+                });
+            }}
+          >
+            {observationRefreshBusy ? "Doğrulanıyor…" : "Cihaz verilerini yenile"}
+          </button>
+          <button
+            type="button"
+            className="future-plan-notice-dismiss"
+            aria-label="Gözlem yenileme bildirimini kapat"
+            onClick={() => setObservationRefreshNotice(null)}
+            disabled={observationRefreshBusy}
+          >
+            <Cross2Icon aria-hidden="true" />
+          </button>
+        </aside>
+      ) : null}
+
       <BottomSheet
         open={captureMenuOpen}
-        onOpenChange={setCaptureMenuOpen}
-        title="Ne ekleyelim?"
-        description="Bir işlem seçin; yalnız gerekli alanlar açılır."
-        snap={0.58}
+        onOpenChange={(open) => {
+          setCaptureMenuOpen(open);
+          if (!open) setObservationContextChoice(null);
+        }}
+        title={
+          observationContextChoice
+            ? "Gözlem hangi etkinliğe ait?"
+            : "Ne ekleyelim?"
+        }
+        description={
+          observationContextChoice
+            ? "Gerçek plan bağını korumak için etkinliği seçin. Olay plan dışıysa bunu ayrıca belirtin."
+            : "Bir işlem seçin; yalnız gerekli alanlar açılır."
+        }
+        snap={observationContextChoice ? 0.72 : 0.58}
       >
+        {observationContextChoice ? (
+          <div className="observation-context-chooser" data-testid="observation-context-chooser">
+            <p>
+              <TargetIcon aria-hidden="true" />
+              <span>
+                <strong>Bugünün uygun gerçek etkinlikleri</strong>
+                <small>Seçiminiz gözlemi plan, hedef ve değerlendirme zincirine bağlar.</small>
+              </span>
+            </p>
+            <div className="observation-context-list">
+              {observationContextChoice.activities.map((activity) => (
+                <button
+                  type="button"
+                  key={activity.id}
+                  onClick={() => {
+                    const initialStudentId = observationContextChoice.initialStudentId;
+                    setObservationContextChoice(null);
+                    void openActivityEvidence(
+                      activity.id,
+                      initialStudentId,
+                      activity,
+                    );
+                  }}
+                >
+                  <span>
+                    <strong>{activity.title}</strong>
+                    <small>
+                      {activity.startTime}
+                      {activity.endTime ? `–${activity.endTime}` : ""}
+                      {activity.status === "in_progress" ? " · uygulanıyor" : " · planlandı"}
+                    </small>
+                  </span>
+                  <ChevronRightIcon aria-hidden="true" />
+                </button>
+              ))}
+              <button
+                type="button"
+                className="is-spontaneous"
+                onClick={() => {
+                  const choice = observationContextChoice;
+                  const student = students.find(
+                    (item) => item.id === choice.spontaneousStudentId,
+                  );
+                  if (!student) {
+                    setAnnouncement(
+                      "Plan dışı gözlem için etkin çocuk doğrulanamadı; kayıt açılmadı.",
+                    );
+                    return;
+                  }
+                  setObservationContextChoice(null);
+                  void openSpontaneousObservation(
+                    student,
+                    choice.civilDate,
+                    choice.initialStudentId,
+                  );
+                }}
+              >
+                <span>
+                  <strong>Bu etkinliklerden bağımsız</strong>
+                  <small>Plan dışı anlık gözlem olarak açıkça ayrı kaydet</small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="capture-choice-grid">
           <button
             type="button"
             onClick={() => {
-              setCaptureMenuOpen(false);
-              if (students.length === 1) {
-                void openStudentObservation(students[0].id);
-              } else {
+              if (students.length === 0) {
                 navigate("classroom");
-                setAnnouncement("Gözlem yazacağınız öğrenciyi seçin.");
+                setAnnouncement(
+                  "Gözlem yazmak için önce Sınıfım bölümünden bir çocuk ekleyin.",
+                );
+                return;
               }
+              void openStudentObservation();
             }}
-            disabled={educationalWritesDisabled}
+            disabled={educationalWritesDisabled || students.length === 0}
           >
             <Pencil1Icon aria-hidden="true" />
             <span>
               <strong>Gözlem yaz</strong>
-              <small>Öğrenci seç → yaz → kaydet</small>
+              <small>
+                {students.length === 0
+                  ? "Önce Sınıfım bölümünden çocuk ekleyin"
+                  : "Çocuk veya grup seç → yaz → kaydet"}
+              </small>
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
@@ -6155,6 +6988,7 @@ export default function Prototype() {
           </button>
           ) : null}
         </div>
+        )}
       </BottomSheet>
 
       <BottomSheet
@@ -6425,6 +7259,18 @@ export default function Prototype() {
         snap={0.78}
       >
         <button
+          className="plans-calendar-button plans-library-button"
+          type="button"
+          onClick={openPremiumPlans}
+        >
+          <StarIcon aria-hidden="true" />
+          <span>
+            <strong>Plan Kütüphanesi</strong>
+            <small>Yıllık · aylık · haftalık · günlük planlar ve değerlendirmeler</small>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
+        <button
           className="plans-calendar-button"
           type="button"
           onClick={() => void openAcademicCalendar(displayedPlanWorkspace.civilDate)}
@@ -6510,6 +7356,33 @@ export default function Prototype() {
             <p>Bu ekran yalnız kaydedilmiş planları gösterir; sahte etkinlik oluşturmaz.</p>
           </div>
         )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={premiumGateOpen}
+        onOpenChange={setPremiumGateOpen}
+        title="Plan Kütüphanesi erişimi"
+        description="Premium üyelik sistemi korunur; bu telefon yalnız doğrulanmış erişimle plan paketlerini açar."
+        snap={0.72}
+      >
+        <div className="premium-gate-summary" role="status">
+          <StarIcon aria-hidden="true" />
+          <span>
+            <strong>Planlar ayrı, güvenlik ayarları ayrı</strong>
+            <small>
+              Etkinleştirme yalnız Plan Kütüphanesi için istenir; cihaz yedeği ve
+              uygulama kilidi ayarlarına yönlendirilmezsiniz.
+            </small>
+          </span>
+        </div>
+        <FounderPremiumActivationPanel
+          access={premiumFounderAccess?.access ?? null}
+          busy={premiumFounderBusy}
+          configured={premiumFounderConfigurationState.configuration !== null}
+          error={premiumFounderError}
+          onActivate={activateFounderPremium}
+          onOpenPlans={openPremiumPlans}
+        />
       </BottomSheet>
 
       <BottomSheet
@@ -8579,19 +9452,6 @@ export default function Prototype() {
             </button>
           </section>
 
-          {premiumFounderConfigurationState.configuration ||
-          premiumFounderAccess ||
-          premiumFounderConfigurationState.error ? (
-            <FounderPremiumActivationPanel
-              access={premiumFounderAccess?.access ?? null}
-              busy={premiumFounderBusy}
-              configured={premiumFounderConfigurationState.configuration !== null}
-              error={premiumFounderError}
-              onActivate={activateFounderPremium}
-              onOpenPlans={openPremiumPlans}
-            />
-          ) : null}
-
           <section className="local-vault-card" aria-label="Cihazdaki veri durumu">
             <span className="security-icon"><LockClosedIcon aria-hidden="true" /></span>
             <span>
@@ -9096,7 +9956,7 @@ export default function Prototype() {
       ) : null}
 
       {premiumPlanOpen &&
-      (premiumPilotPreviewEnabled || premiumFounderAccess) &&
+      premiumPlanEntryEnabled &&
       configuredClassroom?.curriculumProfile ? (
         <Dialog.Root
           open
@@ -9118,12 +9978,7 @@ export default function Prototype() {
                 ageGroup={configuredClassroom.ageGroup ?? ""}
                 contentPack={premiumFounderAccess?.pack ?? null}
                 internalStaffExportEnabled={internalStaffExportEnabled}
-                premiumAccess={
-                  premiumFounderAccess?.access.status === "active" &&
-                  premiumFounderAccess.access.canUsePremiumContent
-                    ? premiumFounderAccess.access
-                    : null
-                }
+                premiumAccess={premiumFounderAccess?.access ?? null}
                 valueEvidenceWritesDisabled={
                   writesBlocked || educationalWritesDisabled
                 }

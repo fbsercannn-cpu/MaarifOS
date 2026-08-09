@@ -13,6 +13,9 @@
 - Morning, afternoon, full-day, or custom working hours are persistent classroom settings tied to the academic year. They are configured during classroom setup and changed only from settings; the Today screen shows them as read-only context, never as a daily selector.
 - Student month folders are derived views, never pre-created records. Show only months that contain an observation, evidence asset, or portfolio item for that student inside the selected academic year; key each month by full `YYYY-MM` and hide empty months.
 - The student portfolio is a child-and-teacher-curated view over existing immutable evidence, not a second evidence-entry flow. Keep source evidence, teacher interpretation, child reflection, and family contribution separate; do not score, rank, diagnose, or silently choose a child's “best” work.
+- The teacher home is an action dashboard, not a marketing feed: the first mobile viewport prioritizes attendance, the next real plan/activity, the first unresolved evidence task, and local draft/sync state. Premium discovery remains compact and secondary to today’s work.
+- Primary phone navigation has five stable, labelled destinations: `Bugün`, `Sınıfım`, `Kayıt Ekle`, `Planlar`, and `Belgeler`. Keep the central quick-record action globally available, every target at least 44×44 px, and plan/document work reachable without waiting for records to exist.
+- A visible control must communicate its actual state immediately. Enabled save actions never use a lock icon; disabled actions expose the exact missing condition, long mobile forms keep their primary save action in view, and entitlement gates open a focused access surface instead of unrelated security settings.
 
 ## Prototype Instructions
 

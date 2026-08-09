@@ -25,6 +25,8 @@ export interface TodayStudentCard {
 export interface TodayAttendanceSummary {
   present: number;
   late: number;
+  absent: number;
+  marked: number;
   total: number;
 }
 
@@ -48,6 +50,29 @@ export interface TodayScreenModel {
   pendingObservationCount: number;
   planEvidenceDetailsEnabled: boolean;
   premiumPlanCenterEnabled: boolean;
+}
+
+export interface TodayControlCenterSummary {
+  attendance: {
+    inClass: number;
+    expected: number;
+    absent: number;
+    late: number;
+    unmarked: number;
+    stateLabel: string;
+    detailLabel: string;
+  };
+  plan: {
+    item: TodayPlanItem | null;
+    label: string;
+    title: string;
+    detail: string;
+  };
+  priority: {
+    count: number;
+    title: string;
+    detail: string;
+  };
 }
 
 export const TODAY_ACTIVITY_STATUS_LABELS: Readonly<
@@ -77,6 +102,77 @@ export function focusActivityFromToday(workspace: TodayWorkspace) {
     workspace.planItems[0] ??
     null
   );
+}
+
+export function createTodayControlCenterSummary(options: {
+  workspace: TodayWorkspace;
+  attendance: TodayAttendanceSummary;
+  pendingObservationCount: number;
+}): TodayControlCenterSummary {
+  const { workspace, attendance, pendingObservationCount } = options;
+  const item = focusActivityFromToday(workspace);
+  const inClass = attendance.present + attendance.late;
+  const unmarked = Math.max(0, attendance.total - attendance.marked);
+  const attendanceDetail = [
+    `${attendance.absent} yok`,
+    `${attendance.late} geç`,
+    ...(unmarked > 0 ? [`${unmarked} işaretlenmedi`] : []),
+  ].join(" · ");
+  const planTime = item
+    ? item.startTime ??
+      (item.durationMinutes ? `${item.durationMinutes} dk` : "Akış sırası")
+    : null;
+  const planDetail = item
+    ? `${planTime}${item.endTime ? `–${item.endTime}` : ""} · ${todayPlanItemStatusLabel(item)}`
+    : workspace.classroom.status === "configured"
+      ? "Günlük plan oluştur"
+      : "Sınıf ve program bilgilerini tamamla";
+
+  return {
+    attendance: {
+      inClass,
+      expected: attendance.total,
+      absent: attendance.absent,
+      late: attendance.late,
+      unmarked,
+      stateLabel:
+        attendance.total === 0
+          ? "Sınıf listesi boş"
+          : unmarked > 0
+            ? "Yoklama eksik"
+            : "Yoklama tamam",
+      detailLabel: attendanceDetail,
+    },
+    plan: {
+      item,
+      label: !item
+        ? "Günün planı"
+        : item.status === "in_progress"
+          ? "Sınıfta şimdi"
+          : item.status === "completed"
+            ? "Son plan kaydı"
+            : item.kind === "premium-flow-block"
+              ? "Sıradaki akış adımı"
+              : "Sıradaki etkinlik",
+      title:
+        item?.title ??
+        (workspace.classroom.status === "configured"
+          ? "Bugün için plan yok"
+          : "Sınıf kurulumu gerekli"),
+      detail: planDetail,
+    },
+    priority: {
+      count: pendingObservationCount,
+      title:
+        pendingObservationCount > 0
+          ? `${pendingObservationCount} gözlem program bağlantısı bekliyor`
+          : "Program bağlantıları tamam",
+      detail:
+        pendingObservationCount > 0
+          ? "Değerlendirme ve belge zinciri için tamamlayın."
+          : "Bekleyen gözlem yok.",
+    },
+  };
 }
 
 export function todayPlanItemStatusLabel(item: TodayPlanItem): string {

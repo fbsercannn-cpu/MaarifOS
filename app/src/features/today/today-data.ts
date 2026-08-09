@@ -29,7 +29,7 @@ import {
   studentEnrollments,
   type StudentEnrollment,
 } from "../archive/academic-year-archive.ts";
-import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-observation.ts";
+import { isAuthenticSpontaneousObservationActivity } from "../evidence/spontaneous-observation-integrity.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
@@ -500,7 +500,12 @@ export function resolvePlanDayWorkspace(
   const scopedActivities = scope
     ? snapshot.activities.filter(
         (record) =>
-          record.activityKind !== SPONTANEOUS_OBSERVATION_ACTIVITY_KIND &&
+          !isAuthenticSpontaneousObservationActivity(
+            record,
+            snapshot.plans,
+            scope,
+            civilDate,
+          ) &&
           recordBelongsToClassroomScope(record, scope),
       )
     : [];
@@ -1058,38 +1063,53 @@ export async function setTodayActivityStatus(
     throw new Error("Etkinliği güncellemek için önce aktif sınıf yapılandırılmalıdır.");
   }
 
-  await store.transaction("readwrite", ["activities"], async (transaction) => {
-    const activities = await transaction.getAll("activities");
-    const existing = activities.find(
-      (record) =>
-        record.id === activityId &&
-        typeof record.deletedAt !== "string" &&
-        recordBelongsToClassroomScope(record, scope),
-    );
-    if (!existing) {
-      throw new Error("Etkinlik aktif sınıfta bulunamadı; mevcut kayıtlar değiştirilmedi.");
-    }
-    if (
-      status === "in_progress" &&
-      activities.some(
+  await store.transaction(
+    "readwrite",
+    ["plans", "activities"],
+    async (transaction) => {
+      const [plans, activities] = await Promise.all([
+        transaction.getAll("plans"),
+        transaction.getAll("activities"),
+      ]);
+      const existing = activities.find(
         (record) =>
-          record.id !== activityId &&
-          record.status === "in_progress" &&
-          record.civilDate === existing.civilDate &&
+          record.id === activityId &&
           typeof record.deletedAt !== "string" &&
           recordBelongsToClassroomScope(record, scope),
-      )
-    ) {
-      throw new Error(
-        "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
       );
-    }
-    await transaction.putMany("activities", [
-      {
-        ...existing,
-        status,
-        updatedAt: now.toISOString(),
-      },
-    ]);
-  });
+      if (!existing) {
+        throw new Error(
+          "Etkinlik aktif sınıfta bulunamadı; mevcut kayıtlar değiştirilmedi.",
+        );
+      }
+      if (
+        status === "in_progress" &&
+        activities.some(
+          (record) =>
+            record.id !== activityId &&
+            record.status === "in_progress" &&
+            !isAuthenticSpontaneousObservationActivity(
+              record,
+              plans,
+              scope,
+              existing.civilDate,
+            ) &&
+            record.civilDate === existing.civilDate &&
+            typeof record.deletedAt !== "string" &&
+            recordBelongsToClassroomScope(record, scope),
+        )
+      ) {
+        throw new Error(
+          "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
+        );
+      }
+      await transaction.putMany("activities", [
+        {
+          ...existing,
+          status,
+          updatedAt: now.toISOString(),
+        },
+      ]);
+    },
+  );
 }

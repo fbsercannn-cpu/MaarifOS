@@ -389,3 +389,148 @@ test("aynı sınıf ve gün içinde yalnız bir etkinliğin devam etmesine izin 
     "in_progress",
   );
 });
+
+test("anlık gözlem bağlamı gerçek sınıf etkinliğinin başlamasını engellemez", async () => {
+  const store = new MemoryStore();
+  const academicYearId = "00000000-0000-4000-8000-000000000135";
+  const classroomId = "00000000-0000-4000-8000-000000000136";
+  const spontaneousActivityId = "00000000-0000-4000-8000-000000000137";
+  const spontaneousPlanId = "00000000-0000-4000-8000-000000000139";
+  const plannedActivityId = "00000000-0000-4000-8000-000000000138";
+  await saveClassroomConfiguration(store, {
+    academicYear: {
+      id: academicYearId,
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    classroom: {
+      id: classroomId,
+      name: "Kurgu Anlık Gözlem Sınıfı",
+    },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.full_day,
+    now: new Date("2026-07-22T08:00:00.000Z"),
+  });
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...baseRecord,
+        id: spontaneousPlanId,
+        academicYearId,
+        classroomId,
+        planType: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "active",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...baseRecord,
+        id: spontaneousActivityId,
+        planId: spontaneousPlanId,
+        academicYearId,
+        classroomId,
+        activityKind: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        startTime: "08:30",
+        status: "in_progress",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+      {
+        ...baseRecord,
+        id: plannedActivityId,
+        academicYearId,
+        classroomId,
+        title: "Batar mı, yüzer mi?",
+        startTime: "09:00",
+        status: "planned",
+      },
+    ]);
+  });
+
+  await setTodayActivityStatus(store, plannedActivityId, "in_progress", {
+    now: new Date("2026-07-22T08:30:00.000Z"),
+  });
+  const activities = (await store.readSnapshot()).activities;
+
+  assert.equal(
+    activities.find((record) => record.id === spontaneousActivityId)?.status,
+    "in_progress",
+  );
+  assert.equal(
+    activities.find((record) => record.id === plannedActivityId)?.status,
+    "in_progress",
+  );
+});
+
+test("normal plana bağlı sahte anlık etkinlik durum çakışmasını atlatamaz", async () => {
+  const store = new MemoryStore();
+  const academicYearId = "00000000-0000-4000-8000-000000000145";
+  const classroomId = "00000000-0000-4000-8000-000000000146";
+  const spoofedPlanId = "00000000-0000-4000-8000-000000000147";
+  const spoofedActivityId = "00000000-0000-4000-8000-000000000148";
+  const plannedActivityId = "00000000-0000-4000-8000-000000000149";
+  await saveClassroomConfiguration(store, {
+    academicYear: {
+      id: academicYearId,
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    classroom: { id: classroomId, name: "Kurgu Bütünlük Sınıfı" },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.full_day,
+    now: new Date("2026-07-22T08:00:00.000Z"),
+  });
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...baseRecord,
+        id: spoofedPlanId,
+        academicYearId,
+        classroomId,
+        planType: "daily",
+        title: "Normal plan",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...baseRecord,
+        id: spoofedActivityId,
+        planId: spoofedPlanId,
+        academicYearId,
+        classroomId,
+        activityKind: "spontaneous-observation",
+        title: "Sahte anlık etkinlik",
+        status: "in_progress",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+      {
+        ...baseRecord,
+        id: plannedActivityId,
+        academicYearId,
+        classroomId,
+        title: "Başlatılacak gerçek etkinlik",
+        status: "planned",
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    setTodayActivityStatus(store, plannedActivityId, "in_progress", {
+      now: new Date("2026-07-22T08:30:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+  assert.equal(
+    (await store.readSnapshot()).activities.find(
+      (record) => record.id === plannedActivityId,
+    )?.status,
+    "planned",
+  );
+});

@@ -33,6 +33,7 @@ import {
   resolveLocalTeacherIdentity,
 } from "./local-teacher-identity.ts";
 import { scheduledPlanIntegrityIssue } from "../planning/scheduled-plan-workspace.ts";
+import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
 
 export {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
@@ -316,6 +317,7 @@ export async function createPlanWithActivity(
     premiumSource?: PremiumDailyTemplateSelection;
     premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
     premiumAlternativeActivated?: boolean;
+    initialActivityStatus?: "planned" | "in_progress";
     now?: Date;
   },
 ): Promise<PlanActivityResult> {
@@ -328,6 +330,14 @@ export async function createPlanWithActivity(
   if (input.endTime && input.startTime >= input.endTime) {
     throw new Error("Etkinlik bitiş saati başlangıç saatinden sonra olmalıdır.");
   }
+  if (
+    input.initialActivityStatus !== undefined &&
+    input.initialActivityStatus !== "planned" &&
+    input.initialActivityStatus !== "in_progress"
+  ) {
+    throw new Error("İlk etkinlik durumu planlandı veya devam ediyor olmalıdır.");
+  }
+  const initialActivityStatus = input.initialActivityStatus ?? "planned";
   const planId = validUuid(input.planId, "Plan");
   const activityId = validUuid(input.activityId, "Etkinlik");
   const profile = normalizeCurriculumProfile(input.curriculumProfile);
@@ -397,6 +407,26 @@ export async function createPlanWithActivity(
       }
       if (activities.some((record) => record.id === activityId)) {
         throw new Error("Bu etkinlik kimliği zaten kullanılıyor.");
+      }
+      if (
+        initialActivityStatus === "in_progress" &&
+        activities.some(
+          (record) =>
+            record.status === "in_progress" &&
+            !isAuthenticSpontaneousObservationActivity(
+              record,
+              plans,
+              scope,
+              input.civilDate,
+            ) &&
+            record.civilDate === input.civilDate &&
+            typeof record.deletedAt !== "string" &&
+            sameScope(record, scope),
+        )
+      ) {
+        throw new Error(
+          "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
+        );
       }
       if (input.premiumSource) {
         const premiumSource = input.premiumSource;
@@ -632,7 +662,7 @@ export async function createPlanWithActivity(
         title: requiredText(input.activityTitle, "Etkinlik başlığı"),
         startTime: input.startTime,
         ...(input.endTime ? { endTime: input.endTime } : {}),
-        status: "planned",
+        status: initialActivityStatus,
         curriculumProfileSnapshot: profile,
         curriculumTargets,
         maarifRefs,

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import {
+  CheckCircledIcon,
   ChevronDownIcon,
   ClockIcon,
   Cross2Icon,
+  ExclamationTriangleIcon,
   PersonIcon,
   StarIcon,
 } from "@radix-ui/react-icons";
@@ -14,6 +16,8 @@ import {
   type FlowControls,
   type FlowScreen,
 } from "../../mobile";
+import { isCivilDate } from "../../core/domain/attendance.ts";
+import { isLocalTime } from "../../core/domain/classroom.ts";
 import type { DashboardStudent as Student } from "../dashboard/dashboard-data";
 import type { CurriculumProfileSnapshot } from "../evidence/evidence-flow";
 import {
@@ -36,6 +40,7 @@ import {
 import type { ScheduledPlanEditDraft } from "./scheduled-plan-workspace.ts";
 
 function formatTurkishCivilDate(civilDate: string) {
+  if (!isCivilDate(civilDate)) return "Plan tarihini YYYY-AA-GG biçiminde yazın";
   const date = new Date(`${civilDate}T12:00:00.000Z`);
   const dateLabel = new Intl.DateTimeFormat("tr-TR", {
     timeZone: "Europe/Istanbul",
@@ -219,18 +224,26 @@ export function PlanCreationScreen({
           ),
     [suggestionArea],
   );
+  const selectedActivitySuggestion = PRESCHOOL_ACTIVITY_SUGGESTIONS.find(
+    (suggestion) => suggestion.title === activityTitle,
+  );
   const assignedStudentIds = initialEdit?.studentIds ??
     (assignmentMode === "whole-class"
       ? students.map((student) => student.id)
       : selectedStudentIds);
   const assignmentCount = selectedTargets.length * assignedStudentIds.length;
+  const planDateValid = isCivilDate(planCivilDate);
+  const startTimeValid = isLocalTime(startTime);
+  const endTimeValid = !endTime || isLocalTime(endTime);
+  const timeOrderValid =
+    startTimeValid && endTimeValid && (!endTime || startTime < endTime);
   const planDateInPremiumWeek =
-    initialEdit
+    planDateValid && (initialEdit
       ? planCivilDate >= initialEdit.allowedDateStart &&
         planCivilDate <= initialEdit.allowedDateEnd
       : !initialTemplate ||
         (planCivilDate >= initialTemplate.weekSnapshot.periodStart &&
-          planCivilDate <= initialTemplate.weekSnapshot.periodEnd);
+          planCivilDate <= initialTemplate.weekSnapshot.periodEnd));
   const premiumFlowDefinition =
     initialEdit?.flowDefinition ?? initialTemplate?.fullDayFlow ?? [];
   const premiumDailyFlowValid =
@@ -256,6 +269,56 @@ export function PlanCreationScreen({
     planTitle === initialTemplate.planTitle
       ? `${initialTemplate.alternativeActivitySnapshot.title} planı`
       : planTitle;
+  const saveBlockingReasons = [
+    !activityTitle.trim()
+      ? "Bir etkinlik seçin veya etkinlik adını yazın."
+      : null,
+    !planTitle.trim() ? "Plan başlığını yazın." : null,
+    selectedTargets.length === 0
+      ? "En az bir program hedefi seçin."
+      : null,
+    assignedStudentIds.length === 0
+      ? "En az bir çocuk seçerek çocuk kapsamını tamamlayın."
+      : null,
+    !planDateValid
+      ? "Plan tarihini YYYY-AA-GG biçiminde yazın."
+      : null,
+    planDateValid && !planDateInPremiumWeek
+      ? "Plan tarihini kaynak haftanın tarih aralığına alın."
+      : null,
+    !startTimeValid
+      ? "Başlangıç saatini SS:DD biçiminde yazın."
+      : null,
+    !endTimeValid
+      ? "Bitiş saatini SS:DD biçiminde yazın."
+      : null,
+    startTimeValid && endTimeValid && !timeOrderValid
+      ? "Bitiş saati başlangıç saatinden sonra olmalıdır."
+      : null,
+    !premiumDailyFlowValid
+      ? "Tam gün akışındaki süre ve not alanlarını kontrol edin."
+      : null,
+  ].filter((reason): reason is string => reason !== null);
+  const saveReady = !busy && saveBlockingReasons.length === 0;
+  const saveDisabled = busy || saveBlockingReasons.length > 0;
+  const saveReadinessTitle = error
+    ? "Plan kaydedilemedi"
+    : busy
+      ? "Plan kaydediliyor"
+      : saveReady
+        ? "Kaydetmeye hazır"
+        : saveBlockingReasons.length === 1
+          ? "1 adım kaldı"
+          : `${saveBlockingReasons.length} adım kaldı`;
+  const saveReadinessDetail = error
+    ? error
+    : busy
+      ? "Kayıt tamamlanana kadar bu ekranda kalın."
+      : saveReady
+        ? initialEdit
+          ? "Değişiklikler kontrol edildi; kaydedebilirsiniz."
+          : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
+        : saveBlockingReasons.join(" ");
   const selectPremiumApplication = (useAlternative: boolean) => {
     setPremiumAlternativeActivated(useAlternative);
     if (!initialTemplate) return;
@@ -276,7 +339,11 @@ export function PlanCreationScreen({
       !activityTitle.trim() ||
       selectedTargets.length === 0 ||
       assignedStudentIds.length === 0 ||
+      !planDateValid ||
       !planDateInPremiumWeek ||
+      !startTimeValid ||
+      !endTimeValid ||
+      !timeOrderValid ||
       !premiumDailyFlowValid ||
       busy
     ) return;
@@ -339,6 +406,45 @@ export function PlanCreationScreen({
               ? "Resmî MEB kaynağıyla doğrulanmış program"
               : "Sınıf için seçilen program"}
           </em>
+        </section>
+
+        <section
+          className="plan-save-dock"
+          aria-label="Plan kaydetme durumu"
+          data-error={error ? "true" : "false"}
+        >
+          <div
+            id="plan-save-readiness"
+            className={
+              error
+                ? "plan-readiness is-error"
+                : saveReady
+                  ? "plan-readiness is-ready"
+                  : "plan-readiness"
+            }
+            role={error ? "alert" : "status"}
+            aria-live={error ? "assertive" : "polite"}
+            aria-atomic="true"
+          >
+            {!error && saveReady ? (
+              <CheckCircledIcon aria-hidden="true" />
+            ) : (
+              <ExclamationTriangleIcon aria-hidden="true" />
+            )}
+            <span>
+              <strong>{saveReadinessTitle}</strong>
+              <small>{saveReadinessDetail}</small>
+            </span>
+          </div>
+          <button
+            className="d1-primary"
+            type="button"
+            onClick={() => void save()}
+            disabled={saveDisabled}
+            aria-describedby="plan-save-readiness"
+          >
+            {busy ? "Kaydediliyor…" : initialEdit ? "Değişiklikleri kaydet" : initialTemplate ? "Tam gün planını kaydet" : "Planı kaydet"}
+          </button>
         </section>
 
         {premiumFlowDefinition.length > 0 ? (
@@ -516,7 +622,9 @@ export function PlanCreationScreen({
               <span className="d1-kicker">Oyun temelli fikir havuzu</span>
               <h2 id="plan-ideas-title">Bugün neyi keşfedelim?</h2>
             </div>
-            <strong>Birini seçin</strong>
+            <strong aria-live="polite">
+              {selectedActivitySuggestion ? "Fikir seçildi" : "Birini seçin"}
+            </strong>
           </div>
           <p>
             Alanı seçin, ardından bir etkinliğe dokunun.
@@ -558,7 +666,9 @@ export function PlanCreationScreen({
                 <StarIcon aria-hidden="true" />
                 <strong>{suggestion.title}</strong>
                 <small>{suggestion.teacherPrompt}</small>
-                <span>Bu fikri kullan</span>
+                <span>
+                  {activityTitle === suggestion.title ? "Seçildi" : "Bu fikri kullan"}
+                </span>
               </button>
             ))}
           </Carousel>
@@ -608,7 +718,7 @@ export function PlanCreationScreen({
               />
               <div className="d1-form-grid">
                 <label htmlFor="d1-start-time">Başlangıç
-                  <input
+                  <KeyboardInput
                     id="d1-start-time"
                     type="time"
                     value={startTime}
@@ -616,7 +726,7 @@ export function PlanCreationScreen({
                   />
                 </label>
                 <label htmlFor="d1-end-time">Bitiş
-                  <input
+                  <KeyboardInput
                     id="d1-end-time"
                     type="time"
                     value={endTime}
@@ -643,7 +753,7 @@ export function PlanCreationScreen({
               <span className="d1-kicker">Program omurgası</span>
               <h2 id="curriculum-picker-title">Bu etkinlikte ele alınacak hedefler</h2>
             </div>
-            <strong>{selectedTargets.length} seçili</strong>
+            <strong aria-live="polite">{selectedTargets.length} hedef seçili</strong>
           </div>
           <KeyboardInput
             value={targetQuery}
@@ -758,24 +868,6 @@ export function PlanCreationScreen({
           </div>
         </details>
         </>}
-
-        {error ? <p className="d1-error" role="alert">{error}</p> : null}
-        <button
-          className="d1-primary"
-          type="button"
-          onClick={() => void save()}
-          disabled={
-            busy ||
-            !planTitle.trim() ||
-            !activityTitle.trim() ||
-            selectedTargets.length === 0 ||
-            assignedStudentIds.length === 0 ||
-            !planDateInPremiumWeek ||
-            !premiumDailyFlowValid
-          }
-        >
-          {busy ? "Kaydediliyor…" : initialEdit ? "Değişiklikleri kaydet" : initialTemplate ? "Tam gün planını kaydet" : "Planı kaydet"}
-        </button>
       </div>
     </MobileScroll>
   );
