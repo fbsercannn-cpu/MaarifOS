@@ -84,18 +84,29 @@ test("service worker kontrollü güncelleme, sağlık penceresi ve rollback cach
   assert.match(worker, /request\.headers\.has\("Authorization"\)/);
   assert.match(worker, /request\.headers\.has\("Range"\)/);
   assert.match(worker, /no-store/);
+  assert.match(worker, /\^text\\\/html/);
+  assert.match(worker, /const hasScript = builtAssets\.some/);
+  assert.match(worker, /const hasStyle = builtAssets\.some/);
+  assert.match(worker, /const shellReadyUrl = new URL\("__maarifos_shell_ready__"/);
+  assert.match(worker, /cache\.match\(shellReadyUrl\)/);
+  assert.match(worker, /release: WORKER_RELEASE/);
+  assert.match(worker, /function decodeRoutingPath\(pathname\)/);
+  assert.match(worker, /function isAppNavigationPath\(url\)/);
   assert.match(worker, /function isSensitivePath\(url\)/);
   assert.match(worker, /isSensitivePath\(url\) \|\|/);
   assert.match(worker, /maarifos-icon-192\.png/);
   assert.match(worker, /maarifos-icon-512\.png/);
   assert.match(worker, /maarifos-icon-maskable-512\.png/);
   assert.match(worker, /apple-touch-icon-180\.png/);
-  assert.match(worker, /const WORKER_RELEASE = "0\.9\.0"/);
+  assert.match(worker, /const WORKER_RELEASE = "0\.9\.1"/);
   assert.match(worker, /shell-\$\{CACHE_VERSION\}/);
   assert.match(worker, /assets-\$\{CACHE_VERSION\}/);
   assert.match(worker, /const CACHE_HEALTH_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
   assert.match(worker, /previousRelease/);
   assert.match(worker, /fallbackCacheNames/);
+  assert.match(worker, /function isCurrentWorkerActive\(\)/);
+  assert.match(worker, /if \(!isCurrentWorkerActive\(\)\) return false/);
+  assert.match(worker, /metadata\.currentRelease !== WORKER_RELEASE/);
   assert.match(worker, /markHealthyAndCleanup/);
   assert.match(worker, /self\.clients\.matchAll/);
   assert.match(worker, /client\.postMessage/);
@@ -133,7 +144,8 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
           : "application/octet-stream",
       }),
       clone: () => makeResponse(request),
-      text: async () => "<!doctype html><html></html>",
+      text: async () =>
+        '<!doctype html><html><head><script type="module" src="/assets/index-test1234.js"></script><link rel="stylesheet" href="/assets/index-test1234.css"></head></html>',
     };
   };
   const registration = {
@@ -192,7 +204,7 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
   await Promise.all(updateInstallPromises);
   assert.equal(clientLookupCount, 1);
   assert.equal(JSON.stringify(clientMessages), JSON.stringify([
-    { type: "maarifos:update-ready", version: "0.9.0" },
+    { type: "maarifos:update-ready", version: "0.9.1" },
   ]));
 
   const messagePromises = [];
@@ -203,15 +215,276 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
       waitUntil: (promise) => messagePromises.push(promise),
     });
   dispatchMessage({ type: "maarifos:skip-waiting", version: "0.2.0" });
-  dispatchMessage({ type: "unrelated", version: "0.9.0" });
+  dispatchMessage({ type: "unrelated", version: "0.9.1" });
   assert.equal(skipWaitingCount, 0);
 
-  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.9.0" });
+  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.9.1" });
   await Promise.all(messagePromises);
   assert.equal(skipWaitingCount, 1);
 });
 
-test("service worker hassas kök yolları online ve offline navigasyonda kabukla yanıtlamaz", async () => {
+test("waiting worker sağlık sorgusu aktif sürüm cache'lerini değiştirmez", async () => {
+  const source = await readFile(projectFile("public/sw.js"), "utf8");
+  const listeners = new Map();
+  const deletedCaches = [];
+  const cacheWrites = [];
+  const statusMessages = [];
+  const currentShellResponse = new Response("current-shell", {
+    headers: { "Content-Type": "text/html" },
+  });
+  const metadataResponse = () =>
+    new Response(
+      JSON.stringify({
+        schemaVersion: 1,
+        currentRelease: "0.9.0",
+        previousRelease: "0.8.0",
+        activatedAt: 1,
+        healthyAt: 1,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  const cacheNames = [
+    "maarifos-shell-0.9.1",
+    "maarifos-assets-0.9.1",
+    "maarifos-meta",
+    "maarifos-shell-0.9.0",
+    "maarifos-assets-0.9.0",
+    "maarifos-shell-0.8.0",
+    "maarifos-assets-0.8.0",
+  ];
+  const shellCache = {
+    match: async (request) => {
+      const requestUrl = request?.url ?? request?.href ?? String(request);
+      if (new URL(requestUrl).pathname === "/__maarifos_shell_ready__") {
+        return new Response(
+          JSON.stringify({ schemaVersion: 1, release: "0.9.1" }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return currentShellResponse.clone();
+    },
+    put: async (request) => cacheWrites.push(request),
+  };
+  const metadataCache = {
+    match: async () => metadataResponse(),
+    put: async (request) => cacheWrites.push(request),
+  };
+  const emptyCache = {
+    match: async () => null,
+    put: async (request) => cacheWrites.push(request),
+  };
+  const self = {
+    registration: {
+      scope: "https://example.test/",
+      active: { scriptURL: "https://example.test/sw.js?v=0.9.0" },
+      navigationPreload: null,
+    },
+    location: { origin: "https://example.test" },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () => [],
+    },
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    skipWaiting: async () => undefined,
+  };
+
+  vm.runInNewContext(source, {
+    AbortController,
+    Headers,
+    Request,
+    Response,
+    Set,
+    URL,
+    caches: {
+      keys: async () => [...cacheNames],
+      open: async (cacheName) => {
+        if (cacheName === "maarifos-shell-0.9.1") return shellCache;
+        if (cacheName === "maarifos-meta") return metadataCache;
+        return emptyCache;
+      },
+      delete: async (cacheName) => {
+        deletedCaches.push(cacheName);
+        return true;
+      },
+    },
+    clearTimeout,
+    fetch: async () => {
+      throw new Error("Sağlık sorgusu ağ isteği yapmamalı.");
+    },
+    self,
+    setTimeout,
+  });
+
+  const waitUntilPromises = [];
+  listeners.get("message")({
+    data: { type: "maarifos:get-status" },
+    ports: [{ postMessage: (message) => statusMessages.push(message) }],
+    waitUntil: (promise) => waitUntilPromises.push(promise),
+  });
+  await Promise.all(waitUntilPromises);
+
+  assert.deepEqual(deletedCaches, []);
+  assert.deepEqual(cacheWrites, []);
+  assert.equal(statusMessages.length, 1);
+  assert.equal(statusMessages[0].type, "maarifos:sw-status");
+  assert.equal(statusMessages[0].version, "0.9.1");
+  assert.equal(statusMessages[0].shellReady, true);
+});
+
+test("Cloudflare tarafından sonradan eklenen HTML yalnız doğrulanmış aynı-origin build varlıklarını kurar", async () => {
+  const source = await readFile(projectFile("public/sw.js"), "utf8");
+  const listeners = new Map();
+  const fetchedUrls = [];
+  const cacheWrites = [];
+  const cache = {
+    match: async () => null,
+    put: async (request) => {
+      cacheWrites.push(request?.url ?? request?.href ?? String(request));
+    },
+  };
+  const html = `<!doctype html>
+    <html><head>
+      <script type="module" src="/assets/index-safe1234.js"></script>
+      <link rel="stylesheet" href="/assets/index-safe1234.css">
+      <script>(function(){const injected='<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></scr'+'ipt>';})();</script>
+      <a href="https://evil.example/assets/foreign-safe1234.js"></a>
+      <a href="http://[invalid"></a>
+    </head><body><div id="root"></div></body></html>`;
+  const makeResponse = (request) => {
+    const pathname = new URL(request.url).pathname;
+    return {
+      ok: true,
+      type: "basic",
+      headers: new Headers({
+        "Content-Type": pathname === "/index.html"
+          ? "text/html; charset=utf-8"
+          : "application/octet-stream",
+      }),
+      clone: () => makeResponse(request),
+      text: async () => html,
+    };
+  };
+  const self = {
+    registration: {
+      scope: "https://example.test/",
+      active: null,
+      navigationPreload: null,
+    },
+    location: { origin: "https://example.test" },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () => [],
+    },
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    skipWaiting: async () => undefined,
+  };
+
+  vm.runInNewContext(source, {
+    AbortController,
+    Headers,
+    Request,
+    Response,
+    Set,
+    URL,
+    caches: {
+      keys: async () => [],
+      open: async () => cache,
+      delete: async () => true,
+    },
+    clearTimeout,
+    fetch: async (request) => {
+      fetchedUrls.push(request.url);
+      return makeResponse(request);
+    },
+    self,
+    setTimeout,
+  });
+
+  const installPromises = [];
+  listeners.get("install")({
+    waitUntil: (promise) => installPromises.push(promise),
+  });
+  await Promise.all(installPromises);
+
+  assert.ok(fetchedUrls.includes("https://example.test/assets/index-safe1234.js"));
+  assert.ok(fetchedUrls.includes("https://example.test/assets/index-safe1234.css"));
+  assert.equal(fetchedUrls.some((url) => url.includes("/cdn-cgi/")), false);
+  assert.equal(fetchedUrls.some((url) => url.startsWith("https://evil.example/")), false);
+  assert.equal(cacheWrites.at(-1), "https://example.test/__maarifos_shell_ready__");
+});
+
+test("eksik build varlığı tamamlanma markerı yazmadan service worker kurulumunu durdurur", async () => {
+  const source = await readFile(projectFile("public/sw.js"), "utf8");
+  const listeners = new Map();
+  const cacheWrites = [];
+  const html =
+    '<!doctype html><script type="module" src="/assets/index-safe1234.js"></script><link rel="stylesheet" href="/assets/index-missing1234.css">';
+  const cache = {
+    match: async () => null,
+    put: async (request) => {
+      cacheWrites.push(request?.url ?? request?.href ?? String(request));
+    },
+  };
+  const makeResponse = (request) => {
+    const pathname = new URL(request.url).pathname;
+    const missing = pathname === "/assets/index-missing1234.css";
+    return {
+      ok: !missing,
+      type: "basic",
+      headers: new Headers({
+        "Content-Type": pathname === "/index.html"
+          ? "text/html; charset=utf-8"
+          : "application/octet-stream",
+      }),
+      clone: () => makeResponse(request),
+      text: async () => html,
+    };
+  };
+  const self = {
+    registration: {
+      scope: "https://example.test/",
+      active: null,
+      navigationPreload: null,
+    },
+    location: { origin: "https://example.test" },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () => [],
+    },
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    skipWaiting: async () => undefined,
+  };
+
+  vm.runInNewContext(source, {
+    AbortController,
+    Headers,
+    Request,
+    Response,
+    Set,
+    URL,
+    caches: {
+      keys: async () => [],
+      open: async () => cache,
+      delete: async () => true,
+    },
+    clearTimeout,
+    fetch: async (request) => makeResponse(request),
+    self,
+    setTimeout,
+  });
+
+  const installPromises = [];
+  listeners.get("install")({
+    waitUntil: (promise) => installPromises.push(promise),
+  });
+  await assert.rejects(Promise.all(installPromises), /App-shell/);
+  assert.equal(
+    cacheWrites.includes("https://example.test/__maarifos_shell_ready__"),
+    false,
+  );
+});
+
+test("service worker yalnız extensionless uygulama rotalarını offline kabuğa düşürür", async () => {
   const source = await readFile(projectFile("public/sw.js"), "utf8");
   const listeners = new Map();
   const offlineShell = new Response("offline-shell", {
@@ -283,7 +556,16 @@ test("service worker hassas kök yolları online ve offline navigasyonda kabukla
     return responses;
   };
 
-  for (const path of ["/api", "/api/", "/api/children", "/auth", "/auth/", "/auth/session"]) {
+  for (const path of [
+    "/api",
+    "/api/",
+    "/api/children",
+    "/api%2Fchildren",
+    "/auth",
+    "/auth/",
+    "/auth/session",
+    "/auth%2Fsession",
+  ]) {
     online = true;
     const beforeOnline = networkRequestCount;
     assert.deepEqual(await dispatchNavigation(path), []);
@@ -295,7 +577,33 @@ test("service worker hassas kök yolları online ve offline navigasyonda kabukla
     assert.equal(networkRequestCount, beforeOffline, `${path} offline iken uygulama kabuğuna düşmemeli`);
   }
 
-  for (const path of ["/apiary", "/author"]) {
+  for (const path of [
+    "/missing.json",
+    "/assets/missing.js",
+    "/assets/missing",
+    "/assets%2Fmissing.js",
+    "/missing%2Ejson",
+    "/missing%252Ejson",
+  ]) {
+    online = true;
+    const beforeOnline = networkRequestCount;
+    assert.deepEqual(await dispatchNavigation(path), []);
+    assert.equal(networkRequestCount, beforeOnline, `${path} online iken app-shell rotası olmamalı`);
+
+    online = false;
+    const beforeOffline = networkRequestCount;
+    assert.deepEqual(await dispatchNavigation(path), []);
+    assert.equal(networkRequestCount, beforeOffline, `${path} offline iken uygulama kabuğuna düşmemeli`);
+  }
+
+  for (const path of [
+    "/",
+    "/index.html",
+    "/index%2Ehtml",
+    "/apiary",
+    "/authentication",
+    "/classroom?native=1",
+  ]) {
     online = true;
     const [onlineResponse] = await dispatchNavigation(path);
     assert.equal(await onlineResponse.text(), "online");
@@ -339,6 +647,10 @@ test("PWA girişi doğrulanmış offline durumunu ve kullanıcı kontrollü gün
     pwa,
     /waitingWorker\.postMessage/,
   );
+  assert.match(pwa, /waitingHealth = await requestWorkerHealth\(waitingWorker\)/);
+  assert.match(pwa, /!waitingHealth\.shellReady/);
+  assert.match(pwa, /publishWaitingWorkerVerificationFailure/);
+  assert.match(pwa, /const waitingWorkerReady = currentRegistration/);
   assert.match(pwa, /!registration\.active/);
   assert.match(
     pwa,

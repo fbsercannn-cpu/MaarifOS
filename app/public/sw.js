@@ -1,7 +1,7 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.9.0";
+const WORKER_RELEASE = "0.9.1";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
 const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
 const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";
@@ -18,6 +18,7 @@ const scopeUrl = new URL("./", self.registration.scope);
 const indexUrl = new URL("index.html", scopeUrl);
 const manifestUrl = new URL("manifest.webmanifest", scopeUrl);
 const metadataUrl = new URL("__maarifos_runtime_metadata__", scopeUrl);
+const shellReadyUrl = new URL("__maarifos_shell_ready__", scopeUrl);
 const iconUrls = [
   "assets/brand/maarifos-icon-192.png",
   "assets/brand/maarifos-icon-512.png",
@@ -61,6 +62,11 @@ function releaseFromShellCache(cacheName) {
   return cacheName.startsWith(prefix) ? cacheName.slice(prefix.length) : null;
 }
 
+function isCurrentWorkerActive() {
+  const activeScriptUrl = self.registration.active?.scriptURL;
+  return typeof activeScriptUrl === "string" && activeScriptUrl === self.location.href;
+}
+
 async function recordActivation() {
   const existing = await readRuntimeMetadata();
   if (existing?.currentRelease === WORKER_RELEASE) return existing;
@@ -86,12 +92,20 @@ async function recordActivation() {
 
 async function verifyCurrentShellCache() {
   const cache = await caches.open(SHELL_CACHE);
-  const [scope, index, manifest] = await Promise.all([
+  const [scope, index, manifest, readyMarker] = await Promise.all([
     cache.match(scopeUrl),
     cache.match(indexUrl),
     cache.match(manifestUrl),
+    cache.match(shellReadyUrl),
   ]);
-  return Boolean(scope && index && manifest);
+  if (!scope || !index || !manifest || !readyMarker) return false;
+
+  try {
+    const marker = await readyMarker.json();
+    return marker?.schemaVersion === 1 && marker?.release === WORKER_RELEASE;
+  } catch {
+    return false;
+  }
 }
 
 async function fallbackCacheNames(kind) {
@@ -114,9 +128,12 @@ async function fallbackCacheNames(kind) {
 }
 
 async function markHealthyAndCleanup() {
+  if (!isCurrentWorkerActive()) return false;
   if (!(await verifyCurrentShellCache())) return false;
 
-  const metadata = (await readRuntimeMetadata()) ?? (await recordActivation());
+  const metadata = await readRuntimeMetadata();
+  if (!metadata || metadata.currentRelease !== WORKER_RELEASE) return false;
+
   const healthyAt = metadata.healthyAt ?? Date.now();
   if (metadata.healthyAt === null) {
     await writeRuntimeMetadata({ ...metadata, healthyAt });
@@ -141,7 +158,6 @@ async function markHealthyAndCleanup() {
 async function getWorkerHealth() {
   const cacheNames = await caches.keys();
   const shellReady = await verifyCurrentShellCache();
-  if (shellReady) await markHealthyAndCleanup();
   return {
     type: STATUS_RESPONSE_MESSAGE,
     version: WORKER_RELEASE,
@@ -204,7 +220,12 @@ function discoverBuiltAssets(html) {
   const referencePattern = /(?:src|href)=["']([^"']+)["']/gi;
 
   for (const match of html.matchAll(referencePattern)) {
-    const candidate = new URL(match[1], scopeUrl);
+    let candidate;
+    try {
+      candidate = new URL(match[1], scopeUrl);
+    } catch {
+      continue;
+    }
     if (candidate.origin === scopeUrl.origin && candidate.pathname.startsWith(assetsPath)) {
       assetUrls.add(candidate.href);
     }
@@ -217,12 +238,20 @@ async function installAppShell() {
   const cache = await caches.open(SHELL_CACHE);
   const indexRequest = new Request(indexUrl, { cache: "reload" });
   const indexResponse = await fetch(indexRequest);
+  const contentType = indexResponse.headers.get("Content-Type") || "";
 
-  if (!canStore(indexResponse)) {
+  if (!canStore(indexResponse) || !/^text\/html(?:\s*;|$)/i.test(contentType)) {
     throw new Error("MaarifOS çevrim dışı uygulama kabuğu alınamadı.");
   }
 
   const html = await indexResponse.clone().text();
+  const builtAssets = discoverBuiltAssets(html);
+  const hasScript = builtAssets.some((url) => new URL(url).pathname.endsWith(".js"));
+  const hasStyle = builtAssets.some((url) => new URL(url).pathname.endsWith(".css"));
+  if (!hasScript || !hasStyle) {
+    throw new Error("MaarifOS uygulama kabuğunun derlenmiş kaynakları doğrulanamadı.");
+  }
+
   await Promise.all([
     cache.put(scopeUrl, indexResponse.clone()),
     cache.put(indexUrl, indexResponse.clone()),
@@ -230,10 +259,16 @@ async function installAppShell() {
     ...iconUrls.map((url) =>
       fetchAndStore(cache, new Request(url, { cache: "reload" })),
     ),
-    ...discoverBuiltAssets(html).map((url) =>
+    ...builtAssets.map((url) =>
       fetchAndStore(cache, new Request(url, { cache: "reload" })),
     ),
   ]);
+  await cache.put(
+    shellReadyUrl,
+    new Response(JSON.stringify({ schemaVersion: 1, release: WORKER_RELEASE }), {
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 }
 
 self.addEventListener("install", (event) => {
@@ -344,10 +379,39 @@ async function cacheFirstStaticAsset(event) {
 }
 
 function isSensitivePath(url) {
+  const routingPath = decodeRoutingPath(url.pathname);
+  if (routingPath === null) return false;
+
   return ["api", "auth"].some((segment) => {
     const path = new URL(segment, scopeUrl).pathname;
-    return url.pathname === path || url.pathname.startsWith(`${path}/`);
+    return routingPath === path || routingPath.startsWith(`${path}/`);
   });
+}
+
+function decodeRoutingPath(pathname) {
+  try {
+    const decoded = decodeURIComponent(pathname);
+    if (decoded.includes("%") || decoded.includes("\\") || decoded.includes("\0")) {
+      return null;
+    }
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function isAppNavigationPath(url) {
+  const routingPath = decodeRoutingPath(url.pathname);
+  if (routingPath === null) return false;
+  if ([scopeUrl.pathname, indexUrl.pathname].includes(routingPath)) return true;
+
+  const assetsRootPath = assetsPath.endsWith("/") ? assetsPath.slice(0, -1) : assetsPath;
+  const finalPathSegment = routingPath.split("/").at(-1) || "";
+  return (
+    routingPath !== assetsRootPath &&
+    !routingPath.startsWith(assetsPath) &&
+    !finalPathSegment.includes(".")
+  );
 }
 
 function shouldHandleStaticRequest(request, url) {
@@ -377,7 +441,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(event));
+    if (isAppNavigationPath(url)) {
+      event.respondWith(networkFirstNavigation(event));
+    }
     return;
   }
 

@@ -199,36 +199,75 @@ function isNewReleaseMessage(
   );
 }
 
-async function announceWaitingWorker(
-  registration: ServiceWorkerRegistration,
-  announcedVersion?: string,
-): Promise<void> {
-  const waitingWorker = registration.waiting;
-  if (
-    !registration.active ||
-    !waitingWorker ||
-    waitingWorker === announcedWaitingWorker
-  ) {
+function publishWaitingWorkerVerificationFailure(): void {
+  announcedWaitingWorker = null;
+  if (currentStatus.offlineReady) {
+    publishStatus({
+      ...currentStatus,
+      phase: "ready",
+      updateVersion: null,
+      message: "Çevrim dışı uygulama hazır.",
+    });
     return;
   }
 
-  announcedWaitingWorker = waitingWorker;
-  let updateVersion = announcedVersion ?? CURRENT_RELEASE.version;
-  try {
-    updateVersion = (await requestWorkerHealth(waitingWorker)).version;
-  } catch {
-    // Waiting worker yine de kullanıcı kontrollü etkinleştirmeye sunulur.
+  publishStatus({
+    phase: "error",
+    offlineReady: false,
+    version: CURRENT_RELEASE.version,
+    activeVersion: currentStatus.activeVersion,
+    updateVersion: null,
+    message: "Yeni çevrim dışı sürümün uygulama dosyaları doğrulanamadı.",
+    errorCode: "cache",
+  });
+}
+
+async function announceWaitingWorker(
+  registration: ServiceWorkerRegistration,
+  announcedVersion?: string,
+): Promise<boolean> {
+  const waitingWorker = registration.waiting;
+  if (
+    !registration.active ||
+    !waitingWorker
+  ) {
+    return false;
   }
 
+  if (
+    waitingWorker === announcedWaitingWorker &&
+    currentStatus.phase === "update-ready"
+  ) {
+    return true;
+  }
+
+  let waitingHealth: ServiceWorkerHealth;
+  try {
+    waitingHealth = await requestWorkerHealth(waitingWorker);
+  } catch {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
+  if (
+    !waitingHealth.shellReady ||
+    (announcedVersion !== undefined && announcedVersion !== waitingHealth.version)
+  ) {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
+  announcedWaitingWorker = waitingWorker;
   publishStatus({
     phase: "update-ready",
     offlineReady: currentStatus.offlineReady,
     version: CURRENT_RELEASE.version,
     activeVersion: currentStatus.activeVersion,
-    updateVersion,
+    updateVersion: waitingHealth.version,
     message: "Yeni sürüm hazır; açık kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
   });
   window.dispatchEvent(new CustomEvent(PWA_UPDATE_READY_EVENT));
+  return true;
 }
 
 function observeInstallingWorker(
@@ -298,16 +337,32 @@ export async function activateWaitingServiceWorker(): Promise<boolean> {
   }
 
   currentRegistration = registration;
+  let waitingHealth: ServiceWorkerHealth;
+  try {
+    waitingHealth = await requestWorkerHealth(waitingWorker);
+  } catch {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+  if (
+    !waitingHealth.shellReady ||
+    (currentStatus.updateVersion !== null &&
+      currentStatus.updateVersion !== waitingHealth.version)
+  ) {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
   updateActivationRequested = true;
   publishStatus({
     ...currentStatus,
     phase: "activating-update",
-    updateVersion: currentStatus.updateVersion ?? CURRENT_RELEASE.version,
+    updateVersion: waitingHealth.version,
     message: "Yeni sürüm güvenli biçimde etkinleştiriliyor.",
   });
   waitingWorker.postMessage({
     type: SERVICE_WORKER_ACTIVATE_MESSAGE,
-    version: currentStatus.updateVersion ?? CURRENT_RELEASE.version,
+    version: waitingHealth.version,
   });
   return true;
 }
@@ -371,15 +426,27 @@ async function installServiceWorker(): Promise<void> {
     }
     await registration.update();
   } catch (error) {
-    publishStatus({
-      phase: "error",
-      offlineReady: false,
-      version: CURRENT_RELEASE.version,
-      activeVersion: null,
-      updateVersion: null,
-      message: "Çevrim dışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
-      errorCode: "registration",
-    });
+    const waitingWorkerReady = currentRegistration
+      ? await announceWaitingWorker(currentRegistration)
+      : false;
+    if (waitingWorkerReady) return;
+
+    if (currentStatus.offlineReady) {
+      console.warn("MaarifOS çevrim dışı güncelleme denetimi tamamlanamadı.", error);
+      return;
+    }
+
+    if (currentStatus.phase !== "error") {
+      publishStatus({
+        phase: "error",
+        offlineReady: false,
+        version: CURRENT_RELEASE.version,
+        activeVersion: null,
+        updateVersion: null,
+        message: "Çevrim dışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
+        errorCode: "registration",
+      });
+    }
     console.warn("MaarifOS çevrim dışı desteği başlatılamadı.", error);
   }
 }

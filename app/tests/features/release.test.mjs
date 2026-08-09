@@ -37,11 +37,11 @@ function acknowledgement({
 }
 
 test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata taşır", () => {
-  assert.equal(CURRENT_RELEASE.version, "0.9.0");
+  assert.equal(CURRENT_RELEASE.version, "0.9.1");
   assert.equal(CURRENT_RELEASE.releasedOn, "2026-08-09");
   assert.equal(
     CURRENT_RELEASE.title,
-    "Öğretmen planı, değerlendirmesi ve belgeleri birbirine bağlandı",
+    "Çevrim dışı güncelleme güvenliği güçlendirildi",
   );
   assert.ok(CURRENT_RELEASE.notes.length >= 4);
   assert.ok(CURRENT_RELEASE.notes.every((note) => note.trim().length >= 20));
@@ -101,8 +101,8 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
     JSON.parse(storage.getItem(RELEASE_ACKNOWLEDGEMENT_STORAGE_KEY)),
     {
       schemaVersion: 1,
-      firstSeenVersion: "0.9.0",
-      acknowledgedVersion: "0.9.0",
+      firstSeenVersion: "0.9.1",
+      acknowledgedVersion: "0.9.1",
       acknowledgedAt: "2026-07-28T12:30:00.000Z",
     },
   );
@@ -110,7 +110,7 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
   const state = inspectCurrentRelease({ storage });
   assert.equal(state.kind, "current");
   assert.equal(state.shouldPresent, false);
-  assert.equal(state.previousVersion, "0.9.0");
+  assert.equal(state.previousVersion, "0.9.1");
 });
 
 test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notlarını sunar", () => {
@@ -125,7 +125,7 @@ test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notların
   assert.equal(state.kind, "update");
   assert.equal(state.shouldPresent, true);
   assert.equal(state.previousVersion, "0.1.0");
-  assert.equal(state.release.version, "0.9.0");
+  assert.equal(state.release.version, "0.9.1");
 });
 
 test("güncelleme onayında ilk görülen sürümü korur", () => {
@@ -151,7 +151,7 @@ test("güncelleme onayında ilk görülen sürümü korur", () => {
     {
       schemaVersion: 1,
       firstSeenVersion: "0.0.5",
-      acknowledgedVersion: "0.9.0",
+      acknowledgedVersion: "0.9.1",
       acknowledgedAt: "2026-07-28T15:00:00.000Z",
     },
   );

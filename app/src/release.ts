@@ -63,16 +63,14 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.9.0",
+  version: "0.9.1",
   releasedOn: "2026-08-09",
-  title: "Öğretmen planı, değerlendirmesi ve belgeleri birbirine bağlandı",
+  title: "Çevrim dışı güncelleme güvenliği güçlendirildi",
   notes: Object.freeze([
-    "Yıllık omurga, Eylül aylık planı, haftalar ve 10 bloklu günlük akış aynı öğretmen zincirinde görünür; gelecek tarihli planlar Takvim’den bulunup güvenle düzenlenir.",
-    "Haftalık kararlar sonraki haftaya, çocuklar-program-öğretmen yönünden aylık değerlendirme ise sonraki aya açık öneri olarak taşınır; hiçbir karar sessizce uygulanmaz.",
-    "Öğretmenin kaydettiği plan ve değerlendirmeler PDF/DOCX belgelerine girer; MEB Ek 18 kontrol çizelgesi ve ayrı öğretmen değerlendirme eki üretilebilir.",
-    "Hızlı gözlem tekrarlı ayrıntılardan arındırıldı; aynı değişmez gözlemden öğretmen onaylı MEB Ek 3 anekdot kaydı ve PDF/DOCX belgesi hazırlanabilir.",
-    "Kurucu test erişimi iki cihazla ve cihaz anahtarıyla sınırlandı; normal ücretli premium sözleşmesi ile tek cihaz varsayımı korunur.",
-    "Uygulama PIN’i yalnız ekran kilididir, cihaz içi veritabanı şifrelemesi değildir; gerçek çocuk verili pilot, ayrı depolama kasası ve kurumsal onay tamamlanana kadar uygun değildir.",
+    "Bekleyen yeni sürümün sağlık denetimi artık çalışan sürümün çevrim dışı önbelleğini değiştirmez veya silemez.",
+    "Güncelleme yalnız yeni uygulama kabuğu ve derlenmiş kaynakları doğrulandıktan sonra sunulur; öğretmen onay verene kadar mevcut çevrim dışı sürüm çalışmayı sürdürür.",
+    "Uygulama kabuğunun HTML türü ile JavaScript ve stil kaynakları kurulum sırasında doğrulanır; eksik veya karışık yayın çevrim dışı hazır sayılmaz.",
+    "Plan, gözlem, değerlendirme, belge ve kurucu premium işlevleri 0.9.0 ile aynı kalır; bu yama PWA güncelleme bütünlüğünü düzeltir.",
   ]),
 });
 

@@ -65,7 +65,7 @@ Exact request:
     "y": "<32-byte-base64url>"
   },
   "deviceKeyThumbprint": "sha256:<RFC-7638-base64url>",
-  "appVersion": "0.9.0",
+  "appVersion": "0.9.1",
   "idempotencyKey": "<UUID-v4>"
 }
 ```

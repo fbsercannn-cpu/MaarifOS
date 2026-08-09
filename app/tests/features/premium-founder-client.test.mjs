@@ -214,7 +214,7 @@ async function harness(options = {}) {
 function activationInput(subject, overrides = {}) {
   return {
     code: FOUNDER_PIN,
-    appVersion: "0.9.0",
+    appVersion: "0.9.1",
     configuration: subject.configuration,
     fetcher: subject.fetcher,
     deviceIdentityStore: subject.deviceIdentityStore,

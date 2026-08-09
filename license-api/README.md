@@ -2,7 +2,7 @@
 
 Zero-runtime-dependency Cloudflare Worker + D1 service for the two founder phones. It adds a device-bound `staff-code` entitlement without changing the commercial premium purchase path.
 
-This private Worker is independently versioned and remains at SemVer `0.1.0`; the main MaarifOS app moving to `0.9.0` does not change the License API version.
+This private Worker is independently versioned and remains at SemVer `0.1.0`; the main MaarifOS app moving to `0.9.1` does not change the License API version.
 
 ## What is implemented
 

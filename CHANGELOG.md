@@ -4,6 +4,24 @@ Bu projedeki önemli değişiklikler bu dosyada tutulur. Biçim, Keep a Changelo
 ilkelerine; sürümler SemVer 2.0.0'a dayanır. MaarifOS uygulaması ile ayrı dağıtılan
 private lisans Worker'ı bağımsız sürümlenir.
 
+## [0.9.1] - 2026-08-09
+
+### Güvenlik
+
+- Bekleyen service worker sağlık sorgusu salt okunur hale getirildi; yeni sürüm
+  etkinleşmeden çalışan sürümün çevrim dışı cache'lerini silemez.
+- Cache temizliği yalnız metadata'daki etkin sürüm ile worker sürümü eşleştiğinde
+  çalışır; eski etkin ve doğrulanmış bekleyen sürümün sınırı korunur.
+- Güncelleme kartı ve etkinleştirme komutu yalnız bekleyen worker'ın app-shell
+  cache'i doğrulandıktan sonra sunulur.
+
+### Düzeltildi
+
+- Eski sürümden 0.9.0'a geçerken görülebilen geçici “çevrim dışı dosyalar
+  doğrulanamadı” durumu ve aktif cache'in erken temizlenme riski giderildi.
+- Service worker kurulumu yalnız doğru HTML MIME türü ile aynı-origin derlenmiş
+  JavaScript ve CSS kaynakları bulunan uygulama kabuğunu kabul eder.
+
 ## [0.9.0] - 2026-08-09
 
 ### Eklendi

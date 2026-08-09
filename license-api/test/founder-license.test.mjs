@@ -182,7 +182,7 @@ async function redemptionInput(
       (await proofSignature(device, signedChallenge, idempotencyKey)),
     devicePublicKeyJwk: device.publicJwk,
     deviceKeyThumbprint: device.thumbprint,
-    appVersion: "0.9.0",
+    appVersion: "0.9.1",
     idempotencyKey,
     ...(overrides.extra ?? {}),
   };

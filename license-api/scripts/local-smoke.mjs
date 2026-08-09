@@ -64,7 +64,7 @@ const redeemPayload = {
   proofSignature,
   devicePublicKeyJwk: publicJwk,
   deviceKeyThumbprint,
-  appVersion: "0.9.0",
+  appVersion: "0.9.1",
   idempotencyKey,
 };
 let serializedRedeem = JSON.stringify(redeemPayload);

@@ -79,7 +79,7 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
     const registration = await navigator.serviceWorker.ready;
     return registration.active?.scriptURL ?? "";
   });
-  expect(serviceWorkerScript).toContain("/sw.js?v=0.9.0");
+  expect(serviceWorkerScript).toContain("/sw.js?v=0.9.1");
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),

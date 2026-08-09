@@ -1,6 +1,6 @@
 # MaarifOS kanonik yetenek durumu
 
-**Sürüm:** 0.9.0
+**Sürüm:** 0.9.1
 **Durum tarihi:** 9 Ağustos 2026
 **Kapsam:** Bu dosya çalışan ürün kabiliyetinin tek kanonik özetidir. `PROJECT.md`
 ürün niyetini, `docs/ROADMAP.md` gelecek sırayı anlatır; menü adları ve plan
@@ -64,15 +64,21 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 
 ## Geçerli kalite hükmü
 
-`9 Ağustos 2026` tarihinde 0.9.0 sürüm adayı bütünleşik `npm run test:quality`
-kapısından `319.5 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,
+`9 Ağustos 2026` tarihinde 0.9.1 sürüm adayı bütünleşik `npm run test:quality`
+kapısından `317.7 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,
 Founder License API/D1 güvenlik matrisi, korunan runtime, lint, typecheck, auth,
 coverage, backup/restore, tüm runtime veri/UI akışları, PWA, production build,
 bundle bütçesi, Chromium ve WebKit mobil smoke, Sites Worker ve gerçek service
 worker ile çevrim dışı production PWA birlikte yeşildir. Lisans API 15/15,
-mobil belge/tam plan smoke 6/6, Sites 20/20 ve production PWA 3/3 geçti. Ana
-başlangıç paketi gerçek tembel yükleme ile 173,41 KiB gzip'a indi; 14 JavaScript
-parçasının her biri 180 KiB sınırının altındadır.
+PWA sözleşmesi 9/9, mobil belge/tam plan smoke 6/6, Sites 20/20 ve production
+PWA 3/3 geçti. Ana başlangıç paketi gerçek tembel yükleme ile 173,22 KiB gzip'a
+indi; 14 JavaScript parçasının her biri 180 KiB sınırının altındadır.
+
+0.9.1 yaması, bekleyen service worker sağlık sorgusunu salt okunur hale getirir;
+çalışan sürümün çevrim dışı cache'leri yeni sürüm etkinleşmeden temizlenemez.
+Tamamlanma marker'ı yalnız HTML, manifest, ikonlar ve aynı-origin derlenmiş
+JavaScript/CSS kaynakları başarıyla kurulduktan sonra yazılır. Noktalı/statik
+görünümlü bilinmeyen rotalar çevrimdışıyken uygulama kabuğuna düşmez.
 
 Canonical canlı Lisans API
 `https://maarifos-founder-license-api.otonom-hesaplama.workers.dev` ve uzak D1
