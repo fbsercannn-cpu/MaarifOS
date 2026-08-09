@@ -76,11 +76,10 @@ async function addFictionalChild(page: Page) {
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill(CHILD_NAME);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
     page
-      .getByRole("region", { name: /Çocuklarım/i })
-      .getByRole("button", { name: new RegExp(`${CHILD_NAME}.*hızlı gözlem`, "i") }),
+      .getByRole("region", { name: /Sınıftaki çocuklar/i })
+      .getByRole("button", { name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i") }),
   ).toBeVisible();
 }
 
@@ -154,17 +153,18 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
   );
   const metrics: CycleMetric[] = [];
 
-  // Çocuk sözü türü, ilk çocuk seçimi yapılmadan önce açıkça seçilir. Böylece
-  // aşağıdaki etkileşim sözleşmesi tam olarak "çocuk seçildikten sonra" ölçülür.
-  await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
-  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
-  await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk sözü", exact: true }).click();
+  // Sınıfım kısayolu ilk çocuğu seçili açar. Aşağıdaki etkileşim sözleşmesi
+  // tam olarak "çocuk seçildikten sonra" ölçülür.
+  await page
+    .getByRole("region", { name: /Sınıftaki çocuklar/i })
+    .getByRole("button", { name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i") })
+    .click();
   const initialStudent = page
     .getByRole("region", { name: "Gözlem yapılacak çocuk" })
     .getByRole("button", { name: new RegExp(CHILD_NAME) });
-  await initialStudent.click();
   await expect(initialStudent).toHaveAttribute("aria-pressed", "true");
+  await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk sözü", exact: true }).click();
 
   for (let index = 0; index < CYCLE_COUNT; index += 1) {
     const startedAt = await page.evaluate(() => performance.now());
@@ -172,9 +172,9 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
 
     if (index > 0) {
       const quickObservationShortcut = page
-        .getByRole("region", { name: /Çocuklarım/i })
+        .getByRole("region", { name: /Sınıftaki çocuklar/i })
         .getByRole("button", {
-          name: new RegExp(`${CHILD_NAME}.*hızlı gözlem`, "i"),
+          name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i"),
         });
       teacherInteractions += await interact(
         "click",
@@ -204,7 +204,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
       page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
     ).toBeHidden();
     await expect(
-      page.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
+      page.getByRole("region", { name: /Sınıftaki çocuklar/i }),
     ).toBeVisible();
 
     const finishedAt = await page.evaluate(() => performance.now());
@@ -255,10 +255,11 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await acknowledgeReleaseIfNeeded(page);
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await expect(
     page
-      .getByRole("region", { name: /Çocuklarım/i })
-      .getByText(`${CYCLE_COUNT} gözlem`, { exact: true }),
+      .getByRole("region", { name: /Sınıftaki çocuklar/i })
+      .getByText(new RegExp(`${CYCLE_COUNT} gözlem$`)),
   ).toBeVisible();
 
   const afterReload = await readObservations(page);

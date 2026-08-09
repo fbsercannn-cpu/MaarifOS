@@ -214,7 +214,7 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
   await expect(
     page.getByRole("button", { name: "Fırat profilini aç" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Fırat için işlemler" }).click();
+  await page.getByRole("button", { name: "Fırat için diğer işlemler" }).click();
   await expect(
     page.getByRole("button", { name: "Fırat çocuğunu sınıftan ayır" }),
   ).toBeVisible();

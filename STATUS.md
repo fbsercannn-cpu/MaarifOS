@@ -1,6 +1,6 @@
 # MaarifOS kanonik yetenek durumu
 
-**Sürüm:** 0.9.1
+**Sürüm:** 0.10.0
 **Durum tarihi:** 9 Ağustos 2026
 **Kapsam:** Bu dosya çalışan ürün kabiliyetinin tek kanonik özetidir. `PROJECT.md`
 ürün niyetini, `docs/ROADMAP.md` gelecek sırayı anlatır; menü adları ve plan
@@ -30,7 +30,7 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 
 | Alan | Durum | Kullanıcıya söylenecek gerçek | Kanıt / kapı |
 |---|---|---|---|
-| PWA kurulumu ve çevrim dışı kabuk | `IMPLEMENTED` | Uygulama kurulabilir ve daha önce yüklenmiş kabuk çevrim dışı açılır. | `app/src/pwa.ts`, PWA/offline testleri |
+| PWA kurulumu ve çevrim dışı kabuk | `IMPLEMENTED` | Uygulama kurulabilir ve daha önce yüklenmiş kabuk çevrim dışı açılır. Ayarlar çalışan/bekleyen sürümü ayrı gösterir; elle denetim ile odak, görünürlük ve ağa dönüşte sınırlı otomatik denetim çalışır. | `app/src/pwa.ts`, PWA/offline ve 0.9.1→0.10.0 veri korumalı yükseltme testleri |
 | Eğitim yılı ve sınıf kurulumu | `IMPLEMENTED` | Sınıf, eğitim yılı, çalışma düzeni ve program profili kalıcıdır. | repository + migration + runtime testleri |
 | Öğrenci yaşam döngüsü | `IMPLEMENTED` | Ekleme, düzenleme, arşivleme, geri alma ve yıllar arası kimlik korunur. | student lifecycle testleri |
 | Günlük yoklama | `IMPLEMENTED` | `Geldi / Geç geldi / Gelmedi` günlük kaydı sınıf üyeliğinden bağımsızdır. Giriş, çıkış, erken ayrılma, kısmi gün ve mazeret olayları; neden, öğretmen notu, geri alma, yeniden yükleme ve öğrenci geçmişi uçtan uca korunur. Olaylar şifreli yedek/restore kapsamındadır ve olay alanı bulunmayan N-1 kayıtları geriye uyumlu okunur. | `app/src/core/domain/attendance.ts`; `app/src/features/dashboard/dashboard-data.ts`; `app/src/features/attendance/attendance-history.ts`; `attendance-membership`, `attendance-events`, `attendance-history`, `core/backup` ve runtime kullanıcı akışı testleri |
@@ -63,6 +63,30 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 | Bulut senkronizasyonu ve kurum rolleri | `PLANNED` | Yerel kullanımın ön koşulu değildir. | ayrı ürün hipotezi ve G4 kapısı |
 
 ## Geçerli kalite hükmü
+
+`0.10.0` kararlı sürüm adayı, `dbaa779` tabanı üzerinde hazırlanan profesyonel öğretmen
+çalışma yüzeylerini ve gerçek PWA güncelleme durumunu kapsar. Bugün öğretmen kontrol
+merkezi, Sınıfım görev alanı, plan ön koşulları ve hızlı gözlem zinciri geriye uyumlu
+özellik artışı olarak sürüme alınmıştır. PWA; çalışan `0.9.1` worker'dan bekleyen
+`0.10.0` worker'a sağlık denetimi, öğretmen onayı, `controllerchange`, reload ve
+IndexedDB veri korunumu sırasını otomatik production testinde doğrular. Kurucu
+aktivasyonu cihaz/depo/ağ/doğrulama aşamalarını güvenli destek kodlarıyla ayırır ve
+geçici yerel yazma hatasında doğrulanmış erişimi korur. Bu satır
+release hazırlık durumudur; production dağıtımı, tag'i veya GitHub Release'i tek
+başına kanıtlamaz.
+
+`9 Ağustos 2026` tarihinde güncel `0.10.0` çalışma ağacı bütünleşik
+`npm run quality:gate` kapısından kesintisiz `324.3 s` içinde geçti. License API/D1
+güvenlik matrisi 15/15, PWA sözleşmesi 9/9, kalıcı veri arayüzleri 7/7, eğitim yılı
+ve öğretmen iş akışları 6/6, hızlı gözlem ve gelecek plan düzenleme 4/4, Chromium ve
+WebKit mobil smoke 10/10, Sites güvenlik/paket sözleşmesi 26/26 ve gerçek production
+PWA yükseltme/offline matrisi 4/4 yeşildir. Kurucu cihaz anahtarı iki tarayıcı motorunda
+IndexedDB yeniden açılışı, imza öz sınaması, blocked ve versionchange koşullarıyla
+doğrulandı. Bu kanıt fiziksel Emine telefonu kabulünün yerine geçmez; ikinci üretim
+yuvası tüketilmeden cihaz üzerindeki tek canlı aktivasyon denemesi açık kabul kapısıdır.
+
+Bir sonraki paragraftan başlayan dağıtım ve tüm kalite kapısı kanıtı, yayımlanmış
+`0.9.1` sürümünün tarihsel kanıtıdır.
 
 `9 Ağustos 2026` tarihinde 0.9.1 sürüm adayı bütünleşik `npm run test:quality`
 kapısından `317.7 s` içinde geçti: MARİF ajan ve mobil giriş sözleşmeleri,

@@ -15,12 +15,23 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
+  FOUNDER_BUILD_ATTESTATION,
+  FOUNDER_PRODUCTION_MODE,
+  FOUNDER_PRODUCTION_PROFILE,
+  PREMIUM_LICENSE_AUDIENCE_ENV,
   PREMIUM_LICENSE_API_ORIGIN_ENV,
+  PREMIUM_LICENSE_ISSUER_ENV,
+  PREMIUM_LICENSE_TRUSTED_KEYS_ENV,
+  PRODUCTION_FOUNDER_KEY_ID,
+  parseFounderProductionProfile,
+  preflightSitesBuild,
   prepareSitesBuild,
   renderStaticAssetHeadersFile,
+  validateProductionFounderEnvironment,
   validateProductionLicenseApiOrigin,
 } from "../scripts/prepare-sites-build.mjs";
 import {
+  MAARIFOS_LIVE_SITES_PROJECT_ID,
   assertNoDeploymentSecrets,
   stageSitesPackage,
 } from "../scripts/prepare-sites-package.mjs";
@@ -55,6 +66,48 @@ const assertSecurityHeaders = (response, licenseApiOrigin = null) => {
 
 const countOccurrences = (value, target) => value.split(target).length - 1;
 const sha256Bytes = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+const PRODUCTION_PUBLIC_JWK = Object.freeze({
+  kty: "EC",
+  crv: "P-256",
+  x: "VXW0xDaRpJ-JbGSiqSeMv4NIIoBlCXRakT-EmjMlA3g",
+  y: "0HqKTAdCzTiMnQ2D_1nCh6_pb7xaBQHUktCdF7naTHA",
+  key_ops: Object.freeze(["verify"]),
+  ext: true,
+});
+
+const founderEnvironment = (
+  origin = "https://maarifos-founder-license-api.otonom-hesaplama.workers.dev",
+) => Object.freeze({
+  [PREMIUM_LICENSE_API_ORIGIN_ENV]: origin,
+  [PREMIUM_LICENSE_ISSUER_ENV]: origin,
+  [PREMIUM_LICENSE_AUDIENCE_ENV]: "maarifos-pwa",
+  [PREMIUM_LICENSE_TRUSTED_KEYS_ENV]: JSON.stringify({
+    [PRODUCTION_FOUNDER_KEY_ID]: PRODUCTION_PUBLIC_JWK,
+  }),
+});
+
+const founderProfileSource = (environment) =>
+  `${[
+    PREMIUM_LICENSE_API_ORIGIN_ENV,
+    PREMIUM_LICENSE_ISSUER_ENV,
+    PREMIUM_LICENSE_AUDIENCE_ENV,
+    PREMIUM_LICENSE_TRUSTED_KEYS_ENV,
+  ].map((name) => `${name}=${environment[name]}`).join("\n")}\n`;
+
+const addFounderClientBundle = async (root, environment) => {
+  const trustedKeys = JSON.parse(environment[PREMIUM_LICENSE_TRUSTED_KEYS_ENV]);
+  const key = trustedKeys[PRODUCTION_FOUNDER_KEY_ID];
+  const source = [
+    environment[PREMIUM_LICENSE_API_ORIGIN_ENV],
+    environment[PREMIUM_LICENSE_AUDIENCE_ENV],
+    PRODUCTION_FOUNDER_KEY_ID,
+    key.x,
+    key.y,
+  ].map((value) => JSON.stringify(value)).join(";\n");
+  await mkdir(path.join(root, "dist", "client", "assets"), { recursive: true });
+  await writeFile(path.join(root, "dist", "client", "assets", "founder.js"), source);
+};
 
 const createShellRuntime = (shellBody = "<!doctype html><title>MaarifOS</title>") => {
   const shellBytes = Buffer.from(shellBody);
@@ -162,7 +215,7 @@ const assertStaticHeadersFile = (source, licenseApiOrigin = null) => {
   }
 };
 
-const createSitesFixture = async () => {
+const createSitesFixture = async ({ projectId = "test" } = {}) => {
   const root = await mkdtemp(path.join(tmpdir(), "maarifos-sites-build-"));
   await Promise.all([
     mkdir(path.join(root, "dist", "client"), { recursive: true }),
@@ -176,7 +229,10 @@ const createSitesFixture = async () => {
       path.join(root, "worker", "index.js"),
       await readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
     ),
-    writeFile(path.join(root, ".openai", "hosting.json"), "{\"project_id\":\"test\"}"),
+    writeFile(
+      path.join(root, ".openai", "hosting.json"),
+      JSON.stringify({ project_id: projectId }),
+    ),
   ]);
   return root;
 };
@@ -493,11 +549,13 @@ test("does not reserve similarly named application routes", async () => {
 
 test("injects one exact canonical HTTPS license origin into the production CSP", async () => {
   const root = await createSitesFixture();
-  const licenseApiOrigin = "https://license.maarif.example:8443";
+  const licenseApiOrigin = "https://license.maarifos.app:8443";
+  const environment = founderEnvironment(licenseApiOrigin);
   try {
+    await addFounderClientBundle(root, environment);
     const result = prepareSitesBuild({
       root,
-      environment: { [PREMIUM_LICENSE_API_ORIGIN_ENV]: licenseApiOrigin },
+      environment,
     });
     assert.equal(result.licenseApiOrigin, licenseApiOrigin);
 
@@ -536,6 +594,11 @@ test("keeps production CSP self-only when the license origin is absent", async (
   try {
     const result = prepareSitesBuild({ root, environment: {} });
     assert.equal(result.licenseApiOrigin, null);
+    assert.equal(result.founderEnabled, false);
+    await assert.rejects(
+      access(path.join(root, "dist", ".openai", FOUNDER_BUILD_ATTESTATION)),
+      { code: "ENOENT" },
+    );
     const builtWorker = await importBuiltWorker(root);
     const staticHeaders = await readFile(path.join(root, "dist", "client", "_headers"), "utf8");
     assertStaticHeadersFile(staticHeaders);
@@ -549,16 +612,211 @@ test("keeps production CSP self-only when the license origin is absent", async (
   }
 });
 
+test("enforces all-or-none founder fields and rejects public Vite secret names", () => {
+  assert.equal(validateProductionFounderEnvironment({}, { requireFounder: false }), null);
+  assert.throws(
+    () => validateProductionFounderEnvironment({
+      [PREMIUM_LICENSE_API_ORIGIN_ENV]: "https://license.maarifos.app",
+    }),
+    /all-or-none/,
+  );
+  assert.throws(
+    () => validateProductionFounderEnvironment({
+      ...founderEnvironment(),
+      VITE_FOUNDER_PIN: "000000",
+    }),
+    /forbidden secret-bearing name/,
+  );
+  assert.throws(
+    () => validateProductionFounderEnvironment({}, { requireFounder: true }),
+    /requires all four/,
+  );
+});
+
+test("accepts only the production issuer, audience, kid, and exact public P-256 JWK", () => {
+  const valid = founderEnvironment();
+  assert.doesNotThrow(() =>
+    validateProductionFounderEnvironment(valid, { requireFounder: true }));
+
+  const cases = [
+    {
+      environment: { ...valid, [PREMIUM_LICENSE_ISSUER_ENV]: "https://issuer.maarifos.app" },
+      message: /issuer must exactly equal/,
+    },
+    {
+      environment: { ...valid, [PREMIUM_LICENSE_AUDIENCE_ENV]: "maarifos-local" },
+      message: /audience must exactly equal/,
+    },
+    {
+      environment: { ...valid, [PREMIUM_LICENSE_TRUSTED_KEYS_ENV]: "{" },
+      message: /valid bounded JSON/,
+    },
+    {
+      environment: {
+        ...valid,
+        [PREMIUM_LICENSE_TRUSTED_KEYS_ENV]: JSON.stringify({
+          [PRODUCTION_FOUNDER_KEY_ID]: PRODUCTION_PUBLIC_JWK,
+          "founder-es256-local": PRODUCTION_PUBLIC_JWK,
+        }),
+      },
+      message: /only the documented fields/,
+    },
+    {
+      environment: {
+        ...valid,
+        [PREMIUM_LICENSE_TRUSTED_KEYS_ENV]: JSON.stringify({
+          [PRODUCTION_FOUNDER_KEY_ID]: { ...PRODUCTION_PUBLIC_JWK, d: "private-material" },
+        }),
+      },
+      message: /only the documented fields|exact public P-256/,
+    },
+    {
+      environment: {
+        ...valid,
+        [PREMIUM_LICENSE_TRUSTED_KEYS_ENV]: JSON.stringify({
+          [PRODUCTION_FOUNDER_KEY_ID]: { ...PRODUCTION_PUBLIC_JWK, use: "sig" },
+        }),
+      },
+      message: /only the documented fields/,
+    },
+  ];
+  for (const { environment, message } of cases) {
+    assert.throws(
+      () => validateProductionFounderEnvironment(environment, { requireFounder: true }),
+      message,
+    );
+  }
+  assert.throws(
+    () => parseFounderProductionProfile(
+      `${founderProfileSource(valid)}VITE_UNDOCUMENTED_PUBLIC_FIELD=value\n`,
+    ),
+    /only the four public premium fields/,
+  );
+  assert.throws(
+    () => parseFounderProductionProfile(
+      `${founderProfileSource(valid)}${PREMIUM_LICENSE_AUDIENCE_ENV}=maarifos-pwa\n`,
+    ),
+    /duplicate field/,
+  );
+});
+
+test("founder mode preflight and build bind the tracked profile to a value-free attestation", async () => {
+  const root = await createSitesFixture();
+  const environment = founderEnvironment();
+  try {
+    await Promise.all([
+      writeFile(
+        path.join(root, FOUNDER_PRODUCTION_PROFILE),
+        founderProfileSource(environment),
+      ),
+      addFounderClientBundle(root, environment),
+    ]);
+    const preflight = preflightSitesBuild({
+      root,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    assert.deepEqual(preflight, {
+      founderEnabled: true,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    const result = prepareSitesBuild({
+      root,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    assert.equal(result.founderEnabled, true);
+    const attestationPath = path.join(root, "dist", ".openai", FOUNDER_BUILD_ATTESTATION);
+    const firstAttestation = await readFile(attestationPath, "utf8");
+    const parsed = JSON.parse(firstAttestation);
+    assert.deepEqual(Object.keys(parsed).sort(), [
+      "clientTreeSha256",
+      "configurationSha256",
+      "profileSha256",
+      "schemaVersion",
+    ]);
+    assert.equal(parsed.schemaVersion, 1);
+    for (const digest of [
+      parsed.clientTreeSha256,
+      parsed.configurationSha256,
+      parsed.profileSha256,
+    ]) {
+      assert.match(digest, /^[a-f0-9]{64}$/u);
+    }
+    for (const publicValue of [
+      environment[PREMIUM_LICENSE_API_ORIGIN_ENV],
+      environment[PREMIUM_LICENSE_AUDIENCE_ENV],
+      PRODUCTION_FOUNDER_KEY_ID,
+      PRODUCTION_PUBLIC_JWK.x,
+      PRODUCTION_PUBLIC_JWK.y,
+    ]) {
+      assert.equal(firstAttestation.includes(publicValue), false);
+    }
+
+    prepareSitesBuild({
+      root,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    assert.equal(await readFile(attestationPath, "utf8"), firstAttestation);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("founder preflight rejects profile drift and removes stale deployment outputs", async () => {
+  const root = await createSitesFixture();
+  const environment = founderEnvironment();
+  const staleOutputs = [
+    path.join(root, "dist", "server", "index.js"),
+    path.join(root, "dist", "client", "_headers"),
+    path.join(root, "dist", ".openai", "hosting.json"),
+    path.join(root, "dist", ".openai", FOUNDER_BUILD_ATTESTATION),
+  ];
+  try {
+    await writeFile(
+      path.join(root, FOUNDER_PRODUCTION_PROFILE),
+      founderProfileSource(environment),
+    );
+    await Promise.all(staleOutputs.map(async (output) => {
+      await mkdir(path.dirname(output), { recursive: true });
+      await writeFile(output, "stale");
+    }));
+    assert.throws(
+      () => preflightSitesBuild({
+        root,
+        environment: founderEnvironment("https://drift.maarifos.app"),
+        mode: FOUNDER_PRODUCTION_MODE,
+      }),
+      /drifted/,
+    );
+    for (const output of staleOutputs) {
+      await assert.rejects(access(output), { code: "ENOENT" });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("loads the same production Vite env used by the client build", async () => {
   const root = await createSitesFixture();
-  const licenseApiOrigin = "https://license-env.maarif.example";
-  const inheritedLicenseApiOrigin = process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
+  const licenseApiOrigin = "https://license-env.maarifos.app";
+  const environment = founderEnvironment(licenseApiOrigin);
+  const inheritedEnvironment = Object.fromEntries(
+    [
+      PREMIUM_LICENSE_API_ORIGIN_ENV,
+      PREMIUM_LICENSE_ISSUER_ENV,
+      PREMIUM_LICENSE_AUDIENCE_ENV,
+      PREMIUM_LICENSE_TRUSTED_KEYS_ENV,
+    ].map((name) => [name, process.env[name]]),
+  );
   try {
-    delete process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
+    for (const name of Object.keys(inheritedEnvironment)) delete process.env[name];
     await writeFile(
       path.join(root, ".env.production"),
-      `${PREMIUM_LICENSE_API_ORIGIN_ENV}=${licenseApiOrigin}\n`,
+      founderProfileSource(environment),
     );
+    await addFounderClientBundle(root, environment);
     const result = prepareSitesBuild({ root });
     assert.equal(result.licenseApiOrigin, licenseApiOrigin);
     const builtWorker = await importBuiltWorker(root);
@@ -570,10 +828,9 @@ test("loads the same production Vite env used by the client build", async () => 
     );
     assertSecurityHeaders(response, licenseApiOrigin);
   } finally {
-    if (inheritedLicenseApiOrigin === undefined) {
-      delete process.env[PREMIUM_LICENSE_API_ORIGIN_ENV];
-    } else {
-      process.env[PREMIUM_LICENSE_API_ORIGIN_ENV] = inheritedLicenseApiOrigin;
+    for (const [name, value] of Object.entries(inheritedEnvironment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
     await rm(root, { recursive: true, force: true });
   }
@@ -585,6 +842,8 @@ test("rejects invalid license origins and removes any stale deployable Worker", 
     "http://license.example.test",
     "http://127.0.0.1:8787",
     "https://localhost:8787",
+    "https://10.0.0.1",
+    "https://license.example.test",
     "https://license.example.test/",
     "https://license.example.test/path",
     "https://license.example.test?tenant=founder",
@@ -605,24 +864,30 @@ test("rejects invalid license origins and removes any stale deployable Worker", 
   const staleWorker = path.join(root, "dist", "server", "index.js");
   const staleHeaders = path.join(root, "dist", "client", "_headers");
   const staleHosting = path.join(root, "dist", ".openai", "hosting.json");
+  const staleAttestation = path.join(
+    root,
+    "dist",
+    ".openai",
+    FOUNDER_BUILD_ATTESTATION,
+  );
   try {
     await mkdir(path.dirname(staleWorker), { recursive: true });
     await mkdir(path.dirname(staleHosting), { recursive: true });
     await writeFile(staleWorker, "stale-worker");
     await writeFile(staleHeaders, "stale-headers");
     await writeFile(staleHosting, "stale-hosting");
+    await writeFile(staleAttestation, "stale-attestation");
     assert.throws(
       () => prepareSitesBuild({
         root,
-        environment: {
-          [PREMIUM_LICENSE_API_ORIGIN_ENV]: "https://license.example.test/path",
-        },
+        environment: founderEnvironment("https://license.example.test/path"),
       }),
       /canonical public HTTPS origin/,
     );
     await assert.rejects(access(staleWorker), { code: "ENOENT" });
     await assert.rejects(access(staleHeaders), { code: "ENOENT" });
     await assert.rejects(access(staleHosting), { code: "ENOENT" });
+    await assert.rejects(access(staleAttestation), { code: "ENOENT" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -633,8 +898,9 @@ test("stages a deterministic opaque shell without changing the source dist", asy
   const stageOne = `${root}-stage-one`;
   const stageTwo = `${root}-stage-two`;
   try {
-    const licenseApiOrigin = "https://license.maarif.example";
-    await mkdir(path.join(root, "dist", "client", "assets"), { recursive: true });
+    const licenseApiOrigin = "https://license.maarifos.app";
+    const environment = founderEnvironment(licenseApiOrigin);
+    await addFounderClientBundle(root, environment);
     await writeFile(
       path.join(root, "dist", "client", "assets", "app.js"),
       "console.log('app')",
@@ -642,7 +908,7 @@ test("stages a deterministic opaque shell without changing the source dist", asy
     );
     prepareSitesBuild({
       root,
-      environment: { [PREMIUM_LICENSE_API_ORIGIN_ENV]: licenseApiOrigin },
+      environment,
     });
 
     const sourceIndexPath = path.join(root, "dist", "client", "index.html");
@@ -794,6 +1060,115 @@ test("stages a deterministic opaque shell without changing the source dist", asy
   }
 });
 
+test("requires and revalidates founder attestation for the live Sites target", async () => {
+  const missingRoot = await createSitesFixture({
+    projectId: MAARIFOS_LIVE_SITES_PROJECT_ID,
+  });
+  const missingStage = `${missingRoot}-stage`;
+  const liveRoot = await createSitesFixture({
+    projectId: MAARIFOS_LIVE_SITES_PROJECT_ID,
+  });
+  const validStage = `${liveRoot}-valid-stage`;
+  const clientTamperStage = `${liveRoot}-client-tamper-stage`;
+  const attestationTamperStage = `${liveRoot}-attestation-tamper-stage`;
+  const driftStage = `${liveRoot}-drift-stage`;
+  const environment = founderEnvironment();
+  try {
+    prepareSitesBuild({ root: missingRoot, environment: {} });
+    assert.throws(
+      () => stageSitesPackage({ root: missingRoot, destination: missingStage }),
+      /requires a founder build attestation/,
+    );
+    await assert.rejects(access(missingStage), { code: "ENOENT" });
+
+    await Promise.all([
+      writeFile(
+        path.join(liveRoot, FOUNDER_PRODUCTION_PROFILE),
+        founderProfileSource(environment),
+      ),
+      addFounderClientBundle(liveRoot, environment),
+    ]);
+    prepareSitesBuild({
+      root: liveRoot,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    assert.doesNotThrow(() =>
+      stageSitesPackage({ root: liveRoot, destination: validStage }));
+
+    await writeFile(
+      path.join(liveRoot, "dist", "client", "assets", "founder.js"),
+      "tampered-client",
+    );
+    assert.throws(
+      () => stageSitesPackage({ root: liveRoot, destination: clientTamperStage }),
+      /does not match the current client tree/,
+    );
+    await assert.rejects(access(clientTamperStage), { code: "ENOENT" });
+
+    await addFounderClientBundle(liveRoot, environment);
+    prepareSitesBuild({
+      root: liveRoot,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    const attestationPath = path.join(
+      liveRoot,
+      "dist",
+      ".openai",
+      FOUNDER_BUILD_ATTESTATION,
+    );
+    const attestation = JSON.parse(await readFile(attestationPath, "utf8"));
+    attestation.configurationSha256 = "0".repeat(64);
+    await writeFile(attestationPath, `${JSON.stringify(attestation)}\n`);
+    assert.throws(
+      () => stageSitesPackage({ root: liveRoot, destination: attestationTamperStage }),
+      /drifted from the tracked production profile/,
+    );
+    await assert.rejects(access(attestationTamperStage), { code: "ENOENT" });
+
+    prepareSitesBuild({
+      root: liveRoot,
+      environment,
+      mode: FOUNDER_PRODUCTION_MODE,
+    });
+    await writeFile(
+      path.join(liveRoot, FOUNDER_PRODUCTION_PROFILE),
+      founderProfileSource(founderEnvironment("https://drift.maarifos.app")),
+    );
+    assert.throws(
+      () => stageSitesPackage({ root: liveRoot, destination: driftStage }),
+      /drifted from the tracked production profile/,
+    );
+    await assert.rejects(access(driftStage), { code: "ENOENT" });
+  } finally {
+    await Promise.all([
+      rm(missingRoot, { recursive: true, force: true }),
+      rm(missingStage, { recursive: true, force: true }),
+      rm(liveRoot, { recursive: true, force: true }),
+      rm(validStage, { recursive: true, force: true }),
+      rm(clientTamperStage, { recursive: true, force: true }),
+      rm(attestationTamperStage, { recursive: true, force: true }),
+      rm(driftStage, { recursive: true, force: true }),
+    ]);
+  }
+});
+
+test("keeps non-live Sites projects compatible with self-only staging", async () => {
+  const root = await createSitesFixture({ projectId: "appgprj_non_live_fixture" });
+  const destination = `${root}-stage`;
+  try {
+    prepareSitesBuild({ root, environment: {} });
+    assert.doesNotThrow(() => stageSitesPackage({ root, destination }));
+    await access(path.join(destination, "dist", "server", "index.js"));
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(destination, { recursive: true, force: true }),
+    ]);
+  }
+});
+
 test("staging fails closed on secret-bearing files and mismatched hosting metadata", async () => {
   const secretRoot = await createSitesFixture();
   const secretStage = `${secretRoot}-stage`;
@@ -839,6 +1214,22 @@ test("staging fails closed on secret-bearing files and mismatched hosting metada
       () => assertNoDeploymentSecrets(path.join(secretRoot, "dist")),
       /forbidden secret marker/,
     );
+
+    for (const secretName of [
+      "founder_pin_hmac_key",
+      "founder_pin_hmac_digest",
+      "rate_limit_hmac_key",
+      "entitlement_private_jwk",
+    ]) {
+      await writeFile(
+        path.join(mismatchRoot, "dist", "client", "unsafe.js"),
+        `const forbiddenName = ${JSON.stringify(secretName)};`,
+      );
+      assert.throws(
+        () => assertNoDeploymentSecrets(path.join(mismatchRoot, "dist")),
+        /forbidden secret marker/,
+      );
+    }
   } finally {
     await Promise.all([
       rm(secretRoot, { recursive: true, force: true }),

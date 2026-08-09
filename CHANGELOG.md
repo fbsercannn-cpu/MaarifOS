@@ -4,6 +4,40 @@ Bu projedeki önemli değişiklikler bu dosyada tutulur. Biçim, Keep a Changelo
 ilkelerine; sürümler SemVer 2.0.0'a dayanır. MaarifOS uygulaması ile ayrı dağıtılan
 private lisans Worker'ı bağımsız sürümlenir.
 
+## [0.10.0] - 2026-08-09
+
+### Eklendi
+
+- Bugün ekranına günlük öncelik, plan, devam, takvim, sınıf ve bekleyen gözlem
+  durumlarını bir araya getiren öğretmen kontrol merkezi eklendi.
+- Sınıfım ekranına sınıf özeti, çocuk arama ve çocuk başına profil ile gözlem
+  eylemlerini görev sırasına göre sunan çalışma alanı eklendi.
+- Ayarlar'a çalışan çevrim dışı paket ile bekleyen worker sürümünü ayrı gösteren,
+  öğretmenin elle güncelleme denetimi başlatabildiği gerçek PWA durum yüzeyi eklendi.
+- Kurucu üretim paketi için yalnız açık doğrulama anahtarını kabul eden, eksik veya
+  sürüklenmiş yapılandırmayı derlemeden önce durduran ve Sites paketini değer sızdırmayan
+  SHA-256 doğrulamasıyla bağlayan yayın kapısı eklendi.
+
+### Değiştirildi
+
+- Plan oluşturma ve Premium Plan Merkezi; eksik ön koşulları, kaydedilmiş planı,
+  değerlendirmeyi ve belge eylemlerini açık durumlarla ayıracak şekilde düzenlendi.
+- Hızlı gözlem tek ham gözlem metnine odaklandı; seçilen çocuk ve varsa plan bağlamı
+  aynı kayıt zincirinde korunurken yinelenen ayrıntı alanları ana akıştan çıkarıldı.
+
+### Düzeltildi
+
+- Ana ekrandaki güncelleme kartının bekleyen worker sürümü yerine uygulama sabitini
+  göstermesi ve Ayarlar'ın gerçek worker durumuna bakmadan “Güncel” demesi giderildi.
+- Güncelleme denetimi uygulama açılışına ek olarak odak, görünürlük ve ağa dönüşte
+  beş dakikalık otomatik sınırla çalışır; elle denetim bu sınırı güvenle aşabilir.
+- Kurucu premium aktivasyonunda cihaz anahtarı, yerel kasa, ağ ve sunucu doğrulama
+  aşamaları güvenli destek kodlarıyla ayrıldı; geçici yerel yazma hatası önceki
+  doğrulanmış erişimi artık silmiyor. Yalnız lisans alanını temizleyen iki aşamalı
+  yerel onarım, öğrenci ve öğretmen kayıtlarına dokunmadan açık uyarıyla sunuluyor.
+- `0.9.1 → 0.10.0` geçişi bekleyen worker sağlık kontrolü, kullanıcı onayı,
+  `controllerchange`, reload ve IndexedDB veri korunumu zinciriyle sınanır.
+
 ## [0.9.1] - 2026-08-09
 
 ### Güvenlik

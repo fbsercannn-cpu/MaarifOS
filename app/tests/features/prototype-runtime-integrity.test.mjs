@@ -44,6 +44,10 @@ test("Kayıt Ekle gözlem seçimi chooser'ı async açılıştan önce kapatmaz 
   assert.match(observationOpen, /resolution\.kind === "choose-activity"/);
   assert.match(observationOpen, /await openSpontaneousObservation\(/);
   assert.match(observationOpen, /catch \(reason\) \{\s*surfaceTransitionRef\.current = null/);
+  assert.match(
+    prototypeSource,
+    /previousSurface === "evidence-flow"[\s\S]{0,100}activeSurface === "capture-menu"[\s\S]{0,120}window\.history\.back\(\)/,
+  );
 });
 
 function premiumEvidenceSnapshot(packSnapshot) {

@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",
@@ -36,7 +36,9 @@
     "predev": "npm run check:runtime && node scripts/prepare-premium-preview.mjs",
     "dev": "vite",
     "prebuild": "npm run check:runtime",
-    "build": "tsc && vite build && node scripts/prepare-sites-build.mjs"
+    "build": "tsc && vite build && node scripts/prepare-sites-build.mjs",
+    "preflight:sites:founder": "node scripts/prepare-sites-build.mjs --preflight --mode founder-production --require-founder",
+    "build:sites:founder": "npm run preflight:sites:founder && tsc && vite build --mode founder-production && node scripts/prepare-sites-build.mjs --mode founder-production --require-founder"
   },
   "dependencies": {
     "@fontsource/roboto": "5.2.10",

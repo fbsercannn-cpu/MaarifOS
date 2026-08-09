@@ -157,7 +157,10 @@ import type { PremiumDailyTemplateSelection } from "./features/premium-plans/dom
 import {
   activatePremiumFounderAccess,
   loadStoredPremiumFounderAccess,
+  premiumFounderActivationErrorPresentation,
   premiumFounderConfigurationFromEnvironment,
+  resetPremiumFounderLocalLicenseAccess,
+  type PremiumFounderActivationErrorPresentation,
   type PremiumFounderAccessResult,
   type PremiumFounderConfiguration,
 } from "./features/premium-access/founder-client.ts";
@@ -324,8 +327,23 @@ type PersistenceState = {
 type OfflineReadiness = "checking" | "ready" | "unavailable";
 
 type PwaRuntimeStatus = {
-  phase: "ready" | "update-ready" | "activating-update" | "error";
+  phase:
+    | "idle"
+    | "disabled"
+    | "unsupported"
+    | "registering"
+    | "installing"
+    | "checking-update"
+    | "ready"
+    | "update-ready"
+    | "activating-update"
+    | "error";
   offlineReady: boolean;
+  version: string;
+  activeVersion: string | null;
+  updateVersion: string | null;
+  lastCheckedAt: string | null;
+  message: string;
 };
 
 class PersistenceUnavailableError extends Error {
@@ -2360,6 +2378,9 @@ export default function Prototype() {
   const [premiumFounderError, setPremiumFounderError] = useState(
     premiumFounderConfigurationState.error,
   );
+  const [premiumFounderErrorPresentation, setPremiumFounderErrorPresentation] =
+    useState<PremiumFounderActivationErrorPresentation | null>(null);
+  const [premiumFounderResetBusy, setPremiumFounderResetBusy] = useState(false);
   const [premiumDailyTemplate, setPremiumDailyTemplate] =
     useState<PremiumDailyTemplateSelection | null>(null);
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
@@ -2437,6 +2458,7 @@ export default function Prototype() {
   const [releasePreviousVersion, setReleasePreviousVersion] =
     useState<string | null>(null);
   const [updateReady, setUpdateReady] = useState(false);
+  const [pwaStatus, setPwaStatus] = useState<PwaRuntimeStatus | null>(null);
   const [installStatus, setInstallStatus] = useState(() =>
     isStandaloneApp()
       ? "MaarifOS bu cihazda uygulama olarak çalışıyor."
@@ -2994,18 +3016,19 @@ export default function Prototype() {
     if (!configuration) return undefined;
     let cancelled = false;
     setPremiumFounderBusy(true);
+    setPremiumFounderErrorPresentation(null);
     void loadStoredPremiumFounderAccess({ configuration })
       .then((result) => {
         if (cancelled) return;
         setPremiumFounderAccess(result);
         setPremiumFounderError("");
+        setPremiumFounderErrorPresentation(null);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
-        setPremiumFounderAccess(null);
-        setPremiumFounderError(
-          "Bu cihazdaki eski premium yetkisi doğrulanamadı. Kodu yeniden kullanarak güvenle etkinleştirebilirsiniz.",
-        );
+        const presentation = premiumFounderActivationErrorPresentation(error);
+        setPremiumFounderError(presentation.message);
+        setPremiumFounderErrorPresentation(presentation);
       })
       .finally(() => {
         if (!cancelled) setPremiumFounderBusy(false);
@@ -3187,14 +3210,15 @@ export default function Prototype() {
         setOfflineReadiness("checking");
         return;
       }
+      setPwaStatus(status);
       setOfflineReadiness(
         status.offlineReady
           ? "ready"
           : status.phase === "error"
-            ? "unavailable"
-            : "checking",
+             ? "unavailable"
+             : "checking",
       );
-      if (status.phase === "update-ready") setUpdateReady(true);
+      setUpdateReady(status.phase === "update-ready");
     };
     const initial = (
       window as Window & { __maarifosPwaStatus?: PwaRuntimeStatus }
@@ -3231,6 +3255,10 @@ export default function Prototype() {
 
   useEffect(() => {
     const announceReadyUpdate = () => {
+      const status = (
+        window as Window & { __maarifosPwaStatus?: PwaRuntimeStatus }
+      ).__maarifosPwaStatus;
+      if (status) setPwaStatus(status);
       setUpdateReady(true);
       setAnnouncement(
         "Yeni MaarifOS sürümü hazır. Kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
@@ -5457,6 +5485,15 @@ export default function Prototype() {
       return;
     }
 
+    if (
+      previousSurface === "evidence-flow" &&
+      activeSurface === "capture-menu"
+    ) {
+      historyRestoringRef.current = true;
+      window.history.back();
+      return;
+    }
+
     const replaceCurrentEntry =
       previousSurface === "plan-flow" ||
       previousSurface === "evidence-flow" ||
@@ -5568,6 +5605,7 @@ export default function Prototype() {
     if (!configuration || premiumFounderBusy) return;
     setPremiumFounderBusy(true);
     setPremiumFounderError("");
+    setPremiumFounderErrorPresentation(null);
     try {
       const result = await activatePremiumFounderAccess({
         code,
@@ -5575,6 +5613,7 @@ export default function Prototype() {
         configuration,
       });
       setPremiumFounderAccess(result);
+      setPremiumFounderErrorPresentation(null);
       setPremiumGateOpen(false);
       if (configuredClassroom?.curriculumProfile) {
         surfaceTransitionRef.current = "premium-plans";
@@ -5588,13 +5627,32 @@ export default function Prototype() {
           "Kurucu Premium etkinleştirildi. Planları açmak için sınıf program profilini tamamlayın.",
         );
       }
-    } catch {
-      setPremiumFounderAccess(null);
-      setPremiumFounderError(
-        "Kod doğrulanamadı. İnternet bağlantısını, kodu ve iki cihaz hakkının dolu olup olmadığını kontrol edin.",
-      );
+    } catch (error) {
+      const presentation = premiumFounderActivationErrorPresentation(error);
+      setPremiumFounderError(presentation.message);
+      setPremiumFounderErrorPresentation(presentation);
     } finally {
       setPremiumFounderBusy(false);
+    }
+  };
+
+  const resetFounderPremiumLocalLicense = async () => {
+    if (premiumFounderBusy || premiumFounderResetBusy) return;
+    setPremiumFounderResetBusy(true);
+    try {
+      await resetPremiumFounderLocalLicenseAccess();
+      setPremiumFounderAccess(null);
+      setPremiumFounderError("");
+      setPremiumFounderErrorPresentation(null);
+      setAnnouncement(
+        "Yalnız bu telefondaki premium lisans alanı onarıldı. Sunucu cihaz hakkı boşaltılmadı; kodu yeniden girdiğinizde bu telefon yeni cihaz sayılabilir.",
+      );
+    } catch (error) {
+      const presentation = premiumFounderActivationErrorPresentation(error);
+      setPremiumFounderError(presentation.message);
+      setPremiumFounderErrorPresentation(presentation);
+    } finally {
+      setPremiumFounderResetBusy(false);
     }
   };
 
@@ -6491,6 +6549,15 @@ export default function Prototype() {
     }
   };
 
+  const checkForUpdates = () => {
+    if (!navigator.onLine) {
+      setAnnouncement("Güncelleme denetimi için internet bağlantısı gerekiyor.");
+      return;
+    }
+    setAnnouncement("Yeni MaarifOS sürümü denetleniyor.");
+    window.dispatchEvent(new CustomEvent("maarifos:check-update"));
+  };
+
   const retryPersistence = () => {
     if (persistenceState.phase !== "error") return;
     setAnnouncement("Cihaz verilerine yeniden bağlanılıyor.");
@@ -6533,6 +6600,29 @@ export default function Prototype() {
                   className: "is-checking",
                   icon: <ClockIcon aria-hidden="true" />,
                 };
+  const waitingUpdateVersion = pwaStatus?.updateVersion;
+  const displayedUpdateVersion =
+    waitingUpdateVersion ?? CURRENT_RELEASE.version;
+  const updateCheckBusy =
+    pwaStatus?.phase === "checking-update" ||
+    pwaStatus?.phase === "installing" ||
+    pwaStatus?.phase === "activating-update";
+  const updateActionUnavailable =
+    !updateReady &&
+    (pwaStatus?.phase === "disabled" || pwaStatus?.phase === "unsupported");
+  const releaseStatusLabel = updateReady
+    ? `${displayedUpdateVersion} hazır`
+    : updateCheckBusy
+      ? pwaStatus?.phase === "activating-update"
+        ? "Etkinleştiriliyor"
+        : "Denetleniyor"
+      : pwaStatus?.phase === "error"
+        ? "Denetlenemedi"
+        : pwaStatus?.activeVersion === CURRENT_RELEASE.version
+          ? "Güncel"
+          : pwaStatus?.activeVersion
+            ? "Eşitleme bekliyor"
+            : "Hazırlanıyor";
   const securityGateOpen =
     appLocked ||
     persistenceState.phase === "hydrating" ||
@@ -6633,7 +6723,7 @@ export default function Prototype() {
                 educationalWritesDisabled,
                 dataBusy,
                 updateReady,
-                updateVersion: CURRENT_RELEASE.version,
+                updateVersion: displayedUpdateVersion,
                 pendingObservationCount: evidenceWorkspace.pendingObservations.length,
                 planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
                 premiumPlanCenterEnabled: premiumPlanEntryEnabled,
@@ -7380,8 +7470,11 @@ export default function Prototype() {
           busy={premiumFounderBusy}
           configured={premiumFounderConfigurationState.configuration !== null}
           error={premiumFounderError}
+          errorPresentation={premiumFounderErrorPresentation}
+          resetBusy={premiumFounderResetBusy}
           onActivate={activateFounderPremium}
           onOpenPlans={openPremiumPlans}
+          onResetLocalLicense={resetFounderPremiumLocalLicense}
         />
       </BottomSheet>
 
@@ -9607,18 +9700,60 @@ export default function Prototype() {
                 <MagicWandIcon />
               </span>
               <span>
-                <small>Güncel sürüm</small>
+                <small>Bu cihazdaki uygulama</small>
                 <h3 id="release-summary-heading">MaarifOS {CURRENT_RELEASE.version}</h3>
               </span>
-              <b><CheckCircledIcon aria-hidden="true" /> Güncel</b>
+              <b>
+                {updateReady ? (
+                  <MagicWandIcon aria-hidden="true" />
+                ) : updateCheckBusy ? (
+                  <ClockIcon aria-hidden="true" />
+                ) : pwaStatus?.phase === "error" ? (
+                  <Cross2Icon aria-hidden="true" />
+                ) : (
+                  <CheckCircledIcon aria-hidden="true" />
+                )}
+                {releaseStatusLabel}
+              </b>
             </div>
             <p>{CURRENT_RELEASE.title}</p>
             <div className="release-meta" aria-label="Sürüm bilgileri">
-              <span>Sürüm {CURRENT_RELEASE.version}</span>
+              <span>Uygulama {CURRENT_RELEASE.version}</span>
+              {pwaStatus?.activeVersion ? (
+                <span>Çevrim dışı paket {pwaStatus.activeVersion}</span>
+              ) : null}
               <time dateTime={CURRENT_RELEASE.releasedOn}>
                 {formatTurkishCivilDate(CURRENT_RELEASE.releasedOn)}
               </time>
             </div>
+            <small className="provider-status" role="status">
+              {pwaStatus?.message ?? "Güncelleme hizmeti hazırlanıyor."}
+            </small>
+            <button
+              className="install-app-button"
+              type="button"
+              onClick={() => {
+                if (updateReady) {
+                  void applyReadyUpdate();
+                  return;
+                }
+                checkForUpdates();
+              }}
+              disabled={dataBusy || updateCheckBusy || updateActionUnavailable}
+            >
+              {updateReady ? (
+                <MagicWandIcon aria-hidden="true" />
+              ) : (
+                <CheckCircledIcon aria-hidden="true" />
+              )}
+              <span>
+                {updateReady
+                  ? `${displayedUpdateVersion} sürümüne güvenle güncelle`
+                  : updateCheckBusy
+                    ? "Güncellemeler denetleniyor"
+                    : "Güncellemeleri şimdi denetle"}
+              </span>
+            </button>
             <button
               className="release-notes-toggle"
               type="button"

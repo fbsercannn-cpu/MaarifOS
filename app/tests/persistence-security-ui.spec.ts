@@ -22,7 +22,7 @@ async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill(name);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.getByRole("button", { name: `${name} için işlemler` }).click();
+  await page.getByRole("button", { name: `${name} için diğer işlemler` }).click();
   await expect(
     page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` }),
   ).toBeVisible();
@@ -159,11 +159,11 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
     exact: true,
   });
   await captureTrigger.click();
-  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
-  const quickObservationTrigger = page.getByRole("button", {
-    name: `${firstChild} için hızlı gözlem`,
+  const captureMenu = page.getByRole("dialog", { name: "Ne ekleyelim?" });
+  const observationTrigger = captureMenu.getByRole("button", {
+    name: /Gözlem yaz/,
   });
-  await quickObservationTrigger.click();
+  await observationTrigger.click();
 
   const studentRegion = page.getByRole("region", {
     name: "Gözlem yapılacak çocuk",
@@ -181,14 +181,10 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
   await expect(page.getByLabel("Ne oldu?")).toHaveValue(draftText);
 
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("main", { name: "Sınıfım" }),
-  ).toBeVisible();
-  await expect(quickObservationTrigger).toBeFocused();
+  await expect(captureMenu).toBeVisible();
+  await expect(observationTrigger).toBeFocused();
 
-  await captureTrigger.click();
-  await page.getByRole("button", { name: /Gözlem yaz/ }).click();
-  await quickObservationTrigger.click();
+  await observationTrigger.click();
   await studentRegion
     .getByRole("button", { name: new RegExp(firstChild) })
     .click();

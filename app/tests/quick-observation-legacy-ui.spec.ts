@@ -116,7 +116,9 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
   await addChild(page, "Eski Taslak Kurgu Çocuk");
   await openQuickObservation(page);
   await page.getByLabel("Ne oldu?").fill(rawText);
-  await expect(page.getByText("Taslak bu cihazda korundu", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Taslak bu cihazda korundu" }),
+  ).toBeVisible();
   await replaceSavedDraftWithLegacyDetails(page);
 
   await page.reload({ waitUntil: "networkidle" });
@@ -157,7 +159,8 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
 
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  const children = page.getByRole("region", { name: /Çocuklarım/i });
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  const children = page.getByRole("region", { name: /Sınıftaki çocuklar/i });
   await children
     .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
     .click();

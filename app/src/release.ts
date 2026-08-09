@@ -63,14 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.9.1",
+  version: "0.10.0",
   releasedOn: "2026-08-09",
-  title: "Çevrim dışı güncelleme güvenliği güçlendirildi",
+  title: "Öğretmen çalışma akışı profesyonelleştirildi",
   notes: Object.freeze([
-    "Bekleyen yeni sürümün sağlık denetimi artık çalışan sürümün çevrim dışı önbelleğini değiştirmez veya silemez.",
-    "Güncelleme yalnız yeni uygulama kabuğu ve derlenmiş kaynakları doğrulandıktan sonra sunulur; öğretmen onay verene kadar mevcut çevrim dışı sürüm çalışmayı sürdürür.",
-    "Uygulama kabuğunun HTML türü ile JavaScript ve stil kaynakları kurulum sırasında doğrulanır; eksik veya karışık yayın çevrim dışı hazır sayılmaz.",
-    "Plan, gözlem, değerlendirme, belge ve kurucu premium işlevleri 0.9.0 ile aynı kalır; bu yama PWA güncelleme bütünlüğünü düzeltir.",
+    "Bugün ekranı günlük önceliği, planı, devam durumunu, takvimi, sınıfı ve bekleyen gözlemleri tek öğretmen kontrol merkezinde görünür kılar.",
+    "Sınıfım ekranı sınıf özeti, çocuk arama ve çocuk başına profil ile gözlem eylemlerini öğretmenin gerçek görev sırasına göre sunar.",
+    "Plan oluşturma ve Premium Plan Merkezi; eksik ön koşulları, kaydedilmiş planı, değerlendirmeyi ve belge eylemlerini açık durumlarla birbirinden ayırır.",
+    "Hızlı gözlem tek ham gözlem metnine odaklanır; seçilen çocuk ve varsa plan bağlamı aynı kayıt zincirinde korunur, yinelenen ayrıntı alanları öğretmeni yormaz.",
+    "Yeni sürüm denetimi uygulama açılışında, yeniden odaklandığında, görünür olduğunda ve ağa döndüğünde kontrollü çalışır; Ayarlar gerçek çalışan ve bekleyen sürümü gösterir.",
+    "Kurucu premium aktivasyonu cihaz anahtarı, yerel kasa, ağ ve doğrulama aşamalarını güvenli destek kodlarıyla ayırır; geçici yerel yazma hatası doğrulanmış erişimi silmez.",
   ]),
 });
 

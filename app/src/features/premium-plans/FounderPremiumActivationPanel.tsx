@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   CheckCircledIcon,
   LockClosedIcon,
@@ -9,6 +9,10 @@ import type {
   PremiumAccessStatus,
   VerifiedPremiumAccess,
 } from "../premium-access/entitlement.ts";
+import type {
+  PremiumFounderActivationErrorPresentation,
+  PremiumFounderActivationRecovery,
+} from "../premium-access/founder-client.ts";
 
 type FounderPremiumAccessSnapshot = Pick<
   VerifiedPremiumAccess,
@@ -82,8 +86,35 @@ export interface FounderPremiumActivationPanelProps {
   busy: boolean;
   configured: boolean;
   error?: string;
+  errorPresentation?: PremiumFounderActivationErrorPresentation | null;
+  resetBusy?: boolean;
   onActivate: (code: string) => Promise<void>;
   onOpenPlans: () => void;
+  onResetLocalLicense?: () => Promise<void>;
+}
+
+const recoveryInstructions: Readonly<
+  Record<PremiumFounderActivationRecovery, string>
+> = {
+  retry: "Bilgileri kontrol edip yalnız bir kez daha deneyin.",
+  "check-connection":
+    "Wi-Fi veya mobil verinin çalıştığını doğrulayın; bağlantı düzeldikten sonra yeniden deneyin.",
+  "close-other-tabs":
+    "Açık diğer MaarifOS sekmelerini kapatın, sonra bu ekrandan yeniden deneyin.",
+  "reload-app":
+    "MaarifOS'u tamamen kapatıp yeniden açın. Mevcut sınıf ve öğretmen kayıtları silinmez.",
+  "update-app":
+    "Uygulamanın güncel sürümünü açın; sorun sürerse destek koduyla yardım isteyin.",
+  "reset-local-license":
+    "Yalnız bu telefondaki premium lisans alanı kontrollü olarak onarılabilir.",
+  "contact-support":
+    "Arka arkaya kod denemeyin. Görünen destek kodunu ürün sahibine iletin.",
+};
+
+export function founderPremiumRecoveryInstruction(
+  recovery: PremiumFounderActivationRecovery,
+): string {
+  return recoveryInstructions[recovery];
 }
 
 export function FounderPremiumActivationPanel({
@@ -91,15 +122,24 @@ export function FounderPremiumActivationPanel({
   busy,
   configured,
   error = "",
+  errorPresentation = null,
+  resetBusy = false,
   onActivate,
   onOpenPlans,
+  onResetLocalLicense,
 }: FounderPremiumActivationPanelProps) {
   const [code, setCode] = useState("");
+  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
   const presentation = founderPremiumAccessPresentation(access);
+  const visibleError = errorPresentation?.message ?? error;
+
+  useEffect(() => {
+    setResetConfirmationOpen(false);
+  }, [errorPresentation?.failure]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || !/^\d{6}$/.test(code)) return;
+    if (busy || resetBusy || !/^\d{6}$/.test(code)) return;
     const oneTimeCode = code;
     setCode("");
     await onActivate(oneTimeCode);
@@ -159,14 +199,14 @@ export function FounderPremiumActivationPanel({
                   pattern="[0-9]{6}"
                   autoComplete="off"
                   aria-describedby="founder-premium-code-note"
-                  disabled={busy}
+                  disabled={busy || resetBusy}
                 />
               </label>
               <button
                 className="install-app-button founder-premium-primary"
                 type="submit"
                 data-testid="founder-premium-activate"
-                disabled={busy || !/^\d{6}$/.test(code)}
+                disabled={busy || resetBusy || !/^\d{6}$/.test(code)}
               >
                 <LockClosedIcon aria-hidden="true" />
                 {busy ? "Bu telefon doğrulanıyor…" : "Bu telefonda etkinleştir"}
@@ -185,10 +225,70 @@ export function FounderPremiumActivationPanel({
         </>
       )}
 
-      {error ? (
+      {visibleError ? (
         <p className="security-inline-error" role="alert" data-testid="founder-premium-error">
-          {error}
+          {visibleError}
         </p>
+      ) : null}
+
+      {errorPresentation ? (
+        <div className="secure-secret-form" data-testid="founder-premium-recovery">
+          <small className="provider-status">
+            {founderPremiumRecoveryInstruction(errorPresentation.recovery)}
+          </small>
+          {errorPresentation.supportCode ? (
+            <small className="provider-status" data-testid="founder-premium-support-code">
+              Destek kodu: <code>{errorPresentation.supportCode}</code>
+            </small>
+          ) : null}
+
+          {errorPresentation.recovery === "reset-local-license" &&
+          onResetLocalLicense ? (
+            resetConfirmationOpen ? (
+              <div data-testid="founder-premium-reset-confirmation">
+                <p className="founder-premium-unavailable">
+                  Bu işlem yalnız premium cihaz anahtarını, premium yetki belgesini ve
+                  indirilen premium içerik önbelleğini siler. Sınıf, çocuk, gözlem, plan
+                  ve belgeler silinmez. Sunucudaki cihaz slotu boşalmaz; yeniden bağlanan
+                  telefon yeni cihaz sayılır ve boş ikinci slotu kullanabilir. Slot yoksa
+                  yönetici desteği gerekir.
+                </p>
+                <button
+                  className="install-app-button founder-premium-primary"
+                  type="button"
+                  data-testid="founder-premium-reset-confirm"
+                  disabled={busy || resetBusy}
+                  onClick={async () => {
+                    await onResetLocalLicense();
+                    setResetConfirmationOpen(false);
+                  }}
+                >
+                  {resetBusy
+                    ? "Premium lisans alanı onarılıyor…"
+                    : "Yalnız premium lisans alanını sıfırla"}
+                </button>
+                <button
+                  className="install-app-button"
+                  type="button"
+                  disabled={busy || resetBusy}
+                  onClick={() => setResetConfirmationOpen(false)}
+                >
+                  Vazgeç
+                </button>
+              </div>
+            ) : (
+              <button
+                className="install-app-button"
+                type="button"
+                data-testid="founder-premium-reset-start"
+                disabled={busy || resetBusy}
+                onClick={() => setResetConfirmationOpen(true)}
+              >
+                Yerel premium lisansını onar
+              </button>
+            )
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

@@ -33,7 +33,7 @@ test("yaklaşan eğitim yılı hazırlık modunda uyarır ve eğitimsel yazılar
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await page.keyboard.press("Escape");
   const quickObservation = page.getByRole("button", {
-    name: `${childName} için hızlı gözlem`,
+    name: `${childName} için gözlem ekle`,
   });
   await expect(quickObservation).toBeDisabled();
   await expect(quickObservation).toHaveAttribute(

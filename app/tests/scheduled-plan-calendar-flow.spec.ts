@@ -64,10 +64,12 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
     });
 
     const contentSnapshot = {
+      sku: "maarifos-premium-plan-pack",
       id: "kurgu-premium-paket",
       version: "1.0.0",
       contentReleaseId: "kurgu-release",
       manifestDigest: "sha256:kurgu",
+      academicRelease: "2026-2027",
     };
     const sourceTemplate = {
       id: "kurgu-kaynak-etkinlik",
@@ -213,7 +215,7 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
     };
   });
 
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/?premiumPilot=1", { waitUntil: "networkidle" });
   const releaseButton = page.getByRole("button", { name: "Harika, başlayalım" });
   if (await releaseButton.isVisible().catch(() => false)) {
     await releaseButton.click();

@@ -17,7 +17,18 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertNoReservedStaticAssets } from "./prepare-sites-build.mjs";
+import {
+  FOUNDER_BUILD_ATTESTATION,
+  FOUNDER_PRODUCTION_PROFILE,
+  assertNoReservedStaticAssets,
+  founderConfigurationSha256,
+  founderProfileSha256,
+  hashDeterministicFileTree,
+  parseFounderProductionProfile,
+  renderSitesWorker,
+  validateFounderBuildAttestation,
+  validateProductionFounderEnvironment,
+} from "./prepare-sites-build.mjs";
 
 const APP_SHELL_PATH_MARKER =
   "/* @maarifos-sites-package:app-shell-path */ null";
@@ -28,8 +39,12 @@ const MAX_APP_SHELL_BYTES = 1_048_576;
 const HOSTING_KEYS = new Set(["project_id", "d1", "r2"]);
 const TEXT_FILE_PATTERN = /(?:^_headers$|\.(?:c?js|mjs|css|html?|json|map|txt|webmanifest|xml))$/i;
 const FORBIDDEN_SECRET_TOKENS = Object.freeze([
+  "founder_pin_hmac_key",
+  "founder_pin_hmac_digest",
   "founder_pin_hmac_secret",
   "founder-pin-hmac-secret",
+  "rate_limit_hmac_key",
+  "entitlement_private_jwk",
   "entitlement_private_key",
   "entitlement-private-key",
   "-----begin private key-----",
@@ -39,6 +54,9 @@ const FORBIDDEN_SECRET_TOKENS = Object.freeze([
 ]);
 const FORBIDDEN_SECRET_PATH_SEGMENT = /^(?:\.env(?:\..*)?|\.dev\.vars(?:\..*)?|\.secrets?|\.wrangler|private-assets?|\.git|\.npmrc|\.pypirc|\.yarnrc(?:\.yml)?)$/i;
 const FORBIDDEN_SECRET_FILE_EXTENSION = /\.(?:key|pem|p12|pfx)$/i;
+export const MAARIFOS_LIVE_SITES_PROJECT_ID =
+  "appgprj_6a60733e774c8191bbeeb1cca335281d";
+const MAX_FOUNDER_ATTESTATION_BYTES = 8 * 1024;
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -109,6 +127,69 @@ const parseHostingMetadata = (bytes) => {
   return metadata;
 };
 
+const parseFounderAttestationBytes = (bytes) => {
+  if (bytes.length === 0 || bytes.length > MAX_FOUNDER_ATTESTATION_BYTES) {
+    throw new Error("Founder build attestation is missing or exceeds its bounded size.");
+  }
+  let value;
+  try {
+    value = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error("Founder build attestation must be valid JSON.");
+  }
+  return validateFounderBuildAttestation(value);
+};
+
+const validateFounderPackageAttestation = ({
+  attestationPath,
+  clientRoot,
+  liveTarget,
+  root,
+  workerPath,
+}) => {
+  if (!existsSync(attestationPath)) {
+    if (liveTarget) {
+      throw new Error("The live MaarifOS Sites target requires a founder build attestation.");
+    }
+    return null;
+  }
+
+  const attestation = parseFounderAttestationBytes(readFileSync(attestationPath));
+  if (attestation.clientTreeSha256 !== hashDeterministicFileTree(clientRoot)) {
+    throw new Error("Founder build attestation does not match the current client tree.");
+  }
+  if (!liveTarget) return attestation;
+
+  const profilePath = path.join(root, FOUNDER_PRODUCTION_PROFILE);
+  if (!existsSync(profilePath)) {
+    throw new Error("The live MaarifOS Sites target requires the tracked founder profile.");
+  }
+  const profileBytes = readFileSync(profilePath);
+  const profileEnvironment = parseFounderProductionProfile(profileBytes.toString("utf8"));
+  const configuration = validateProductionFounderEnvironment(profileEnvironment, {
+    requireFounder: true,
+  });
+  if (
+    attestation.profileSha256 !== founderProfileSha256(profileBytes) ||
+    attestation.configurationSha256 !== founderConfigurationSha256(configuration)
+  ) {
+    throw new Error("Founder build attestation has drifted from the tracked production profile.");
+  }
+
+  const sourceWorkerPath = path.join(root, "worker", "index.js");
+  if (!existsSync(sourceWorkerPath)) {
+    throw new Error("The live MaarifOS Sites target requires its source security Worker.");
+  }
+  const expectedWorker = renderSitesWorker(
+    readFileSync(sourceWorkerPath, "utf8"),
+    configuration.apiOrigin,
+  );
+  if (readFileSync(workerPath, "utf8") !== expectedWorker) {
+    throw new Error("Built Sites Worker has drifted from the founder production profile.");
+  }
+  return attestation;
+};
+
 const injectExactlyOnce = (source, marker, value, label) => {
   const markerCount = source.split(marker).length - 1;
   if (markerCount !== 1) {
@@ -149,6 +230,11 @@ export function stageSitesPackage({ root, destination } = {}) {
   const sourceWorker = path.join(sourceDist, "server", "index.js");
   const sourceHosting = path.join(resolvedRoot, ".openai", "hosting.json");
   const builtHosting = path.join(sourceDist, ".openai", "hosting.json");
+  const founderAttestation = path.join(
+    sourceDist,
+    ".openai",
+    FOUNDER_BUILD_ATTESTATION,
+  );
 
   for (const file of [sourceIndex, sourceWorker, sourceHosting, builtHosting]) {
     if (!existsSync(file)) throw new Error("Missing Sites package input: " + file);
@@ -164,10 +250,17 @@ export function stageSitesPackage({ root, destination } = {}) {
   assertNoReservedStaticAssets(sourceClient);
   assertNoDeploymentSecrets(sourceDist);
   const hostingBytes = readFileSync(sourceHosting);
-  parseHostingMetadata(hostingBytes);
+  const hostingMetadata = parseHostingMetadata(hostingBytes);
   if (!readFileSync(builtHosting).equals(hostingBytes)) {
     throw new Error("Built and source Sites hosting metadata must match exactly.");
   }
+  validateFounderPackageAttestation({
+    attestationPath: founderAttestation,
+    clientRoot: sourceClient,
+    liveTarget: hostingMetadata.project_id === MAARIFOS_LIVE_SITES_PROJECT_ID,
+    root: resolvedRoot,
+    workerPath: sourceWorker,
+  });
 
   const indexBytes = readFileSync(sourceIndex);
   if (indexBytes.length === 0 || indexBytes.length > MAX_APP_SHELL_BYTES) {

@@ -133,7 +133,7 @@ export function ClassroomScreen({
     priorityTask.kind === "open-attendance"
       ? priorityTask.actionLabel
       : priorityTask.kind === "add-student"
-      ? "Çocuk ekle"
+      ? "İlk çocuğu ekle"
       : priorityTask.kind === "clear-search"
         ? "Aramayı temizle"
         : priorityTask.kind === "observe-student"

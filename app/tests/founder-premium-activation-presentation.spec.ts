@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { founderPremiumAccessPresentation } from "../src/features/premium-plans/FounderPremiumActivationPanel.tsx";
+import {
+  founderPremiumAccessPresentation,
+  founderPremiumRecoveryInstruction,
+} from "../src/features/premium-plans/FounderPremiumActivationPanel.tsx";
 
 function access(
   status: "active" | "expired" | "refresh-required" | "revoked",
@@ -52,5 +55,20 @@ test("etkin olmayan erişim yalnız sözleşme izin veriyorsa mevcut öğretmen 
   ).toBe(false);
   expect(founderPremiumAccessPresentation(null).canOpenExistingPlans).toBe(
     false,
+  );
+});
+
+test("typed recovery yönergeleri teknik ayrıntı veya gizli kod istemeden eylem söyler", () => {
+  expect(founderPremiumRecoveryInstruction("check-connection")).toContain(
+    "Wi-Fi",
+  );
+  expect(founderPremiumRecoveryInstruction("close-other-tabs")).toContain(
+    "sekmelerini kapatın",
+  );
+  expect(founderPremiumRecoveryInstruction("reset-local-license")).toContain(
+    "Yalnız bu telefondaki premium lisans alanı",
+  );
+  expect(founderPremiumRecoveryInstruction("contact-support")).toContain(
+    "destek kodunu",
   );
 });

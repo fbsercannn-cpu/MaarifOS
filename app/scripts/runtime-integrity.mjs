@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export const PROTECTED_RUNTIME_FILE_DESCRIPTORS = Object.freeze([
+  { path: ".env.founder-production", kind: "text" },
   { path: "scripts/check-mobile-runtime.mjs", kind: "text" },
   { path: "scripts/prepare-sites-build.mjs", kind: "text" },
   { path: "scripts/prepare-sites-package.mjs", kind: "text" },
