@@ -1,36 +1,45 @@
-const PREMIUM_LICENSE_API_ORIGIN =
+export const PREMIUM_LICENSE_API_ORIGIN =
   /* @maarifos-sites-build:premium-license-api-origin */ null;
 
-const CONNECT_SOURCES = [
-  "'self'",
-  ...(PREMIUM_LICENSE_API_ORIGIN === null ? [] : [PREMIUM_LICENSE_API_ORIGIN]),
-];
+export function createContentSecurityPolicy(licenseApiOrigin = null) {
+  const connectSources = [
+    "'self'",
+    ...(licenseApiOrigin === null ? [] : [licenseApiOrigin]),
+  ];
 
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'none'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  "img-src 'self' data: blob:",
-  "media-src 'self' blob:",
-  `connect-src ${CONNECT_SOURCES.join(" ")}`,
-  "worker-src 'self'",
-  "manifest-src 'self'",
-  "form-action 'self'",
-  "upgrade-insecure-requests",
-].join("; ");
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    `connect-src ${connectSources.join(" ")}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
 
-const SECURITY_HEADERS = {
-  "Content-Security-Policy": CONTENT_SECURITY_POLICY,
-  "Permissions-Policy":
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
-  "Referrer-Policy": "no-referrer",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-};
+export function createSecurityHeaders(licenseApiOrigin = null) {
+  return Object.freeze({
+    "Content-Security-Policy": createContentSecurityPolicy(licenseApiOrigin),
+    "Permissions-Policy":
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  });
+}
+
+export const CONTENT_SECURITY_POLICY = createContentSecurityPolicy(
+  PREMIUM_LICENSE_API_ORIGIN,
+);
+export const SECURITY_HEADERS = createSecurityHeaders(PREMIUM_LICENSE_API_ORIGIN);
 
 function withSecurityHeaders(response) {
   const headers = new Headers(response.headers);
@@ -66,7 +75,7 @@ export default {
     }
 
     const indexUrl = requestUrl;
-    indexUrl.pathname = "/index.html";
+    indexUrl.pathname = "/";
     indexUrl.search = "";
     return withSecurityHeaders(
       await env.ASSETS.fetch(new Request(indexUrl, request)),
