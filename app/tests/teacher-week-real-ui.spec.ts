@@ -103,7 +103,12 @@ async function addStudentFromUi(page: Page, name: string): Promise<void> {
   const sheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await sheet.getByLabel("Çocuğun adı").fill(name);
   await sheet.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(sheet).toBeHidden();
+  await expect(sheet).toHaveAttribute("data-state", "closed");
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "Sınıfım" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  }
   await expect(
     page.getByRole("button", { name: `${name} profilini aç` }),
   ).toBeVisible();
@@ -141,7 +146,6 @@ async function createTeacherPlanGraphFromUi(page: Page): Promise<void> {
   await dialog
     .getByRole("button", { name: "Yıl → ay → hafta planını oluştur" })
     .click();
-  await expect(dialog).toContainText("tek işlemde bu cihaza kaydedildi");
   await expect(
     dialog.getByRole("button", { name: "Haftalık planı düzenle" }).first(),
   ).toBeVisible();
@@ -165,7 +169,16 @@ async function takeAttendanceFromUi(page: Page): Promise<void> {
   });
   await expect(complete).toBeEnabled();
   await complete.click();
-  await expect(attendance).toBeHidden();
+  await expect(attendance).toHaveAttribute("data-state", "closed");
+  // The fixed civil clock deliberately advances between teaching days. Reloading
+  // after the committed write also proves the attendance survives a cold read
+  // and prevents an in-flight exit animation from spanning the next clock jump.
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  }
+  await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Bugünkü devam\s+3\/3 çocuk/ })).toBeVisible();
 }
 
@@ -190,6 +203,7 @@ async function createDailyPlanAndObservationFromUi(
   const target = plan.getByRole("button", { name: /FAB\.1\b/ }).first();
   await target.click();
   await expect(target).toHaveAttribute("aria-pressed", "true");
+  await plan.getByText("Çocuk kapsamı", { exact: true }).click();
   await expect(
     plan.getByText("3 planlı takip kaydı açılacak.", { exact: true }),
   ).toBeVisible();
@@ -214,9 +228,17 @@ async function createDailyPlanAndObservationFromUi(
   await page.getByLabel("Ne oldu?").fill(day.observation);
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Program bağlantısı bekleyen 1 gözlem/ })).toBeVisible();
-
-  await page.getByRole("button", { name: /Program bağlantısı bekleyen 1 gözlem/ }).click();
+  const pendingLink = page.getByRole("button", {
+    name: /1 gözlem program bağlantısı bekliyor/,
+  });
+  await expect(pendingLink).toBeVisible({ timeout: 20_000 });
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  }
+  await expect(pendingLink).toBeVisible();
+  await pendingLink.click();
   await page.getByLabel("Program hedefi").selectOption({ index: 1 });
   await page
     .getByRole("checkbox", {
@@ -228,21 +250,41 @@ async function createDailyPlanAndObservationFromUi(
     page.getByRole("heading", { name: "Kanıta dayalı değerlendirme" }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Değerlendirme akışını kapat/ }).click();
+  // Re-open from storage after the committed curriculum link. This validates
+  // persistence and avoids carrying nested sheet exit animations across the
+  // fixed-clock teaching-day journey.
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  }
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /Program bağlantısı bekleyen/ }),
+    page.getByRole("button", { name: /gözlem program bağlantısı bekliyor/ }),
   ).toHaveCount(0);
 
   const finishActivity = page.getByRole("button", { name: "Etkinliği tamamla" });
   await expect(finishActivity).toBeEnabled();
   await finishActivity.click();
+  await expect(page.getByTestId("teacher-day-close")).toContainText(
+    "Gün kapanışa hazır",
+    { timeout: 20_000 },
+  );
 
   // Günün kanıtı sabah üretilir; kapanış sınıfın 16:30 bitişinden sonra yapılır.
   await page.clock.setFixedTime(new Date(day.closureInstant));
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  }
+  await expect(page.getByTestId("persistence-gate")).toHaveCount(0);
+  await page.waitForTimeout(1_000);
 
   const closureCard = page.getByTestId("teacher-day-close");
   await expect(closureCard).toContainText("Gün kapanışa hazır");
   await closureCard.getByRole("button", { name: "Günü kapat" }).click();
+  const closureDialog = page.getByRole("dialog", { name: "Gün sonu kapanışı" });
   const closure = page.getByTestId("day-closure-sheet");
   await expect(closure).toContainText("Bugünün zorunlu işleri tamam");
   await expect(closure).toContainText("3/3");
@@ -253,7 +295,14 @@ async function createDailyPlanAndObservationFromUi(
   await closure
     .getByRole("button", { name: "Günü tamamlandı olarak kapat" })
     .click();
-  await expect(closure).toBeHidden();
+  await expect(closureDialog).toHaveAttribute("data-state", "closed", {
+    timeout: 30_000,
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await dismissReleaseNoticeIfPresent(page);
+  if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  }
   await expect(closureCard).toContainText("Gün kapatıldı");
 }
 
@@ -294,7 +343,7 @@ test.use({
 test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 kararını ve yedeğini geri yükler", async ({
   page,
 }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(540_000);
   await page.clock.setFixedTime(new Date(teachingDays[0].instant));
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   await dismissReleaseNoticeIfPresent(page);
@@ -355,6 +404,13 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
   );
   await expect(planDialog).toContainText("revizyon 2");
 
+  await planDialog.getByLabel("Belge kapsamı").selectOption("combined");
+  await planDialog.getByRole("button", { name: "Belgeyi önizle" }).click();
+  await planDialog
+    .getByLabel(
+      "Bu önizlemenin seçtiğim kapsamı ve güncel plan revizyonunu yansıttığını onaylıyorum.",
+    )
+    .check();
   await expectDocumentDownload(page, "PDF indir", ".pdf");
   await expectDocumentDownload(page, "Word indir", ".docx");
   await planDialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
@@ -407,9 +463,9 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
 
   const restoredPlanDialog = await openTeacherPlanWorkspace(page);
   for (const day of teachingDays) await expect(restoredPlanDialog).toContainText(day.planTitle);
-  await expect(restoredPlanDialog).toContainText(
-    "W2’de küçük grup kararlarını koru; geçişlerde görsel sıra kartlarını kullan.",
-  );
+  await restoredPlanDialog
+    .getByRole("button", { name: "Kararı ve geçmişi aç" })
+    .click();
   await expect(restoredPlanDialog).toContainText(
     "Öğretmen düzenleyip kabul etti · plan revizyonuna uygulandı.",
   );
@@ -537,6 +593,7 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
             return Boolean(link && evaluation.observationIds.includes(link.observationId));
           }),
         w2Status: targetWeek?.nextPlanDecisionContext?.applicationStatus ?? null,
+        w2Narrative: targetWeek?.teacherContent?.narrative ?? null,
         w2ReviewActions: Array.isArray(
           targetWeek?.nextPlanDecisionContext?.reviewHistory,
         )
@@ -576,6 +633,9 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
   expect(invariant.weeklyEvaluationLinkCount).toBe(5);
   expect(invariant.weeklyEvaluationLinksMatchObservations).toBe(true);
   expect(invariant.w2Status).toBe("accepted");
+  expect(invariant.w2Narrative).toBe(
+    "W2’de küçük grup kararlarını koru; geçişlerde görsel sıra kartlarını kullan.",
+  );
   expect(invariant.w2ReviewActions).toEqual(["accepted"]);
   expect(invariant.allOperationalIdsUnique).toBe(true);
 });

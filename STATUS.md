@@ -1,7 +1,7 @@
 # MaarifOS kanonik yetenek durumu
 
-**Sürüm:** 0.10.0
-**Durum tarihi:** 9 Ağustos 2026
+**Sürüm:** 0.11.0
+**Durum tarihi:** 16 Ağustos 2026
 **Kapsam:** Bu dosya çalışan ürün kabiliyetinin tek kanonik özetidir. `PROJECT.md`
 ürün niyetini, `docs/ROADMAP.md` gelecek sırayı anlatır; menü adları ve plan
 başlıkları bitmiş özellik kanıtı değildir.
@@ -30,13 +30,13 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 
 | Alan | Durum | Kullanıcıya söylenecek gerçek | Kanıt / kapı |
 |---|---|---|---|
-| PWA kurulumu ve çevrim dışı kabuk | `IMPLEMENTED` | Uygulama kurulabilir ve daha önce yüklenmiş kabuk çevrim dışı açılır. Ayarlar çalışan/bekleyen sürümü ayrı gösterir; elle denetim ile odak, görünürlük ve ağa dönüşte sınırlı otomatik denetim çalışır. | `app/src/pwa.ts`, PWA/offline ve 0.9.1→0.10.0 veri korumalı yükseltme testleri |
+| PWA kurulumu ve çevrim dışı kabuk | `IMPLEMENTED` | Uygulama kurulabilir ve daha önce yüklenmiş kabuk çevrim dışı açılır. Ayarlar çalışan/bekleyen sürümü ayrı gösterir; elle denetim ile odak, görünürlük ve ağa dönüşte sınırlı otomatik denetim çalışır. | `app/src/pwa.ts`, PWA/offline ve 0.10.0→0.11.0 veri korumalı yükseltme testleri |
 | Eğitim yılı ve sınıf kurulumu | `IMPLEMENTED` | Sınıf, eğitim yılı, çalışma düzeni ve program profili kalıcıdır. | repository + migration + runtime testleri |
 | Öğrenci yaşam döngüsü | `IMPLEMENTED` | Ekleme, düzenleme, arşivleme, geri alma ve yıllar arası kimlik korunur. | student lifecycle testleri |
 | Günlük yoklama | `IMPLEMENTED` | `Geldi / Geç geldi / Gelmedi` günlük kaydı sınıf üyeliğinden bağımsızdır. Giriş, çıkış, erken ayrılma, kısmi gün ve mazeret olayları; neden, öğretmen notu, geri alma, yeniden yükleme ve öğrenci geçmişi uçtan uca korunur. Olaylar şifreli yedek/restore kapsamındadır ve olay alanı bulunmayan N-1 kayıtları geriye uyumlu okunur. | `app/src/core/domain/attendance.ts`; `app/src/features/dashboard/dashboard-data.ts`; `app/src/features/attendance/attendance-history.ts`; `attendance-membership`, `attendance-events`, `attendance-history`, `core/backup` ve runtime kullanıcı akışı testleri |
 | Plansız hızlı gözlem | `IMPLEMENTED` | Ham metin değişmeden saklanır; öğrenci seçimi ve taslak geri kazanımı vardır. Bağlam ve ikinci çocuk sözü tekrarları kaldırılmış, eski ayrıntılar açık karara bağlanmıştır. | evidence flow, 20 çevrim ve legacy reload/runtime testleri |
-| Plan → etkinlik → kanıt | `IMPLEMENTED` | 10 bloklu günlük plan tek gerçek etkinliği çoğaltmadan taşır. Gelecek plan Today'de erken başlamaz; Takvim'de bulunur, yalnız başlamamış ve kanıtsızken atomik düzenlenir. | planning/evidence, scheduled workspace, mobil ve production-offline testleri |
-| Haftalık ve aylık öğretmen değerlendirmesi | `PARTIAL` | Haftalık kanıt/karar ile çocuklar-program-öğretmen yönünden append-only aylık değerlendirme çalışır; veri yetersizliği ve eksik çocuk kapsamı görünürdür, öneriler sonraki plana sessiz uygulanmaz. | premium plan flow/export, roster snapshot ve backup/restore testleri; tek telefon tam zincir pilotu açık |
+| Öğretmene ait plan → etkinlik → kanıt | `IMPLEMENTED` | Premiumdan bağımsız yıllık, aylık, haftalık ve günlük plan; öğretmen onaylı 10 bölümlü akışı tek gerçek etkinlik, gözlem ve program bağıyla aynı kaynak zincirinde taşır. Gelecek plan Today'de erken başlamaz; Takvim'de bulunur ve kanıt bütünlüğü korunarak atomik revize edilir. | teacher-owned planning, daily-flow, scheduled workspace, gerçek hafta UI, backup/restore ve production-offline testleri |
+| Haftalık ve aylık öğretmen değerlendirmesi | `IMPLEMENTED` | Beklenen öğretim günleri eksiksiz ve güncel kapanmadan haftalık karar yazılmaz. Çocuklar, program ve öğretmen yönündeki aylık değerlendirme append-only kaydedilir; yetersiz kanıt açık kalır ve öneriler sonraki plana öğretmen onayı olmadan uygulanmaz. | teacher-owned weekly/monthly, day-closure, roster snapshot, gerçek hafta UI ve backup/restore testleri |
 | Değerler Pedagojisi Anayasası ve D1–D20 çekirdeği | `PARTIAL` | Makine-okunur anayasa, resmî Ek-14 kaynak zinciri, plan sözleşmeleri, altı rollü değişmez karar sözleşmesi ve iki dönemlik authored hedef profili çalışır. Gerçek altı rol kararı ve tamamlanmış Eylül–Haziran içerik seti olmadan yayımlanmış model sayılmaz. | `docs/DEGERLER_PEDAGOJISI_ANAYASASI.md`; values sözleşme/katalog/insan-inceleme testleri |
 | 2026–2027 değerler yayın hedef profili ve Ekim referans blueprint'i | `HIDDEN` | On ay/iki dönem/108 etkinlik authored hedef sözleşmesi; iki dönemde ana değerler üzerinden D1–D20, 18/18/18 çatı ve ay bazlı kültürel köprü adayları için strict contract testlerinden geçer. Bu bir gerçek release doğrulaması değildir. Ekim yalnız 12 etkinliklik planlanmış referanstır; gelecek dokuz ayın gerçek içerik dosyaları, release-set manifesti ve insan kararları henüz yoktur. | `docs/DEGERLER_2026_2027_YILLIK_MATRIS.md`; annual release-set ve October reference testleri |
 | Premium Plan Merkezi · Eylül v3 | `PARTIAL` | Eylül için yıllık omurga, aylık plan, dört hafta, günlük akış, değerlendirme ve belge zinciri kurucu test erişiminde çalışır. Ekim–Haziran yayımlanmamıştır; içerik varmış gibi gösterilmez ve ticari satışa açık değildir. | premium content/manifest, kalıcı plan, mobil/offline akış ve export testleri |
@@ -49,7 +49,7 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 | Portfolyo seçkisi | `PARTIAL` | Mevcut kanıt üzerinden seçim ve ayrı yansıtma alanları vardır; PDF/medya paketi tamam değildir. | portfolio testleri |
 | Profil fotoğrafı | `IMPLEMENTED` | Küçük profil fotoğrafı yerel öğrenci kaydında tutulur. | student profile testleri |
 | Genel medya/blob deposu | `SCHEMA_ONLY` | Fotoğraf/video belge yönetimi henüz kullanıcıya hazır değildir. | Blob/thumbnail/kota/backup kapısı |
-| Genel PDF ve resmî belge merkezi | `PARTIAL` | Belgeler yüzeyinden MEB Ek 3 anekdotu ile premium Ek 18 üretilebilir. Genel gelişim raporu, toplu gözlem özeti, portfolyo/medya paketi ve aranabilir birleşik PDF tamam değildir. | anekdot backup/UI/download, Ek 18 mobil PDF/DOCX ve görsel QA testleri |
+| Genel PDF ve resmî belge merkezi | `PARTIAL` | Belgeler yüzeyinden öğretmen planının günlük, haftalık, aylık ve birleşik kapsamı önizlenip onaylandıktan sonra PDF/DOCX; ayrıca MEB Ek 3 anekdotu ile Ek 18 üretilebilir. Genel gelişim raporu, toplu gözlem özeti, portfolyo/medya paketi ve aranabilir birleşik PDF tamam değildir. | teacher-owned document preview/export, anekdot backup/UI/download, Ek 18 mobil PDF/DOCX ve görsel QA testleri |
 | Premium plan PDF/DOCX çıktısı | `PARTIAL` | Exact entitlement ve kurulu Eylül paketiyle öğretmenin gerçekten kaydettiği plan, blok, not ve değerlendirme kaynak kimlikleriyle PDF/DOCX'e girer. Dokuz ayın içeriği ve genel satın alma yolu yoktur. | persisted export read-model, içerik kaybı, mizanpaj ve mobil indirme testleri |
 | MEB Ek 3 anekdot belgesi | `IMPLEMENTED` | Değişmez gözlem, ayrı öğretmen değerlendirmesi ve onaylı program bağları içerik mührüyle korunur; eksikte fail-closed, hazır kayıtta PDF/DOCX ve öğrenci dosyası izi üretilir. Portfolyoya otomatik eklenmez. | domain, exact-seal tamper, backup/restore, 390×844 indirme, PDF ve Word açılış QA |
 | MEB Ek 18 aylık plan kontrol çizelgesi | `IMPLEMENTED` | Altı resmî sayfanın alan sırası kalıcı aylık plan hedeflerinden üretilir; üç eksenli değerlendirme açıkça ayrı öğretmen ekidir. Uzun metin taşmaz ve ekte kayıpsız korunur. | 7 sayfalık gerçek PDF render/source karşılaştırması, Word 7 sayfa/11 tablo ve telefon testleri |
@@ -63,6 +63,26 @@ kurumsal KVKK kararı, cihaz güvenliği ve restore tatbikatı kapanmadan başla
 | Bulut senkronizasyonu ve kurum rolleri | `PLANNED` | Yerel kullanımın ön koşulu değildir. | ayrı ürün hipotezi ve G4 kapısı |
 
 ## Geçerli kalite hükmü
+
+`0.11.0` sürüm adayı; premiumdan bağımsız öğretmen plan omurgasını, on bölümlü
+günlük akışı, tek gerçek etkinlik, değişmez gözlem, öğretmen onaylı program bağı,
+gün kapanışı, haftalık karar, önizlemeli belge ve şifreli geri yükleme zincirini
+aynı ürün akışında birleştirir. Öğretmen plan kimlikleri artık sağlayıcı içerik
+paketi işareti sayılmaz; gerçek premium paket bütünlüğü ise fail-closed kalır.
+
+`16 Ağustos 2026` tarihinde güncel `0.11.0` çalışma ağacı bütünleşik
+`npm run quality:gate` kapısından kesintisiz geçti. Kanonik 390×844 öğretmen
+haftası; UI üzerinden 3 çocuk, 15 yoklama, 5 günlük plan, 50 günlük akış bölümü,
+5 etkinlik, 5 değişmez gözlem, 5 öğretmen onaylı program bağı, 5 tam gün kapanışı,
+haftalık değerlendirme, sonraki hafta kararı, PDF/DOCX, şifreli yedek, geçici veri
+değişikliği ve atomik geri yüklemeyi tek senaryoda doğruladı. Ayrıca License API
+15/15, PWA sözleşmesi 9/9, Chromium/WebKit smoke 10/10, Sites sözleşmesi 26/26 ve
+production PWA yükseltme/offline matrisi 4/4 geçti. Bu paragraf yerel release
+adayı kanıtıdır; production dağıtımı ve fiziksel telefon güncellemesi ayrıca
+doğrulanmalıdır.
+
+Bir sonraki paragraftan başlayan kalite hükmü, `0.10.0` sürüm adayının tarihsel
+kanıtıdır.
 
 `0.10.0` kararlı sürüm adayı, `dbaa779` tabanı üzerinde hazırlanan profesyonel öğretmen
 çalışma yüzeylerini ve gerçek PWA güncelleme durumunu kapsar. Bugün öğretmen kontrol

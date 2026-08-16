@@ -16,6 +16,9 @@ test("öğretmene ait yıllık → aylık → haftalık planı yedekler, geri y�
     const curriculum = await import(
       "/src/features/curriculum/curriculum-catalog.ts"
     );
+    const dailyFlow = await import(
+      "/src/core/domain/teacher-owned-daily-flow.ts"
+    );
     const source = new core.IndexedDbDataStore({
       databaseName: `maarifos-teacher-plan-source-${crypto.randomUUID()}`,
     });
@@ -116,10 +119,10 @@ test("öğretmene ait yıllık → aylık → haftalık planı yedekler, geri y�
           teacherContent: { focus: "Uyum ve aidiyet" },
           weeks: [
             {
-              title: "7–11 Eylül Haftası",
+              title: "8 Eylül Öğretmen Planı Dilimi",
               weekKey: "2026-W37",
-              periodStart: "2026-09-07",
-              periodEnd: "2026-09-11",
+              periodStart: "2026-09-08",
+              periodEnd: "2026-09-08",
               teacherContent: { flow: ["karşılama", "oyun", "gözlem"] },
             },
             {
@@ -168,6 +171,9 @@ test("öğretmene ait yıllık → aylık → haftalık planı yedekler, geri y�
       curriculumTargets: [curriculumTarget],
       assignmentMode: "selected-students",
       studentIds: [studentId],
+      teacherOwnedDailyFlowBlocks:
+        dailyFlow.defaultTeacherOwnedDailyFlowBlockDrafts(450),
+      teacherOwnedActivityBlockKind: "teacher-activity-one",
       initialActivityStatus: "in_progress",
       now: new Date("2026-09-08T06:00:00.000Z"),
     });

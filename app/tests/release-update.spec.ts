@@ -55,12 +55,12 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.10.0");
-  await expect(updateDialog).toContainText("9 Ağustos 2026");
+  await expect(updateDialog).toContainText("Sürüm 0.11.0");
+  await expect(updateDialog).toContainText("16 Ağustos 2026");
   await expect(updateDialog).toContainText(
-    "Öğretmen çalışma akışı profesyonelleştirildi",
+    "Öğretmen planlama ve kanıt zinciri tek akışta birleştirildi",
   );
-  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.10.0");
+  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.11.0");
   await expect(updateDialog).toContainText("Kayıtlarınız korundu");
   await updateDialog.getByRole("button", {
     name: "Harika, başlayalım",
@@ -76,13 +76,13 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.10.0");
-  await expect(settings).toContainText("9 Ağustos 2026");
+  await expect(settings).toContainText("MaarifOS 0.11.0");
+  await expect(settings).toContainText("16 Ağustos 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "Bugün ekranı günlük önceliği, planı, devam durumunu, takvimi",
+    "Öğretmene ait yıllık, aylık, haftalık ve günlük plan zinciri",
   );
 });
 
@@ -101,8 +101,8 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", as
     name: "MaarifOS güncellendi",
   });
   await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.10.0");
-  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.10.0");
+  await expect(updateDialog).toContainText("Sürüm 0.11.0");
+  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.11.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({
@@ -140,8 +140,8 @@ test("ana ekran ve Ayarlar bekleyen worker'ın gerçek sürümünü gösterir", 
     const status = {
       phase: "update-ready",
       offlineReady: true,
-      version: "0.10.0",
-      activeVersion: "0.9.1",
+      version: "0.11.0",
+      activeVersion: "0.10.0",
       updateVersion: "0.11.0",
       lastCheckedAt: "2026-08-09T10:00:00.000Z",
       message: "Yeni sürüm hazır; açık kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
@@ -157,7 +157,7 @@ test("ana ekran ve Ayarlar bekleyen worker'ın gerçek sürümünü gösterir", 
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("Çevrim dışı paket 0.9.1");
+  await expect(settings).toContainText("Çevrim dışı paket 0.10.0");
   await expect(settings).toContainText("0.11.0 hazır");
   await expect(
     settings.getByRole("button", {

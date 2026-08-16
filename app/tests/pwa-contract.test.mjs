@@ -98,7 +98,7 @@ test("service worker kontrollü güncelleme, sağlık penceresi ve rollback cach
   assert.match(worker, /maarifos-icon-512\.png/);
   assert.match(worker, /maarifos-icon-maskable-512\.png/);
   assert.match(worker, /apple-touch-icon-180\.png/);
-  assert.match(worker, /const WORKER_RELEASE = "0\.10\.0"/);
+  assert.match(worker, /const WORKER_RELEASE = "0\.11\.0"/);
   assert.match(worker, /shell-\$\{CACHE_VERSION\}/);
   assert.match(worker, /assets-\$\{CACHE_VERSION\}/);
   assert.match(worker, /const CACHE_HEALTH_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
@@ -204,7 +204,7 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
   await Promise.all(updateInstallPromises);
   assert.equal(clientLookupCount, 1);
   assert.equal(JSON.stringify(clientMessages), JSON.stringify([
-    { type: "maarifos:update-ready", version: "0.10.0" },
+    { type: "maarifos:update-ready", version: "0.11.0" },
   ]));
 
   const messagePromises = [];
@@ -215,10 +215,10 @@ test("service worker ilk kurulumda beklemez ve yalnız sürümü eşleşen açı
       waitUntil: (promise) => messagePromises.push(promise),
     });
   dispatchMessage({ type: "maarifos:skip-waiting", version: "0.2.0" });
-  dispatchMessage({ type: "unrelated", version: "0.10.0" });
+  dispatchMessage({ type: "unrelated", version: "0.11.0" });
   assert.equal(skipWaitingCount, 0);
 
-  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.10.0" });
+  dispatchMessage({ type: "maarifos:skip-waiting", version: "0.11.0" });
   await Promise.all(messagePromises);
   assert.equal(skipWaitingCount, 1);
 });
@@ -236,28 +236,28 @@ test("waiting worker sağlık sorgusu aktif sürüm cache'lerini değiştirmez",
     new Response(
       JSON.stringify({
         schemaVersion: 1,
-        currentRelease: "0.9.1",
-        previousRelease: "0.9.0",
+        currentRelease: "0.10.0",
+        previousRelease: "0.9.1",
         activatedAt: 1,
         healthyAt: 1,
       }),
       { headers: { "Content-Type": "application/json" } },
     );
   const cacheNames = [
+    "maarifos-shell-0.11.0",
+    "maarifos-assets-0.11.0",
+    "maarifos-meta",
     "maarifos-shell-0.10.0",
     "maarifos-assets-0.10.0",
-    "maarifos-meta",
     "maarifos-shell-0.9.1",
     "maarifos-assets-0.9.1",
-    "maarifos-shell-0.9.0",
-    "maarifos-assets-0.9.0",
   ];
   const shellCache = {
     match: async (request) => {
       const requestUrl = request?.url ?? request?.href ?? String(request);
       if (new URL(requestUrl).pathname === "/__maarifos_shell_ready__") {
         return new Response(
-          JSON.stringify({ schemaVersion: 1, release: "0.10.0" }),
+          JSON.stringify({ schemaVersion: 1, release: "0.11.0" }),
           { headers: { "Content-Type": "application/json" } },
         );
       }
@@ -276,7 +276,7 @@ test("waiting worker sağlık sorgusu aktif sürüm cache'lerini değiştirmez",
   const self = {
     registration: {
       scope: "https://example.test/",
-      active: { scriptURL: "https://example.test/sw.js?v=0.9.1" },
+      active: { scriptURL: "https://example.test/sw.js?v=0.10.0" },
       navigationPreload: null,
     },
     location: { origin: "https://example.test" },
@@ -298,7 +298,7 @@ test("waiting worker sağlık sorgusu aktif sürüm cache'lerini değiştirmez",
     caches: {
       keys: async () => [...cacheNames],
       open: async (cacheName) => {
-        if (cacheName === "maarifos-shell-0.10.0") return shellCache;
+        if (cacheName === "maarifos-shell-0.11.0") return shellCache;
         if (cacheName === "maarifos-meta") return metadataCache;
         return emptyCache;
       },
@@ -327,7 +327,7 @@ test("waiting worker sağlık sorgusu aktif sürüm cache'lerini değiştirmez",
   assert.deepEqual(cacheWrites, []);
   assert.equal(statusMessages.length, 1);
   assert.equal(statusMessages[0].type, "maarifos:sw-status");
-  assert.equal(statusMessages[0].version, "0.10.0");
+  assert.equal(statusMessages[0].version, "0.11.0");
   assert.equal(statusMessages[0].shellReady, true);
 });
 

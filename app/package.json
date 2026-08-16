@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "module",
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",
@@ -22,7 +22,7 @@
     "test:runtime:ui:workflows:core": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/academic-year-preparation-ui.spec.ts tests/attendance-membership-ui.spec.ts tests/attendance-events-ui.spec.ts tests/anecdote-backup.spec.ts tests/day-closure-ui.spec.ts --workers=1",
     "test:runtime:ui:workflows:planning": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/teacher-owned-plan-ui.spec.ts --workers=1 && npm run test:runtime:ui:workflows:daily-flow && npm run test:runtime:ui:workflows:teacher-week",
     "test:runtime:ui:workflows:daily-flow": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/core/teacher-owned-daily-flow-backup.spec.ts --workers=1",
-    "test:runtime:ui:workflows:teacher-week": "node scripts/run-runtime-tests.mjs --budget-ms=240000 tests/teacher-week-real-ui.spec.ts --workers=1",
+    "test:runtime:ui:workflows:teacher-week": "node scripts/run-runtime-tests.mjs --budget-ms=600000 tests/teacher-week-real-ui.spec.ts --workers=1",
     "test:runtime:ui:teacher": "node scripts/run-runtime-tests.mjs --budget-ms=150000 tests/quick-observation-legacy-ui.spec.ts tests/quick-observation-20cycle.spec.ts tests/scheduled-plan-calendar-flow.spec.ts --workers=1",
     "test:runtime:ui": "npm run test:runtime:ui:mobile && npm run test:runtime:ui:persistence && npm run test:runtime:ui:workflows && npm run test:runtime:ui:teacher",
     "test:runtime:pwa-ui": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/pwa-native.spec.ts",

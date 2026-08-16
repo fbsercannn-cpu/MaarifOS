@@ -27,10 +27,10 @@ const contentTypes: Record<string, string> = {
 async function startVersionUpgradeServer() {
   const distRoot = resolve(process.cwd(), "dist", "client");
   const currentWorker = await readFile(join(distRoot, "sw.js"), "utf8");
-  expect(currentWorker).toContain('const WORKER_RELEASE = "0.10.0";');
+  expect(currentWorker).toContain('const WORKER_RELEASE = "0.11.0";');
   const previousWorker = currentWorker.replace(
+    'const WORKER_RELEASE = "0.11.0";',
     'const WORKER_RELEASE = "0.10.0";',
-    'const WORKER_RELEASE = "0.9.1";',
   );
   let currentWorkerEnabled = false;
 
@@ -189,7 +189,7 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
     const registration = await navigator.serviceWorker.ready;
     return registration.active?.scriptURL ?? "";
   });
-  expect(serviceWorkerScript).toContain("/sw.js?v=0.10.0");
+  expect(serviceWorkerScript).toContain("/sw.js?v=0.11.0");
   await page.reload({ waitUntil: "networkidle" });
   await expect(
     page.getByRole("button", { name: "Şimdi güncelle" }),
@@ -207,7 +207,7 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
   await expect(page.getByText("Sabah grubu · 08.30–12.30", { exact: true })).toBeVisible();
 });
 
-test("0.9.1 etkin worker 0.10.0'ı doğrular, kullanıcı onayıyla etkinleştirir ve cihaz verisini korur", async ({
+test("0.10.0 etkin worker 0.11.0'ı doğrular, kullanıcı onayıyla etkinleştirir ve cihaz verisini korur", async ({
   browser,
 }) => {
   test.setTimeout(60_000);
@@ -224,11 +224,11 @@ test("0.9.1 etkin worker 0.10.0'ı doğrular, kullanıcı onayıyla etkinleştir
             const status = (window as PwaWindow).__maarifosPwaStatus;
             return status?.offlineReady ? status.activeVersion : null;
           }),
-        { message: "0.9.1 app-shell etkin ve sağlıklı olmalı", timeout: 15_000 },
+        { message: "0.10.0 app-shell etkin ve sağlıklı olmalı", timeout: 15_000 },
       )
-      .toBe("0.9.1");
+      .toBe("0.10.0");
     expect(await workerHealth(page, "active")).toEqual(
-      expect.objectContaining({ version: "0.9.1", shellReady: true }),
+      expect.objectContaining({ version: "0.10.0", shellReady: true }),
     );
 
     const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
@@ -270,15 +270,15 @@ test("0.9.1 etkin worker 0.10.0'ı doğrular, kullanıcı onayıyla etkinleştir
               ? `${status.activeVersion}->${status.updateVersion}`
               : status?.phase ?? null;
           }),
-        { message: "0.10.0 worker sağlık denetiminden sonra waiting olmalı", timeout: 15_000 },
+        { message: "0.11.0 worker sağlık denetiminden sonra waiting olmalı", timeout: 15_000 },
       )
-      .toBe("0.9.1->0.10.0");
+      .toBe("0.10.0->0.11.0");
     expect(await workerHealth(page, "waiting")).toEqual(
-      expect.objectContaining({ version: "0.10.0", shellReady: true }),
+      expect.objectContaining({ version: "0.11.0", shellReady: true }),
     );
-    await expect(settings).toContainText("Çevrim dışı paket 0.9.1");
+    await expect(settings).toContainText("Çevrim dışı paket 0.10.0");
     const applyUpdate = settings.getByRole("button", {
-      name: "0.10.0 sürümüne güvenle güncelle",
+      name: "0.11.0 sürümüne güvenle güncelle",
     });
     await expect(applyUpdate).toBeEnabled();
 
@@ -294,11 +294,11 @@ test("0.9.1 etkin worker 0.10.0'ı doğrular, kullanıcı onayıyla etkinleştir
             const status = (window as PwaWindow).__maarifosPwaStatus;
             return status?.offlineReady ? status.activeVersion : null;
           }),
-        { message: "controllerchange ve reload sonrasında 0.10.0 etkin olmalı", timeout: 15_000 },
+        { message: "controllerchange ve reload sonrasında 0.11.0 etkin olmalı", timeout: 15_000 },
       )
-      .toBe("0.10.0");
+      .toBe("0.11.0");
     expect(await workerHealth(page, "active")).toEqual(
-      expect.objectContaining({ version: "0.10.0", shellReady: true }),
+      expect.objectContaining({ version: "0.11.0", shellReady: true }),
     );
     expect(
       await page.evaluate(
@@ -388,7 +388,7 @@ test("kalıcı tarayıcı profili ağsız yeni süreçte app-shell ile soğuk ba
       timeout: 15_000,
     });
     await expect(
-      offlinePage.getByRole("main", { name: "MaarifOS Bugün ekranı" }),
+      offlinePage.getByRole("dialog", { name: "Sınıf kurulumu" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect
       .poll(

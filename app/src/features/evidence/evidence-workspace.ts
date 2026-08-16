@@ -134,10 +134,8 @@ function premiumProvenanceFromRecords(
 ): EvidencePremiumProvenance | undefined {
   const hasPremiumMarkers =
     plan.sourceContentPackSnapshot !== undefined ||
-    plan.sourceWeeklyPlanId !== undefined ||
     plan.premiumDailyFlowSnapshot !== undefined ||
-    activity.sourceContentPackSnapshot !== undefined ||
-    activity.sourceWeeklyPlanId !== undefined;
+    activity.sourceContentPackSnapshot !== undefined;
   if (!hasPremiumMarkers) return undefined;
   const planPack = premiumPackReference(plan.sourceContentPackSnapshot);
   const activityPack = premiumPackReference(activity.sourceContentPackSnapshot);

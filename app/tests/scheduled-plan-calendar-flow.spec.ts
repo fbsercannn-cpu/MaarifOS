@@ -5,6 +5,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik ve provenance korur", async ({
   page,
 }) => {
+  test.setTimeout(45_000);
   await page.goto("/tests/runtime-fixture.html");
   const seeded = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
@@ -222,7 +223,8 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
   }
   await expect(page.getByText("Kurgu dostluk çemberi", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /Sınıf takvimini aç/ }).click();
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Eğitim takvimi/ }).click();
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await calendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
   const planCard = calendar.getByTestId("calendar-scheduled-plan");
@@ -261,7 +263,8 @@ test("mobil Takvim → tarih → akış → düzenle → reload zinciri kimlik v
   );
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /Sınıf takvimini aç/ }).click();
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Eğitim takvimi/ }).click();
   const reloadedCalendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await reloadedCalendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
   await expect(reloadedCalendar.getByTestId("calendar-scheduled-plan")).toHaveCount(0);

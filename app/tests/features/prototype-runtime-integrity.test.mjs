@@ -211,6 +211,17 @@ test("premium kanıt provenance'ı exact target pack'i taşır; eksik alanı pre
     status: "invalid",
     pack: null,
   });
+
+  const teacherOwnedSnapshot = premiumEvidenceSnapshot(pack);
+  delete teacherOwnedSnapshot.plans[0].sourceContentPackSnapshot;
+  delete teacherOwnedSnapshot.activities[0].sourceContentPackSnapshot;
+  teacherOwnedSnapshot.plans[0].planOrigin = "teacher-authored";
+  const teacherOwned = resolveEvidenceWorkspace(
+    teacherOwnedSnapshot,
+    new Date("2026-09-15T09:00:00.000Z"),
+  );
+  assert.equal(teacherOwned.activities[0].premiumProvenance, undefined);
+  assert.equal(teacherOwned.pendingObservations[0].premiumProvenance, undefined);
 });
 
 test("plan commit başarısı refresh hatasından ayrılır ve duplicate retry yerine dürüst yenileme sunar", () => {

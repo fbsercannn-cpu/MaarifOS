@@ -63,16 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.10.0",
-  releasedOn: "2026-08-09",
-  title: "Öğretmen çalışma akışı profesyonelleştirildi",
+  version: "0.11.0",
+  releasedOn: "2026-08-16",
+  title: "Öğretmen planlama ve kanıt zinciri tek akışta birleştirildi",
   notes: Object.freeze([
-    "Bugün ekranı günlük önceliği, planı, devam durumunu, takvimi, sınıfı ve bekleyen gözlemleri tek öğretmen kontrol merkezinde görünür kılar.",
-    "Sınıfım ekranı sınıf özeti, çocuk arama ve çocuk başına profil ile gözlem eylemlerini öğretmenin gerçek görev sırasına göre sunar.",
-    "Plan oluşturma ve Premium Plan Merkezi; eksik ön koşulları, kaydedilmiş planı, değerlendirmeyi ve belge eylemlerini açık durumlarla birbirinden ayırır.",
-    "Hızlı gözlem tek ham gözlem metnine odaklanır; seçilen çocuk ve varsa plan bağlamı aynı kayıt zincirinde korunur, yinelenen ayrıntı alanları öğretmeni yormaz.",
-    "Yeni sürüm denetimi uygulama açılışında, yeniden odaklandığında, görünür olduğunda ve ağa döndüğünde kontrollü çalışır; Ayarlar gerçek çalışan ve bekleyen sürümü gösterir.",
-    "Kurucu premium aktivasyonu cihaz anahtarı, yerel kasa, ağ ve doğrulama aşamalarını güvenli destek kodlarıyla ayırır; geçici yerel yazma hatası doğrulanmış erişimi silmez.",
+    "Öğretmene ait yıllık, aylık, haftalık ve günlük plan zinciri premium erişimden bağımsız olarak oluşturulur, düzenlenir ve aynı kaynak kimlikleriyle yeniden açılır.",
+    "Günlük planın öğretmen tarafından gözden geçirilen 10 bölümü; tek gerçek etkinlik, gözlem ve program bağıyla kanıt zincirinde birleşir.",
+    "Gün kapanışı, ertelenen işler, haftalık ve aylık değerlendirme ile sonraki plan kararları öğretmen onayı ve değişmez kaynak izleriyle korunur.",
+    "Günlük, haftalık, aylık veya birleşik plan belgesi indirilmeden önce kapsamı ve revizyonu seçilerek önizlenir ve öğretmen tarafından onaylanır.",
+    "Önceki günden veya haftadan getirilen plan akışı kaynağını korur; süre düzeltmeleri sınıf gününün toplamını bozmadan tek adımda dengelenebilir.",
+    "Bugün, Sınıfım, Planlar ve Belgeler yüzeyleri öğretmenin sıradaki işini görünür kılan daha tutarlı bir çalışma düzeninde birleşir.",
   ]),
 });
 

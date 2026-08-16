@@ -42,7 +42,7 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   await configureActiveClassroom(page);
   let dialog = await openTeacherPlanWorkspace(page);
 
-  await expect(dialog.getByRole("heading", { name: "Üç kısa kararla başlayın" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Dört kısa kararla başlayın" })).toBeVisible();
   await dialog
     .getByLabel("Bu yıl sınıfınız için en önemli öncelik nedir?")
     .fill("Her çocuğun güvenli katılımını güçlendirmek");
@@ -52,38 +52,15 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   await dialog
     .getByLabel("Bu haftanın öğretmen akışı nedir?")
     .fill("Karşılama, oyun, açık hava, gözlem ve gün sonu yansıtması");
+  await dialog
+    .getByLabel("Sonraki ay için başlangıç niyetiniz nedir?")
+    .fill("İlk ayın kanıtlarına göre katılım yollarını çeşitlendirmek");
   await dialog.getByRole("button", { name: "Yıl → ay → hafta planını oluştur" }).click();
 
   await expect(dialog).toContainText("tek işlemde bu cihaza kaydedildi");
   await expect(dialog.getByRole("button", { name: "Yıllık planı düzenle" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Aylık planı düzenle" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Haftalık planı düzenle" })).toBeVisible();
-
-  await dialog.getByRole("button", { name: "Ayı üç yönden değerlendir" }).click();
-  const monthlyReview = dialog.getByTestId("teacher-monthly-review");
-  await expect(monthlyReview).toContainText("0 gözlem · 0 gün · 0 hafta");
-  await expect(
-    monthlyReview.getByRole("radio", { name: /Kanıt yeterli/ }),
-  ).toBeDisabled();
-  await monthlyReview
-    .getByLabel("1. Çocuklar yönü değerlendirmesi")
-    .fill("Ay geneli için yeterli gözlem henüz oluşmadı; çocuklar hakkında genelleme yapılmadı.");
-  await monthlyReview
-    .getByLabel("Program yönü açıklaması")
-    .fill("Program yönü için kanıt eksikliği görünür bırakıldı.");
-  await monthlyReview
-    .getByLabel("Öğretmen yansıtması")
-    .fill("İki haftaya yayılan dengeli gözlem planı kuracağım.");
-  await monthlyReview
-    .getByLabel("Sonraki ay için öğretmen önerisi")
-    .fill("Her aktif çocuk için farklı gün ve haftalarda kanıt topla.");
-  await monthlyReview
-    .getByRole("button", { name: "Üç yönlü değerlendirmeyi kaydet" })
-    .click();
-  await expect(dialog).toContainText("Aylık üç yönlü değerlendirme kaydedildi");
-  await expect(
-    dialog.getByRole("button", { name: "Aylık değerlendirmeleri aç (1)" }),
-  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Aylık planı düzenle" }).first()).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Haftalık planı düzenle" }).first()).toBeVisible();
 
   await dialog.getByRole("button", { name: "Yıllık planı düzenle" }).click();
   await dialog.getByLabel("Plan başlığı").fill("Kurgu Öğretmenin Revize Yıllık Planı");
@@ -94,11 +71,18 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   await expect(dialog).toContainText("önceki sürüm korunarak kaydedildi");
   await expect(dialog).toContainText("revizyon 2");
 
+  await dialog.getByLabel("Belge kapsamı").selectOption("combined");
+  await dialog.getByRole("button", { name: "Belgeyi önizle" }).click();
+  await dialog
+    .getByLabel(
+      "Bu önizlemenin seçtiğim kapsamı ve güncel plan revizyonunu yansıttığını onaylıyorum.",
+    )
+    .check();
   const downloadPromise = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Word indir" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(
-    /^MaarifOS_Ogretmen_Plan_Zinciri_2026-08-01_[0-9a-f]{8}\.docx$/,
+    /^MaarifOS_Ogretmen_Plani_Birlesik_[0-9a-f]{8}\.docx$/,
   );
   const downloadPath = await download.path();
   expect(downloadPath).not.toBeNull();
@@ -118,7 +102,7 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
 });
 
-test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder ve W2 önerisini inceleme bekler halde görür", async ({
+test("öğretmen eksik gün kapanışı ve program bağıyla haftalık karar yazamaz", async ({
   page,
 }) => {
   test.setTimeout(45_000);
@@ -133,6 +117,9 @@ test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder
     const evidence = await import("/src/features/evidence/evidence-flow.ts");
     const curriculum = await import(
       "/src/features/curriculum/curriculum-catalog.ts"
+    );
+    const dailyFlow = await import(
+      "/src/core/domain/teacher-owned-daily-flow.ts"
     );
     const store = new core.IndexedDbDataStore();
     const snapshot = await store.readSnapshot();
@@ -221,6 +208,9 @@ test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder
       curriculumTargets: [target],
       assignmentMode: "selected-students",
       studentIds: [studentId],
+      teacherOwnedDailyFlowBlocks:
+        dailyFlow.defaultTeacherOwnedDailyFlowBlockDrafts(480),
+      teacherOwnedActivityBlockKind: "teacher-activity-one",
       initialActivityStatus: "in_progress",
       now: new Date("2026-08-15T06:02:00.000Z"),
     });
@@ -252,6 +242,9 @@ test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder
   const review = dialog.getByTestId("teacher-weekly-review");
   await expect(review).toContainText("Kurgu Ada");
   await expect(review).toContainText("Ortak oyun sırası");
+  await expect(review).toContainText("Haftalık değerlendirme henüz hazır değil");
+  await expect(review).toContainText("Bu hafta öğretim günü yok");
+  await expect(review).toContainText("Program bağı tamamlanmadan seçilemez");
   await review
     .getByLabel("Kanıt özeti")
     .fill("Kurgu Ada ortak oyun sırasını arkadaşının önerisiyle yeniden düzenledi.");
@@ -259,12 +252,9 @@ test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder
     .getByLabel("Öğretmen değerlendirmesi")
     .fill("Ortak karar vermeyi daha küçük gruplarda sürdürmek yararlı olacak.");
   await review.getByLabel("Sonraki plan kararı").selectOption("adapt");
-  await review
-    .getByRole("button", { name: "Kaydet ve sonraki haftaya öneri taşı" })
-    .click();
-  await expect(dialog).toContainText("sonraki hafta için öneri");
-  await expect(dialog).toContainText("Önceki haftadan öğretmen önerisi");
-  await expect(dialog).toContainText("Henüz bu haftanın planına uygulanmadı");
+  await expect(
+    review.getByRole("button", { name: "Kaydet ve sonraki haftaya öneri taşı" }),
+  ).toBeDisabled();
 
   const persisted = await page.evaluate(async ({ sourceWeekId, targetWeekId }) => {
     const core = await import("/src/core/index.ts");
@@ -275,11 +265,6 @@ test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder
     const target = snapshot.plans.find((record) => record.id === targetWeekId);
     return { source, target };
   }, seeded);
-  expect(persisted.source?.weeklyEvaluations?.[0].observationIds).toEqual([
-    seeded.observationId,
-  ]);
-  expect(persisted.target?.nextPlanDecisionContext?.sourceWeeklyPlanId).toBe(
-    seeded.sourceWeekId,
-  );
-  expect(persisted.target?.teacherReviewRequired).toBe(true);
+  expect(persisted.source?.weeklyEvaluations ?? []).toEqual([]);
+  expect(persisted.target?.nextPlanDecisionContext).toBeUndefined();
 });

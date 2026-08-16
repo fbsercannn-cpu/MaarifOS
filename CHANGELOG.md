@@ -4,6 +4,39 @@ Bu projedeki önemli değişiklikler bu dosyada tutulur. Biçim, Keep a Changelo
 ilkelerine; sürümler SemVer 2.0.0'a dayanır. MaarifOS uygulaması ile ayrı dağıtılan
 private lisans Worker'ı bağımsız sürümlenir.
 
+## [0.11.0] - 2026-08-16
+
+### Eklendi
+
+- Premium erişimden bağımsız yıllık → aylık → haftalık → günlük öğretmen planı
+  oluşturma, yeniden açma ve iyimser eşzamanlılık korumalı revizyon zinciri eklendi.
+- Günlük plana öğretmen onaylı, çalışma süresiyle birebir eşleşen 10 bölümlü akış;
+  tek gerçek etkinlik, gözlem ve program bağıyla doğrulanabilir ilişki eklendi.
+- Gün kapanışı, ertelenen iş yaşam döngüsü, haftalık ve aylık kanıt değerlendirmesi
+  ile sonraki plan kararları için append-only öğretmen onayı eklendi.
+- Günlük, haftalık, aylık ve birleşik kapsam seçimi; revizyon önizleme ve öğretmen
+  onayı sonrasında PDF/DOCX üretimi eklendi.
+
+### Değiştirildi
+
+- Bugün, Sınıfım, Planlar ve Belgeler; aynı sayaçları tekrarlamak yerine sıradaki
+  gerçek öğretmen işini ve kaynak kanıtını öne çıkaracak biçimde yeniden düzenlendi.
+- Günlük plan hazırlığında önceki gün veya hafta akışını kaynak iziyle getirme,
+  tek blok üzerinden süre dengeleme ve kalıcı yazarlık onayı sağlandı.
+- Yedek/geri yükleme şeması öğretmen planı, günlük akış, kapanış, değerlendirme,
+  karar ve belge kaynak ilişkilerini tahrife karşı daha sıkı doğrular.
+
+### Düzeltildi
+
+- Öğretmen planlarının premium kapısına yönlenmesi, haftalık planın öğretim günü
+  yerine takvim haftasına göre erken/geç kapanması ve mükerrer günlük planın
+  güvenilir plan seçilmiş gibi gösterilmesi giderildi.
+- Dar telefonlarda günlük akış süre kartının yatay taşması, erişilebilir bölüm
+  adlarının belirsizliği ve kaydetme öncesi 10 bölüm incelemesinin görünmez kalması
+  giderildi.
+- `0.10.0 → 0.11.0` geçişi, bekleyen worker sağlık denetimi, kullanıcı onayı,
+  reload ve IndexedDB öğretmen verisinin korunmasıyla sınanır.
+
 ## [0.10.0] - 2026-08-09
 
 ### Eklendi
