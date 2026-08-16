@@ -47,7 +47,7 @@ export const ALPHA_CAPABILITIES = Object.freeze({
   pdfReports: false,
   notifications: false,
   cloudSync: false,
-  calendarNotes: false,
+  calendarNotes: true,
 } as const) satisfies AlphaCapabilityRegistry;
 
 export function isCapabilityEnabled(capability: CapabilityId): boolean {

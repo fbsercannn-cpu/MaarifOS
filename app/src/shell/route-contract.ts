@@ -3,8 +3,8 @@ import {
   type AlphaPrimaryNavigationItem,
 } from "../core/capabilities/alpha-capabilities.ts";
 
-export type AppRouteId = "today" | "classroom";
-export type AppRoutePath = "/" | "/classroom";
+export type AppRouteId = "today" | "classroom" | "plans" | "documents";
+export type AppRoutePath = "/" | "/classroom" | "/plans" | "/documents";
 
 export interface AppRouteDefinition {
   readonly id: AppRouteId;
@@ -15,6 +15,8 @@ export interface AppRouteDefinition {
 const ROUTE_PATHS: Readonly<Record<AppRouteId, AppRoutePath>> = Object.freeze({
   today: "/",
   classroom: "/classroom",
+  plans: "/plans",
+  documents: "/documents",
 });
 
 /** Hediye Alpha ana navigasyonu, kullanıcıya açık route'ların tek kaynağıdır. */
@@ -22,7 +24,10 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = Object.freeze(
   visiblePrimaryNavigation()
     .filter(
       (item): item is AlphaPrimaryNavigationItem & { id: AppRouteId } =>
-        item.id === "today" || item.id === "classroom",
+        item.id === "today" ||
+        item.id === "classroom" ||
+        item.id === "plans" ||
+        item.id === "documents",
     )
     .map((item) =>
       Object.freeze({

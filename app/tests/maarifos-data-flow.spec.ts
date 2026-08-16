@@ -5,13 +5,17 @@ async function ensureClassroomConfigured(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   if (await setup.isVisible().catch(() => false)) {
     await setup.getByLabel("Sınıf adı").fill("Kurgu Test Sınıfı");
-    await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-    await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+    await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
+    await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+    await setup.getByRole("button", { name: "Devam et" }).click();
+    await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
     await setup
       .getByLabel("Uygulanan program")
       .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
     await setup.getByLabel("Program katalog kimliği").fill("KURGU-KATALOG");
     await setup.getByLabel("Kaynak sürümü").fill("2026-test");
+    await setup.getByRole("button", { name: "Devam et" }).click();
+    await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
     await setup
       .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
       .click();
@@ -21,9 +25,12 @@ async function ensureClassroomConfigured(page: Page) {
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill(name);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+  const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addSheet.getByLabel("Çocuğun adı").fill(name);
+  await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(addSheet).toBeHidden();
+  await expect(page.getByRole("button", { name: `${name} profilini aç` })).toBeVisible();
   await page.getByRole("button", { name: `${name} için diğer işlemler` }).click();
   await expect(page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` })).toBeVisible();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -79,6 +86,10 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openArchivedStudents(page);
   await page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` }).click();
+  await expect(page.getByRole("button", { name: `${childName} profilini aç` })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` }),
+  ).toHaveCount(0);
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
@@ -471,7 +482,7 @@ test("Öğretmenin plan ve belge iş alanları ana navigasyondan erişilir", asy
     page.getByRole("heading", { name: "Bugün için plan eklenmedi" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Günlük plan oluştur" }),
+    page.getByTestId("current-work").getByRole("button", { name: "Günlük plan oluştur" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Günün planı" })).toBeVisible();
 

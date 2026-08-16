@@ -27,11 +27,12 @@ test("Hediye Alpha yalnız doğrulanmış çekirdek kabiliyetleri açar", () => 
     pdfReports: false,
     notifications: false,
     cloudSync: false,
-    calendarNotes: false,
+    calendarNotes: true,
   });
 
   expect(isCapabilityEnabled("attendanceV2")).toBe(true);
   expect(isCapabilityEnabled("planEvidenceDetails")).toBe(true);
+  expect(isCapabilityEnabled("calendarNotes")).toBe(true);
   expect(isCapabilityEnabled("portfolio")).toBe(false);
   expect(Object.keys(ALPHA_CAPABILITIES)).toEqual(CAPABILITY_IDS);
 });

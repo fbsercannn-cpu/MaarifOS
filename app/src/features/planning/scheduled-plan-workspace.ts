@@ -16,6 +16,13 @@ import type {
   PremiumDailyFlowBlockDraft,
   PremiumFullDayFlowBlock,
 } from "../premium-plans/domain.ts";
+import {
+  isTeacherOwnedDailyFlow,
+  type TeacherOwnedActivityFlowBlockKind,
+  type TeacherOwnedDailyFlowBlockDraft,
+  type TeacherOwnedDailyFlowBlockEdit,
+} from "../../core/domain/teacher-owned-daily-flow.ts";
+import { isTeacherOwnedPlanRecord } from "../../core/domain/teacher-owned-plan.ts";
 
 export interface ScheduledPlanSummary {
   planId: string;
@@ -55,6 +62,18 @@ export interface ScheduledPlanEditDraft {
   studentIds: string[];
   flowDefinition: PremiumFullDayFlowBlock[];
   flowBlocks: PremiumDailyFlowBlockDraft[];
+  teacherOwnedDailyFlowBlocks: TeacherOwnedDailyFlowBlockEdit[];
+  teacherOwnedActivityBlockKind: TeacherOwnedActivityFlowBlockKind | null;
+}
+
+export interface TeacherOwnedDailyFlowCopySource {
+  planId: string;
+  weeklyPlanId: string;
+  civilDate: string;
+  planTitle: string;
+  flowRevisionNumber: number;
+  blocks: TeacherOwnedDailyFlowBlockDraft[];
+  activityBlockKind: TeacherOwnedActivityFlowBlockKind;
 }
 
 interface PremiumFlowShape {
@@ -173,10 +192,62 @@ export function scheduledPlanIntegrityIssue(options: {
   if (activity && activity.civilDate !== plan.civilDate) {
     return "Plan ile gerçek etkinliğin kayıtlı tarihleri uyuşmuyor.";
   }
+  if (plan.teacherOwnedDailyFlow !== undefined) {
+    if (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)) {
+      return "Öğretmenin 10 bölümlü günlük akış kaydı doğrulanamadı.";
+    }
+    const annual = scopedPlan(plans, plan.sourceAnnualPlanId, "annual", scope);
+    const monthly = scopedPlan(plans, plan.sourceMonthlyPlanId, "monthly", scope);
+    const weekly = scopedPlan(plans, plan.sourceWeeklyPlanId, "weekly", scope);
+    if (
+      !annual ||
+      !monthly ||
+      !weekly ||
+      !isTeacherOwnedPlanRecord(annual) ||
+      !isTeacherOwnedPlanRecord(monthly) ||
+      !isTeacherOwnedPlanRecord(weekly) ||
+      annual.planType !== "annual" ||
+      monthly.planType !== "monthly" ||
+      weekly.planType !== "weekly" ||
+      monthly.annualPlanId !== annual.id ||
+      weekly.annualPlanId !== annual.id ||
+      weekly.monthlyPlanId !== monthly.id ||
+      !annual.monthlySectionIds.includes(monthly.id) ||
+      !monthly.weeklySectionIds.includes(weekly.id) ||
+      String(plan.civilDate) < weekly.periodStart ||
+      String(plan.civilDate) > weekly.periodEnd
+    ) {
+      return "Öğretmenin günlük akışının yıl, ay ve hafta kaynak zinciri doğrulanamadı.";
+    }
+    if (
+      activity &&
+      (activity.sourceAnnualPlanId !== annual.id ||
+        activity.sourceMonthlyPlanId !== monthly.id ||
+        activity.sourceWeeklyPlanId !== weekly.id)
+    ) {
+      return "Öğretmen planı ile etkinliği arasındaki kaynak zinciri uyuşmuyor.";
+    }
+    if (activity?.teacherOwnedFlowBlockId !== undefined) {
+      const linkedBlock = typeof activity.teacherOwnedFlowBlockId === "string"
+        ? plan.teacherOwnedDailyFlow.blocks.find(
+            (block) => block.id === activity.teacherOwnedFlowBlockId,
+          )
+        : null;
+      if (
+        !linkedBlock ||
+        (linkedBlock.kind !== "teacher-activity-one" &&
+          linkedBlock.kind !== "teacher-activity-two") ||
+        linkedBlock.status === "skipped"
+      ) {
+        return "Gerçek etkinliğin öğretmen akışı bölüm bağlantısı doğrulanamadı.";
+      }
+    }
+    return null;
+  }
   const hasPremiumMarkers =
     plan.premiumDailyFlowSnapshot !== undefined ||
-    plan.sourceWeeklyPlanId !== undefined ||
-    plan.sourceContentPackSnapshot !== undefined;
+    plan.sourceContentPackSnapshot !== undefined ||
+    plan.sourceActivityTemplateId !== undefined;
   if (!hasPremiumMarkers) return null;
 
   const flow = parsePremiumFlow(plan);
@@ -307,6 +378,9 @@ export function resolveScheduledPlanWorkspace(
       );
       const activity = activities.length === 1 ? activities[0] : null;
       const premiumFlow = parsePremiumFlow(plan);
+      const teacherOwnedFlow = isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)
+        ? plan.teacherOwnedDailyFlow
+        : null;
       const integrityIssue = scheduledPlanIntegrityIssue({
         plan,
         activity,
@@ -327,7 +401,8 @@ export function resolveScheduledPlanWorkspace(
         planTitle: text(plan.title) ?? "Başlıksız günlük plan",
         activityTitle: text(activity?.title) ?? "Etkinlik kaydı eksik",
         premium: premiumFlow !== null || plan.premiumDailyFlowSnapshot !== undefined,
-        flowBlockCount: premiumFlow?.blocks.length ?? 0,
+        flowBlockCount:
+          premiumFlow?.blocks.length ?? teacherOwnedFlow?.blocks.length ?? 0,
         persistedActivityCount: activities.length,
         editable: reason === null,
         editBlockReason: reason,
@@ -433,6 +508,23 @@ export function resolveScheduledPlanEditDraft(
           teacherNote: String(block.teacherNote),
         }))
       : [],
+    teacherOwnedDailyFlowBlocks: isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)
+      ? plan.teacherOwnedDailyFlow.blocks.map((block) => ({
+          id: block.id,
+          kind: block.kind,
+          title: block.title,
+          status: block.status,
+          durationMinutes: block.durationMinutes,
+          transitionNote: block.transitionNote,
+          teacherNote: block.teacherNote,
+        }))
+      : [],
+    teacherOwnedActivityBlockKind: isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow) &&
+      typeof activity.teacherOwnedFlowBlockId === "string"
+      ? (plan.teacherOwnedDailyFlow.blocks.find(
+          (block) => block.id === activity.teacherOwnedFlowBlockId,
+        )?.kind as TeacherOwnedActivityFlowBlockKind | undefined) ?? null
+      : null,
   };
 }
 
@@ -442,4 +534,84 @@ export async function loadScheduledPlanEditDraft(
 ): Promise<ScheduledPlanEditDraft> {
   await migrateLegacyClassroomScopes(store, { now: options.now });
   return resolveScheduledPlanEditDraft(await store.readSnapshot(), options);
+}
+
+export async function loadTeacherOwnedDailyFlowCopySources(
+  store: LocalDataStore,
+  options: { weeklyPlanId: string; beforeCivilDate: string },
+): Promise<TeacherOwnedDailyFlowCopySource[]> {
+  if (!isCivilDate(options.beforeCivilDate)) {
+    throw new Error("Kopyalama hedef günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  await migrateLegacyClassroomScopes(store);
+  const snapshot = await store.readSnapshot();
+  const scope = resolveActiveClassroomScope(snapshot);
+  if (!scope) return [];
+  const plans = snapshot.plans
+    .filter(
+      (plan) =>
+        plan.planType === "daily" &&
+        plan.sourceWeeklyPlanId === options.weeklyPlanId &&
+        typeof plan.civilDate === "string" &&
+        plan.civilDate < options.beforeCivilDate &&
+        typeof plan.deletedAt !== "string" &&
+        recordBelongsToClassroomScope(plan, scope) &&
+        isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow),
+    )
+    .sort(
+      (left, right) =>
+        String(right.civilDate).localeCompare(String(left.civilDate)) ||
+        right.updatedAt.localeCompare(left.updatedAt) ||
+        right.id.localeCompare(left.id),
+    );
+  const sources: TeacherOwnedDailyFlowCopySource[] = [];
+  for (const plan of plans) {
+    if (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)) continue;
+    const activities = snapshot.activities.filter(
+      (activity) =>
+        activity.planId === plan.id &&
+        typeof activity.deletedAt !== "string" &&
+        recordBelongsToClassroomScope(activity, scope),
+    );
+    const activity = activities.length === 1 ? activities[0] : null;
+    if (
+      !activity ||
+      scheduledPlanIntegrityIssue({ plan, activity, plans: snapshot.plans, scope })
+    ) continue;
+    const linkedBlock = typeof activity.teacherOwnedFlowBlockId === "string"
+      ? plan.teacherOwnedDailyFlow.blocks.find(
+          (block) => block.id === activity.teacherOwnedFlowBlockId,
+        )
+      : null;
+    if (
+      !linkedBlock ||
+      (linkedBlock.kind !== "teacher-activity-one" &&
+        linkedBlock.kind !== "teacher-activity-two") ||
+      linkedBlock.status === "skipped"
+    ) continue;
+    sources.push({
+      planId: plan.id,
+      weeklyPlanId: options.weeklyPlanId,
+      civilDate: String(plan.civilDate),
+      planTitle: text(plan.title) ?? "Önceki günlük plan",
+      flowRevisionNumber: plan.teacherOwnedDailyFlow.revisionNumber,
+      blocks: plan.teacherOwnedDailyFlow.blocks.map((block) => ({
+        kind: block.kind,
+        title: block.title,
+        status: block.status,
+        durationMinutes: block.durationMinutes,
+        transitionNote: block.transitionNote,
+        teacherNote: block.teacherNote,
+      })),
+      activityBlockKind: linkedBlock.kind,
+    });
+  }
+  return sources;
+}
+
+export async function loadTeacherOwnedDailyFlowCopySource(
+  store: LocalDataStore,
+  options: { weeklyPlanId: string; beforeCivilDate: string },
+): Promise<TeacherOwnedDailyFlowCopySource | null> {
+  return (await loadTeacherOwnedDailyFlowCopySources(store, options))[0] ?? null;
 }

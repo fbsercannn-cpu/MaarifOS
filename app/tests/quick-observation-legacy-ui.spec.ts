@@ -4,13 +4,17 @@ async function ensureClassroomConfigured(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   if (!(await setup.isVisible().catch(() => false))) return;
   await setup.getByLabel("Sınıf adı").fill("Eski Taslak Test Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
   await setup.getByLabel("Program katalog kimliği").fill("KURGU-KATALOG");
   await setup.getByLabel("Kaynak sürümü").fill("2026-test");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();
@@ -19,9 +23,12 @@ async function ensureClassroomConfigured(page: Page) {
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill(name);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+  const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addSheet.getByLabel("Çocuğun adı").fill(name);
+  await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(addSheet).toBeHidden();
+  await expect(page.getByRole("button", { name: `${name} profilini aç` })).toBeVisible();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
@@ -133,6 +140,9 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
 
   await legacyReview.getByRole("button", { name: "Kayda dahil et" }).click();
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
+  ).toBeHidden();
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
   await expect(savedObservationDetails(page, rawText)).resolves.toEqual({
     context: "Eski fen merkezi bağlamı",
@@ -155,6 +165,9 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
   await page.getByLabel("Çocuğun aynen sözü", { exact: true }).fill(quote);
   await expect(page.getByLabel("Çocuğun sözü", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
+  ).toBeHidden();
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
 
   await page.reload({ waitUntil: "networkidle" });

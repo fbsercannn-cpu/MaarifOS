@@ -8,8 +8,24 @@ import {
   resolveActiveClassroomScope,
   type ActiveClassroomScope,
 } from "../../core/domain/classroom-scope.ts";
-import { isLocalTime } from "../../core/domain/classroom.ts";
+import {
+  isClassroomSchedule,
+  isLocalTime,
+} from "../../core/domain/classroom.ts";
 import { createEmptySnapshot, type StoredRecord } from "../../core/domain/model.ts";
+import {
+  isTeacherOwnedPlanRecord,
+  type TeacherOwnedWeeklyPlan,
+} from "../../core/domain/teacher-owned-plan.ts";
+import {
+  createTeacherOwnedDailyFlow,
+  isTeacherOwnedDailyFlow,
+  reviseTeacherOwnedDailyFlow,
+  type TeacherOwnedActivityFlowBlockKind,
+  type TeacherOwnedDailyFlowBlockEdit,
+  type TeacherOwnedDailyFlowBlockDraft,
+  type TeacherOwnedDailyFlowTemplateSource,
+} from "../../core/domain/teacher-owned-daily-flow.ts";
 import type {
   DataTransaction,
   LocalDataStore,
@@ -102,6 +118,8 @@ export interface UpdateScheduledPlanCommand {
   startTime: string;
   endTime?: string;
   premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+  teacherOwnedDailyFlowBlocks?: readonly TeacherOwnedDailyFlowBlockEdit[];
+  teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
   now?: Date;
 }
 
@@ -300,6 +318,64 @@ function snapshotById(candidates: unknown, id: string): unknown | null {
   ) ?? null;
 }
 
+type TeacherOwnedDailyLineage = {
+  annualPlanId: string;
+  monthlyPlanId: string;
+  weeklyPlanId: string;
+};
+
+function resolveTeacherOwnedDailyLineage(
+  plans: readonly StoredRecord[],
+  scope: ActiveClassroomScope,
+  civilDate: string,
+): TeacherOwnedDailyLineage | null {
+  const matchingWeeks = plans.filter(
+    (record): record is TeacherOwnedWeeklyPlan =>
+      isTeacherOwnedPlanRecord(record) &&
+      record.planType === "weekly" &&
+      typeof record.deletedAt !== "string" &&
+      sameScope(record, scope) &&
+      record.periodStart <= civilDate &&
+      record.periodEnd >= civilDate,
+  );
+  if (matchingWeeks.length === 0) return null;
+  if (matchingWeeks.length !== 1) {
+    throw new Error(
+      "Bu gün birden fazla öğretmen haftalık planına düşüyor; çakışma incelenmeden günlük plan oluşturulamaz.",
+    );
+  }
+
+  const weekly = matchingWeeks[0];
+  const monthly = plans.find((record) => record.id === weekly.monthlyPlanId);
+  const annual = plans.find((record) => record.id === weekly.annualPlanId);
+  if (
+    !monthly ||
+    !annual ||
+    !isTeacherOwnedPlanRecord(monthly) ||
+    monthly.planType !== "monthly" ||
+    !isTeacherOwnedPlanRecord(annual) ||
+    annual.planType !== "annual" ||
+    monthly.annualPlanId !== annual.id ||
+    !annual.monthlySectionIds.includes(monthly.id) ||
+    !monthly.weeklySectionIds.includes(weekly.id) ||
+    !sameScope(monthly, scope) ||
+    !sameScope(annual, scope) ||
+    weekly.periodStart < monthly.periodStart ||
+    weekly.periodEnd > monthly.periodEnd ||
+    monthly.periodStart < annual.periodStart ||
+    monthly.periodEnd > annual.periodEnd
+  ) {
+    throw new Error(
+      "Günlük planın öğretmene ait yıl, ay ve hafta kaynak zinciri doğrulanamadı.",
+    );
+  }
+  return {
+    annualPlanId: annual.id,
+    monthlyPlanId: monthly.id,
+    weeklyPlanId: weekly.id,
+  };
+}
+
 export async function createPlanWithActivity(
   store: LocalDataStore,
   input: {
@@ -316,6 +392,9 @@ export async function createPlanWithActivity(
     studentIds: string[];
     premiumSource?: PremiumDailyTemplateSelection;
     premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+    teacherOwnedDailyFlowBlocks?: readonly TeacherOwnedDailyFlowBlockDraft[];
+    teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
+    teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
     premiumAlternativeActivated?: boolean;
     initialActivityStatus?: "planned" | "in_progress";
     now?: Date;
@@ -336,6 +415,11 @@ export async function createPlanWithActivity(
     input.initialActivityStatus !== "in_progress"
   ) {
     throw new Error("İlk etkinlik durumu planlandı veya devam ediyor olmalıdır.");
+  }
+  if (input.premiumSource && input.teacherOwnedDailyFlowBlocks !== undefined) {
+    throw new Error(
+      "Öğretmenin günlük akışı premium sağlayıcı planıyla birleştirilemez.",
+    );
   }
   const initialActivityStatus = input.initialActivityStatus ?? "planned";
   const planId = validUuid(input.planId, "Plan");
@@ -573,6 +657,80 @@ export async function createPlanWithActivity(
           );
         }
       }
+      const teacherOwnedLineage = input.premiumSource
+        ? null
+        : resolveTeacherOwnedDailyLineage(plans, scope, input.civilDate);
+      if (
+        input.teacherOwnedDailyFlowBlocks !== undefined &&
+        !teacherOwnedLineage
+      ) {
+        throw new Error(
+          "Öğretmen günlük akışı yalnız doğrulanmış yıllık, aylık ve haftalık öğretmen planı zincirinde saklanabilir.",
+        );
+      }
+      if (input.teacherOwnedDailyFlowTemplateSource !== undefined && !teacherOwnedLineage) {
+        throw new Error(
+          "Öğretmen günlük akış şablon kaynağı yalnız doğrulanmış öğretmen plan zincirinde kullanılabilir.",
+        );
+      }
+      let teacherOwnedDailyFlow = null;
+      let teacherOwnedFlowBlockId: string | null = null;
+      if (teacherOwnedLineage) {
+        if (!input.teacherOwnedDailyFlowBlocks || !input.teacherOwnedActivityBlockKind) {
+          throw new Error(
+            "Öğretmen plan zincirindeki günlük akış, 10 bölüm ve gerçek etkinliğin uygulanacağı bölüm öğretmen tarafından gözden geçirilmeden kaydedilemez.",
+          );
+        }
+        if (!isClassroomSchedule(classroom?.schedule)) {
+          throw new Error(
+            "Öğretmen günlük akışı için sınıfın başlangıç ve bitiş saatleri tamamlanmalıdır.",
+          );
+        }
+        if (input.teacherOwnedDailyFlowTemplateSource) {
+          const source = input.teacherOwnedDailyFlowTemplateSource;
+          const sourcePlan = plans.find(
+            (plan) =>
+              plan.id === source.sourcePlanId &&
+              plan.planType === "daily" &&
+              plan.sourceWeeklyPlanId === teacherOwnedLineage.weeklyPlanId &&
+              plan.sourceWeeklyPlanId === source.sourceWeeklyPlanId &&
+              plan.civilDate === source.sourceCivilDate &&
+              typeof plan.civilDate === "string" &&
+              plan.civilDate < input.civilDate &&
+              typeof plan.deletedAt !== "string" &&
+              sameScope(plan, scope) &&
+              isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow) &&
+              plan.teacherOwnedDailyFlow.revisionNumber ===
+                source.sourceFlowRevisionNumber,
+          );
+          if (!sourcePlan) {
+            throw new Error(
+              "Günlük akış şablonu yalnız aynı haftadaki doğrulanmış önceki öğretmen planından alınabilir.",
+            );
+          }
+        }
+        const confirmedByUserId = await resolveLocalTeacherIdentity(transaction, {
+          now,
+        });
+        teacherOwnedDailyFlow = createTeacherOwnedDailyFlow({
+          blocks: input.teacherOwnedDailyFlowBlocks,
+          schedule: classroom.schedule,
+          confirmedByUserId,
+          ...(input.teacherOwnedDailyFlowTemplateSource
+            ? { templateSource: input.teacherOwnedDailyFlowTemplateSource }
+            : {}),
+          now,
+        });
+        const activityFlowBlock = teacherOwnedDailyFlow.blocks.find(
+          (block) => block.kind === input.teacherOwnedActivityBlockKind,
+        );
+        if (!activityFlowBlock || activityFlowBlock.status === "skipped") {
+          throw new Error(
+            "Gerçek etkinlik yalnız öğretmen akışındaki uygulanacak bir etkinlik bölümüne bağlanabilir.",
+          );
+        }
+        teacherOwnedFlowBlockId = activityFlowBlock.id;
+      }
       const activeStudentIds = activeStudentIdsForScope(students, scope);
       const assignedStudentIds =
         input.assignmentMode === "whole-class"
@@ -648,6 +806,14 @@ export async function createPlanWithActivity(
               lensSelectionMode: input.premiumSource.lensSelectionMode,
             }
           : {}),
+        ...(teacherOwnedLineage
+          ? {
+              sourceAnnualPlanId: teacherOwnedLineage.annualPlanId,
+              sourceMonthlyPlanId: teacherOwnedLineage.monthlyPlanId,
+              sourceWeeklyPlanId: teacherOwnedLineage.weeklyPlanId,
+              teacherOwnedDailyFlow,
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -691,6 +857,14 @@ export async function createPlanWithActivity(
               lensSelectionMode: input.premiumSource.lensSelectionMode,
             }
           : {}),
+        ...(teacherOwnedLineage
+          ? {
+              sourceAnnualPlanId: teacherOwnedLineage.annualPlanId,
+              sourceMonthlyPlanId: teacherOwnedLineage.monthlyPlanId,
+              sourceWeeklyPlanId: teacherOwnedLineage.weeklyPlanId,
+              teacherOwnedFlowBlockId,
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -725,6 +899,14 @@ export async function updateScheduledPlanWithActivity(
   }
   const planTitle = requiredText(input.planTitle, "Plan başlığı");
   const activityTitle = requiredText(input.activityTitle, "Etkinlik başlığı");
+  if (
+    Boolean(input.premiumDailyFlowBlocks?.length) &&
+    Boolean(input.teacherOwnedDailyFlowBlocks?.length)
+  ) {
+    throw new Error(
+      "Premium akış ile öğretmenin günlük akışı aynı revizyonda birleştirilemez.",
+    );
+  }
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
   const today = civilDateInIstanbul(now);
@@ -893,6 +1075,40 @@ export async function updateScheduledPlanWithActivity(
         throw new Error("Standart günlük plana premium akış blokları eklenemez.");
       }
 
+      let teacherOwnedDailyFlow = plan.teacherOwnedDailyFlow;
+      let teacherOwnedFlowBlockId = activity.teacherOwnedFlowBlockId;
+      if (teacherOwnedDailyFlow !== undefined) {
+        if (
+          !isTeacherOwnedDailyFlow(teacherOwnedDailyFlow) ||
+          !input.teacherOwnedDailyFlowBlocks ||
+          !input.teacherOwnedActivityBlockKind
+        ) {
+          throw new Error(
+            "Öğretmenin kayıtlı 10 bölümlü günlük akışı düzenleme için doğrulanamadı.",
+          );
+        }
+        const revisedTeacherOwnedDailyFlow = reviseTeacherOwnedDailyFlow(
+          teacherOwnedDailyFlow,
+          input.teacherOwnedDailyFlowBlocks,
+          await resolveLocalTeacherIdentity(transaction, { now }),
+          now,
+        );
+        teacherOwnedDailyFlow = revisedTeacherOwnedDailyFlow;
+        const activityFlowBlock = revisedTeacherOwnedDailyFlow.blocks.find(
+          (block) => block.kind === input.teacherOwnedActivityBlockKind,
+        );
+        if (!activityFlowBlock || activityFlowBlock.status === "skipped") {
+          throw new Error(
+            "Gerçek etkinlik yalnız öğretmen akışındaki uygulanacak bir etkinlik bölümüne bağlanabilir.",
+          );
+        }
+        teacherOwnedFlowBlockId = activityFlowBlock.id;
+      } else if (input.teacherOwnedDailyFlowBlocks?.length) {
+        throw new Error(
+          "Bağımsız günlük plana sonradan öğretmen plan zinciri uydurulamaz.",
+        );
+      }
+
       const updatedPlan: StoredRecord = {
         ...plan,
         title: planTitle,
@@ -901,6 +1117,9 @@ export async function updateScheduledPlanWithActivity(
         ...(premiumDailyFlowSnapshot !== undefined
           ? { premiumDailyFlowSnapshot }
           : {}),
+        ...(teacherOwnedDailyFlow !== undefined
+          ? { teacherOwnedDailyFlow }
+          : {}),
       };
       const updatedActivity: StoredRecord = {
         ...activity,
@@ -908,6 +1127,9 @@ export async function updateScheduledPlanWithActivity(
         startTime: input.startTime,
         civilDate: input.civilDate,
         updatedAt: timestamp,
+        ...(teacherOwnedDailyFlow !== undefined
+          ? { teacherOwnedFlowBlockId }
+          : {}),
       };
       if (input.endTime) updatedActivity.endTime = input.endTime;
       else delete updatedActivity.endTime;

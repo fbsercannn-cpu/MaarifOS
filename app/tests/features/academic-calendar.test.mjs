@@ -169,3 +169,30 @@ test("takvim kaydı etkin eğitim yılı dışına taşamaz", async () => {
   assert.equal(store.snapshot.calendarEntries.length, 0);
 });
 
+test("öğretmenin okulda eğitim yok kaydı takvim CRUD zincirinde ayrı tür olarak korunur", async () => {
+  const store = activeStore();
+  const id = "00000000-0000-4000-8000-000000000704";
+  await saveCalendarEntry(store, {
+    id,
+    entryType: "no_school",
+    title: "Yerel kurum kapanışı",
+    note: "İlçe duyurusu öğretmen tarafından takvime işlendi.",
+    startDate: "2026-12-09",
+    status: "planned",
+    now: new Date("2026-12-01T08:00:00.000Z"),
+  });
+
+  const [entry] = (await loadAcademicCalendar(store)).entries;
+  assert.equal(entry.id, id);
+  assert.equal(entry.entryType, "no_school");
+  assert.equal(entry.startDate, "2026-12-09");
+  assert.equal(entry.endDate, "2026-12-09");
+
+  await saveCalendarEntry(store, {
+    ...entry,
+    status: "cancelled",
+    now: new Date("2026-12-02T08:00:00.000Z"),
+  });
+  assert.equal((await loadAcademicCalendar(store)).entries[0].status, "cancelled");
+});
+

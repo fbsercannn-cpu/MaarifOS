@@ -6,11 +6,13 @@ async function configureClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await expect(setup).toBeVisible();
   await setup.getByLabel("Sınıf adı").fill("Güneş Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", {
     name: "Sınıfı ve çalışma düzenini kaydet",
   }).click();
@@ -110,10 +112,7 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await configureClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım" }).click();
-  await page
-    .getByLabel("Sınıftaki çocuklar")
-    .getByRole("button", { name: "Çocuk ekle", exact: true })
-    .click();
+  await page.getByRole("button", { name: "İlk çocuğu ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   const studentName = addSheet.getByLabel("Çocuğun adı");
   await studentName.fill("Kaydedilmemiş öğretmen girdisi");

@@ -178,6 +178,8 @@ export interface PremiumPlanCenterScreenProps {
   internalStaffExportEnabled?: boolean;
   premiumAccess?: VerifiedPremiumAccess | null;
   valueEvidenceWritesDisabled?: boolean;
+  initialSection?: "overview" | "weekly" | "monthly";
+  onRecordsChanged?: () => void | Promise<void>;
   onClose: () => void;
   onUseActivity: (selection: PremiumDailyTemplateSelection) => void;
 }
@@ -190,6 +192,8 @@ export function PremiumPlanCenterScreen({
   internalStaffExportEnabled = false,
   premiumAccess = null,
   valueEvidenceWritesDisabled = false,
+  initialSection = "overview",
+  onRecordsChanged,
   onClose,
   onUseActivity,
 }: PremiumPlanCenterScreenProps) {
@@ -239,6 +243,8 @@ export function PremiumPlanCenterScreen({
   const [valueEvidenceEditorObservationId, setValueEvidenceEditorObservationId] =
     useState<string | null>(null);
   const valueEvidenceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const weeklySectionRef = useRef<HTMLElement | null>(null);
+  const monthlySectionRef = useRef<HTMLElement | null>(null);
   const [exportBusy, setExportBusy] = useState<PremiumPlanExportFormat | null>(null);
   const [exportMessage, setExportMessage] = useState("");
   const [, setAccessClockTick] = useState(0);
@@ -246,6 +252,10 @@ export function PremiumPlanCenterScreen({
   const closeValueEvidenceEditor = () => {
     setValueEvidenceEditorObservationId(null);
     valueEvidenceTriggerRef.current?.focus();
+  };
+
+  const notifyRecordsChanged = () => {
+    void Promise.resolve(onRecordsChanged?.()).catch(() => undefined);
   };
 
   useEffect(() => {
@@ -292,6 +302,18 @@ export function PremiumPlanCenterScreen({
       active = false;
     };
   }, [contentPack, store]);
+
+  useEffect(() => {
+    if (!pack || initialSection === "overview") return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const target = initialSection === "weekly"
+        ? weeklySectionRef.current
+        : monthlySectionRef.current;
+      target?.scrollIntoView({ block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialSection, pack]);
 
   const eligible =
     curriculumProfile.framework === "tymm" &&
@@ -439,6 +461,7 @@ export function PremiumPlanCenterScreen({
       setLatestMonthlyEvaluation(null);
       setSelectedMonthlyEvaluationId(null);
       setWeeklyCarryForwardContexts([]);
+      notifyRecordsChanged();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Plan panosu eklenemedi.");
     } finally {
@@ -469,6 +492,7 @@ export function PremiumPlanCenterScreen({
         teacherPreferredSupportingLensIds,
       });
       setInstalled(await loadInstalledPremiumPlan(store, pack));
+      notifyRecordsChanged();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Pedagojik yaklaşım güncellenemedi.");
     } finally {
@@ -640,6 +664,7 @@ export function PremiumPlanCenterScreen({
           ? "Değerlendirme kaydedildi ve karar sonraki haftanın öğretmen incelemesine taşındı."
           : "Değerlendirme kaydedildi. Bu pakette sonraki hafta bulunmadığı için karar geçmişte korundu.",
       );
+      notifyRecordsChanged();
     } catch (reason) {
       setReviewMessage(reason instanceof Error ? reason.message : "Haftalık değerlendirme kaydedilemedi.");
     } finally {
@@ -792,6 +817,7 @@ export function PremiumPlanCenterScreen({
       setMonthlyReviewMessage(
         "Aylık değerlendirme üç boyutuyla kaydedildi. Önceki kayıtlar değiştirilmeden korunuyor.",
       );
+      notifyRecordsChanged();
     } catch (reason) {
       setMonthlyReviewMessage(
         reason instanceof Error
@@ -1087,7 +1113,13 @@ export function PremiumPlanCenterScreen({
               </ol>
             </section>
 
-            <section className="premium-section" aria-labelledby="premium-activities-title">
+            <section
+              className="premium-section"
+              aria-labelledby="premium-activities-title"
+              ref={weeklySectionRef}
+              tabIndex={-1}
+              data-testid="premium-weekly-work"
+            >
               <div className="premium-section-heading">
                 <span>Eylül 2026</span>
                 <h2 id="premium-activities-title">Öğretmen incelemeli etkinlikler</h2>
@@ -1412,6 +1444,9 @@ export function PremiumPlanCenterScreen({
             <section
               className="premium-section premium-monthly-evaluation"
               aria-labelledby="premium-monthly-evaluation-title"
+              ref={monthlySectionRef}
+              tabIndex={-1}
+              data-testid="premium-monthly-work"
             >
               <div className="premium-section-heading">
                 <span>MEB 2024 · s. 136–139 ve Ek 18</span>

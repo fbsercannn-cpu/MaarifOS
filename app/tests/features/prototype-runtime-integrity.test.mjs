@@ -50,6 +50,39 @@ test("Kayıt Ekle gözlem seçimi chooser'ı async açılıştan önce kapatmaz 
   );
 });
 
+test("Kayıt Ekle takvim geçişi async okumadan önce hedef yüzeyi kilitler", () => {
+  const calendarOpen = prototypeSource.slice(
+    prototypeSource.indexOf("const openAcademicCalendar = async"),
+    prototypeSource.indexOf("const openTodayPlans ="),
+  );
+  const transitionIndex = calendarOpen.indexOf(
+    'surfaceTransitionRef.current = "calendar"',
+  );
+  const firstAwaitIndex = calendarOpen.indexOf("await Promise.all");
+
+  assert.notEqual(transitionIndex, -1);
+  assert.notEqual(firstAwaitIndex, -1);
+  assert.ok(transitionIndex < firstAwaitIndex);
+  assert.match(calendarOpen, /setCalendarOpen\(true\)/);
+  assert.match(
+    calendarOpen,
+    /catch \(reason\) \{\s*surfaceTransitionRef\.current = null/,
+  );
+
+  const captureCalendarLabelIndex = prototypeSource.indexOf("Takvime not ekle");
+  const captureCalendarIndex = prototypeSource.lastIndexOf(
+    "void openAcademicCalendar();",
+    captureCalendarLabelIndex,
+  );
+  assert.notEqual(captureCalendarIndex, -1);
+  const captureCalendarAction = prototypeSource.slice(
+    Math.max(0, captureCalendarIndex - 180),
+    captureCalendarIndex + 80,
+  );
+  assert.match(captureCalendarAction, /setCaptureMenuOpen\(false\)/);
+  assert.match(captureCalendarAction, /void openAcademicCalendar\(\)/);
+});
+
 function premiumEvidenceSnapshot(packSnapshot) {
   const snapshot = createEmptySnapshot();
   const academicYearId = "00000000-0000-4000-8000-000000009001";

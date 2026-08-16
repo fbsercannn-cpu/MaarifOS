@@ -12,12 +12,23 @@ import {
   Carousel,
   FlowStack,
   KeyboardInput,
+  KeyboardTextarea,
   MobileScroll,
   type FlowControls,
   type FlowScreen,
 } from "../../mobile";
 import { isCivilDate } from "../../core/domain/attendance.ts";
-import { isLocalTime } from "../../core/domain/classroom.ts";
+import {
+  isLocalTime,
+  type ClassroomSchedule,
+} from "../../core/domain/classroom.ts";
+import {
+  defaultTeacherOwnedDailyFlowBlockDrafts,
+  type TeacherOwnedActivityFlowBlockKind,
+  type TeacherOwnedDailyFlowBlockDraft,
+  type TeacherOwnedDailyFlowBlockEdit,
+  type TeacherOwnedDailyFlowTemplateSource,
+} from "../../core/domain/teacher-owned-daily-flow.ts";
 import type { DashboardStudent as Student } from "../dashboard/dashboard-data";
 import type { CurriculumProfileSnapshot } from "../evidence/evidence-flow";
 import {
@@ -37,7 +48,10 @@ import {
   PRESCHOOL_ACTIVITY_SUGGESTIONS,
   type PreschoolActivityArea,
 } from "./activity-suggestions";
-import type { ScheduledPlanEditDraft } from "./scheduled-plan-workspace.ts";
+import type {
+  ScheduledPlanEditDraft,
+  TeacherOwnedDailyFlowCopySource,
+} from "./scheduled-plan-workspace.ts";
 
 function formatTurkishCivilDate(civilDate: string) {
   if (!isCivilDate(civilDate)) return "Plan tarihini YYYY-AA-GG biçiminde yazın";
@@ -88,6 +102,9 @@ export type PlanCreationCommand = {
   studentIds: string[];
   premiumSource?: PremiumDailyTemplateSelection;
   premiumDailyFlowBlocks?: PremiumDailyFlowBlockDraft[];
+  teacherOwnedDailyFlowBlocks?: TeacherOwnedDailyFlowBlockDraft[];
+  teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
+  teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
   premiumAlternativeActivated?: boolean;
 };
 
@@ -102,7 +119,27 @@ export type PlanUpdateCommand = {
   startTime: string;
   endTime?: string;
   premiumDailyFlowBlocks?: PremiumDailyFlowBlockDraft[];
+  teacherOwnedDailyFlowBlocks?: TeacherOwnedDailyFlowBlockEdit[];
+  teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
 };
+
+export interface TeacherOwnedDailyFlowContext {
+  schedule: ClassroomSchedule;
+  weeklyPlanId: string;
+  allowedDateStart: string;
+  allowedDateEnd: string;
+  copySources?: readonly TeacherOwnedDailyFlowCopySource[];
+}
+
+function minutesFromLocalTime(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function scheduleDurationMinutes(schedule: ClassroomSchedule): number {
+  return minutesFromLocalTime(schedule.endTime) -
+    minutesFromLocalTime(schedule.startTime);
+}
 
 export function PlanCreationScreen({
   civilDate,
@@ -115,6 +152,7 @@ export function PlanCreationScreen({
   onUpdate,
   initialTemplate,
   initialEdit,
+  teacherOwnedDailyFlowContext,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -126,6 +164,7 @@ export function PlanCreationScreen({
   onUpdate?: (command: PlanUpdateCommand) => Promise<void>;
   initialTemplate?: PremiumDailyTemplateSelection;
   initialEdit?: ScheduledPlanEditDraft;
+  teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
 }) {
   const [ids] = useState(() => ({
     planId: initialEdit?.planId ?? crypto.randomUUID(),
@@ -155,6 +194,44 @@ export function PlanCreationScreen({
   );
   const [premiumAlternativeActivated, setPremiumAlternativeActivated] =
     useState(false);
+  const [teacherOwnedDailyFlowBlocks, setTeacherOwnedDailyFlowBlocks] = useState<
+    TeacherOwnedDailyFlowBlockDraft[]
+  >(() => {
+    if (initialEdit) {
+      return structuredClone(initialEdit.teacherOwnedDailyFlowBlocks);
+    }
+    if (!initialTemplate && teacherOwnedDailyFlowContext) {
+      return defaultTeacherOwnedDailyFlowBlockDrafts(
+        scheduleDurationMinutes(teacherOwnedDailyFlowContext.schedule),
+      );
+    }
+    return [];
+  });
+  const [expectedTeacherOwnedDailyFlowMinutes] = useState(() =>
+    initialEdit?.teacherOwnedDailyFlowBlocks.length
+      ? initialEdit.teacherOwnedDailyFlowBlocks.reduce(
+          (total, block) => total + block.durationMinutes,
+          0,
+        )
+      : teacherOwnedDailyFlowContext
+        ? scheduleDurationMinutes(teacherOwnedDailyFlowContext.schedule)
+        : 0,
+  );
+  const [teacherOwnedDailyFlowReviewed, setTeacherOwnedDailyFlowReviewed] =
+    useState(false);
+  const [teacherOwnedActivityBlockKind, setTeacherOwnedActivityBlockKind] =
+    useState<TeacherOwnedActivityFlowBlockKind>(
+      initialEdit?.teacherOwnedActivityBlockKind ?? "teacher-activity-one",
+    );
+  const [teacherOwnedCopyPreviewOpen, setTeacherOwnedCopyPreviewOpen] =
+    useState(false);
+  const [teacherOwnedWeekCopyOpen, setTeacherOwnedWeekCopyOpen] = useState(false);
+  const [teacherOwnedSelectedCopyPlanId, setTeacherOwnedSelectedCopyPlanId] =
+    useState<string | null>(null);
+  const [teacherOwnedSelectedCopyMode, setTeacherOwnedSelectedCopyMode] =
+    useState<"previous-day" | "weekly-template">("previous-day");
+  const [teacherOwnedDailyFlowTemplateSource, setTeacherOwnedDailyFlowTemplateSource] =
+    useState<TeacherOwnedDailyFlowTemplateSource | undefined>(undefined);
   const [suggestionArea, setSuggestionArea] =
     useState<PreschoolActivityArea>("all");
   const curriculumAgeBand = curriculumAgeBandFromLabel(ageGroup);
@@ -257,6 +334,79 @@ export function PlanCreationScreen({
           block.transitionNote.length <= 500 &&
           block.teacherNote.length <= 1_000,
       ));
+  const teacherOwnedDailyFlowEnabled =
+    teacherOwnedDailyFlowBlocks.length > 0 && !initialTemplate;
+  const teacherOwnedDailyFlowTotalMinutes = teacherOwnedDailyFlowBlocks.reduce(
+    (total, block) => total + block.durationMinutes,
+    0,
+  );
+  const teacherOwnedSkippedMinutes = teacherOwnedDailyFlowBlocks.reduce(
+    (total, block) =>
+      total + (block.status === "skipped" ? block.durationMinutes : 0),
+    0,
+  );
+  const teacherOwnedDateInWeek = !teacherOwnedDailyFlowEnabled || Boolean(
+    initialEdit
+      ? planCivilDate >= initialEdit.allowedDateStart &&
+        planCivilDate <= initialEdit.allowedDateEnd
+      : teacherOwnedDailyFlowContext &&
+        planCivilDate >= teacherOwnedDailyFlowContext.allowedDateStart &&
+        planCivilDate <= teacherOwnedDailyFlowContext.allowedDateEnd,
+  );
+  const teacherOwnedDailyFlowValid =
+    !teacherOwnedDailyFlowEnabled ||
+    (teacherOwnedDailyFlowBlocks.length === 10 &&
+      teacherOwnedDailyFlowTotalMinutes === expectedTeacherOwnedDailyFlowMinutes &&
+      teacherOwnedDateInWeek &&
+      teacherOwnedDailyFlowBlocks.some((block) => block.status === "planned") &&
+      teacherOwnedDailyFlowBlocks.every(
+        (block) =>
+          block.title.trim().length > 0 &&
+          block.title.trim().length <= 200 &&
+          Number.isInteger(block.durationMinutes) &&
+          block.durationMinutes >= 5 &&
+          block.durationMinutes <= 240 &&
+          block.transitionNote.length <= 500 &&
+          block.teacherNote.length <= 1_000,
+      ));
+  const teacherOwnedActivityBlock = teacherOwnedDailyFlowBlocks.find(
+    (block) => block.kind === teacherOwnedActivityBlockKind,
+  );
+  const teacherOwnedActivityBlockValid =
+    !teacherOwnedDailyFlowEnabled ||
+    Boolean(teacherOwnedActivityBlock && teacherOwnedActivityBlock.status !== "skipped");
+  const teacherOwnedCopySources = teacherOwnedDailyFlowContext?.copySources ?? [];
+  const teacherOwnedNearestCopySource = teacherOwnedCopySources[0];
+  const teacherOwnedCopySource = teacherOwnedCopySources.find(
+    (source) => source.planId === teacherOwnedSelectedCopyPlanId,
+  ) ?? teacherOwnedNearestCopySource;
+  const teacherOwnedCopyDifferenceCount = teacherOwnedCopySource
+    ? teacherOwnedCopySource.blocks.filter((sourceBlock, index) => {
+        const currentBlock = teacherOwnedDailyFlowBlocks[index];
+        return !currentBlock ||
+          sourceBlock.title !== currentBlock.title ||
+          sourceBlock.status !== currentBlock.status ||
+          sourceBlock.durationMinutes !== currentBlock.durationMinutes ||
+          sourceBlock.transitionNote !== currentBlock.transitionNote ||
+          sourceBlock.teacherNote !== currentBlock.teacherNote;
+      }).length
+    : 0;
+  const teacherOwnedDurationDifference =
+    expectedTeacherOwnedDailyFlowMinutes - teacherOwnedDailyFlowTotalMinutes;
+  const teacherOwnedDurationAdjustmentBlock = teacherOwnedDailyFlowBlocks.find(
+    (block) =>
+      block.kind === "rest-regulation" &&
+      block.status !== "skipped" &&
+      block.durationMinutes + teacherOwnedDurationDifference >= 5 &&
+      block.durationMinutes + teacherOwnedDurationDifference <= 240,
+  ) ?? teacherOwnedDailyFlowBlocks.find(
+    (block) =>
+      block.status !== "skipped" &&
+      block.kind !== "teacher-activity-one" &&
+      block.kind !== "teacher-activity-two" &&
+      block.durationMinutes + teacherOwnedDurationDifference >= 5 &&
+      block.durationMinutes + teacherOwnedDurationDifference <= 240,
+  );
   const resolvedPremiumActivityTitle =
     initialTemplate &&
     premiumAlternativeActivated &&
@@ -298,6 +448,24 @@ export function PlanCreationScreen({
     !premiumDailyFlowValid
       ? "Tam gün akışındaki süre ve not alanlarını kontrol edin."
       : null,
+    !teacherOwnedDateInWeek
+      ? "Plan tarihini öğretmen planındaki kaynak haftanın tarih aralığına alın."
+      : null,
+    teacherOwnedDailyFlowEnabled &&
+    teacherOwnedDailyFlowTotalMinutes !== expectedTeacherOwnedDailyFlowMinutes
+      ? `10 bölümün toplamını sınıfın ${expectedTeacherOwnedDailyFlowMinutes} dakikalık çalışma düzeniyle eşitleyin.`
+      : null,
+    !teacherOwnedDailyFlowValid &&
+    teacherOwnedDateInWeek &&
+    teacherOwnedDailyFlowTotalMinutes === expectedTeacherOwnedDailyFlowMinutes
+      ? "Öğretmenin 10 bölümlü günlük akışındaki başlık, süre ve notları kontrol edin."
+      : null,
+    teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed
+      ? "10 bölümlü günlük akışı gözden geçirdiğinizi onaylayın."
+      : null,
+    !teacherOwnedActivityBlockValid
+      ? "Gerçek etkinliğin uygulanacağı, atlanmamış bir akış bölümü seçin."
+      : null,
   ].filter((reason): reason is string => reason !== null);
   const saveReady = !busy && saveBlockingReasons.length === 0;
   const saveDisabled = busy || saveBlockingReasons.length > 0;
@@ -317,7 +485,9 @@ export function PlanCreationScreen({
       : saveReady
         ? initialEdit
           ? "Değişiklikler kontrol edildi; kaydedebilirsiniz."
-          : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
+          : teacherOwnedDailyFlowEnabled
+            ? "Etkinlik, hedef, çocuk kapsamı, 10 akış bölümü ve öğretmen onayı tamamlandı."
+            : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
         : saveBlockingReasons.join(" ");
   const selectPremiumApplication = (useAlternative: boolean) => {
     setPremiumAlternativeActivated(useAlternative);
@@ -345,6 +515,9 @@ export function PlanCreationScreen({
       !endTimeValid ||
       !timeOrderValid ||
       !premiumDailyFlowValid ||
+      !teacherOwnedDailyFlowValid ||
+      !teacherOwnedActivityBlockValid ||
+      (teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed) ||
       busy
     ) return;
     setBusy(true);
@@ -366,6 +539,13 @@ export function PlanCreationScreen({
           ...(premiumFlowDefinition.length > 0
             ? { premiumDailyFlowBlocks }
             : {}),
+          ...(teacherOwnedDailyFlowEnabled
+            ? {
+                teacherOwnedDailyFlowBlocks:
+                  teacherOwnedDailyFlowBlocks as TeacherOwnedDailyFlowBlockEdit[],
+                teacherOwnedActivityBlockKind,
+              }
+            : {}),
         });
         return;
       }
@@ -381,6 +561,15 @@ export function PlanCreationScreen({
         studentIds: assignedStudentIds,
         ...(initialTemplate ? { premiumSource: initialTemplate } : {}),
         ...(initialTemplate ? { premiumDailyFlowBlocks } : {}),
+        ...(!initialTemplate && teacherOwnedDailyFlowEnabled
+          ? {
+              teacherOwnedDailyFlowBlocks,
+              teacherOwnedActivityBlockKind,
+              ...(teacherOwnedDailyFlowTemplateSource
+                ? { teacherOwnedDailyFlowTemplateSource }
+                : {}),
+            }
+          : {}),
         ...(initialTemplate ? { premiumAlternativeActivated } : {}),
       });
     } catch (reason) {
@@ -394,8 +583,8 @@ export function PlanCreationScreen({
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">{initialEdit ? "Kayıtlı öğretmen planı" : "Günlük plan hazırlığı"}</span>
-          <h1>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
-          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
+          <h1>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği 10 bölümlü günlük akışınıza yerleştirin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
+          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : teacherOwnedDailyFlowEnabled ? "Etkinlik, hedef ve çocuk kapsamından sonra 10 bölümü inceleyin; gerçek etkinliğin uygulanacağı bölümü seçip açıkça onaylayın." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
         </div>
 
         <section className="d1-context-card" aria-label="Plan bağlamı">
@@ -614,6 +803,383 @@ export function PlanCreationScreen({
               </ol>
             </section>
           </>
+        ) : null}
+
+        {teacherOwnedDailyFlowEnabled ? (
+          <section
+            className="premium-daily-flow-preview teacher-owned-daily-flow-editor"
+            aria-labelledby="teacher-owned-daily-flow-title"
+            data-testid="teacher-owned-daily-flow-editor"
+          >
+            <div>
+              <span className="d1-kicker">Öğretmenin günlük akışı</span>
+              <h2 id="teacher-owned-daily-flow-title">
+                10 bölümü {expectedTeacherOwnedDailyFlowMinutes > 300
+                  ? "tam gün"
+                  : "yarım gün"} düzenine yerleştirin
+              </h2>
+              <p>
+                Bu bölümler tek bir etkinlik kaydını çoğaltmaz. Başlık, süre,
+                uygulama durumu ve öğretmen notları planın değişmez revizyon
+                geçmişinde korunur.
+              </p>
+              <label htmlFor="teacher-owned-activity-block">
+                Gerçek etkinlik hangi bölümde uygulanacak?
+              </label>
+              <select
+                id="teacher-owned-activity-block"
+                value={teacherOwnedActivityBlockKind}
+                onChange={(event) => {
+                  setTeacherOwnedDailyFlowReviewed(false);
+                  setTeacherOwnedActivityBlockKind(
+                    event.target.value as TeacherOwnedActivityFlowBlockKind,
+                  );
+                }}
+                aria-describedby="teacher-owned-activity-block-help"
+              >
+                {teacherOwnedDailyFlowBlocks
+                  .filter(
+                    (block) =>
+                      block.kind === "teacher-activity-one" ||
+                      block.kind === "teacher-activity-two",
+                  )
+                  .map((block) => (
+                    <option
+                      key={block.kind}
+                      value={block.kind}
+                      disabled={block.status === "skipped"}
+                    >
+                      {block.title}
+                      {block.status === "skipped" ? " — uygulanmayacak" : ""}
+                    </option>
+                  ))}
+              </select>
+              <small id="teacher-owned-activity-block-help">
+                Gözlem ve uygulama kanıtı bu bölüm kimliğiyle aynı kayıt zincirinde korunur.
+              </small>
+              {teacherOwnedCopySource ? (
+                <div className="teacher-owned-flow-copy" data-testid="teacher-owned-flow-copy">
+                  <div className="teacher-owned-flow-copy-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTeacherOwnedSelectedCopyPlanId(
+                          teacherOwnedNearestCopySource?.planId ?? null,
+                        );
+                        setTeacherOwnedSelectedCopyMode("previous-day");
+                        setTeacherOwnedWeekCopyOpen(false);
+                        setTeacherOwnedCopyPreviewOpen((current) => !current);
+                      }}
+                      aria-expanded={
+                        teacherOwnedCopyPreviewOpen &&
+                        teacherOwnedSelectedCopyMode === "previous-day"
+                      }
+                    >
+                      Dünden getir
+                    </button>
+                    {teacherOwnedCopySources.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTeacherOwnedCopyPreviewOpen(false);
+                          setTeacherOwnedWeekCopyOpen((current) => !current);
+                        }}
+                        aria-expanded={teacherOwnedWeekCopyOpen}
+                      >
+                        Haftadan seç
+                      </button>
+                    ) : null}
+                  </div>
+                  {teacherOwnedWeekCopyOpen ? (
+                    <div className="teacher-owned-flow-week-options" aria-label="Bu haftanın önceki planları">
+                      {teacherOwnedCopySources.map((source) => (
+                        <button
+                          type="button"
+                          key={source.planId}
+                          onClick={() => {
+                            setTeacherOwnedSelectedCopyPlanId(source.planId);
+                            setTeacherOwnedSelectedCopyMode("weekly-template");
+                            setTeacherOwnedCopyPreviewOpen(true);
+                          }}
+                        >
+                          <strong>{source.civilDate}</strong>
+                          <span>{source.planTitle}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {teacherOwnedCopyPreviewOpen ? (
+                    <div className="teacher-owned-flow-copy-preview" role="status">
+                      <small>
+                        {teacherOwnedCopySource.civilDate} · {teacherOwnedCopySource.planTitle}
+                      </small>
+                      <strong>
+                        {teacherOwnedCopyDifferenceCount === 0
+                          ? "Taslak zaten önceki günle aynı"
+                          : `${teacherOwnedCopyDifferenceCount} bölüm değişecek`}
+                      </strong>
+                      <p>
+                        Yalnız bölüm taslağı ve etkinlik bölümü seçimi alınır; etkinlik,
+                        gözlem ve kayıt kimlikleri kopyalanmaz.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={teacherOwnedCopyDifferenceCount === 0}
+                        onClick={() => {
+                          setTeacherOwnedDailyFlowReviewed(false);
+                          setTeacherOwnedDailyFlowBlocks(
+                            structuredClone(teacherOwnedCopySource.blocks),
+                          );
+                          setTeacherOwnedActivityBlockKind(
+                            teacherOwnedCopySource.activityBlockKind,
+                          );
+                          setTeacherOwnedDailyFlowTemplateSource({
+                            mode: teacherOwnedSelectedCopyMode,
+                            sourcePlanId: teacherOwnedCopySource.planId,
+                            sourceWeeklyPlanId: teacherOwnedCopySource.weeklyPlanId,
+                            sourceCivilDate: teacherOwnedCopySource.civilDate,
+                            sourceFlowRevisionNumber:
+                              teacherOwnedCopySource.flowRevisionNumber,
+                          });
+                          setTeacherOwnedCopyPreviewOpen(false);
+                          setTeacherOwnedWeekCopyOpen(false);
+                        }}
+                      >
+                        Bu taslağı uygula
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div
+              className={
+                teacherOwnedDailyFlowTotalMinutes ===
+                expectedTeacherOwnedDailyFlowMinutes
+                  ? "teacher-owned-flow-total is-ready"
+                  : "teacher-owned-flow-total is-attention"
+              }
+            >
+              <strong>
+                {teacherOwnedDailyFlowTotalMinutes} / {expectedTeacherOwnedDailyFlowMinutes} dk
+              </strong>
+              <span>
+                {teacherOwnedDailyFlowTotalMinutes ===
+                expectedTeacherOwnedDailyFlowMinutes
+                  ? teacherOwnedSkippedMinutes > 0
+                    ? `Gün takvimi tamam · ${teacherOwnedSkippedMinutes} dk uygulanmayacak açık zaman`
+                    : "Gün takvimi sınıfın çalışma süresiyle tam eşleşiyor"
+                  : "Bölüm sürelerini sınıfın çalışma düzeniyle eşitleyin"}
+              </span>
+              {teacherOwnedDurationDifference !== 0 &&
+              teacherOwnedDurationAdjustmentBlock ? (
+                <button
+                  type="button"
+                  className="teacher-owned-flow-adjust-one"
+                  onClick={() => {
+                    setTeacherOwnedDailyFlowReviewed(false);
+                    setTeacherOwnedDailyFlowBlocks((current) =>
+                      current.map((block) =>
+                        block.kind === teacherOwnedDurationAdjustmentBlock.kind
+                          ? {
+                              ...block,
+                              durationMinutes:
+                                block.durationMinutes + teacherOwnedDurationDifference,
+                            }
+                          : block,
+                      ),
+                    );
+                  }}
+                >
+                  {Math.abs(teacherOwnedDurationDifference)} dk {teacherOwnedDurationDifference > 0
+                    ? "ekle"
+                    : "azalt"}: {teacherOwnedDurationAdjustmentBlock.title}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="teacher-owned-flow-balance"
+                onClick={() => {
+                  setTeacherOwnedDailyFlowBlocks((current) => {
+                    const balanced = defaultTeacherOwnedDailyFlowBlockDrafts(
+                      expectedTeacherOwnedDailyFlowMinutes,
+                    );
+                    const next = current.map((block, index) => ({
+                      ...block,
+                      durationMinutes: balanced[index].durationMinutes,
+                    }));
+                    const changed = next.some(
+                      (block, index) =>
+                        block.durationMinutes !== current[index].durationMinutes,
+                    );
+                    if (changed) setTeacherOwnedDailyFlowReviewed(false);
+                    return changed ? next : current;
+                  });
+                }}
+                disabled={teacherOwnedDailyFlowBlocks.every(
+                  (block, index) =>
+                    block.durationMinutes ===
+                    defaultTeacherOwnedDailyFlowBlockDrafts(
+                      expectedTeacherOwnedDailyFlowMinutes,
+                    )[index].durationMinutes,
+                )}
+              >
+                Süreleri sınıf gününe eşit dağıt
+              </button>
+            </div>
+            <ol>
+              {teacherOwnedDailyFlowBlocks.map((block, index) => (
+                <li key={block.id ?? block.kind}>
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{block.title}</strong>
+                    <small>
+                      {block.durationMinutes} dk · {block.status === "planned"
+                        ? "Planlandı"
+                        : block.status === "optional"
+                          ? "İsteğe bağlı"
+                          : "Bu gün uygulanmayacak"}
+                    </small>
+                    <details className="premium-flow-block-editor">
+                      <summary>
+                        {index + 1}. {block.title} — bölümü düzenle
+                      </summary>
+                      <label htmlFor={`teacher-block-title-${index}`}>
+                        Bölüm başlığı
+                      </label>
+                      <KeyboardInput
+                        id={`teacher-block-title-${index}`}
+                        value={block.title}
+                        maxLength={200}
+                        onChange={(event) =>
+                          {
+                            setTeacherOwnedDailyFlowReviewed(false);
+                            setTeacherOwnedDailyFlowBlocks((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? { ...candidate, title: event.target.value }
+                                  : candidate,
+                              ),
+                            );
+                          }
+                        }
+                      />
+                      <label htmlFor={`teacher-block-status-${index}`}>
+                        Uygulama durumu
+                      </label>
+                      <select
+                        id={`teacher-block-status-${index}`}
+                        value={block.status}
+                        onChange={(event) =>
+                          {
+                            setTeacherOwnedDailyFlowReviewed(false);
+                            setTeacherOwnedDailyFlowBlocks((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? {
+                                      ...candidate,
+                                      status: event.target.value as TeacherOwnedDailyFlowBlockDraft["status"],
+                                    }
+                                  : candidate,
+                              ),
+                            );
+                          }
+                        }
+                      >
+                        <option value="planned">Planlandı</option>
+                        <option value="optional">İsteğe bağlı</option>
+                        <option value="skipped">Bu gün uygulanmayacak</option>
+                      </select>
+                      <label htmlFor={`teacher-block-duration-${index}`}>
+                        Süre (dakika)
+                      </label>
+                      <KeyboardInput
+                        id={`teacher-block-duration-${index}`}
+                        inputMode="numeric"
+                        min={5}
+                        max={240}
+                        aria-describedby={`teacher-block-duration-help-${index}`}
+                        value={String(block.durationMinutes)}
+                        onChange={(event) => {
+                          const durationMinutes = Number(
+                            event.target.value.replace(/\D/g, ""),
+                          );
+                          setTeacherOwnedDailyFlowReviewed(false);
+                          setTeacherOwnedDailyFlowBlocks((current) =>
+                            current.map((candidate, candidateIndex) =>
+                              candidateIndex === index
+                                ? { ...candidate, durationMinutes }
+                                : candidate,
+                            ),
+                          );
+                        }}
+                      />
+                      <small id={`teacher-block-duration-help-${index}`}>
+                        5–240 dakika. Toplam süre sınıf gününün süresiyle eşleşmelidir.
+                      </small>
+                      <label htmlFor={`teacher-block-transition-${index}`}>
+                        Geçiş notu
+                      </label>
+                      <KeyboardInput
+                        id={`teacher-block-transition-${index}`}
+                        value={block.transitionNote}
+                        maxLength={500}
+                        onChange={(event) =>
+                          {
+                            setTeacherOwnedDailyFlowReviewed(false);
+                            setTeacherOwnedDailyFlowBlocks((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? { ...candidate, transitionNote: event.target.value }
+                                  : candidate,
+                              ),
+                            );
+                          }
+                        }
+                      />
+                      <label htmlFor={`teacher-block-note-${index}`}>
+                        Öğretmen notu
+                      </label>
+                      <KeyboardTextarea
+                        id={`teacher-block-note-${index}`}
+                        value={block.teacherNote}
+                        maxLength={1000}
+                        onChange={(event) =>
+                          {
+                            setTeacherOwnedDailyFlowReviewed(false);
+                            setTeacherOwnedDailyFlowBlocks((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? { ...candidate, teacherNote: event.target.value }
+                                  : candidate,
+                              ),
+                            );
+                          }
+                        }
+                      />
+                    </details>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <label className="teacher-owned-flow-review-confirmation">
+              <input
+                type="checkbox"
+                checked={teacherOwnedDailyFlowReviewed}
+                disabled={!teacherOwnedDailyFlowValid}
+                onChange={(event) =>
+                  setTeacherOwnedDailyFlowReviewed(event.target.checked)
+                }
+              />
+              <span>
+                <strong>10 bölümü gözden geçirdim</strong>
+                <small>
+                  Bu onaydan sonra akış “öğretmenin hazırladığı günlük akış”
+                  olarak kaydedilir. Bir alan değişirse yeniden onay gerekir.
+                </small>
+              </span>
+            </label>
+          </section>
         ) : null}
 
         {!initialEdit ? <section className="plan-ideas" aria-labelledby="plan-ideas-title">
@@ -885,6 +1451,7 @@ export function PlanCreationFlow({
   onClose,
   initialTemplate,
   initialEdit,
+  teacherOwnedDailyFlowContext,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -897,6 +1464,7 @@ export function PlanCreationFlow({
   onClose: () => void;
   initialTemplate?: PremiumDailyTemplateSelection;
   initialEdit?: ScheduledPlanEditDraft;
+  teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
 }) {
   const initial = useMemo<FlowScreen>(
     () => ({
@@ -916,6 +1484,7 @@ export function PlanCreationFlow({
           onUpdate={onUpdate}
           initialTemplate={initialTemplate}
           initialEdit={initialEdit}
+          teacherOwnedDailyFlowContext={teacherOwnedDailyFlowContext}
         />
       ),
     }),
@@ -931,6 +1500,7 @@ export function PlanCreationFlow({
       onUpdate,
       initialTemplate,
       initialEdit,
+      teacherOwnedDailyFlowContext,
     ],
   );
 

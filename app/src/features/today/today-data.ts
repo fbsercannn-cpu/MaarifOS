@@ -30,11 +30,15 @@ import {
   type StudentEnrollment,
 } from "../archive/academic-year-archive.ts";
 import { isAuthenticSpontaneousObservationActivity } from "../evidence/spontaneous-observation-integrity.ts";
+import { isTeacherOwnedDailyFlow } from "../../core/domain/teacher-owned-daily-flow.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
 export type TodayActivityStatus = "planned" | "in_progress" | "completed";
-export type TodayPlanItemKind = "activity" | "premium-flow-block";
+export type TodayPlanItemKind =
+  | "activity"
+  | "premium-flow-block"
+  | "teacher-flow-block";
 export type TodayFlowBlockStatus = "planned" | "optional" | "skipped";
 export type AcademicYearOperationalStatus =
   | "active"
@@ -488,6 +492,49 @@ function premiumFlowItemsFromPlan(
   return { items, consumedActivityIds };
 }
 
+function teacherOwnedFlowItemsFromPlan(
+  plan: StoredRecord,
+  activityPairs: readonly { record: StoredRecord; item: TodayPlanItem }[],
+): { items: TodayPlanItem[]; consumedActivityIds: Set<string> } | null {
+  if (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)) return null;
+  const planActivityPairs = activityPairs.filter(
+    ({ record }) => record.planId === plan.id,
+  );
+  const consumedActivityIds = new Set<string>();
+  const items = plan.teacherOwnedDailyFlow.blocks.map((block) => {
+    const activityPair = planActivityPairs.find(
+      ({ record, item }) =>
+        !consumedActivityIds.has(item.id) &&
+        record.teacherOwnedFlowBlockId === block.id,
+    );
+    if (activityPair) consumedActivityIds.add(activityPair.item.id);
+    const activity = activityPair?.item;
+    return {
+      id: activity?.id ?? `teacher-flow:${plan.id}:${block.id}`,
+      title: block.title,
+      kind: "teacher-flow-block" as const,
+      ...(activity?.startTime ? { startTime: activity.startTime } : {}),
+      ...(activity?.endTime ? { endTime: activity.endTime } : {}),
+      ...(activity?.subject ? { subject: activity.subject } : {}),
+      ...(activity?.curriculumConnection
+        ? { curriculumConnection: activity.curriculumConnection }
+        : {}),
+      status: activity?.status ?? "planned",
+      evidenceCount: activity?.evidenceCount ?? 0,
+      planId: plan.id,
+      ...(activity?.activityId ? { activityId: activity.activityId } : {}),
+      ...(activity?.title ? { activityTitle: activity.title } : {}),
+      flowBlockId: block.id,
+      flowBlockStatus: block.status,
+      durationMinutes: block.durationMinutes,
+      ...(block.transitionNote ? { transitionNote: block.transitionNote } : {}),
+      ...(block.teacherNote ? { teacherNote: block.teacherNote } : {}),
+      canCaptureEvidence: Boolean(activity && block.status !== "skipped"),
+    };
+  });
+  return { items, consumedActivityIds };
+}
+
 export function resolvePlanDayWorkspace(
   snapshot: DataSnapshot,
   civilDate: string,
@@ -534,6 +581,27 @@ export function resolvePlanDayWorkspace(
           return projection.items;
         })
     : [];
+  const teacherOwnedFlowItems = scope
+    ? snapshot.plans
+        .filter(
+          (record) =>
+            record.civilDate === civilDate &&
+            recordBelongsToClassroomScope(record, scope),
+        )
+        .sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) ||
+            left.id.localeCompare(right.id),
+        )
+        .flatMap((plan) => {
+          const projection = teacherOwnedFlowItemsFromPlan(plan, activityPairs);
+          if (!projection) return [];
+          for (const activityId of projection.consumedActivityIds) {
+            consumedActivityIds.add(activityId);
+          }
+          return projection.items;
+        })
+    : [];
   const unconsumedActivityItems = activityPairs
     .map(({ item }) => item)
     .filter((item) => !consumedActivityIds.has(item.id))
@@ -542,7 +610,11 @@ export function resolvePlanDayWorkspace(
         (left.startTime ?? "99:99").localeCompare(right.startTime ?? "99:99") ||
         left.id.localeCompare(right.id),
     );
-  const basePlanItems = [...premiumFlowItems, ...unconsumedActivityItems];
+  const basePlanItems = [
+    ...premiumFlowItems,
+    ...teacherOwnedFlowItems,
+    ...unconsumedActivityItems,
+  ];
   const todayObservations = scope
     ? snapshot.observations.filter(
         (record) =>

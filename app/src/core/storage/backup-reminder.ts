@@ -1,11 +1,17 @@
 export const LAST_SUCCESSFUL_ENCRYPTED_BACKUP_SCHEMA_VERSION = 1 as const;
 export const LAST_SUCCESSFUL_ENCRYPTED_BACKUP_STORAGE_KEY =
   "maarifos.backup.last-successful-encrypted.v1";
+export const BACKUP_HEALTH_RECEIPT_SCHEMA_VERSION = 2 as const;
+export const BACKUP_HEALTH_RECEIPT_STORAGE_KEY =
+  "maarifos.backup.health-receipt.v2";
 export const BACKUP_REMINDER_DAYS = 7 as const;
 export const BACKUP_OVERDUE_DAYS = 14 as const;
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000;
 const MAX_BACKUP_METADATA_LENGTH = 512;
+const MAX_BACKUP_HEALTH_RECEIPT_LENGTH = 2_048;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SAFE_FILE_NAME_PATTERN = /^[^\\/:*?"<>|\u0000-\u001f]{1,180}\.maarifos$/u;
 
 export interface BackupMetadataStorage {
   getItem(key: string): string | null;
@@ -16,6 +22,43 @@ interface LastSuccessfulEncryptedBackupRecord {
   readonly schemaVersion: typeof LAST_SUCCESSFUL_ENCRYPTED_BACKUP_SCHEMA_VERSION;
   readonly lastSuccessfulAt: string;
 }
+
+export interface BackupHealthReceipt {
+  readonly schemaVersion: typeof BACKUP_HEALTH_RECEIPT_SCHEMA_VERSION;
+  readonly fileName: string;
+  readonly encryptedChecksum: string;
+  readonly encryptedByteLength: number;
+  readonly payloadChecksum: string;
+  readonly dataSchemaVersion: number;
+  readonly appVersion: string;
+  readonly createdAt: string;
+  readonly verifiedAt: string;
+  readonly lastRestoreDrillAt: string | null;
+  readonly lastRestoreMode: "merge" | "replace" | null;
+}
+
+export interface BackupHealthReceiptInput {
+  readonly fileName: string;
+  readonly encryptedChecksum: string;
+  readonly encryptedByteLength: number;
+  readonly payloadChecksum: string;
+  readonly dataSchemaVersion: number;
+  readonly appVersion: string;
+  readonly createdAt: string;
+  readonly verifiedAt: string;
+}
+
+export type BackupRecoveryHealth =
+  | {
+      readonly kind: "drill-verified";
+      readonly message: string;
+      readonly lastRestoreDrillAt: string;
+    }
+  | {
+      readonly kind: "drill-required" | "legacy-time-only" | "missing";
+      readonly message: string;
+      readonly lastRestoreDrillAt: null;
+    };
 
 export type LastSuccessfulEncryptedBackupState =
   | {
@@ -64,6 +107,155 @@ function isStoredRecord(
     value.schemaVersion === LAST_SUCCESSFUL_ENCRYPTED_BACKUP_SCHEMA_VERSION &&
     canonicalUtcIso(value.lastSuccessfulAt) !== null
   );
+}
+
+function isBackupHealthReceipt(value: unknown): value is BackupHealthReceipt {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expected = [
+    "appVersion",
+    "createdAt",
+    "dataSchemaVersion",
+    "encryptedByteLength",
+    "encryptedChecksum",
+    "fileName",
+    "lastRestoreDrillAt",
+    "lastRestoreMode",
+    "payloadChecksum",
+    "schemaVersion",
+    "verifiedAt",
+  ].sort();
+  return (
+    keys.length === expected.length &&
+    keys.every((key, index) => key === expected[index]) &&
+    value.schemaVersion === BACKUP_HEALTH_RECEIPT_SCHEMA_VERSION &&
+    typeof value.fileName === "string" &&
+    SAFE_FILE_NAME_PATTERN.test(value.fileName) &&
+    typeof value.encryptedChecksum === "string" &&
+    SHA256_PATTERN.test(value.encryptedChecksum) &&
+    typeof value.encryptedByteLength === "number" &&
+    Number.isInteger(value.encryptedByteLength) &&
+    value.encryptedByteLength > 0 &&
+    value.encryptedByteLength <= 32 * 1024 * 1024 &&
+    typeof value.payloadChecksum === "string" &&
+    SHA256_PATTERN.test(value.payloadChecksum) &&
+    typeof value.dataSchemaVersion === "number" &&
+    Number.isInteger(value.dataSchemaVersion) &&
+    value.dataSchemaVersion > 0 &&
+    value.dataSchemaVersion <= 10_000 &&
+    typeof value.appVersion === "string" &&
+    value.appVersion.length > 0 &&
+    value.appVersion.length <= 120 &&
+    canonicalUtcIso(value.createdAt) !== null &&
+    canonicalUtcIso(value.verifiedAt) !== null &&
+    (value.lastRestoreDrillAt === null ||
+      canonicalUtcIso(value.lastRestoreDrillAt) !== null) &&
+    (value.lastRestoreMode === null ||
+      value.lastRestoreMode === "merge" ||
+      value.lastRestoreMode === "replace") &&
+    ((value.lastRestoreDrillAt === null && value.lastRestoreMode === null) ||
+      (value.lastRestoreDrillAt !== null && value.lastRestoreMode !== null))
+  );
+}
+
+export function recordEncryptedBackupHealth(
+  storage: BackupMetadataStorage,
+  input: BackupHealthReceiptInput,
+): BackupHealthReceipt | null {
+  const receipt: BackupHealthReceipt = {
+    schemaVersion: BACKUP_HEALTH_RECEIPT_SCHEMA_VERSION,
+    ...input,
+    lastRestoreDrillAt: null,
+    lastRestoreMode: null,
+  };
+  if (!isBackupHealthReceipt(receipt)) return null;
+  try {
+    storage.setItem(BACKUP_HEALTH_RECEIPT_STORAGE_KEY, JSON.stringify(receipt));
+    return receipt;
+  } catch {
+    return null;
+  }
+}
+
+export function readBackupHealthReceipt(
+  storage: BackupMetadataStorage,
+): BackupHealthReceipt | null {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(BACKUP_HEALTH_RECEIPT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (raw === null || raw.length > MAX_BACKUP_HEALTH_RECEIPT_LENGTH) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isBackupHealthReceipt(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function recordSuccessfulRestoreDrill(
+  storage: BackupMetadataStorage,
+  input: {
+    readonly sourceChecksum: string;
+    readonly restoredAt: Date;
+    readonly mode: "merge" | "replace";
+  },
+): BackupHealthReceipt | null {
+  const current = readBackupHealthReceipt(storage);
+  if (
+    !current ||
+    !SHA256_PATTERN.test(input.sourceChecksum) ||
+    current.encryptedChecksum !== input.sourceChecksum ||
+    Number.isNaN(input.restoredAt.getTime())
+  ) {
+    return null;
+  }
+  const updated: BackupHealthReceipt = {
+    ...current,
+    lastRestoreDrillAt: input.restoredAt.toISOString(),
+    lastRestoreMode: input.mode,
+  };
+  if (!isBackupHealthReceipt(updated)) return null;
+  try {
+    storage.setItem(BACKUP_HEALTH_RECEIPT_STORAGE_KEY, JSON.stringify(updated));
+    return updated;
+  } catch {
+    return null;
+  }
+}
+
+export function backupRecoveryHealth(
+  receipt: BackupHealthReceipt | null,
+  lastSuccessfulAt: string | null,
+): BackupRecoveryHealth {
+  if (receipt?.lastRestoreDrillAt) {
+    return {
+      kind: "drill-verified",
+      message: "Bu cihazda aynı şifreli dosyayla geri yükleme tatbikatı doğrulandı.",
+      lastRestoreDrillAt: receipt.lastRestoreDrillAt,
+    };
+  }
+  if (receipt) {
+    return {
+      kind: "drill-required",
+      message: "Dosya bütünlüğü doğrulandı; gerçek kurtarma için bu dosyayı seçip geri yükleme tatbikatı yapın.",
+      lastRestoreDrillAt: null,
+    };
+  }
+  if (lastSuccessfulAt) {
+    return {
+      kind: "legacy-time-only",
+      message: "Eski yedek için yalnız zaman kaydı var; yeni şifreli yedek ve geri yükleme tatbikatı yapın.",
+      lastRestoreDrillAt: null,
+    };
+  }
+  return {
+    kind: "missing",
+    message: "Henüz doğrulanmış şifreli yedek veya geri yükleme tatbikatı yok.",
+    lastRestoreDrillAt: null,
+  };
 }
 
 /**

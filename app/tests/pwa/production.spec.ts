@@ -128,11 +128,13 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await expect(setup).toBeVisible();
   await setup.getByLabel("Sınıf adı").fill("Güneş Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" }).click();
   await expect(setup).toBeHidden();
   await expect(page.getByRole("heading", { name: "Bugün", exact: true })).toBeVisible();
@@ -231,19 +233,18 @@ test("0.9.1 etkin worker 0.10.0'ı doğrular, kullanıcı onayıyla etkinleştir
 
     const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
     await setup.getByLabel("Sınıf adı").fill("Sürüm Koruma Sınıfı");
-    await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-    await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+    await setup.getByRole("button", { name: "Devam et" }).click();
+    await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
     await setup
       .getByLabel("Uygulanan program")
       .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+    await setup.getByRole("button", { name: "Devam et" }).click();
+    await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
     await setup.getByRole("button", {
       name: "Sınıfı ve çalışma düzenini kaydet",
     }).click();
     await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-    await page
-      .getByLabel("Sınıftaki çocuklar")
-      .getByRole("button", { name: "Çocuk ekle", exact: true })
-      .click();
+    await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
     await page.getByLabel("Çocuğun adı").fill("Sürüm Koruma Çocuğu");
     await page.getByRole("button", { name: "Ekle", exact: true }).click();
     await expect(

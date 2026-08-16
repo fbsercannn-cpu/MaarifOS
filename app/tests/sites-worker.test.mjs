@@ -988,6 +988,18 @@ test("stages a deterministic opaque shell without changing the source dist", asy
         ["GET /classroom?native=1", `GET ${resultOne.shellPath}`],
       ],
       [
+        new Request("https://app.example.test/plans?native=1", {
+          headers: { accept: "text/html" },
+        }),
+        ["GET /plans?native=1", `GET ${resultOne.shellPath}`],
+      ],
+      [
+        new Request("https://app.example.test/documents?native=1", {
+          headers: { accept: "text/html" },
+        }),
+        ["GET /documents?native=1", `GET ${resultOne.shellPath}`],
+      ],
+      [
         new Request("https://app.example.test/index.html", {
           headers: { accept: "*/*" },
         }),

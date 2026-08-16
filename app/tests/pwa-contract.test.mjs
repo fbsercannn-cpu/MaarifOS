@@ -603,6 +603,8 @@ test("service worker yalnız extensionless uygulama rotalarını offline kabuğa
     "/apiary",
     "/authentication",
     "/classroom?native=1",
+    "/plans?native=1",
+    "/documents?native=1",
   ]) {
     online = true;
     const [onlineResponse] = await dispatchNavigation(path);

@@ -85,10 +85,16 @@ import {
   type AlphaPrimaryNavigationId,
 } from "./core/capabilities/alpha-capabilities";
 import {
+  backupRecoveryHealth,
   backupReminderState,
+  readBackupHealthReceipt,
   readLastSuccessfulEncryptedBackup,
+  recordEncryptedBackupHealth,
   recordSuccessfulEncryptedBackup,
+  recordSuccessfulRestoreDrill,
+  type BackupHealthReceipt,
 } from "./core/storage/backup-reminder";
+import { sha256Hex } from "./core/backup/crypto";
 import {
   inspectStorageHealth,
   type StorageHealthState,
@@ -104,19 +110,28 @@ import {
   type DashboardStudent as Student,
 } from "./features/dashboard/dashboard-data";
 import { loadStudentAttendanceHistory } from "./features/attendance";
-import {
-  AttendancePanels,
-  StudentAttendanceHistoryPanel,
-} from "./features/attendance/AttendancePanels";
 import { ATTENDANCE_EVENT_LABELS } from "./features/attendance/attendance-panel-model";
 import { RouteFocusBoundary, useBrowserRouter } from "./shell";
 import { classifyApplicationError } from "./core/errors";
 import {
-  TodayScreen,
   createTodayStudentCards,
   todayPlanItemStatusLabel,
-} from "./features/today";
-import { ClassroomToolsSheets } from "./features/classroom/ClassroomToolsSheets";
+} from "./features/today/today-screen-model.ts";
+import {
+  emptyTeacherWorkCycle,
+  loadTeacherWorkCycle,
+  type TeacherWorkCycleWorkspace,
+} from "./features/teacher-cycle/teacher-work-cycle.ts";
+import {
+  type TeacherWeekWorkspace,
+} from "./features/teacher-cycle/teacher-week-workspace.ts";
+import {
+  closeTeacherDay,
+  emptyTeacherDayClosureWorkspace,
+  loadTeacherDayClosureWorkspace,
+  transitionTeacherDayCarryForward,
+  type TeacherDayClosureWorkspace,
+} from "./features/day-closure/teacher-day-closure.ts";
 import {
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
@@ -142,17 +157,35 @@ import { resolveObservationContext } from "./features/evidence/observation-conte
 import { verifyCommittedObservationRefresh } from "./features/evidence/observation-commit-refresh";
 import type { AnecdoteExportFormat } from "./features/anecdote/export-document.ts";
 import type { AnecdoteFormWorkspace } from "./features/anecdote/anecdote-form.ts";
+import type { DocumentWorkspaceItemId } from "./features/documents/document-workspace-model.ts";
+import type { SetupProgressStepId } from "./features/onboarding/setup-progress-model.ts";
 import {
-  PlanCreationFlow,
-  type PlanCreationCommand,
-  type PlanUpdateCommand,
+  CLASSROOM_SETUP_SECTIONS,
+  classroomSetupReadiness,
+  classroomSetupSectionAvailable,
+  classroomSetupSectionComplete,
+  nextClassroomSetupSection,
+  previousClassroomSetupSection,
+  type ClassroomSetupSectionId,
+} from "./features/onboarding/classroom-setup-model.ts";
+import type {
+  PlanCreationCommand,
+  PlanUpdateCommand,
+} from "./features/planning/PlanCreationFlow.tsx";
+import type { PlanWorkbenchLevelId } from "./features/planning/plan-workbench-model.ts";
+import {
+  destinationForPlanDocument,
+  destinationForPlanLevel,
+} from "./features/planning/teacher-plan-destination.ts";
+import {
   loadScheduledPlanEditDraft,
   loadScheduledPlanWorkspace,
+  loadTeacherOwnedDailyFlowCopySources,
   type ScheduledPlanEditDraft,
   type ScheduledPlanSummary,
   type ScheduledPlanWorkspace,
-} from "./features/planning";
-import { FounderPremiumActivationPanel } from "./features/premium-plans/FounderPremiumActivationPanel.tsx";
+  type TeacherOwnedDailyFlowCopySource,
+} from "./features/planning/scheduled-plan-workspace.ts";
 import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
 import {
   activatePremiumFounderAccess,
@@ -249,10 +282,64 @@ const ClassroomScreen = lazy(() =>
   })),
 );
 
+const TodayScreen = lazy(() =>
+  import("./features/today/TodayScreen.tsx").then((module) => ({
+    default: module.TodayScreen,
+  })),
+);
+
+const ClassroomToolsSheets = lazy(() =>
+  import("./features/classroom/ClassroomToolsSheets.tsx").then((module) => ({
+    default: module.ClassroomToolsSheets,
+  })),
+);
+
+const AttendancePanels = lazy(() =>
+  import("./features/attendance/AttendancePanels").then((module) => ({
+    default: module.AttendancePanels,
+  })),
+);
+
+const StudentAttendanceHistoryPanel = lazy(() =>
+  import("./features/attendance/AttendancePanels").then((module) => ({
+    default: module.StudentAttendanceHistoryPanel,
+  })),
+);
+
+const PlanWorkspaceScreen = lazy(() =>
+  import("./features/planning/PlanWorkspaceScreen.tsx").then((module) => ({
+    default: module.PlanWorkspaceScreen,
+  })),
+);
+
+const PlanCreationFlow = lazy(() =>
+  import("./features/planning/PlanCreationFlow.tsx").then((module) => ({
+    default: module.PlanCreationFlow,
+  })),
+);
+
+const TeacherOwnedPlanScreen = lazy(() =>
+  import("./features/planning/TeacherOwnedPlanScreen.tsx").then((module) => ({
+    default: module.TeacherOwnedPlanScreen,
+  })),
+);
+
+const DocumentWorkspaceScreen = lazy(() =>
+  import("./features/documents/DocumentWorkspaceScreen.tsx").then((module) => ({
+    default: module.DocumentWorkspaceScreen,
+  })),
+);
+
 const PremiumPlanCenterScreen = lazy(() =>
   import("./features/premium-plans/PremiumPlanCenterScreen.tsx").then((module) => ({
     default: module.PremiumPlanCenterScreen,
   })),
+);
+
+const FounderPremiumActivationPanel = lazy(() =>
+  import("./features/premium-plans/FounderPremiumActivationPanel.tsx").then(
+    (module) => ({ default: module.FounderPremiumActivationPanel }),
+  ),
 );
 
 const AnecdoteCenterPanel = lazy(() =>
@@ -323,6 +410,110 @@ type PersistenceState = {
   pendingWrites: number;
   lastCommittedAt?: string;
 };
+
+function emptyTeacherWeekState(civilDate: string): TeacherWeekWorkspace {
+  return {
+    status: "not-configured",
+    civilDate,
+    weekStart: civilDate,
+    weekEnd: civilDate,
+    days: [],
+    expectedDayCount: 0,
+    coverageStatus: "fallback",
+    coverageDetail: "Etkin sınıf kurulumu tamamlanmadan öğretim günü paydası oluşturulmaz.",
+    completedDayCount: 0,
+    carriedDayCount: 0,
+    plannedDayCount: 0,
+    openWorkDayCount: 0,
+    nextActionDate: null,
+    nextActionLabel: "Sınıf kurulumunu tamamlayın",
+  };
+}
+
+async function loadTeacherWeekWorkspaceLazy(
+  store: IndexedDbDataStore,
+  options: { readonly civilDate: string },
+): Promise<TeacherWeekWorkspace> {
+  const module = await import(
+    "./features/teacher-cycle/teacher-week-workspace.ts"
+  );
+  return module.loadTeacherWeekWorkspace(store, options);
+}
+
+type HydrationStepId =
+  | "dashboard"
+  | "today"
+  | "evidence"
+  | "calendar"
+  | "scheduled-plans"
+  | "teacher-cycle"
+  | "teacher-week"
+  | "day-closure"
+  | "app-lock"
+  | "recovery";
+
+const HYDRATION_SUPPORT_CODES = {
+  dashboard: "HYD-DASH",
+  today: "HYD-TODAY",
+  evidence: "HYD-EVIDENCE",
+  calendar: "HYD-CALENDAR",
+  "scheduled-plans": "HYD-SCHEDULE",
+  "teacher-cycle": "HYD-CYCLE",
+  "teacher-week": "HYD-WEEK",
+  "day-closure": "HYD-CLOSURE",
+  "app-lock": "HYD-LOCK",
+  recovery: "HYD-RECOVERY",
+} as const satisfies Record<HydrationStepId, string>;
+
+class HydrationStepError extends Error {
+  readonly step: HydrationStepId;
+  readonly reason: unknown;
+
+  constructor(step: HydrationStepId, reason: unknown) {
+    super(`Hydration failed at ${step}.`);
+    this.name = "HydrationStepError";
+    this.step = step;
+    this.reason = reason;
+  }
+}
+
+function runHydrationStep<Result>(
+  step: HydrationStepId,
+  operation: Promise<Result>,
+): Promise<Result> {
+  return operation.catch((reason: unknown) => {
+    throw new HydrationStepError(step, reason);
+  });
+}
+
+function describeHydrationFailure(reason: unknown): {
+  detail: string;
+  supportCode: string;
+  step: HydrationStepId | "unknown";
+  kind: string;
+} {
+  const step = reason instanceof HydrationStepError ? reason.step : "unknown";
+  const rootReason = reason instanceof HydrationStepError ? reason.reason : reason;
+  const classification = classifyApplicationError(rootReason);
+  const supportCode =
+    step === "unknown" ? "HYD-UNKNOWN" : HYDRATION_SUPPORT_CODES[step];
+  const detail =
+    step === "recovery"
+      ? "Kurtarma kayıtları doğrulanamadı."
+      : step === "app-lock"
+        ? "Uygulama kilidi bilgisi doğrulanamadı."
+        : step === "teacher-cycle" || step === "day-closure"
+          ? "Öğretmen çalışma özeti doğrulanamadı."
+          : step === "unknown"
+            ? "Cihazdaki veriler açılamadı."
+            : "Cihazdaki öğretmen kayıtları doğrulanamadı.";
+  return {
+    detail: `${detail} Destek kodu: ${supportCode}. Yeni kayıtlar güvenlik için durduruldu.`,
+    supportCode,
+    step,
+    kind: classification.kind,
+  };
+}
 
 type OfflineReadiness = "checking" | "ready" | "unavailable";
 
@@ -411,17 +602,11 @@ type ExternalFeedbackFormState = {
   includeInYearSummary: boolean;
 };
 
-const bootstrapCivilDate = civilDateInIstanbul(new Date());
-const currentCivilYear = Number(bootstrapCivilDate.slice(0, 4));
-const currentCivilMonth = Number(bootstrapCivilDate.slice(5, 7));
-const currentAcademicStartYear =
-  currentCivilMonth >= 9 ? currentCivilYear : currentCivilYear - 1;
 const initialClassroomForm: ClassroomFormState = {
   classroomName: "",
-  academicYearName:
-    `${currentAcademicStartYear}–${currentAcademicStartYear + 1} Eğitim Yılı`,
-  academicYearStart: `${currentAcademicStartYear}-09-01`,
-  academicYearEnd: `${currentAcademicStartYear + 1}-08-31`,
+  academicYearName: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
+  academicYearStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+  academicYearEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
   ageGroup: "",
   curriculumProgram: "",
   curriculumCatalogLabel: "",
@@ -460,6 +645,7 @@ const calendarEntryTypeLabels: Record<CalendarEntryType, string> = {
   fruit_day: "Meyve günü",
   activity: "Etkinlik",
   adaptation_day: "Uyum günü",
+  no_school: "Okulda eğitim yok",
   official_marker: "Resmî takvim işareti",
 };
 
@@ -680,6 +866,7 @@ type AppSurface =
   | "documents"
   | "release-notes"
   | "plan-flow"
+  | "teacher-plan-records"
   | "premium-gate"
   | "premium-plans"
   | "evidence-flow";
@@ -701,6 +888,7 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
     candidate === "documents" ||
     candidate === "release-notes" ||
     candidate === "plan-flow" ||
+    candidate === "teacher-plan-records" ||
     candidate === "premium-gate" ||
     candidate === "premium-plans" ||
     candidate === "evidence-flow"
@@ -1481,6 +1669,15 @@ function EvidenceCaptureScreen({
     ) return;
     setBusy(true);
     setError("");
+    // Final kaydı başlatmadan önce gecikmeli taslak yazımını kesin. Aksi halde
+    // 450 ms'lik otomatik-kayıt callback'i finalize işleminden sonra kuyruğa
+    // girip silinmiş taslağı yeniden canlandırabilir ve sonraki gözlemde eski
+    // metin/türü gösterebilir.
+    if (draftTimerRef.current !== null) {
+      window.clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    finalizedRef.current = true;
     try {
       if (selectionMode === "single") {
         await actions.capture(activity, {
@@ -1505,9 +1702,9 @@ function EvidenceCaptureScreen({
           taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
         });
       }
-      finalizedRef.current = true;
       await actions.close();
     } catch (reason) {
+      finalizedRef.current = false;
       setError(reason instanceof Error ? reason.message : "Gözlem notu kaydedilemedi.");
       setBusy(false);
     }
@@ -2312,6 +2509,8 @@ export default function Prototype() {
     null,
   );
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] =
+    useState<"overview" | "backup">("overview");
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -2328,6 +2527,8 @@ export default function Prototype() {
   const [academicYearTransitionConfirmed, setAcademicYearTransitionConfirmed] =
     useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [documentsInitialSection, setDocumentsInitialSection] =
+    useState<"overview" | "anecdotes" | "students">("overview");
   const [anecdoteWorkspace, setAnecdoteWorkspace] =
     useState<AnecdoteFormWorkspace>({
       forms: [],
@@ -2344,6 +2545,7 @@ export default function Prototype() {
   const [studentActionsOpenId, setStudentActionsOpenId] =
     useState<string | null>(null);
   const [classExportPreviewOpen, setClassExportPreviewOpen] = useState(false);
+  const [classroomToolsMounted, setClassroomToolsMounted] = useState(false);
   const [classExportStartDate, setClassExportStartDate] = useState("");
   const [classExportEndDate, setClassExportEndDate] = useState("");
   const [classExportStudentIds, setClassExportStudentIds] = useState<string[]>(
@@ -2352,13 +2554,36 @@ export default function Prototype() {
   const [classExportNameMode, setClassExportNameMode] =
     useState<"preferred" | "registered">("preferred");
   const [todayWorkspace, setTodayWorkspace] = useState<TodayWorkspace>(emptyTodayWorkspace);
+  const [teacherWorkCycle, setTeacherWorkCycle] =
+    useState<TeacherWorkCycleWorkspace>(() =>
+      emptyTeacherWorkCycle(fallbackDashboardState.attendanceCivilDate),
+    );
+  const [teacherWeekWorkspace, setTeacherWeekWorkspace] =
+    useState<TeacherWeekWorkspace>(() =>
+      emptyTeacherWeekState(fallbackDashboardState.attendanceCivilDate),
+    );
+  const [dayClosureWorkspace, setDayClosureWorkspace] =
+    useState<TeacherDayClosureWorkspace>(() =>
+      emptyTeacherDayClosureWorkspace(
+        fallbackDashboardState.attendanceCivilDate,
+      ),
+    );
+  const [dayClosureOpen, setDayClosureOpen] = useState(false);
+  const [dayClosureNote, setDayClosureNote] = useState("");
+  const [dayClosureError, setDayClosureError] = useState("");
+  const [dayClosureBusy, setDayClosureBusy] = useState(false);
   const [selectedPlanDayWorkspace, setSelectedPlanDayWorkspace] =
     useState<TodayWorkspace | null>(null);
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [teacherPlanRecordsOpen, setTeacherPlanRecordsOpen] = useState(false);
+  const [teacherPlanRecordsInitialLevel, setTeacherPlanRecordsInitialLevel] =
+    useState<Exclude<PlanWorkbenchLevelId, "daily">>("annual");
   const [scheduledPlanEditDraft, setScheduledPlanEditDraft] =
     useState<ScheduledPlanEditDraft | null>(null);
+  const [teacherOwnedDailyFlowCopySources, setTeacherOwnedDailyFlowCopySources] =
+    useState<TeacherOwnedDailyFlowCopySource[]>([]);
   const [futurePlanNotice, setFuturePlanNotice] = useState<{
     planId: string;
     civilDate: string;
@@ -2369,7 +2594,10 @@ export default function Prototype() {
     useState<ObservationRefreshNotice | null>(null);
   const [observationRefreshBusy, setObservationRefreshBusy] = useState(false);
   const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
+  const [premiumPlanInitialSection, setPremiumPlanInitialSection] =
+    useState<"overview" | "weekly" | "monthly">("overview");
   const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+  const [premiumGateMounted, setPremiumGateMounted] = useState(false);
   const [premiumFounderAccess, setPremiumFounderAccess] =
     useState<PremiumFounderAccessResult | null>(null);
   const [premiumFounderBusy, setPremiumFounderBusy] = useState(
@@ -2386,6 +2614,8 @@ export default function Prototype() {
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
     useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
+  const [classroomSetupSection, setClassroomSetupSection] =
+    useState<ClassroomSetupSectionId>("period");
   const [classroomError, setClassroomError] = useState("");
   const [studentDeletionCandidate, setStudentDeletionCandidate] =
     useState<Student | null>(null);
@@ -2433,6 +2663,7 @@ export default function Prototype() {
   const [recoverySnapshots, setRecoverySnapshots] = useState<
     RecoverySnapshotMetadata[]
   >([]);
+  const [recoverySnapshotWarning, setRecoverySnapshotWarning] = useState("");
   const [appLockSetting, setAppLockSetting] =
     useState<AppLockSettingRecord | null>(null);
   const [appLocked, setAppLocked] = useState(false);
@@ -2448,6 +2679,8 @@ export default function Prototype() {
     useState<StorageHealthState | null>(null);
   const [lastSuccessfulBackupAt, setLastSuccessfulBackupAt] =
     useState<string | null>(null);
+  const [backupHealthReceipt, setBackupHealthReceipt] =
+    useState<BackupHealthReceipt | null>(null);
   const [wipeConfirmation, setWipeConfirmation] = useState("");
   const [dataBusy, setDataBusy] = useState(false);
   const [dataStatus, setDataStatus] = useState("Bu cihazdaki veriler hazırlanıyor.");
@@ -2473,6 +2706,10 @@ export default function Prototype() {
   const backupReminder = useMemo(
     () => backupReminderState(lastSuccessfulBackupAt),
     [lastSuccessfulBackupAt],
+  );
+  const recoveryHealth = useMemo(
+    () => backupRecoveryHealth(backupHealthReceipt, lastSuccessfulBackupAt),
+    [backupHealthReceipt, lastSuccessfulBackupAt],
   );
   const [announcement, setAnnouncement] = useState("MaarifOS hazır.");
   const authView = useMemo(() => deriveWelcomeViewModel(authState), [authState]);
@@ -2617,6 +2854,13 @@ export default function Prototype() {
     classroomForm.academicYearEnd,
     classroomForm.academicYearStart,
   ]);
+  const officialAcademicCalendarApplied =
+    classroomForm.academicYearName ===
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName &&
+    classroomForm.academicYearStart ===
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
+    classroomForm.academicYearEnd ===
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate;
   const academicYearTransitionRequired =
     configuredClassroom !== null &&
     (classroomForm.academicYearName.trim() !==
@@ -2625,6 +2869,21 @@ export default function Prototype() {
         configuredClassroom.academicYearStart ||
       classroomForm.academicYearEnd !==
         configuredClassroom.academicYearEnd);
+  const classroomSetupReadinessState = classroomSetupReadiness({
+    classroomName: classroomForm.classroomName,
+    academicYearName: classroomForm.academicYearName,
+    academicYearStart: classroomForm.academicYearStart,
+    academicYearEnd: classroomForm.academicYearEnd,
+    ageGroup: classroomForm.ageGroup,
+    curriculumProgramSupported: isSupportedCurriculumProgram(
+      classroomForm.curriculumProgram,
+    ),
+    curriculumCatalogId: classroomForm.curriculumCatalogId,
+    curriculumSourceVersion: classroomForm.curriculumSourceVersion,
+    scheduleKind: classroomForm.scheduleKind,
+    startTime: classroomForm.startTime,
+    endTime: classroomForm.endTime,
+  });
   const visibleCalendarDays = useMemo(
     () => calendarMonthDays(calendarMonth),
     [calendarMonth],
@@ -2769,6 +3028,8 @@ export default function Prototype() {
     ? "evidence-flow"
     : planFlowOpen
       ? "plan-flow"
+      : teacherPlanRecordsOpen
+        ? "teacher-plan-records"
       : premiumPlanOpen
         ? "premium-plans"
         : premiumGateOpen
@@ -2904,6 +3165,20 @@ export default function Prototype() {
           lastCommittedAt: committedAt,
         });
         setDataStatus(detail);
+        if (options.educationalWrite) {
+          const civilDate = civilDateInIstanbul(new Date());
+          void Promise.all([
+            loadTeacherDayClosureWorkspace(store, { civilDate }),
+            loadTeacherWeekWorkspaceLazy(store, { civilDate }),
+          ])
+            .then(([workspace, week]) => {
+              setDayClosureWorkspace(workspace);
+              setTeacherWeekWorkspace(week);
+            })
+            .catch(() => {
+              // Ana yazma zaten commit edildi; özet yenileme hatası commit sonucunu tersine çeviremez.
+            });
+        }
         return result;
       },
       (reason: unknown) => {
@@ -2969,17 +3244,26 @@ export default function Prototype() {
   }, []);
 
   const refreshD1Workspaces = async () => {
-    const [today, evidence, calendar, scheduledPlans] = await Promise.all([
+    const civilDate = civilDateInIstanbul(new Date());
+    const [today, evidence, calendar, scheduledPlans, cycle, week, dayClosure] = await Promise.all([
       loadTodayWorkspace(store),
       loadEvidenceWorkspace(store),
       loadAcademicCalendar(store),
       loadScheduledPlanWorkspace(store),
+      loadTeacherWorkCycle(store, {
+        civilDate,
+      }),
+      loadTeacherWeekWorkspaceLazy(store, { civilDate }),
+      loadTeacherDayClosureWorkspace(store, { civilDate }),
     ]);
     setTodayWorkspace(today);
     setEvidenceWorkspace(evidence);
     setAcademicCalendar(calendar);
     setScheduledPlanWorkspace(scheduledPlans);
-    return { today, evidence, calendar, scheduledPlans };
+    setTeacherWorkCycle(cycle);
+    setTeacherWeekWorkspace(week);
+    setDayClosureWorkspace(dayClosure);
+    return { today, evidence, calendar, scheduledPlans, cycle, week, dayClosure };
   };
 
   const refreshAnecdoteDocuments = useCallback(async () => {
@@ -2992,7 +3276,17 @@ export default function Prototype() {
   }, [store]);
 
   useEffect(() => {
-    if (!documentsOpen || persistenceState.phase !== "ready") return undefined;
+    if (studentAddOpen || classExportPreviewOpen) {
+      setClassroomToolsMounted(true);
+    }
+  }, [classExportPreviewOpen, studentAddOpen]);
+
+  useEffect(() => {
+    if (premiumGateOpen) setPremiumGateMounted(true);
+  }, [premiumGateOpen]);
+
+  useEffect(() => {
+    if (persistenceState.phase !== "ready") return undefined;
     let cancelled = false;
     void import("./features/anecdote/anecdote-form.ts")
       .then(({ loadAnecdoteFormWorkspace }) => loadAnecdoteFormWorkspace(store))
@@ -3049,15 +3343,39 @@ export default function Prototype() {
     });
     setDataStatus("Bu cihazdaki veriler hazırlanıyor.");
     void Promise.all([
-      loadDashboardState(store, fallbackDashboardState),
-      loadTodayWorkspace(store),
-      loadEvidenceWorkspace(store),
-      loadAcademicCalendar(store),
-      loadScheduledPlanWorkspace(store),
-      loadAppLockSetting(store),
-      getBackupService().then((service) => service.listRecoverySnapshots()),
+      runHydrationStep(
+        "dashboard",
+        loadDashboardState(store, fallbackDashboardState),
+      ),
+      runHydrationStep("today", loadTodayWorkspace(store)),
+      runHydrationStep("evidence", loadEvidenceWorkspace(store)),
+      runHydrationStep("calendar", loadAcademicCalendar(store)),
+      runHydrationStep(
+        "scheduled-plans",
+        loadScheduledPlanWorkspace(store),
+      ),
+      runHydrationStep("teacher-cycle", loadTeacherWorkCycle(store, {
+        civilDate: fallbackDashboardState.attendanceCivilDate,
+      })),
+      runHydrationStep("teacher-week", loadTeacherWeekWorkspaceLazy(store, {
+        civilDate: fallbackDashboardState.attendanceCivilDate,
+      })),
+      runHydrationStep("day-closure", loadTeacherDayClosureWorkspace(store, {
+        civilDate: fallbackDashboardState.attendanceCivilDate,
+      })),
+      runHydrationStep("app-lock", loadAppLockSetting(store)),
+      getBackupService()
+        .then((service) => service.listRecoverySnapshots())
+        .then(
+          (snapshots) => ({ snapshots, warning: "" }),
+          () => ({
+            snapshots: [] as RecoverySnapshotMetadata[],
+            warning:
+              "Önceki cihaz-içi kurtarma noktaları doğrulanamadı. Ana öğretmen kayıtları açıldı; kurtarma noktaları silinmedi ve geri yükleme için inceleme gerekiyor.",
+          }),
+        ),
     ])
-      .then(([state, workspace, evidence, calendar, scheduledPlans, lockSetting, snapshots]) => {
+      .then(([state, workspace, evidence, calendar, scheduledPlans, cycle, week, dayClosure, lockSetting, recovery]) => {
         if (cancelled) return;
         setStudents(state.students);
         setArchivedStudents(state.archivedStudents);
@@ -3067,7 +3385,11 @@ export default function Prototype() {
         setEvidenceWorkspace(evidence);
         setAcademicCalendar(calendar);
         setScheduledPlanWorkspace(scheduledPlans);
-        setRecoverySnapshots(snapshots);
+        setTeacherWorkCycle(cycle);
+        setTeacherWeekWorkspace(week);
+        setDayClosureWorkspace(dayClosure);
+        setRecoverySnapshots(recovery.snapshots);
+        setRecoverySnapshotWarning(recovery.warning);
         if (lockSetting) {
           appLockSessionRef.current = new AppLockSession(
             lockSetting.config,
@@ -3128,12 +3450,20 @@ export default function Prototype() {
         });
         setDataStatus("Cihaz verileri açıldı ve yazmaya hazır.");
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         if (cancelled) return;
-        markPersistenceFailure(
-          "Cihazdaki veriler açılamadı. Yeni kayıtlar güvenlik için durduruldu.",
+        const diagnostic = describeHydrationFailure(reason);
+        if (import.meta.env.DEV) {
+          console.warn("[MaarifOS hydration]", {
+            step: diagnostic.step,
+            kind: diagnostic.kind,
+            supportCode: diagnostic.supportCode,
+          });
+        }
+        markPersistenceFailure(diagnostic.detail);
+        setAnnouncement(
+          `Cihaz verileri açılamadı. Destek kodu: ${diagnostic.supportCode}.`,
         );
-        setAnnouncement("Cihazdaki veriler açılamadı.");
       });
     return () => {
       cancelled = true;
@@ -3156,13 +3486,16 @@ export default function Prototype() {
       dayRefreshInFlightRef.current = true;
       try {
         await persistenceQueueRef.current;
-        const [refreshed, refreshedWorkspace, refreshedEvidence] = await Promise.all([
+        const [refreshed, refreshedWorkspace, refreshedEvidence, refreshedCycle, refreshedWeek, refreshedDayClosure] = await Promise.all([
           loadDashboardState(store, {
             ...fallbackDashboardState,
             attendanceCivilDate: currentCivilDate,
           }),
           loadTodayWorkspace(store, { now: new Date() }),
           loadEvidenceWorkspace(store, { now: new Date() }),
+          loadTeacherWorkCycle(store, { civilDate: currentCivilDate }),
+          loadTeacherWeekWorkspaceLazy(store, { civilDate: currentCivilDate }),
+          loadTeacherDayClosureWorkspace(store, { civilDate: currentCivilDate }),
         ]);
         if (cancelled) return;
         setStudents(refreshed.students);
@@ -3171,6 +3504,9 @@ export default function Prototype() {
         setAttendanceCivilDate(refreshed.attendanceCivilDate);
         setTodayWorkspace(refreshedWorkspace);
         setEvidenceWorkspace(refreshedEvidence);
+        setTeacherWorkCycle(refreshedCycle);
+        setTeacherWeekWorkspace(refreshedWeek);
+        setDayClosureWorkspace(refreshedDayClosure);
         setLastAttendanceChange(null);
         setAnnouncement("Yeni İstanbul takvim günü açıldı; önceki yoklama geçmişte korundu.");
       } catch {
@@ -3547,7 +3883,11 @@ export default function Prototype() {
       if (active) setStorageHealth(health);
     });
     const storedBackup = readLastSuccessfulEncryptedBackup(window.localStorage);
-    setLastSuccessfulBackupAt(storedBackup.lastSuccessfulAt);
+    const storedBackupHealth = readBackupHealthReceipt(window.localStorage);
+    setLastSuccessfulBackupAt(
+      storedBackupHealth?.createdAt ?? storedBackup.lastSuccessfulAt,
+    );
+    setBackupHealthReceipt(storedBackupHealth);
     return () => {
       active = false;
     };
@@ -3576,13 +3916,28 @@ export default function Prototype() {
       const backupService = await getBackupService();
       const envelope = await backupService.exportEncryptedBackup(passphrase);
       const serialized = backupService.serializeEncryptedBackup(envelope);
-      await backupService.parseAndDecryptBackup(serialized, passphrase);
+      const verifiedBackup = await backupService.parseAndDecryptBackup(
+        serialized,
+        passphrase,
+      );
       const civilDate = envelope.encryption.createdAt.slice(0, 10);
-      downloadJson(`${prefix}-${civilDate}.maarifos`, serialized);
+      const fileName = `${prefix}-${civilDate}.maarifos`;
+      downloadJson(fileName, serialized);
       recordSuccessfulEncryptedBackup(
         window.localStorage,
         new Date(envelope.encryption.createdAt),
       );
+      const receipt = recordEncryptedBackupHealth(window.localStorage, {
+        fileName,
+        encryptedChecksum: await sha256Hex(serialized),
+        encryptedByteLength: new TextEncoder().encode(serialized).byteLength,
+        payloadChecksum: verifiedBackup.manifest.payloadChecksum,
+        dataSchemaVersion: verifiedBackup.manifest.dataSchemaVersion,
+        appVersion: verifiedBackup.manifest.appVersion,
+        createdAt: envelope.encryption.createdAt,
+        verifiedAt: new Date().toISOString(),
+      });
+      setBackupHealthReceipt(receipt);
       setLastSuccessfulBackupAt(envelope.encryption.createdAt);
       setDataStatus(`Şifreli yedek doğrulandı · ${civilDate}`);
       setAnnouncement("Parola korumalı MaarifOS yedeği oluşturuldu.");
@@ -3781,6 +4136,9 @@ export default function Prototype() {
         restoredEvidence,
         restoredCalendar,
         restoredScheduledPlans,
+        restoredCycle,
+        restoredWeek,
+        restoredDayClosure,
         restoredLockSetting,
         snapshots,
       ] = await Promise.all([
@@ -3789,6 +4147,15 @@ export default function Prototype() {
         loadEvidenceWorkspace(store),
         loadAcademicCalendar(store),
         loadScheduledPlanWorkspace(store),
+        loadTeacherWorkCycle(store, {
+          civilDate: civilDateInIstanbul(new Date()),
+        }),
+        loadTeacherWeekWorkspaceLazy(store, {
+          civilDate: civilDateInIstanbul(new Date()),
+        }),
+        loadTeacherDayClosureWorkspace(store, {
+          civilDate: civilDateInIstanbul(new Date()),
+        }),
         loadAppLockSetting(store),
         backupService.listRecoverySnapshots(),
       ]);
@@ -3801,6 +4168,9 @@ export default function Prototype() {
       setEvidenceWorkspace(restoredEvidence);
       setAcademicCalendar(restoredCalendar);
       setScheduledPlanWorkspace(restoredScheduledPlans);
+      setTeacherWorkCycle(restoredCycle);
+      setTeacherWeekWorkspace(restoredWeek);
+      setDayClosureWorkspace(restoredDayClosure);
       setRecoverySnapshots(snapshots);
       if (restoredLockSetting) {
         appLockSessionRef.current = new AppLockSession(
@@ -3832,6 +4202,17 @@ export default function Prototype() {
           startTime: classroom.schedule.startTime,
           endTime: classroom.schedule.endTime,
         }));
+      }
+      if (restoreRequest.encryption === "encrypted") {
+        const updatedReceipt = recordSuccessfulRestoreDrill(
+          window.localStorage,
+          {
+            sourceChecksum: await sha256Hex(restoreRequest.source),
+            restoredAt: new Date(),
+            mode,
+          },
+        );
+        if (updatedReceipt) setBackupHealthReceipt(updatedReceipt);
       }
       setPendingRestore(null);
       setRestorePassword("");
@@ -4671,6 +5052,7 @@ export default function Prototype() {
       setAnnouncement("Takvimi açmadan önce sınıfınızı kurun.");
       return;
     }
+    surfaceTransitionRef.current = "calendar";
     setDataBusy(true);
     setCalendarError("");
     try {
@@ -5364,6 +5746,7 @@ export default function Prototype() {
     setPlanFlowOpen(false);
     setPremiumDailyTemplate(null);
     setScheduledPlanEditDraft(null);
+    setTeacherOwnedDailyFlowCopySources([]);
     setEvidenceFlowRequest(null);
     const returnFocusTarget = d1ReturnFocusRef.current;
     d1ReturnFocusRef.current = null;
@@ -5393,6 +5776,7 @@ export default function Prototype() {
     setDocumentsOpen(restorableSurface === "documents");
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
+    setTeacherPlanRecordsOpen(restorableSurface === "teacher-plan-records");
     setPremiumGateOpen(restorableSurface === "premium-gate");
     setPremiumPlanOpen(restorableSurface === "premium-plans");
     setEvidenceFlowRequest(evidenceRequest);
@@ -5508,7 +5892,7 @@ export default function Prototype() {
     surfaceTransitionRef.current = null;
   }, [activeSurface, native]);
 
-  const openPlanFlow = (initialTemplate?: PremiumDailyTemplateSelection) => {
+  const openPlanFlow = async (initialTemplate?: PremiumDailyTemplateSelection) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Plan oluşturma güvenlik için kapalı.",
@@ -5540,15 +5924,28 @@ export default function Prototype() {
       setAnnouncement("Plan için program katalog kimliği ve kaynak sürümünü tamamlayın.");
       return;
     }
+    let copySources: TeacherOwnedDailyFlowCopySource[] = [];
+    if (!initialTemplate && teacherWorkCycle.weekly) {
+      try {
+        copySources = await loadTeacherOwnedDailyFlowCopySources(store, {
+          weeklyPlanId: teacherWorkCycle.weekly.id,
+          beforeCivilDate: todayWorkspace.civilDate,
+        });
+      } catch {
+        copySources = [];
+      }
+    }
     d1ReturnFocusRef.current ??=
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     surfaceTransitionRef.current = "plan-flow";
     setPlansOpen(false);
+    setTeacherPlanRecordsOpen(false);
     setPremiumPlanOpen(false);
     setPremiumDailyTemplate(initialTemplate ?? null);
     setScheduledPlanEditDraft(null);
+    setTeacherOwnedDailyFlowCopySources(copySources);
     setPlanFlowOpen(true);
   };
 
@@ -5559,7 +5956,11 @@ export default function Prototype() {
     premiumFounderConfigurationState.configuration !== null ||
     premiumFounderAccess !== null;
 
-  const openPremiumPlans = () => {
+  const openPremiumPlans = (
+    initialSection: "overview" | "weekly" | "monthly" = "overview",
+  ) => {
+    setTeacherPlanRecordsOpen(false);
+    setPremiumPlanInitialSection(initialSection);
     const verifiedAccess = premiumFounderAccess?.access;
     const canUsePremiumPlans =
       verifiedAccess?.status === "active" &&
@@ -6491,17 +6892,29 @@ export default function Prototype() {
       return;
     }
     if (id === "plans") {
+      keyboard.hide();
       setCaptureMenuOpen(false);
-      openTodayPlans();
+      setDocumentsOpen(false);
+      setPlansOpen(false);
+      setPremiumGateOpen(false);
+      setPremiumPlanOpen(false);
+      setPlanFlowOpen(false);
+      setCalendarOpen(false);
+      navigate("plans");
+      setAnnouncement("Plan çalışma alanı açıldı.");
       return;
     }
     if (id === "documents") {
+      keyboard.hide();
       setCaptureMenuOpen(false);
       setPlansOpen(false);
       setPremiumGateOpen(false);
-      surfaceTransitionRef.current = "documents";
-      setDocumentsOpen(true);
-      setAnnouncement("Belgeler ve öğretmen kayıtları açıldı.");
+      setPremiumPlanOpen(false);
+      setPlanFlowOpen(false);
+      setCalendarOpen(false);
+      setDocumentsOpen(false);
+      navigate("documents");
+      setAnnouncement("Belge ve kayıt çalışma alanı açıldı.");
       return;
     }
     setCaptureMenuOpen(false);
@@ -6512,6 +6925,149 @@ export default function Prototype() {
     setAnnouncement(`${label} bölümü seçildi.`);
   };
 
+  const openTeacherPlanRecords = (
+    levelId: Exclude<PlanWorkbenchLevelId, "daily">,
+  ) => {
+    keyboard.hide();
+    setTeacherPlanRecordsInitialLevel(levelId);
+    setPlansOpen(false);
+    setDocumentsOpen(false);
+    setPremiumGateOpen(false);
+    setPremiumPlanOpen(false);
+    surfaceTransitionRef.current = "teacher-plan-records";
+    setTeacherPlanRecordsOpen(true);
+    setAnnouncement(
+      "Bu cihazdaki kalıcı öğretmen planı premium erişimden bağımsız açıldı.",
+    );
+  };
+
+  const openPlanWorkbenchLevel = (levelId: PlanWorkbenchLevelId) => {
+    const destination = destinationForPlanLevel(levelId, teacherWorkCycle);
+    if (destination === "teacher-records" && levelId !== "daily") {
+      openTeacherPlanRecords(levelId);
+      return;
+    }
+    if (destination === "premium-library") {
+      openPremiumPlans(
+        levelId === "monthly"
+          ? "monthly"
+          : levelId === "weekly"
+            ? "weekly"
+            : "overview",
+      );
+      return;
+    }
+    const dailyState = teacherWorkCycle.daily;
+    if (destination === "daily-conflict-review") {
+      void openAcademicCalendar(attendanceCivilDate).then(() => {
+        setAnnouncement(
+          `${dailyState.conflictingPlanIds.length} günlük plan aynı tarihte bulundu. Yeni plan oluşturulmadı; kayıtları inceleyip çakışmayı çözün.`,
+        );
+      });
+      return;
+    }
+    if (educationalWritesDisabled) {
+      setClassroomOpen(true);
+      setAnnouncement(
+        educationalWriteNotice ??
+          "Günlük plan için bugün etkin olan eğitim yılını seçin.",
+      );
+      return;
+    }
+    if (teacherWorkCycle.daily.planId) {
+      openTodayPlans();
+      return;
+    }
+    openPlanFlow();
+  };
+
+  const openDocumentWorkspaceItem = (itemId: DocumentWorkspaceItemId) => {
+    const planDestination = destinationForPlanDocument(itemId, teacherWorkCycle);
+    if (planDestination === "teacher-records") {
+      openTeacherPlanRecords(itemId === "monthly" ? "monthly" : "annual");
+      return;
+    }
+    if (planDestination === "premium-library") {
+      openPremiumPlans(itemId === "monthly" ? "monthly" : "overview");
+      return;
+    }
+    if (itemId === "students" && students.length + archivedStudents.length === 0) {
+      setStudentAddOpen(true);
+      setAnnouncement("İlk öğrenci kaydı formu açıldı.");
+      return;
+    }
+    setDocumentsInitialSection(itemId === "anecdotes" ? "anecdotes" : "students");
+    surfaceTransitionRef.current = "documents";
+    setDocumentsOpen(true);
+    setAnnouncement(
+      itemId === "anecdotes"
+        ? "Anekdot belge hazırlama alanı açıldı."
+        : "Öğrenci dosyası hazırlama alanı açıldı.",
+    );
+  };
+
+  const openSetupProgressStep = (stepId: SetupProgressStepId) => {
+    if (stepId === "classroom") {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      setAnnouncement(
+        configuredClassroom
+          ? "Sınıf ve eğitim yılı ayarları açıldı."
+          : "İlk adım: eğitim yılı ve sınıf bilgilerini tamamlayın.",
+      );
+      return;
+    }
+    if (stepId === "students") {
+      if (!configuredClassroom) {
+        setClassroomOpen(true);
+        setAnnouncement("Çocuk listesinden önce eğitim yılı ve sınıfı kurun.");
+        return;
+      }
+      navigate("classroom");
+      if (students.length === 0) setStudentAddOpen(true);
+      setAnnouncement(
+        students.length === 0
+          ? "İkinci adım: ilk çocuğu ekleyin."
+          : "Sınıf listesi açıldı.",
+      );
+      return;
+    }
+    if (stepId === "plan") {
+      if (!configuredClassroom || students.length === 0) {
+        setAnnouncement("Planlamadan önce sınıf ve çocuk listesini tamamlayın.");
+        return;
+      }
+      navigate("plans");
+      setAnnouncement("Üçüncü adım: ilk plan zincirini hazırlayın.");
+      return;
+    }
+    setSettingsInitialSection("backup");
+    setProfileOpen(true);
+    setAnnouncement("Dördüncü adım: ilk şifreli yedeği oluşturun.");
+  };
+
+  useEffect(() => {
+    if (!documentsOpen) return;
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>(
+          `[data-documents-section="${documentsInitialSection}"]`,
+        )
+        ?.scrollIntoView({ block: "start" });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [documentsInitialSection, documentsOpen]);
+
+  useEffect(() => {
+    if (!profileOpen || settingsInitialSection !== "backup") return;
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector<HTMLElement>('[data-settings-section="backup"]')
+        ?.scrollIntoView({ block: "start" });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [profileOpen, settingsInitialSection]);
+
   const changeAttendanceOpen = (open: boolean) => {
     if (open && educationalWriteNotice) {
       setAnnouncement(educationalWriteNotice);
@@ -6519,6 +7075,120 @@ export default function Prototype() {
     }
     if (!open) keyboard.hide();
     setAttendanceOpen(open);
+  };
+
+  const openDayClosure = async () => {
+    if (educationalWriteNotice) {
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
+    const civilDate = civilDateInIstanbul(new Date());
+    setDayClosureBusy(true);
+    setDayClosureError("");
+    try {
+      const workspace = await loadTeacherDayClosureWorkspace(store, {
+        civilDate,
+      });
+      setDayClosureWorkspace(workspace);
+      setDayClosureNote(workspace.latestClosure?.nextDayNote ?? "");
+      setDayClosureOpen(true);
+      setAnnouncement(
+        workspace.issues.length === 0
+          ? "Gün sonu kapanışı doğrulandı; kayıt özeti hazır."
+          : `${workspace.issues.length} açık iş gün sonu kapanışında görünür tutuluyor.`,
+      );
+    } catch (reason) {
+      const detail =
+        reason instanceof Error && reason.message.trim()
+          ? reason.message
+          : "Gün sonu özeti okunamadı; cihaz verileri değiştirilmedi.";
+      setDayClosureError(detail);
+      setAnnouncement(detail);
+    } finally {
+      setDayClosureBusy(false);
+    }
+  };
+
+  const submitDayClosure = async () => {
+    if (dayClosureBusy) return;
+    const civilDate = civilDateInIstanbul(new Date());
+    setDayClosureBusy(true);
+    setDayClosureError("");
+    try {
+      const record = await enqueuePersistence(
+        () =>
+          closeTeacherDay(store, {
+            civilDate,
+            nextDayNote: dayClosureNote,
+          }),
+        {
+          educationalWrite: {},
+          failureDetail:
+            "Gün sonu kapanışı kaydedilemedi. Açık işler ve öğretmen notu korunuyor.",
+          successDetail: "Gün sonu kapanışı bu cihaza kaydedildi.",
+        },
+      );
+      setDayClosureOpen(false);
+      setDayClosureNote(record.nextDayNote ?? "");
+      setAnnouncement(
+        record.closureStatus === "complete"
+          ? "Gün tamamlandı olarak kapatıldı; kanıt özeti bu cihazda korundu."
+          : "Açık işler yarına taşındı; öğretmen notu ve kanıt özeti bu cihazda korundu.",
+      );
+      try {
+        const refreshed = await loadTeacherDayClosureWorkspace(store, {
+          civilDate,
+        });
+        setDayClosureWorkspace(refreshed);
+      } catch {
+        setAnnouncement(
+          "Gün sonu cihazda kaydedildi; ekran özeti yenilenemedi. Aynı kapanışı yeniden oluşturmayın, cihaz verilerini yeniden açın.",
+        );
+      }
+    } catch (reason) {
+      const detail =
+        reason instanceof Error && reason.message.trim()
+          ? reason.message
+          : "Gün sonu kapanışı tamamlanamadı; cihaz verileri değiştirilmedi.";
+      setDayClosureError(detail);
+      setAnnouncement(detail);
+    } finally {
+      setDayClosureBusy(false);
+    }
+  };
+
+  const transitionDayCarryForward = async (input: {
+    sourceIssueIdentity: string;
+    state: "resolved" | "deferred" | "reopened";
+    deferredUntilCivilDate?: string;
+  }): Promise<void> => {
+    const civilDate = civilDateInIstanbul(new Date());
+    await enqueuePersistence(
+      () => transitionTeacherDayCarryForward(store, input),
+      {
+        educationalWrite: {},
+        failureDetail:
+          "Taşınan iş güncellenemedi. Önceki durum bu cihazda korunuyor.",
+        successDetail: "Taşınan işin yeni durumu bu cihaza kaydedildi.",
+      },
+    );
+
+    try {
+      setDayClosureWorkspace(
+        await loadTeacherDayClosureWorkspace(store, { civilDate }),
+      );
+      setAnnouncement(
+        input.state === "resolved"
+          ? "Taşınan iş çözüldü olarak kaydedildi."
+          : input.state === "reopened"
+            ? "Taşınan iş yeniden açıldı."
+            : `Taşınan iş ${input.deferredUntilCivilDate} tarihine ertelendi.`,
+      );
+    } catch {
+      setAnnouncement(
+        "Taşınan iş cihazda kaydedildi; güncel liste yenilenemedi. Aynı işlemi yeniden oluşturmayın, cihaz verilerini yeniden açın.",
+      );
+    }
   };
 
   const completeReleaseNotice = () => {
@@ -6711,7 +7381,68 @@ export default function Prototype() {
                 }}
               />
             </Suspense>
+          ) : route.id === "plans" ? (
+            <Suspense
+              fallback={
+                <div className="route-loading" role="status" data-testid="plans-route-loading">
+                  Plan çalışma alanı hazırlanıyor…
+                </div>
+              }
+            >
+              <PlanWorkspaceScreen
+                workspace={{
+                  ...teacherWorkCycle,
+                  documents: {
+                    ...teacherWorkCycle.documents,
+                    anecdoteIncompleteCount: anecdoteWorkspace.incompleteCount,
+                    anecdoteReviewRequiredCount:
+                      anecdoteWorkspace.reviewRequiredCount,
+                    anecdoteReadyCount: anecdoteWorkspace.readyCount,
+                  },
+                }}
+                educationalWritesDisabled={educationalWritesDisabled}
+                dataBusy={dataBusy}
+                onOpenLevel={openPlanWorkbenchLevel}
+                onOpenCalendar={() => void openAcademicCalendar(attendanceCivilDate)}
+                onOpenPlanLibrary={() => openPremiumPlans("overview")}
+                onOpenDocuments={() => navigate("documents")}
+              />
+            </Suspense>
+          ) : route.id === "documents" ? (
+            <Suspense
+              fallback={
+                <div className="route-loading" role="status" data-testid="documents-route-loading">
+                  Belge çalışma alanı hazırlanıyor…
+                </div>
+              }
+            >
+              <DocumentWorkspaceScreen
+                workspace={{
+                  ...teacherWorkCycle,
+                  documents: {
+                    ...teacherWorkCycle.documents,
+                    anecdoteIncompleteCount: anecdoteWorkspace.incompleteCount,
+                    anecdoteReviewRequiredCount:
+                      anecdoteWorkspace.reviewRequiredCount,
+                    anecdoteReadyCount: anecdoteWorkspace.readyCount,
+                  },
+                }}
+                studentCount={students.length + archivedStudents.length}
+                observationCount={allEvidenceObservations.length}
+                dataBusy={dataBusy}
+                onOpenItem={openDocumentWorkspaceItem}
+                onOpenPreparationCenter={() => {
+                  setDocumentsInitialSection("overview");
+                  surfaceTransitionRef.current = "documents";
+                  setDocumentsOpen(true);
+                  setAnnouncement("Belge hazırlama alanı açıldı.");
+                }}
+              />
+            </Suspense>
           ) : (
+            <Suspense
+              fallback={<div className="surface-loading" role="status">Bugünün işleri hazırlanıyor…</div>}
+            >
             <TodayScreen
               model={{
                 workspace: todayWorkspace,
@@ -6727,13 +7458,48 @@ export default function Prototype() {
                 pendingObservationCount: evidenceWorkspace.pendingObservations.length,
                 planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
                 premiumPlanCenterEnabled: premiumPlanEntryEnabled,
+                teacherCycle: {
+                  ...teacherWorkCycle,
+                  documents: {
+                    ...teacherWorkCycle.documents,
+                    anecdoteIncompleteCount: anecdoteWorkspace.incompleteCount,
+                    anecdoteReviewRequiredCount:
+                      anecdoteWorkspace.reviewRequiredCount,
+                    anecdoteReadyCount: anecdoteWorkspace.readyCount,
+                  },
+                },
+                teacherWeek: teacherWeekWorkspace,
+                dayClosure: dayClosureWorkspace,
+                setupProgress: {
+                  classroomConfigured: configuredClassroom !== null,
+                  planningAcademicYearReady:
+                    configuredClassroom !== null &&
+                    configuredClassroom.academicYearName ===
+                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName &&
+                    configuredClassroom.academicYearStart ===
+                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
+                    configuredClassroom.academicYearEnd ===
+                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+                  activeStudentCount: students.length,
+                  planReady:
+                    teacherWorkCycle.annual !== null ||
+                    teacherWorkCycle.monthly !== null ||
+                    teacherWorkCycle.weekly !== null ||
+                    teacherWorkCycle.daily.planId !== null,
+                  backupReady: lastSuccessfulBackupAt !== null,
+                },
               }}
               actions={{
-                onOpenSettings: () => setProfileOpen(true),
+                onOpenSettings: () => {
+                  setSettingsInitialSection("overview");
+                  setProfileOpen(true);
+                },
                 onApplyReadyUpdate: applyReadyUpdate,
                 onOpenClassroom: () => setClassroomOpen(true),
                 onOpenAttendance: () => changeAttendanceOpen(true),
+                onOpenDayClosure: () => void openDayClosure(),
                 onOpenCalendar: openAcademicCalendar,
+                onOpenWeekDay: openAcademicCalendar,
                 onOpenStudentSearch: () => {
                   setStudentSearch("");
                   navigate("classroom");
@@ -6745,14 +7511,35 @@ export default function Prototype() {
                 onCompleteCurrentActivity: completeCurrentActivity,
                 onOpenPlanFlow: () => openPlanFlow(),
                 onOpenPremiumPlans: openPremiumPlans,
+                onOpenTeacherCycleStage: (stage) => {
+                  if (stage === "daily") {
+                    if (todayWorkspace.planItems.length > 0) {
+                      openTodayPlans();
+                    } else {
+                      openPlanFlow();
+                    }
+                    return;
+                  }
+                  if (stage === "weekly" || stage === "monthly") {
+                    openTeacherPlanRecords(stage);
+                    return;
+                  }
+                  setPlansOpen(false);
+                  setPremiumGateOpen(false);
+                  navigate("documents");
+                  setAnnouncement("Belge ve kayıt çalışma alanı açıldı.");
+                },
                 onOpenPlanItem: (item) => {
                   openTodayPlans();
                   setAnnouncement(`${item.title} plan kaydı açıldı.`);
                 },
                 onOpenPendingObservation: () => openPendingObservation(),
+                onOpenSetupStep: openSetupProgressStep,
+                onTransitionCarryForward: transitionDayCarryForward,
               }}
               slots={{ formatStudentAge: formatChildAge }}
             />
+            </Suspense>
           )}
         </MobileScroll>
       </RouteFocusBoundary>
@@ -6763,12 +7550,18 @@ export default function Prototype() {
             item.id === "capture"
               ? captureMenuOpen
               : item.id === "plans"
-                ? plansOpen || premiumGateOpen || premiumPlanOpen || planFlowOpen || calendarOpen
+                ? !documentsOpen &&
+                  (route.id === "plans" ||
+                    plansOpen ||
+                    premiumGateOpen ||
+                    premiumPlanOpen ||
+                    planFlowOpen ||
+                    calendarOpen)
                 : item.id === "documents"
-                  ? documentsOpen
+                  ? route.id === "documents" || documentsOpen
                   : route.id === item.id;
           const controlsDialog =
-            item.id === "capture" || item.id === "plans" || item.id === "documents";
+            item.id === "capture";
           return (
             <button
               type="button"
@@ -6918,6 +7711,193 @@ export default function Prototype() {
       ) : null}
 
       <BottomSheet
+        open={dayClosureOpen}
+        onOpenChange={(open) => {
+          if (!dayClosureBusy) {
+            setDayClosureOpen(open);
+            if (!open) setDayClosureError("");
+          }
+        }}
+        title="Gün sonu kapanışı"
+        description="Bugünün gerçek kayıtlarını doğrulayın; eksik işi gizlemek yerine yarına açık bir notla taşıyın."
+        snap={0.86}
+      >
+        <div className="day-closure-sheet" data-testid="day-closure-sheet">
+          {dayClosureWorkspace.previousCarryForward ? (
+            <aside className="day-closure-carry" role="status">
+              <ClockIcon aria-hidden="true" />
+              <span>
+                <strong>Önceki günden taşınan not</strong>
+                <small>{dayClosureWorkspace.previousCarryForward.note}</small>
+              </span>
+            </aside>
+          ) : null}
+
+          <section className="day-closure-evidence" aria-label="Gün kanıt özeti">
+            <article>
+              <strong>
+                {dayClosureWorkspace.evidence.attendanceMarkedCount}/
+                {dayClosureWorkspace.evidence.expectedStudentCount}
+              </strong>
+              <small>yoklama</small>
+            </article>
+            <article>
+              <strong>
+                {dayClosureWorkspace.evidence.completedActivityCount}/
+                {dayClosureWorkspace.evidence.activityCount}
+              </strong>
+              <small>etkinlik</small>
+            </article>
+            <article>
+              <strong>{dayClosureWorkspace.evidence.observationCount}</strong>
+              <small>gözlem</small>
+            </article>
+            <article>
+              <strong>
+                {dayClosureWorkspace.evidence.pendingCurriculumLinkCount}
+              </strong>
+              <small>bekleyen bağ</small>
+            </article>
+          </section>
+
+          {dayClosureWorkspace.status === "stale" ? (
+            <div className="day-closure-stale" role="alert">
+              <MagicWandIcon aria-hidden="true" />
+              <span>
+                <strong>Kapanıştan sonra kayıtlar değişti</strong>
+                <small>
+                  Eski kapanış silinmedi. Güncel kanıtlarla yeni bir kapanış kaydı
+                  oluşturun.
+                </small>
+              </span>
+            </div>
+          ) : null}
+
+          <section className="day-closure-checklist" aria-labelledby="day-closure-checklist-title">
+            <header>
+              <span className="section-eyebrow">Doğrulama</span>
+              <h3 id="day-closure-checklist-title">
+                {dayClosureWorkspace.issues.length === 0
+                  ? "Bugünün zorunlu işleri tamam"
+                  : `${dayClosureWorkspace.issues.length} açık iş var`}
+              </h3>
+              <p>
+                Gözlem sayısı bir performans hedefi değildir; gerçek bir olay
+                yoksa gözlem yazmanız beklenmez.
+              </p>
+            </header>
+            {dayClosureWorkspace.issues.length === 0 ? (
+              <div className="day-closure-complete">
+                <CheckCircledIcon aria-hidden="true" />
+                <span>
+                  <strong>Kayıt zinciri kapanmaya hazır</strong>
+                  <small>Yoklama, günlük plan, uygulama ve program bağları doğrulandı.</small>
+                </span>
+              </div>
+            ) : (
+              <div className="day-closure-issues">
+                {dayClosureWorkspace.issues.map((issue) => (
+                  <article key={issue.code}>
+                    <span>
+                      <strong>{issue.title}</strong>
+                      <small>{issue.detail}</small>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={dayClosureBusy}
+                      onClick={() => {
+                        setDayClosureOpen(false);
+                        if (issue.code === "no-students") {
+                          navigate("classroom");
+                          setStudentAddOpen(true);
+                          return;
+                        }
+                        if (issue.code === "attendance-incomplete") {
+                          changeAttendanceOpen(true);
+                          return;
+                        }
+                        if (issue.code === "curriculum-links-pending") {
+                          void openPendingObservation();
+                          return;
+                        }
+                        if (todayWorkspace.planItems.length > 0) {
+                          openTodayPlans();
+                        } else {
+                          openPlanFlow();
+                        }
+                      }}
+                    >
+                      Düzelt
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {dayClosureWorkspace.issues.length > 0 ? (
+            <label className="day-closure-note" htmlFor="day-closure-note">
+              <span>
+                <strong>Yarına öğretmen notu</strong>
+                <small>En az 10 karakter · açık işin nasıl ele alınacağını yazın</small>
+              </span>
+              <KeyboardTextarea
+                id="day-closure-note"
+                value={dayClosureNote}
+                onChange={(event) => setDayClosureNote(event.target.value)}
+                rows={4}
+                maxLength={1200}
+                placeholder="Örn. Sabah ilk akışta yoklamayı tamamlayıp program bağlarını gözden geçireceğim."
+                aria-describedby="day-closure-note-help"
+              />
+              <small id="day-closure-note-help">
+                {dayClosureNote.trim().length.toLocaleString("tr-TR")}/1200 karakter
+              </small>
+            </label>
+          ) : null}
+
+          {dayClosureError ? (
+            <p className="day-closure-error" role="alert">
+              {dayClosureError}
+            </p>
+          ) : null}
+
+          <footer className="day-closure-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={dayClosureBusy}
+              onClick={() => setDayClosureOpen(false)}
+            >
+              Şimdi değil
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={
+                dayClosureBusy ||
+                (dayClosureWorkspace.issues.length > 0 &&
+                  dayClosureNote.trim().length < 10)
+              }
+              aria-describedby={
+                dayClosureWorkspace.issues.length > 0 &&
+                dayClosureNote.trim().length < 10
+                  ? "day-closure-note-help"
+                  : undefined
+              }
+              onClick={() => void submitDayClosure()}
+            >
+              {dayClosureBusy
+                ? "Kaydediliyor…"
+                : dayClosureWorkspace.issues.length === 0
+                  ? "Günü tamamlandı olarak kapat"
+                  : "Eksikleri yarına taşı ve kapat"}
+            </button>
+          </footer>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
         open={captureMenuOpen}
         onOpenChange={(open) => {
           setCaptureMenuOpen(open);
@@ -7015,17 +7995,24 @@ export default function Prototype() {
               void openStudentObservation();
             }}
             disabled={educationalWritesDisabled || students.length === 0}
+            aria-describedby="capture-observation-readiness"
           >
             <Pencil1Icon aria-hidden="true" />
             <span>
               <strong>Gözlem yaz</strong>
-              <small>
+              <small id="capture-observation-readiness">
                 {students.length === 0
-                  ? "Önce Sınıfım bölümünden çocuk ekleyin"
+                  ? "Kilitli · Önce Sınıfım bölümünden çocuk ekleyin"
+                  : educationalWritesDisabled
+                    ? "Kilitli · Etkin bir eğitim yılı seçin"
                   : "Çocuk veya grup seç → yaz → kaydet"}
               </small>
             </span>
-            <ChevronRightIcon aria-hidden="true" />
+            {educationalWritesDisabled || students.length === 0 ? (
+              <LockClosedIcon className="capture-choice-lock" aria-hidden="true" />
+            ) : (
+              <ChevronRightIcon aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"
@@ -7033,14 +8020,25 @@ export default function Prototype() {
               setCaptureMenuOpen(false);
               changeAttendanceOpen(true);
             }}
-            disabled={educationalWritesDisabled}
+            disabled={educationalWritesDisabled || students.length === 0}
+            aria-describedby="capture-attendance-readiness"
           >
             <CheckCircledIcon aria-hidden="true" />
             <span>
               <strong>Yoklama al</strong>
-              <small>Çocuklara dokunarak işaretle</small>
+              <small id="capture-attendance-readiness">
+                {students.length === 0
+                  ? "Kilitli · Önce sınıf listesini oluşturun"
+                  : educationalWritesDisabled
+                    ? "Kilitli · Etkin bir eğitim yılı seçin"
+                    : "Çocuklara dokunarak işaretle"}
+              </small>
             </span>
-            <ChevronRightIcon aria-hidden="true" />
+            {educationalWritesDisabled || students.length === 0 ? (
+              <LockClosedIcon className="capture-choice-lock" aria-hidden="true" />
+            ) : (
+              <ChevronRightIcon aria-hidden="true" />
+            )}
           </button>
           {isCapabilityEnabled("planEvidenceDetails") ? (
           <button
@@ -7052,13 +8050,22 @@ export default function Prototype() {
               openPlanFlow();
             }}
             disabled={educationalWritesDisabled}
+            aria-describedby="capture-plan-readiness"
           >
             <ReaderIcon aria-hidden="true" />
             <span>
               <strong>Etkinlik planla</strong>
-              <small>Fikir seç → hedef seç → planı kaydet</small>
+              <small id="capture-plan-readiness">
+                {educationalWritesDisabled
+                  ? "Kilitli · Etkin bir eğitim yılı seçin"
+                  : "Fikir seç → hedef seç → planı kaydet"}
+              </small>
             </span>
-            <ChevronRightIcon aria-hidden="true" />
+            {educationalWritesDisabled ? (
+              <LockClosedIcon className="capture-choice-lock" aria-hidden="true" />
+            ) : (
+              <ChevronRightIcon aria-hidden="true" />
+            )}
           </button>
           ) : null}
           {isCapabilityEnabled("calendarNotes") ? (
@@ -7072,10 +8079,42 @@ export default function Prototype() {
             <CalendarIcon aria-hidden="true" />
             <span>
               <strong>Takvime not ekle</strong>
-              <small>Toplantı, meyve günü veya etkinlik</small>
+              <small>Toplantı, etkinlik veya okulda eğitim olmayan gün</small>
             </span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
+          ) : null}
+          {educationalWritesDisabled || students.length === 0 ? (
+            <button
+              type="button"
+              className="capture-readiness-action"
+              onClick={() => {
+                setCaptureMenuOpen(false);
+                if (students.length === 0) {
+                  navigate("classroom");
+                  setAnnouncement(
+                    "Sınıf listesini oluşturmak için ilk çocuğu ekleyin.",
+                  );
+                  return;
+                }
+                setClassroomOpen(true);
+                setAnnouncement(
+                  educationalWriteNotice ??
+                    "Kayıtları açmak için eğitim yılı ayarını tamamlayın.",
+                );
+              }}
+            >
+              <PersonIcon aria-hidden="true" />
+              <span>
+                <strong>
+                  {students.length === 0
+                    ? "Sınıf listesini oluştur"
+                    : "Eğitim yılını etkinleştir"}
+                </strong>
+                <small>Kilitli kayıtların açılması için eksik adımı tamamla</small>
+              </span>
+              <ChevronRightIcon aria-hidden="true" />
+            </button>
           ) : null}
         </div>
         )}
@@ -7083,7 +8122,10 @@ export default function Prototype() {
 
       <BottomSheet
         open={classroomOpen}
-        onOpenChange={setClassroomOpen}
+        onOpenChange={(open) => {
+          setClassroomOpen(open);
+          if (!open) setClassroomSetupSection("period");
+        }}
         title="Sınıf kurulumu"
         description="Bu bilgiler eğitim yılı boyunca kalır. Çalışma düzeni günlük olarak değiştirilmez."
         snap={0.9}
@@ -7095,97 +8137,235 @@ export default function Prototype() {
             void saveClassroom();
           }}
         >
-          <label htmlFor="classroom-name">Sınıf adı</label>
-          <KeyboardInput
-            id="classroom-name"
-            value={classroomForm.classroomName}
-            onChange={(event) => setClassroomForm((current) => ({ ...current, classroomName: event.target.value }))}
-            placeholder="Örn. Güneş Sınıfı"
-            autoComplete="off"
-          />
-
-          <section className="official-calendar-preset">
-            <div>
-              <span className="d1-kicker">MEB resmî takvimi</span>
-              <strong>2026–2027 eğitim öğretim yılı</strong>
-              <small>
-                Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran
-                2027
-              </small>
-            </div>
-            <button type="button" onClick={applyOfficialAcademicCalendar}>
-              Tarihleri uygula
-            </button>
-            <a
-              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              MEB duyurusunu aç
-            </a>
+          <section className="classroom-setup-sequence" aria-label="İlk kurulum sırası">
+            <strong>Başlangıç planı · 1. adım</strong>
+            <ol>
+              <li>Sınıf</li>
+              <li>Çocuk</li>
+              <li>Plan</li>
+              <li>Yedek</li>
+            </ol>
           </section>
 
-          <label htmlFor="academic-year-name">Eğitim yılı</label>
-          <KeyboardInput
-            id="academic-year-name"
-            value={classroomForm.academicYearName}
-            onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }))}
-            autoComplete="off"
-          />
-
-          <div className="settings-grid">
-            <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
-              <KeyboardInput
-                id="academic-year-start"
-                type="date"
-                value={classroomForm.academicYearStart}
-                onChange={(event) => setClassroomForm((current) => ({
-                  ...current,
-                  academicYearStart: event.target.value,
-                }))}
-              />
-            </label>
-            <label htmlFor="academic-year-end">Eğitim yılı bitişi
-              <KeyboardInput
-                id="academic-year-end"
-                type="date"
-                value={classroomForm.academicYearEnd}
-                onChange={(event) => setClassroomForm((current) => ({
-                  ...current,
-                  academicYearEnd: event.target.value,
-                }))}
-              />
-            </label>
-          </div>
-
-          {classroomFormOperationalNotice ? (
-            <div className="academic-year-form-warning" role="alert">
-              <CalendarIcon aria-hidden="true" />
-              <span>
-                <strong>Seçili tarihler bugün etkin değil</strong>
-                {classroomFormOperationalNotice}
-              </span>
+          <section
+            className="classroom-form-stepper"
+            aria-label="Sınıf ayarı bölümleri"
+          >
+            <div>
+              <span className="d1-kicker">Sınıf ayarı</span>
+              <strong>
+                {CLASSROOM_SETUP_SECTIONS.find(
+                  (section) => section.id === classroomSetupSection,
+                )?.title}
+              </strong>
             </div>
+            <ol>
+              {CLASSROOM_SETUP_SECTIONS.map((section, index) => {
+                const available = classroomSetupSectionAvailable(
+                  section.id,
+                  classroomSetupReadinessState,
+                );
+                const complete = classroomSetupSectionComplete(
+                  section.id,
+                  classroomSetupReadinessState,
+                );
+                return (
+                  <li
+                    key={section.id}
+                    data-current={
+                      classroomSetupSection === section.id ? "true" : "false"
+                    }
+                    data-complete={complete ? "true" : "false"}
+                  >
+                    <button
+                      type="button"
+                      disabled={!available}
+                      aria-current={
+                        classroomSetupSection === section.id ? "step" : undefined
+                      }
+                      aria-controls={`classroom-setup-${section.id}`}
+                      onClick={() => setClassroomSetupSection(section.id)}
+                    >
+                      <span>{complete ? <CheckCircledIcon aria-hidden="true" /> : index + 1}</span>
+                      {section.shortLabel}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+
+          {classroomSetupSection === "period" ? (
+            <section
+              id="classroom-setup-period"
+              className="classroom-form-section"
+              aria-labelledby="classroom-setup-period-title"
+            >
+              <div className="classroom-form-section-heading">
+                <span className="d1-kicker">1 / 3</span>
+                <h3 id="classroom-setup-period-title">Dönem ve sınıf</h3>
+                <p>Mevcut sınıfı koruyun veya yeni resmî dönemi açık geçişle hazırlayın.</p>
+              </div>
+              <label htmlFor="classroom-name">Sınıf adı</label>
+              <KeyboardInput
+                id="classroom-name"
+                value={classroomForm.classroomName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, classroomName: event.target.value }))}
+                placeholder="Örn. Güneş Sınıfı"
+                autoComplete="off"
+              />
+              <section className="official-calendar-preset">
+                <div>
+                  <span className="d1-kicker">MEB resmî takvimi</span>
+                  <strong>2026–2027 eğitim öğretim yılı</strong>
+                  <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
+                </div>
+                {officialAcademicCalendarApplied ? (
+                  <span className="official-calendar-applied" role="status">
+                    <CheckCircledIcon aria-hidden="true" /> Resmî tarihler uygulandı
+                  </span>
+                ) : (
+                  <button type="button" onClick={applyOfficialAcademicCalendar}>
+                    2026–2027 dönemini hazırla
+                  </button>
+                )}
+                <a
+                  href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  MEB duyurusunu aç
+                </a>
+              </section>
+              {configuredClassroom && !officialAcademicCalendarApplied ? (
+                <div className="classroom-current-period" role="status">
+                  <CalendarIcon aria-hidden="true" />
+                  <span>
+                    <strong>Bu sınıf {configuredClassroom.academicYearName} dönemine bağlı</strong>
+                    Yeni dönemi hazırlamak eski yılı sessizce değiştirmez; kaydederken arşivleme ve öğrenci taşıma onayı istenir.
+                  </span>
+                </div>
+              ) : null}
+              <label htmlFor="academic-year-name">Eğitim yılı</label>
+              <KeyboardInput
+                id="academic-year-name"
+                value={classroomForm.academicYearName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }))}
+                autoComplete="off"
+              />
+              <div className="settings-grid">
+                <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
+                  <KeyboardInput
+                    id="academic-year-start"
+                    type="date"
+                    value={classroomForm.academicYearStart}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearStart: event.target.value }))}
+                  />
+                </label>
+                <label htmlFor="academic-year-end">Eğitim yılı bitişi
+                  <KeyboardInput
+                    id="academic-year-end"
+                    type="date"
+                    value={classroomForm.academicYearEnd}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearEnd: event.target.value }))}
+                  />
+                </label>
+              </div>
+              {classroomFormOperationalNotice ? (
+                <div className="academic-year-form-warning" role="alert">
+                  <CalendarIcon aria-hidden="true" />
+                  <span>
+                    <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazırlığı" : "Seçili tarihler bugün etkin değil"}</strong>
+                    {classroomForm.academicYearStart > attendanceCivilDate
+                      ? `Sınıf, çocuk listesi ve plan omurgası şimdi hazırlanabilir. Yoklama ve gözlem ${formatTurkishCivilDate(classroomForm.academicYearStart)} tarihinde açılır.`
+                      : classroomFormOperationalNotice}
+                  </span>
+                </div>
+              ) : null}
+            </section>
           ) : null}
 
-          <div className="settings-grid">
-            <label htmlFor="age-group">Yaş grubu
+          {classroomSetupSection === "program" ? (
+            <section
+              id="classroom-setup-program"
+              className="classroom-form-section"
+              aria-labelledby="classroom-setup-program-title"
+            >
+              <div className="classroom-form-section-heading">
+                <span className="d1-kicker">2 / 3</span>
+                <h3 id="classroom-setup-program-title">Program ve yaş grubu</h3>
+                <p>Çocuk grubunu ve planların bağlanacağı doğrulanmış program kaynağını seçin.</p>
+              </div>
+              <label htmlFor="age-group">Yaş grubu</label>
               <select id="age-group" value={classroomForm.ageGroup} onChange={(event) => setClassroomForm((current) => ({ ...current, ageGroup: event.target.value }))}>
                 <option value="">Yaş grubunu seçin</option>
                 <option>36–48 ay</option>
                 <option>48–60 ay</option>
                 <option>60–72 ay</option>
               </select>
-            </label>
-            <label htmlFor="schedule-kind">Çalışma düzeni
+              <label htmlFor="curriculum-program">Uygulanan program</label>
+              <select
+                id="curriculum-program"
+                value={classroomForm.curriculumProgram}
+                onChange={(event) => {
+                  const curriculumProgram = event.target.value;
+                  if (!isSupportedCurriculumProgram(curriculumProgram)) {
+                    setClassroomForm((current) => ({ ...current, curriculumProgram: "", curriculumCatalogId: "", curriculumSourceVersion: "" }));
+                    return;
+                  }
+                  const framework = curriculumFrameworkForProgram(curriculumProgram);
+                  const starter = OFFICIAL_STARTER_CATALOG_PROFILES[framework];
+                  setClassroomForm((current) => ({ ...current, curriculumProgram, curriculumCatalogId: starter.catalogId, curriculumSourceVersion: starter.sourceVersion }));
+                }}
+              >
+                <option value="">Emin değilim / henüz seçmedim</option>
+                <option>Türkiye Yüzyılı Maarif Modeli</option>
+                <option>Okul Öncesi Eğitim Programı — EÇE/2024</option>
+              </select>
+              <div className="settings-grid settings-grid--program">
+                <label htmlFor="curriculum-catalog-id">Program katalog kimliği
+                  <KeyboardInput
+                    id="curriculum-catalog-id"
+                    value={classroomForm.curriculumCatalogId}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, curriculumCatalogId: event.target.value }))}
+                    placeholder="Kullandığınız kaynaktaki kimlik"
+                    autoComplete="off"
+                    disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
+                  />
+                </label>
+                <label htmlFor="curriculum-source-version">Kaynak sürümü
+                  <KeyboardInput
+                    id="curriculum-source-version"
+                    value={classroomForm.curriculumSourceVersion}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, curriculumSourceVersion: event.target.value }))}
+                    placeholder="Baskı / sürüm tarihi"
+                    autoComplete="off"
+                    disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
+                  />
+                </label>
+              </div>
+              <p className="classroom-provenance-note">
+                TYMM seçiminde resmî okul öncesi alan matrislerindeki tam öğrenme çıktıları; EÇE/2024 seçiminde başlangıç kataloğu önerilir. Kimlik veya sürümü değiştirirseniz kayıt öğretmen beyanı olarak işaretlenir.
+              </p>
+            </section>
+          ) : null}
+
+          {classroomSetupSection === "schedule" ? (
+            <section
+              id="classroom-setup-schedule"
+              className="classroom-form-section"
+              aria-labelledby="classroom-setup-schedule-title"
+            >
+              <div className="classroom-form-section-heading">
+                <span className="d1-kicker">3 / 3</span>
+                <h3 id="classroom-setup-schedule-title">Günlük çalışma düzeni</h3>
+                <p>Grup düzenini ve öğretmenin günlük çalışma saatlerini doğrulayın.</p>
+              </div>
+              <label htmlFor="schedule-kind">Çalışma düzeni</label>
               <select
                 id="schedule-kind"
                 value={classroomForm.scheduleKind}
-                onChange={(event) =>
-                  chooseScheduleKind(
-                    event.target.value as ClassroomScheduleKind | "",
-                  )
-                }
+                onChange={(event) => chooseScheduleKind(event.target.value as ClassroomScheduleKind | "")}
               >
                 <option value="">Çalışma düzenini seçin</option>
                 <option value="morning">Sabahçı</option>
@@ -7193,148 +8373,81 @@ export default function Prototype() {
                 <option value="full_day">Tam gün</option>
                 <option value="custom">Özel saatler</option>
               </select>
-            </label>
-          </div>
-
-          <label htmlFor="curriculum-program">Uygulanan program</label>
-          <select
-            id="curriculum-program"
-            value={classroomForm.curriculumProgram}
-            onChange={(event) => {
-              const curriculumProgram = event.target.value;
-              if (!isSupportedCurriculumProgram(curriculumProgram)) {
-                setClassroomForm((current) => ({
-                  ...current,
-                  curriculumProgram: "",
-                  curriculumCatalogId: "",
-                  curriculumSourceVersion: "",
-                }));
-                return;
-              }
-              const framework = curriculumFrameworkForProgram(curriculumProgram);
-              const starter = OFFICIAL_STARTER_CATALOG_PROFILES[framework];
-              setClassroomForm((current) => ({
-                ...current,
-                curriculumProgram,
-                curriculumCatalogId: starter.catalogId,
-                curriculumSourceVersion: starter.sourceVersion,
-              }));
-            }}
-          >
-            <option value="">Emin değilim / henüz seçmedim</option>
-            <option>Türkiye Yüzyılı Maarif Modeli</option>
-            <option>Okul Öncesi Eğitim Programı — EÇE/2024</option>
-          </select>
-
-          <div className="settings-grid settings-grid--program">
-            <label htmlFor="curriculum-catalog-id">Program katalog kimliği
-              <KeyboardInput
-                id="curriculum-catalog-id"
-                value={classroomForm.curriculumCatalogId}
-                onChange={(event) => setClassroomForm((current) => ({
-                  ...current,
-                  curriculumCatalogId: event.target.value,
-                }))}
-                placeholder="Kullandığınız kaynaktaki kimlik"
-                autoComplete="off"
-                disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
-              />
-            </label>
-            <label htmlFor="curriculum-source-version">Kaynak sürümü
-              <KeyboardInput
-                id="curriculum-source-version"
-                value={classroomForm.curriculumSourceVersion}
-                onChange={(event) => setClassroomForm((current) => ({
-                  ...current,
-                  curriculumSourceVersion: event.target.value,
-                }))}
-                placeholder="Baskı / sürüm tarihi"
-                autoComplete="off"
-                disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
-              />
-            </label>
-          </div>
-          <p className="classroom-provenance-note">
-            TYMM seçiminde resmî okul öncesi alan matrislerindeki tam öğrenme
-            çıktıları; EÇE/2024 seçiminde başlangıç kataloğu önerilir. Kimlik
-            veya sürümü değiştirirseniz kayıt öğretmen beyanı olarak
-            işaretlenir.
-          </p>
-
-          <div className="settings-grid">
-            <label htmlFor="schedule-start">Başlangıç
-              <KeyboardInput
-                id="schedule-start"
-                type="time"
-                value={classroomForm.startTime}
-                onChange={(event) =>
-                  setClassroomForm((current) => ({
-                    ...current,
-                    startTime: event.target.value,
-                  }))
-                }
-                disabled={!classroomForm.scheduleKind}
-              />
-            </label>
-            <label htmlFor="schedule-end">Bitiş
-              <KeyboardInput
-                id="schedule-end"
-                type="time"
-                value={classroomForm.endTime}
-                onChange={(event) =>
-                  setClassroomForm((current) => ({
-                    ...current,
-                    endTime: event.target.value,
-                  }))
-                }
-                disabled={!classroomForm.scheduleKind}
-              />
-            </label>
-          </div>
-          <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
-          {classroomError ? <p role="alert">{classroomError}</p> : null}
-          {academicYearTransitionRequired ? (
-            <label className="academic-year-transition-confirm">
-              <input
-                type="checkbox"
-                checked={academicYearTransitionConfirmed}
-                onChange={(event) =>
-                  setAcademicYearTransitionConfirmed(event.target.checked)
-                }
-              />
-              <span>
-                <strong>Yeni eğitim yılına güvenli geçiş yap</strong>
-                Mevcut yıl ve sınıf arşivlensin; {students.length} etkin
-                öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve
-                değerlendirmeler kendi yılı içinde korunsun.
-              </span>
-            </label>
+              <div className="settings-grid">
+                <label htmlFor="schedule-start">Başlangıç
+                  <KeyboardInput
+                    id="schedule-start"
+                    type="time"
+                    value={classroomForm.startTime}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, startTime: event.target.value }))}
+                    disabled={!classroomForm.scheduleKind}
+                  />
+                </label>
+                <label htmlFor="schedule-end">Bitiş
+                  <KeyboardInput
+                    id="schedule-end"
+                    type="time"
+                    value={classroomForm.endTime}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, endTime: event.target.value }))}
+                    disabled={!classroomForm.scheduleKind}
+                  />
+                </label>
+              </div>
+              <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
+              {academicYearTransitionRequired ? (
+                <label className="academic-year-transition-confirm">
+                  <input
+                    type="checkbox"
+                    checked={academicYearTransitionConfirmed}
+                    onChange={(event) => setAcademicYearTransitionConfirmed(event.target.checked)}
+                  />
+                  <span>
+                    <strong>Yeni eğitim yılına güvenli geçiş yap</strong>
+                    Mevcut yıl ve sınıf arşivlensin; {students.length} etkin öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve değerlendirmeler kendi yılı içinde korunsun.
+                  </span>
+                </label>
+              ) : null}
+            </section>
           ) : null}
-          <button
-            className="sheet-primary"
-            type="submit"
-            disabled={
-              dataBusy ||
-              writesBlocked ||
-              !classroomForm.classroomName.trim() ||
-              !classroomForm.academicYearName.trim() ||
-              !classroomForm.academicYearStart ||
-              !classroomForm.academicYearEnd ||
-              !classroomForm.ageGroup ||
-              !isSupportedCurriculumProgram(classroomForm.curriculumProgram) ||
-              !classroomForm.scheduleKind ||
-              !classroomForm.startTime ||
-              !classroomForm.endTime ||
-              !classroomForm.curriculumCatalogId.trim() ||
-              !classroomForm.curriculumSourceVersion.trim() ||
-              (academicYearTransitionRequired &&
-                !academicYearTransitionConfirmed)
-            }
-          >
-            {academicYearTransitionRequired
-              ? "Yeni eğitim yılına geç"
-              : "Sınıfı ve çalışma düzenini kaydet"}
-          </button>
+
+          {classroomError ? <p role="alert">{classroomError}</p> : null}
+          <div className="classroom-form-navigation">
+            {previousClassroomSetupSection(classroomSetupSection) ? (
+              <button
+                type="button"
+                className="sheet-secondary"
+                onClick={() => setClassroomSetupSection(previousClassroomSetupSection(classroomSetupSection) ?? "period")}
+              >
+                Geri
+              </button>
+            ) : <span />}
+            {nextClassroomSetupSection(classroomSetupSection) ? (
+              <button
+                type="button"
+                className="sheet-primary"
+                disabled={!classroomSetupSectionComplete(classroomSetupSection, classroomSetupReadinessState)}
+                onClick={() => {
+                  const next = nextClassroomSetupSection(classroomSetupSection);
+                  if (next) setClassroomSetupSection(next);
+                }}
+              >
+                Devam et
+              </button>
+            ) : (
+              <button
+                className="sheet-primary"
+                type="submit"
+                disabled={
+                  dataBusy ||
+                  writesBlocked ||
+                  !classroomSetupReadinessState.schedule ||
+                  (academicYearTransitionRequired && !academicYearTransitionConfirmed)
+                }
+              >
+                {academicYearTransitionRequired ? "Yeni eğitim yılına geç" : "Sınıfı ve çalışma düzenini kaydet"}
+              </button>
+            )}
+          </div>
         </form>
       </BottomSheet>
 
@@ -7344,14 +8457,14 @@ export default function Prototype() {
           setPlansOpen(open);
           if (!open) setSelectedPlanDayWorkspace(null);
         }}
-        title={displayedPlanIsToday ? "Bugünün planı" : "Seçili günün planı"}
-        description={`${formatTurkishCivilDate(displayedPlanWorkspace.civilDate)} · ${displayedPlanWorkspace.planItems.some((item) => item.kind === "premium-flow-block") ? "Kayıtlı günlük akış" : "Kayıtlı etkinlikler"}`}
+        title={displayedPlanIsToday ? "Gün planı" : "Seçili günün planı"}
+        description={`${displayedPlanIsToday ? "Bugün · " : ""}${formatTurkishCivilDate(displayedPlanWorkspace.civilDate)} · ${displayedPlanWorkspace.planItems.some((item) => item.kind === "premium-flow-block") ? "Kayıtlı günlük akış" : "Kayıtlı etkinlikler"}`}
         snap={0.78}
       >
         <button
           className="plans-calendar-button plans-library-button"
           type="button"
-          onClick={openPremiumPlans}
+          onClick={() => openPremiumPlans("overview")}
         >
           <StarIcon aria-hidden="true" />
           <span>
@@ -7383,9 +8496,50 @@ export default function Prototype() {
           </button>
         ) : null}
         {displayedPlanIsToday ? (
-          <button className="sheet-primary plans-create-button" type="button" onClick={() => openPlanFlow()} disabled={educationalWritesDisabled}>
-            <PlusIcon aria-hidden="true" /> Günlük plan oluştur
-          </button>
+          <>
+            {educationalWritesDisabled ? (
+              <div
+                className="plans-create-readiness"
+                id="plans-create-readiness"
+                aria-label="Günlük plan hazır olma durumu"
+              >
+                <LockClosedIcon aria-hidden="true" />
+                <span>
+                  <strong>Günlük plan yazımı kilitli</strong>
+                  <small>Önce bugün etkin olan eğitim yılını seçin.</small>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlansOpen(false);
+                    setClassroomOpen(true);
+                    setAnnouncement(
+                      educationalWriteNotice ??
+                        "Günlük plan için eğitim yılı ayarını tamamlayın.",
+                    );
+                  }}
+                >
+                  Eğitim yılını aç
+                </button>
+              </div>
+            ) : null}
+            <button
+              className="sheet-primary plans-create-button"
+              type="button"
+              onClick={() => openPlanFlow()}
+              disabled={educationalWritesDisabled}
+              aria-describedby={
+                educationalWritesDisabled ? "plans-create-readiness" : undefined
+              }
+            >
+              {educationalWritesDisabled ? (
+                <LockClosedIcon aria-hidden="true" />
+              ) : (
+                <PlusIcon aria-hidden="true" />
+              )}
+              Günlük plan oluştur
+            </button>
+          </>
         ) : null}
         {displayedPlanWorkspace.planItems.length > 0 ? (
           <div className="activity-list">
@@ -7465,17 +8619,21 @@ export default function Prototype() {
             </small>
           </span>
         </div>
-        <FounderPremiumActivationPanel
-          access={premiumFounderAccess?.access ?? null}
-          busy={premiumFounderBusy}
-          configured={premiumFounderConfigurationState.configuration !== null}
-          error={premiumFounderError}
-          errorPresentation={premiumFounderErrorPresentation}
-          resetBusy={premiumFounderResetBusy}
-          onActivate={activateFounderPremium}
-          onOpenPlans={openPremiumPlans}
-          onResetLocalLicense={resetFounderPremiumLocalLicense}
-        />
+        {premiumGateMounted || premiumGateOpen ? (
+          <Suspense fallback={<div className="premium-loading" role="status">Premium erişim alanı açılıyor…</div>}>
+            <FounderPremiumActivationPanel
+              access={premiumFounderAccess?.access ?? null}
+              busy={premiumFounderBusy}
+              configured={premiumFounderConfigurationState.configuration !== null}
+              error={premiumFounderError}
+              errorPresentation={premiumFounderErrorPresentation}
+              resetBusy={premiumFounderResetBusy}
+              onActivate={activateFounderPremium}
+              onOpenPlans={openPremiumPlans}
+              onResetLocalLicense={resetFounderPremiumLocalLicense}
+            />
+          </Suspense>
+        ) : null}
       </BottomSheet>
 
       <BottomSheet
@@ -7775,23 +8933,80 @@ export default function Prototype() {
         description="Resmî formlar ve yalnız öğretmenin seçtiği kapsamla hazırlanan dışa aktarımlar"
         snap={0.82}
       >
-        <Suspense
-          fallback={
-            <div className="route-loading" role="status">
-              Anekdot belgeleri hazırlanıyor…
-            </div>
-          }
+        <section
+          className="documents-plan-center"
+          data-documents-section="overview"
+          aria-labelledby="documents-plan-center-title"
         >
-          <AnecdoteCenterPanel
-            workspace={anecdoteWorkspace}
-            busy={dataBusy}
-            onSave={saveAnecdoteDocumentDraft}
-            onApprove={approveAnecdoteDocument}
-            onDownload={downloadAnecdoteDocument}
-            onCompleteCurriculumLink={openAnecdoteCurriculumLink}
-          />
-        </Suspense>
-        <section className="documents-coming-soon">
+          <div className="documents-plan-center-heading">
+            <span aria-hidden="true"><ReaderIcon /></span>
+            <div>
+              <small>Plan → değerlendirme → belge</small>
+              <h3 id="documents-plan-center-title">Plan ve değerlendirme belgeleri</h3>
+              <p>
+                Yıllık, aylık, haftalık ve günlük plan kayıtları ile öğretmen
+                değerlendirmelerini aynı kaynak zincirinden PDF veya DOCX alın.
+              </p>
+            </div>
+          </div>
+          <div className="documents-plan-status" role="status">
+            <span>
+              <strong>{teacherWorkCycle.annual ? "Yıllık omurga kayıtlı" : "Yıllık omurga yok"}</strong>
+              <small>
+                {teacherWorkCycle.monthly
+                  ? `${teacherWorkCycle.monthly.weeklyPlanCount} hafta · ${teacherWorkCycle.monthly.dailyPlanCount} günlük plan`
+                  : "Aylık ve haftalık plan zinciri henüz kurulmadı"}
+              </small>
+            </span>
+            <span>
+              <strong>
+                {teacherWorkCycle.documents.monthlyEvaluationCount > 0
+                  ? `${teacherWorkCycle.documents.monthlyEvaluationCount} aylık değerlendirme`
+                  : "Aylık değerlendirme yok"}
+              </strong>
+              <small>Ek 18 yalnız kayıtlı öğretmen değerlendirmesinden üretilir.</small>
+            </span>
+          </div>
+          <div className="documents-plan-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentsOpen(false);
+                openPremiumPlans("overview");
+              }}
+            >
+              <ReaderIcon aria-hidden="true" /> Plan belgelerini aç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentsOpen(false);
+                openPremiumPlans("monthly");
+              }}
+            >
+              <ArchiveIcon aria-hidden="true" /> Aylık değerlendirme ve Ek 18
+            </button>
+          </div>
+        </section>
+        <div data-documents-section="anecdotes">
+          <Suspense
+            fallback={
+              <div className="route-loading" role="status">
+                Anekdot belgeleri hazırlanıyor…
+              </div>
+            }
+          >
+            <AnecdoteCenterPanel
+              workspace={anecdoteWorkspace}
+              busy={dataBusy}
+              onSave={saveAnecdoteDocumentDraft}
+              onApprove={approveAnecdoteDocument}
+              onDownload={downloadAnecdoteDocument}
+              onCompleteCurriculumLink={openAnecdoteCurriculumLink}
+            />
+          </Suspense>
+        </div>
+        <section className="documents-coming-soon" data-documents-section="students">
           <span aria-hidden="true"><ArchiveIcon /></span>
           <small>Öğretmen denetimli çalışma alanı</small>
           <h3>Öğrenci dosyasını amaca göre hazırlayın</h3>
@@ -7843,34 +9058,38 @@ export default function Prototype() {
         </section>
       </BottomSheet>
 
-      <ClassroomToolsSheets
-        addOpen={studentAddOpen}
-        exportOpen={classExportPreviewOpen}
-        busy={dataBusy}
-        newStudentName={newStudentName}
-        civilDate={attendanceCivilDate}
-        exportStartDate={classExportStartDate}
-        exportEndDate={classExportEndDate}
-        exportNameMode={classExportNameMode}
-        exportStudentIds={classExportStudentIds}
-        students={[...students, ...archivedStudents]}
-        observationCount={classExportObservations.length}
-        onAddOpenChange={(open) => {
-          if (!open) keyboard.hide();
-          setStudentAddOpen(open);
-        }}
-        onExportOpenChange={(open) => {
-          if (!open) keyboard.hide();
-          setClassExportPreviewOpen(open);
-        }}
-        onNewStudentNameChange={setNewStudentName}
-        onAddStudent={addStudent}
-        onExportStartDateChange={setClassExportStartDate}
-        onExportEndDateChange={setClassExportEndDate}
-        onExportNameModeChange={setClassExportNameMode}
-        onExportStudentIdsChange={setClassExportStudentIds}
-        onDownload={downloadClassObservations}
-      />
+      {classroomToolsMounted || studentAddOpen || classExportPreviewOpen ? (
+        <Suspense fallback={null}>
+          <ClassroomToolsSheets
+            addOpen={studentAddOpen}
+            exportOpen={classExportPreviewOpen}
+            busy={dataBusy}
+            newStudentName={newStudentName}
+            civilDate={attendanceCivilDate}
+            exportStartDate={classExportStartDate}
+            exportEndDate={classExportEndDate}
+            exportNameMode={classExportNameMode}
+            exportStudentIds={classExportStudentIds}
+            students={[...students, ...archivedStudents]}
+            observationCount={classExportObservations.length}
+            onAddOpenChange={(open) => {
+              if (!open) keyboard.hide();
+              setStudentAddOpen(open);
+            }}
+            onExportOpenChange={(open) => {
+              if (!open) keyboard.hide();
+              setClassExportPreviewOpen(open);
+            }}
+            onNewStudentNameChange={setNewStudentName}
+            onAddStudent={addStudent}
+            onExportStartDateChange={setClassExportStartDate}
+            onExportEndDateChange={setClassExportEndDate}
+            onExportNameModeChange={setClassExportNameMode}
+            onExportStudentIdsChange={setClassExportStudentIds}
+            onDownload={downloadClassObservations}
+          />
+        </Suspense>
+      ) : null}
 
       <BottomSheet
         open={studentDeletionCandidate !== null}
@@ -9522,6 +10741,7 @@ export default function Prototype() {
             setPendingRestore(null);
             setSecureBackupError("");
             setWipeConfirmation("");
+            setSettingsInitialSection("overview");
           }
           setProfileOpen(open);
         }}
@@ -9818,12 +11038,34 @@ export default function Prototype() {
                   </time>
                 ) : null}
               </article>
+              <article data-level={recoveryHealth.kind}>
+                <strong>Kurtarma tatbikatı</strong>
+                <span>{recoveryHealth.message}</span>
+                {recoveryHealth.lastRestoreDrillAt ? (
+                  <time dateTime={recoveryHealth.lastRestoreDrillAt}>
+                    {formatTurkishCivilDate(
+                      recoveryHealth.lastRestoreDrillAt.slice(0, 10),
+                    )}
+                  </time>
+                ) : null}
+              </article>
             </div>
           </section>
 
-          <section className="security-section" aria-labelledby="backup-heading">
+          <section
+            className="security-section"
+            aria-labelledby="backup-heading"
+            data-settings-section="backup"
+          >
             <div className="security-heading-row">
               <div>
+                {settingsInitialSection === "backup" ? (
+                  <span className="d1-kicker">
+                    {lastSuccessfulBackupAt
+                      ? "Başlangıç planı · tamamlandı"
+                      : "Başlangıç planı · 4. adım"}
+                  </span>
+                ) : null}
                 <h3 id="backup-heading">Şifreli yedek ve geri yükle</h3>
                 <p>
                   Yeni yedekler parola ile AES-GCM şifrelenir. Parola
@@ -9831,6 +11073,46 @@ export default function Prototype() {
                 </p>
               </div>
             </div>
+            {lastSuccessfulBackupAt ? (
+              <div className="backup-setup-complete" role="status">
+                <CheckCircledIcon aria-hidden="true" />
+                <span>
+                  <strong>İlk kurulum tamamlandı · 4/4</strong>
+                  Şifreli yedek oluşturuldu ve aynı parola ile açılarak doğrulandı.
+                  Dosyayı güvenli bir yerde saklayın.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate("today");
+                  }}
+                >
+                  Bugüne dön
+                </button>
+              </div>
+            ) : null}
+            <div
+              className="backup-recovery-health"
+              data-state={recoveryHealth.kind}
+              role="status"
+            >
+              <span>
+                <strong>Kurtarma sağlığı</strong>
+                {recoveryHealth.message}
+              </span>
+              {backupHealthReceipt ? (
+                <small>
+                  Şema {backupHealthReceipt.dataSchemaVersion} · uygulama {backupHealthReceipt.appVersion} ·{" "}
+                  {Math.max(1, Math.ceil(backupHealthReceipt.encryptedByteLength / 1024))} KB şifreli dosya
+                </small>
+              ) : null}
+            </div>
+            {recoverySnapshotWarning ? (
+              <p className="security-inline-error" role="alert">
+                {recoverySnapshotWarning}
+              </p>
+            ) : null}
             <div className="secure-secret-form secure-secret-form--backup">
               <label htmlFor="backup-password">
                 Yedek parolası
@@ -9975,16 +11257,23 @@ export default function Prototype() {
                 : "İlk geri yüklemeden önce kalıcı kurtarma noktası otomatik oluşturulacak."}
             </small>
           </section>
-          <details className="security-section security-danger-zone">
+          <details className="security-section security-advanced-zone">
             <summary>
-              <TrashIcon aria-hidden="true" />
+              <GearIcon aria-hidden="true" />
               <span>
-                <strong>Tüm cihaz verilerini sil</strong>
-                <small>Öğrenciler, kayıtlar, ayarlar ve kurtarma noktaları</small>
+                <strong>Gelişmiş cihaz işlemleri</strong>
+                <small>Günlük kullanım ve ilk yedekleme için gerekli değildir</small>
               </span>
               <ChevronDownIcon aria-hidden="true" />
             </summary>
-            <div className="secure-secret-form">
+            <div className="security-danger-zone">
+              <div className="security-danger-heading">
+                <TrashIcon aria-hidden="true" />
+                <span>
+                  <strong>Tüm cihaz verilerini sil</strong>
+                  Öğrenciler, kayıtlar, ayarlar ve kurtarma noktaları kalıcı silinir.
+                </span>
+              </div>
               <p>
                 Bu işlem geri alınamaz. Varsa önce şifreli yedek oluşturun.
                 Onaylamak için <strong>TÜM VERİLERİ SİL</strong> yazın.
@@ -10056,6 +11345,199 @@ export default function Prototype() {
         </div>
       </BottomSheet>
 
+      {teacherPlanRecordsOpen ? (
+        <Dialog.Root
+          open
+          onOpenChange={(open) => {
+            if (!open) setTeacherPlanRecordsOpen(false);
+          }}
+        >
+          <Dialog.Overlay className="d1-flow-overlay" />
+          <Dialog.Content className="d1-flow-layer" key="teacher-plan-records">
+            <Dialog.Title className="sr-only">Kayıtlı öğretmen planı</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Bu cihazdaki yıllık, aylık, haftalık ve günlük öğretmen planlarını
+              premium erişimden bağımsız inceleyin ve temel belge olarak alın.
+            </Dialog.Description>
+            <Suspense
+              fallback={(
+                <div className="premium-loading" role="status">
+                  Kalıcı öğretmen planı açılıyor…
+                </div>
+              )}
+            >
+              <TeacherOwnedPlanScreen
+                store={store}
+                workspace={teacherWorkCycle}
+                scheduledPlans={scheduledPlanWorkspace.plans}
+                initialLevel={teacherPlanRecordsInitialLevel}
+                contentPack={premiumFounderAccess?.pack ?? null}
+                educationalWritesDisabled={educationalWritesDisabled}
+                educationalWriteNotice={educationalWriteNotice}
+                onClose={() => setTeacherPlanRecordsOpen(false)}
+                onOpenProviderLibrary={() => {
+                  setTeacherPlanRecordsOpen(false);
+                  openPremiumPlans(
+                    teacherPlanRecordsInitialLevel === "monthly"
+                      ? "monthly"
+                      : teacherPlanRecordsInitialLevel === "weekly"
+                        ? "weekly"
+                        : "overview",
+                  );
+                }}
+                onViewDailyPlan={(plan) => {
+                  setTeacherPlanRecordsOpen(false);
+                  void viewScheduledPlanFlow(plan);
+                }}
+                onEditDailyPlan={(plan) => {
+                  setTeacherPlanRecordsOpen(false);
+                  void editScheduledPlan(plan);
+                }}
+                onCreatePlanGraph={async (input) => {
+                  const { createTeacherOwnedPlanGraph } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  const graph = await enqueuePersistence(
+                    () => createTeacherOwnedPlanGraph(store, input),
+                    {
+                      educationalWrite: {
+                        allowPreparationForCivilDate: input.periodStart,
+                      },
+                      failureDetail:
+                        "Öğretmen plan zinciri kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Yıl, ay ve hafta planı tek işlemde bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Plan zinciri kaydedildi; özet yenilenemedi. Aynı planı yeniden kaydetmeyin.",
+                    );
+                  });
+                  return graph;
+                }}
+                onRevisePlan={async (input) => {
+                  const { reviseTeacherOwnedPlan } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  const planToRevise = (
+                    await store.transaction("readonly", ["plans"], async (transaction) =>
+                      (await transaction.getAll("plans")).find(
+                        (plan) => plan.id === input.planId,
+                      )
+                    )
+                  );
+                  if (
+                    !planToRevise ||
+                    typeof planToRevise.periodStart !== "string"
+                  ) {
+                    throw new Error("Revize edilecek öğretmen planı doğrulanamadı.");
+                  }
+                  const revised = await enqueuePersistence(
+                    () => reviseTeacherOwnedPlan(store, input),
+                    {
+                      educationalWrite: {
+                        allowPreparationForCivilDate: planToRevise.periodStart,
+                      },
+                      failureDetail:
+                        "Öğretmen plan revizyonu kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Öğretmen plan revizyonu, önceki sürüm korunarak kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Plan revizyonu kaydedildi; özet yenilenemedi. Aynı değişikliği yeniden göndermeyin.",
+                    );
+                  });
+                  return revised;
+                }}
+                onRecordWeeklyEvaluation={async (input) => {
+                  const { recordTeacherWeeklyEvaluation } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  await enqueuePersistence(
+                    () => recordTeacherWeeklyEvaluation(store, input),
+                    {
+                      educationalWrite: {},
+                      failureDetail:
+                        "Haftalık öğretmen değerlendirmesi kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Haftalık değerlendirme ve sonraki hafta önerisi bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Haftalık değerlendirme kaydedildi; özet yenilenemedi. Aynı değerlendirmeyi yeniden göndermeyin.",
+                    );
+                  });
+                }}
+                onReviewWeeklyCarry={async (input) => {
+                  const { reviewTeacherWeeklyCarry } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  await enqueuePersistence(
+                    () => reviewTeacherWeeklyCarry(store, input),
+                    {
+                      educationalWrite: {},
+                      failureDetail:
+                        "Haftalık öneri kararı kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Haftalık öneri için öğretmen kararı ve revizyon izi bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Öğretmen kararı kaydedildi; özet yenilenemedi. Aynı kararı yeniden göndermeyin.",
+                    );
+                  });
+                }}
+                onReviewMonthlyCarry={async (input) => {
+                  const { reviewTeacherMonthlyCarry } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  await enqueuePersistence(
+                    () => reviewTeacherMonthlyCarry(store, input),
+                    {
+                      educationalWrite: {},
+                      failureDetail:
+                        "Aylık öneri kararı kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Sonraki ay önerisi için öğretmen kararı ve revizyon izi bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Aylık öğretmen kararı kaydedildi; özet yenilenemedi. Aynı kararı yeniden göndermeyin.",
+                    );
+                  });
+                }}
+                onRecordMonthlyEvaluation={async (input) => {
+                  const { recordTeacherMonthlyEvaluation } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  await enqueuePersistence(
+                    () => recordTeacherMonthlyEvaluation(store, input),
+                    {
+                      educationalWrite: {},
+                      failureDetail:
+                        "Aylık öğretmen değerlendirmesi kaydedilemedi. Yeni yazmalar durduruldu.",
+                      successDetail:
+                        "Çocuklar, program ve öğretmen yönleriyle aylık değerlendirme bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Aylık değerlendirme kaydedildi; özet yenilenemedi. Aynı değerlendirmeyi yeniden göndermeyin.",
+                    );
+                  });
+                }}
+              />
+            </Suspense>
+          </Dialog.Content>
+        </Dialog.Root>
+      ) : null}
+
       {planFlowOpen && configuredClassroom?.curriculumProfile ? (
         <Dialog.Root
           open
@@ -10073,19 +11555,42 @@ export default function Prototype() {
                 ? "Gelecek tarihli günlük planın başlık, saat ve öğretmen akış notlarını düzenleyin."
                 : "Günlük planı ve ilk etkinliği oluşturun."} Escape tuşuyla kapatabilirsiniz.
             </Dialog.Description>
-            <PlanCreationFlow
-              civilDate={scheduledPlanEditDraft?.civilDate ?? todayWorkspace.civilDate}
-              defaultStartTime={configuredClassroom.schedule.startTime}
-              defaultEndTime={configuredClassroom.schedule.endTime}
-              ageGroup={configuredClassroom.ageGroup ?? ""}
-              curriculumProfile={configuredClassroom.curriculumProfile}
-              students={students}
-              onCreate={createPlanAndStart}
-              onUpdate={updateFuturePlan}
-              initialTemplate={premiumDailyTemplate ?? undefined}
-              initialEdit={scheduledPlanEditDraft ?? undefined}
-              onClose={() => void closeD1Flow()}
-            />
+            <Suspense
+              fallback={(
+                <div className="premium-loading" role="status">
+                  Plan çalışma alanı açılıyor…
+                </div>
+              )}
+            >
+              <PlanCreationFlow
+                civilDate={scheduledPlanEditDraft?.civilDate ?? todayWorkspace.civilDate}
+                defaultStartTime={configuredClassroom.schedule.startTime}
+                defaultEndTime={configuredClassroom.schedule.endTime}
+                ageGroup={configuredClassroom.ageGroup ?? ""}
+                curriculumProfile={configuredClassroom.curriculumProfile}
+                students={students}
+                onCreate={createPlanAndStart}
+                onUpdate={updateFuturePlan}
+                initialTemplate={premiumDailyTemplate ?? undefined}
+                initialEdit={scheduledPlanEditDraft ?? undefined}
+                teacherOwnedDailyFlowContext={
+                  !premiumDailyTemplate &&
+                  !scheduledPlanEditDraft?.premium &&
+                  teacherWorkCycle.weekly
+                    ? {
+                        schedule: configuredClassroom.schedule,
+                        weeklyPlanId: teacherWorkCycle.weekly.id,
+                        allowedDateStart: teacherWorkCycle.weekly.periodStart,
+                        allowedDateEnd: teacherWorkCycle.weekly.periodEnd,
+                        ...(teacherOwnedDailyFlowCopySources.length > 0
+                          ? { copySources: teacherOwnedDailyFlowCopySources }
+                          : {}),
+                      }
+                    : undefined
+                }
+                onClose={() => void closeD1Flow()}
+              />
+            </Suspense>
           </Dialog.Content>
         </Dialog.Root>
       ) : null}
@@ -10117,6 +11622,14 @@ export default function Prototype() {
                 valueEvidenceWritesDisabled={
                   writesBlocked || educationalWritesDisabled
                 }
+                initialSection={premiumPlanInitialSection}
+                onRecordsChanged={() => {
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Plan kaydı cihazda tamamlandı; çalışma döngüsü görünümünü yenilemek için cihaz verilerine yeniden bağlanın.",
+                    );
+                  });
+                }}
                 onClose={() => setPremiumPlanOpen(false)}
                 onUseActivity={(selection) => {
                   setPremiumPlanOpen(false);

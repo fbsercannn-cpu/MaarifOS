@@ -3,11 +3,15 @@ import { expect, test, type Page } from "@playwright/test";
 async function configureClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await setup.getByLabel("Sınıf adı").fill("Yoklama 2 Kurgu Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();
@@ -16,7 +20,7 @@ async function configureClassroom(page: Page) {
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByRole("button", { name: "İlk çocuğu ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill(name);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();

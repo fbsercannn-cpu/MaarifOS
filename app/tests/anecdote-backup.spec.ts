@@ -348,6 +348,7 @@ test("anekdot formu yerel/reload/yedek zincirinden Belgeler ekranına ve gerçek
   });
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Belgeler", exact: true }).click();
+  await page.getByRole("button", { name: /Anekdot kayıt formu:/ }).click();
   const documents = page.getByRole("dialog", { name: "Belgeler" });
   await expect(documents).toBeVisible();
   await expect(documents).toContainText("Anekdot Kayıt Formları");

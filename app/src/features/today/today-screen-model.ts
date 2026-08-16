@@ -7,6 +7,10 @@ import type {
   TodayPlanItem,
   TodayWorkspace,
 } from "./today-data.ts";
+import type { TeacherWorkCycleWorkspace } from "../teacher-cycle/teacher-work-cycle.ts";
+import type { SetupProgressInput } from "../onboarding/setup-progress-model.ts";
+import type { TeacherDayClosureWorkspace } from "../day-closure/teacher-day-closure.ts";
+import type { TeacherWeekWorkspace } from "../teacher-cycle/teacher-week-workspace.ts";
 
 export type TodayConfiguredClassroom = Extract<
   ClassroomContext,
@@ -50,6 +54,212 @@ export interface TodayScreenModel {
   pendingObservationCount: number;
   planEvidenceDetailsEnabled: boolean;
   premiumPlanCenterEnabled: boolean;
+  teacherCycle: TeacherWorkCycleWorkspace;
+  teacherWeek: TeacherWeekWorkspace;
+  dayClosure: TeacherDayClosureWorkspace;
+  setupProgress: SetupProgressInput;
+}
+
+export type TeacherCycleStageId = "daily" | "weekly" | "monthly" | "documents";
+export type TeacherCycleStageTone = "attention" | "current" | "ready" | "waiting";
+
+export interface TeacherCycleStagePresentation {
+  id: TeacherCycleStageId;
+  label: string;
+  title: string;
+  detail: string;
+  actionLabel: string;
+  tone: TeacherCycleStageTone;
+}
+
+export interface TeacherCyclePresentation {
+  currentStep: "plan" | "apply" | "observe" | "evaluate" | "document";
+  stages: readonly TeacherCycleStagePresentation[];
+}
+
+function periodLabel(periodStart: string, periodEnd: string): string {
+  return `${periodStart}–${periodEnd}`;
+}
+
+export function createTeacherCyclePresentation(
+  workspace: TeacherWorkCycleWorkspace,
+  options: { educationalWritesDisabled?: boolean } = {},
+): TeacherCyclePresentation {
+  const daily: TeacherCycleStagePresentation = workspace.daily.status === "conflict"
+    ? {
+        id: "daily",
+        label: "Günlük",
+        title: "Günlük plan çakışması",
+        detail: `${workspace.daily.conflictingPlanIds.length} plan aynı sınıf ve tarihe bağlı · kayıtları birleştirmeden inceleyin.`,
+        actionLabel: "Planları incele",
+        tone: "attention",
+      }
+    : workspace.daily.planId
+    ? workspace.daily.activityCount > 0 &&
+      workspace.daily.completedActivityCount >= workspace.daily.activityCount
+      ? {
+          id: "daily",
+          label: "Günlük",
+          title: "Günün uygulaması tamamlandı",
+          detail: `${workspace.daily.activityCount} etkinlik · ${workspace.daily.observationCount} gözlem`,
+          actionLabel: "Planı aç",
+          tone: "ready",
+        }
+      : {
+          id: "daily",
+          label: "Günlük",
+          title: workspace.daily.title,
+          detail: `${workspace.daily.completedActivityCount}/${workspace.daily.activityCount} etkinlik tamamlandı · ${workspace.daily.observationCount} gözlem`,
+          actionLabel: "Akışı aç",
+          tone: "current",
+        }
+    : options.educationalWritesDisabled
+      ? {
+          id: "daily",
+          label: "Günlük",
+          title: "Günlük yazım henüz açık değil",
+          detail: "Eğitim yılı etkin olduğunda bugünün planı hazırlanır.",
+          actionLabel: "Eğitim yılını aç",
+          tone: "waiting",
+        }
+      : {
+        id: "daily",
+        label: "Günlük",
+        title: "Bugünün planı yok",
+        detail: "Sınıf başlamadan günlük akışı hazırlayın.",
+        actionLabel: "Plan oluştur",
+        tone: "attention",
+        };
+
+  const weekly: TeacherCycleStagePresentation = !workspace.weekly
+    ? {
+        id: "weekly",
+        label: "Haftalık",
+        title: "Haftalık plan zinciri yok",
+        detail: "Yıllık ve aylık omurgadan haftayı hazırlayın.",
+        actionLabel: "Haftaları aç",
+        tone: "attention",
+      }
+    : workspace.weekly.relation === "upcoming"
+      ? {
+          id: "weekly",
+          label: "Haftalık",
+          title: workspace.weekly.title,
+          detail: `${periodLabel(workspace.weekly.periodStart, workspace.weekly.periodEnd)} · henüz başlamadı`,
+          actionLabel: "Haftayı incele",
+          tone: "waiting",
+        }
+      : workspace.weekly.evaluationCount > 0
+        ? {
+            id: "weekly",
+            label: "Haftalık",
+            title: "Haftalık karar kaydedildi",
+            detail: `${workspace.weekly.observationCount} gözlem · ${workspace.weekly.evaluationCount} değerlendirme`,
+            actionLabel: "Kararı aç",
+            tone: "ready",
+          }
+        : workspace.weekly.relation === "past" ||
+            workspace.civilDate >= workspace.weekly.periodEnd
+          ? {
+            id: "weekly",
+            label: "Haftalık",
+            title: "Haftalık değerlendirme bekliyor",
+            detail: `${workspace.weekly.dailyPlanCount} günlük plan · ${workspace.weekly.linkedObservationCount}/${workspace.weekly.observationCount} bağlı gözlem`,
+            actionLabel: "Haftayı değerlendir",
+            tone: "attention",
+          }
+          : {
+              id: "weekly",
+              label: "Haftalık",
+              title: workspace.weekly.title,
+              detail: `${workspace.weekly.dailyPlanCount} günlük plan · ${workspace.weekly.linkedObservationCount}/${workspace.weekly.observationCount} bağlı gözlem · dönem sürüyor`,
+              actionLabel: "Haftayı izle",
+              tone: "current",
+            };
+
+  const monthly: TeacherCycleStagePresentation = !workspace.monthly
+    ? {
+        id: "monthly",
+        label: "Aylık",
+        title: "Aylık plan zinciri yok",
+        detail: "Aylık plan ve değerlendirme aynı kayıtta buluşmalı.",
+        actionLabel: "Ayları aç",
+        tone: "attention",
+      }
+    : workspace.monthly.relation === "upcoming"
+      ? {
+          id: "monthly",
+          label: "Aylık",
+          title: workspace.monthly.title,
+          detail: `${periodLabel(workspace.monthly.periodStart, workspace.monthly.periodEnd)} · henüz başlamadı`,
+          actionLabel: "Ayı incele",
+          tone: "waiting",
+        }
+      : workspace.monthly.evaluationCount > 0
+        ? {
+            id: "monthly",
+            label: "Aylık",
+            title: "Aylık değerlendirme kayıtlı",
+            detail: `${workspace.monthly.observationCount} gözlem · ${workspace.monthly.evaluationCount} değerlendirme`,
+            actionLabel: "Ek 18 ve değerlendirme",
+            tone: "ready",
+          }
+        : workspace.monthly.relation === "past" ||
+            workspace.civilDate >= workspace.monthly.periodEnd
+          ? {
+            id: "monthly",
+            label: "Aylık",
+            title: "Aylık değerlendirme bekliyor",
+            detail: `${workspace.monthly.weeklyPlanCount} hafta · ${workspace.monthly.linkedObservationCount}/${workspace.monthly.observationCount} bağlı gözlem`,
+            actionLabel: "Ayı değerlendir",
+            tone: "attention",
+          }
+          : {
+              id: "monthly",
+              label: "Aylık",
+              title: workspace.monthly.title,
+              detail: `${workspace.monthly.weeklyPlanCount} hafta · ${workspace.monthly.linkedObservationCount}/${workspace.monthly.observationCount} bağlı gözlem · dönem sürüyor`,
+              actionLabel: "Ayı izle",
+              tone: "current",
+            };
+
+  const documentPending =
+    workspace.documents.anecdoteIncompleteCount +
+    workspace.documents.anecdoteReviewRequiredCount;
+  const documentReady =
+    workspace.documents.anecdoteReadyCount +
+    workspace.documents.monthlyEvaluationCount +
+    (workspace.documents.planDocumentReady ? 1 : 0);
+  const documents: TeacherCycleStagePresentation = documentPending > 0
+    ? {
+        id: "documents",
+        label: "Belgeler",
+        title: `${documentPending} kayıt tamamlanmayı bekliyor`,
+        detail: `${documentReady} belge kaynağı hazır · anekdot, plan ve Ek 18`,
+        actionLabel: "Belgeleri tamamla",
+        tone: "attention",
+      }
+    : {
+        id: "documents",
+        label: "Belgeler",
+        title: documentReady > 0 ? `${documentReady} belge kaynağı hazır` : "Belge kaynağı henüz yok",
+        detail: "Plan, değerlendirme ve anekdot çıktıları tek merkezde.",
+        actionLabel: "Belge merkezini aç",
+        tone: documentReady > 0 ? "ready" : "waiting",
+      };
+
+  const currentStep: TeacherCyclePresentation["currentStep"] =
+    workspace.daily.status === "conflict" || !workspace.daily.planId
+      ? "plan"
+      : workspace.daily.activityCount > workspace.daily.completedActivityCount
+        ? "apply"
+        : workspace.pendingCurriculumLinkCount > 0
+          ? "observe"
+          : weekly.tone === "attention" || monthly.tone === "attention"
+            ? "evaluate"
+            : "document";
+
+  return { currentStep, stages: [daily, weekly, monthly, documents] };
 }
 
 export interface TodayControlCenterSummary {

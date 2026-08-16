@@ -293,6 +293,7 @@ export function ClassroomScreen({
         </div>
       </section>
 
+      {summary.activeStudentCount > 0 ? (
       <div className="roster-toolbar">
         <label className="roster-search">
           <MagnifyingGlassIcon aria-hidden="true" />
@@ -315,17 +316,15 @@ export function ClassroomScreen({
           ) : null}
         </label>
 
-        {summary.activeStudentCount > 0 ? (
-          <button
-            className="roster-add-trigger"
-            type="button"
-            onClick={onOpenAddStudent}
-            disabled={isBusy}
-          >
-            <PlusIcon aria-hidden="true" />
-            Çocuk ekle
-          </button>
-        ) : null}
+        <button
+          className="roster-add-trigger"
+          type="button"
+          onClick={onOpenAddStudent}
+          disabled={isBusy}
+        >
+          <PlusIcon aria-hidden="true" />
+          Çocuk ekle
+        </button>
 
         <button
           className="roster-export-trigger"
@@ -337,6 +336,7 @@ export function ClassroomScreen({
           Gözlem dökümü
         </button>
       </div>
+      ) : null}
 
       <section
         className="children-section roster-section"
@@ -460,9 +460,6 @@ export function ClassroomScreen({
                 <span>
                   Sınıf listesini oluşturarak yoklama ve gözlem akışını başlatın.
                 </span>
-                <button type="button" onClick={onOpenAddStudent} disabled={isBusy}>
-                  <PlusIcon aria-hidden="true" /> Çocuk ekle
-                </button>
               </>
             )}
           </div>

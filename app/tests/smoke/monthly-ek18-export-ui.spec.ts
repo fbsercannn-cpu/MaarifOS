@@ -9,22 +9,28 @@ type CapturedBlob = {
 async function configurePremiumClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await setup.getByLabel("Sınıf adı").fill("Ek 18 Mobil Kabul Sınıfı");
-  await setup.getByRole("button", { name: "Tarihleri uygula" }).click();
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("full_day");
+  await expect(setup.getByText("Resmî tarihler uygulandı", { exact: true })).toBeVisible();
+  await expect(setup.getByLabel("Eğitim yılı başlangıcı")).toHaveValue("2026-09-01");
+  await expect(setup.getByLabel("Eğitim yılı bitişi")).toHaveValue("2027-08-31");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("full_day");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();
   await expect(setup).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill("Ek 18 Kurgu Çocuk");
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+  const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addSheet.getByLabel("Çocuğun adı").fill("Ek 18 Kurgu Çocuk");
+  await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(addSheet).toBeHidden();
+  await expect(page.getByRole("button", { name: "Ek 18 Kurgu Çocuk profilini aç" })).toBeVisible();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 

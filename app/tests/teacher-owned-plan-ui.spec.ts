@@ -1,0 +1,285 @@
+import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+
+test.use({ viewport: { width: 390, height: 844 } });
+
+async function configureActiveClassroom(page: import("@playwright/test").Page) {
+  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  await setup.getByLabel("Sınıf adı").fill("Kurgu Plan Zinciri Sınıfı");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-08-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
+  await setup
+    .getByLabel("Uygulanan program")
+    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+  await setup.getByLabel("Program katalog kimliği").fill("TEACHER-PLAN-UI");
+  await setup.getByLabel("Kaynak sürümü").fill("2026-test");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("full_day");
+  await setup.getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" }).click();
+  await expect(setup).toBeHidden();
+}
+
+async function openTeacherPlanWorkspace(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Planlar", exact: true })).toBeVisible();
+  await page
+    .getByRole("region", { name: "Yıl → Ay → Hafta → Gün" })
+    .getByRole("button")
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Kayıtlı öğretmen planı" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, revize eder, Word alır ve reload sonrası aynı kimliklerle açar", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureActiveClassroom(page);
+  let dialog = await openTeacherPlanWorkspace(page);
+
+  await expect(dialog.getByRole("heading", { name: "Üç kısa kararla başlayın" })).toBeVisible();
+  await dialog
+    .getByLabel("Bu yıl sınıfınız için en önemli öncelik nedir?")
+    .fill("Her çocuğun güvenli katılımını güçlendirmek");
+  await dialog
+    .getByLabel("Bu ay neye odaklanacaksınız?")
+    .fill("Sınıf aidiyeti ve birlikte yaşam rutinleri");
+  await dialog
+    .getByLabel("Bu haftanın öğretmen akışı nedir?")
+    .fill("Karşılama, oyun, açık hava, gözlem ve gün sonu yansıtması");
+  await dialog.getByRole("button", { name: "Yıl → ay → hafta planını oluştur" }).click();
+
+  await expect(dialog).toContainText("tek işlemde bu cihaza kaydedildi");
+  await expect(dialog.getByRole("button", { name: "Yıllık planı düzenle" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Aylık planı düzenle" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Haftalık planı düzenle" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Ayı üç yönden değerlendir" }).click();
+  const monthlyReview = dialog.getByTestId("teacher-monthly-review");
+  await expect(monthlyReview).toContainText("0 gözlem · 0 gün · 0 hafta");
+  await expect(
+    monthlyReview.getByRole("radio", { name: /Kanıt yeterli/ }),
+  ).toBeDisabled();
+  await monthlyReview
+    .getByLabel("1. Çocuklar yönü değerlendirmesi")
+    .fill("Ay geneli için yeterli gözlem henüz oluşmadı; çocuklar hakkında genelleme yapılmadı.");
+  await monthlyReview
+    .getByLabel("Program yönü açıklaması")
+    .fill("Program yönü için kanıt eksikliği görünür bırakıldı.");
+  await monthlyReview
+    .getByLabel("Öğretmen yansıtması")
+    .fill("İki haftaya yayılan dengeli gözlem planı kuracağım.");
+  await monthlyReview
+    .getByLabel("Sonraki ay için öğretmen önerisi")
+    .fill("Her aktif çocuk için farklı gün ve haftalarda kanıt topla.");
+  await monthlyReview
+    .getByRole("button", { name: "Üç yönlü değerlendirmeyi kaydet" })
+    .click();
+  await expect(dialog).toContainText("Aylık üç yönlü değerlendirme kaydedildi");
+  await expect(
+    dialog.getByRole("button", { name: "Aylık değerlendirmeleri aç (1)" }),
+  ).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Yıllık planı düzenle" }).click();
+  await dialog.getByLabel("Plan başlığı").fill("Kurgu Öğretmenin Revize Yıllık Planı");
+  await dialog
+    .getByLabel("Öğretmen plan notu")
+    .fill("Katılım, oyun ve gözlem kararları her hafta yeniden değerlendirilecek.");
+  await dialog.getByRole("button", { name: "Revizyonu kaydet" }).click();
+  await expect(dialog).toContainText("önceki sürüm korunarak kaydedildi");
+  await expect(dialog).toContainText("revizyon 2");
+
+  const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Word indir" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(
+    /^MaarifOS_Ogretmen_Plan_Zinciri_2026-08-01_[0-9a-f]{8}\.docx$/,
+  );
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const bytes = await readFile(downloadPath!);
+  expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
+
+  await dialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
+  await page.reload({ waitUntil: "networkidle" });
+  dialog = await openTeacherPlanWorkspace(page);
+  await expect(dialog).toContainText("Kurgu Öğretmenin Revize Yıllık Planı");
+  await expect(dialog).toContainText("revizyon 2");
+
+  const layout = await dialog.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+});
+
+test("öğretmen gerçek günlük plan gözleminden W1 değerlendirmesi kaydeder ve W2 önerisini inceleme bekler halde görür", async ({
+  page,
+}) => {
+  test.setTimeout(45_000);
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureActiveClassroom(page);
+
+  const seeded = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const planning = await import(
+      "/src/features/planning/teacher-owned-plan-service.ts"
+    );
+    const evidence = await import("/src/features/evidence/evidence-flow.ts");
+    const curriculum = await import(
+      "/src/features/curriculum/curriculum-catalog.ts"
+    );
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    const active = snapshot.settings.find(
+      (record) => record.id === core.ACTIVE_CLASSROOM_SETTING_ID,
+    );
+    const classroom = snapshot.classrooms.find(
+      (record) => record.id === active?.classroomId,
+    );
+    if (
+      !active ||
+      !classroom ||
+      !classroom.curriculumProfileSnapshot ||
+      typeof active.academicYearId !== "string" ||
+      typeof active.classroomId !== "string"
+    ) {
+      throw new Error("Kurgu etkin sınıf bulunamadı.");
+    }
+    const studentId = "00000000-0000-4000-8000-000000000f01";
+    const now = "2026-08-15T06:00:00.000Z";
+    await store.transaction(
+      "readwrite",
+      ["students"],
+      async (transaction) => {
+        await transaction.putMany("students", [
+          {
+            id: studentId,
+            academicYearId: active.academicYearId,
+            classroomId: active.classroomId,
+            displayName: "Kurgu Ada",
+            createdAt: now,
+            updatedAt: now,
+            civilDate: "2026-08-15",
+            deletedAt: null,
+            schemaVersion: 1,
+          },
+        ]);
+      },
+    );
+    const graph = await planning.createTeacherOwnedPlanGraph(store, {
+      title: "Kurgu Öğretmen Yıllık Planı",
+      periodStart: "2026-08-01",
+      periodEnd: "2027-06-30",
+      teacherContent: { narrative: "Her çocuğun güvenli katılımı" },
+      months: [
+        {
+          title: "Ağustos Öğretmen Planı",
+          monthKey: "2026-08",
+          periodStart: "2026-08-01",
+          periodEnd: "2026-08-31",
+          teacherContent: { narrative: "Sınıf aidiyeti" },
+          weeks: [
+            {
+              title: "10–16 Ağustos Haftası",
+              weekKey: "2026-W33",
+              periodStart: "2026-08-10",
+              periodEnd: "2026-08-16",
+              teacherContent: { narrative: "Karşılama, oyun ve gözlem" },
+            },
+            {
+              title: "17–23 Ağustos Haftası",
+              weekKey: "2026-W34",
+              periodStart: "2026-08-17",
+              periodEnd: "2026-08-23",
+              teacherContent: { narrative: "Ortak düzen ve sınıf ritmi" },
+            },
+          ],
+        },
+      ],
+      now: new Date("2026-08-15T06:01:00.000Z"),
+    });
+    const profile = classroom.curriculumProfileSnapshot;
+    const target = curriculum
+      .curriculumTargetsForProfile(profile)
+      .find((candidate) => candidate.referenceCode === "FAB.1");
+    if (!target) throw new Error("Kurgu program hedefi bulunamadı.");
+    const daily = await evidence.createPlanWithActivity(store, {
+      civilDate: "2026-08-15",
+      planId: "00000000-0000-4000-8000-000000000f02",
+      planTitle: "15 Ağustos Öğretmen Günlük Planı",
+      activityId: "00000000-0000-4000-8000-000000000f03",
+      activityTitle: "Ortak oyun sırası",
+      startTime: "09:00",
+      endTime: "09:40",
+      curriculumProfile: profile,
+      curriculumTargets: [target],
+      assignmentMode: "selected-students",
+      studentIds: [studentId],
+      initialActivityStatus: "in_progress",
+      now: new Date("2026-08-15T06:02:00.000Z"),
+    });
+    const observationId = "00000000-0000-4000-8000-000000000f04";
+    await evidence.captureImmutableRawObservation(store, {
+      observationId,
+      studentId,
+      planId: daily.plan.id,
+      activityId: daily.activity.id,
+      rawText:
+        "Kurgu Ada, arkadaşının önerisini dinledikten sonra oyundaki sırayı birlikte yeniden kurdu.",
+      observedAt: "2026-08-15T06:20:00.000Z",
+      now: new Date("2026-08-15T06:21:00.000Z"),
+    });
+    store.close();
+    return {
+      sourceWeekId: graph.months[0].weeks[0].id,
+      targetWeekId: graph.months[0].weeks[1].id,
+      observationId,
+    };
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  const dialog = await openTeacherPlanWorkspace(page);
+  await dialog
+    .getByRole("button", { name: "Haftayı kanıtlarla değerlendir" })
+    .first()
+    .click();
+  const review = dialog.getByTestId("teacher-weekly-review");
+  await expect(review).toContainText("Kurgu Ada");
+  await expect(review).toContainText("Ortak oyun sırası");
+  await review
+    .getByLabel("Kanıt özeti")
+    .fill("Kurgu Ada ortak oyun sırasını arkadaşının önerisiyle yeniden düzenledi.");
+  await review
+    .getByLabel("Öğretmen değerlendirmesi")
+    .fill("Ortak karar vermeyi daha küçük gruplarda sürdürmek yararlı olacak.");
+  await review.getByLabel("Sonraki plan kararı").selectOption("adapt");
+  await review
+    .getByRole("button", { name: "Kaydet ve sonraki haftaya öneri taşı" })
+    .click();
+  await expect(dialog).toContainText("sonraki hafta için öneri");
+  await expect(dialog).toContainText("Önceki haftadan öğretmen önerisi");
+  await expect(dialog).toContainText("Henüz bu haftanın planına uygulanmadı");
+
+  const persisted = await page.evaluate(async ({ sourceWeekId, targetWeekId }) => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    const source = snapshot.plans.find((record) => record.id === sourceWeekId);
+    const target = snapshot.plans.find((record) => record.id === targetWeekId);
+    return { source, target };
+  }, seeded);
+  expect(persisted.source?.weeklyEvaluations?.[0].observationIds).toEqual([
+    seeded.observationId,
+  ]);
+  expect(persisted.target?.nextPlanDecisionContext?.sourceWeeklyPlanId).toBe(
+    seeded.sourceWeekId,
+  );
+  expect(persisted.target?.teacherReviewRequired).toBe(true);
+});

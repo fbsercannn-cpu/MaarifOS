@@ -5,13 +5,17 @@ async function configureNativeClassroom(page: Page) {
   await setup.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined);
   if (!(await setup.isVisible().catch(() => false))) return;
   await setup.getByLabel("Sınıf adı").fill("Kurgu PWA Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
   await setup.getByLabel("Program katalog kimliği").fill("KURGU-PWA");
   await setup.getByLabel("Kaynak sürümü").fill("2026-test");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
     .click();
@@ -81,7 +85,7 @@ test("telefon geri tuşu profil, sınıf listesi ve ana ekran sırasını korur"
   await configureNativeClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
   await page.getByLabel("Çocuğun adı").fill("Geri Akış Çocuğu");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   const appUrl = page.url();
@@ -112,9 +116,12 @@ test("ana sayfadaki öğrenci araması ad ve soyadı Türkçe harflerden bağım
   await configureNativeClassroom(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   for (const name of ["Çağrı Işık", "Şule Öztürk"]) {
-    await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-    await page.getByLabel("Çocuğun adı").fill(name);
-    await page.getByRole("button", { name: "Ekle", exact: true }).click();
+    await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+    const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+    await addSheet.getByLabel("Çocuğun adı").fill(name);
+    await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+    await expect(addSheet).toBeHidden();
+    await expect(page.getByRole("button", { name: `${name} profilini aç` })).toBeVisible();
   }
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
@@ -141,9 +148,12 @@ test("sınıf listesi dar telefonlarda taşmadan kayar ve dokunma hedeflerini ko
   await configureNativeClassroom(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   for (const name of ["Ada", "Bora", "Cem", "Duru", "Ece", "Fırat"]) {
-    await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-    await page.getByLabel("Çocuğun adı").fill(name);
-    await page.getByRole("button", { name: "Ekle", exact: true }).click();
+    await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+    const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
+    await addSheet.getByLabel("Çocuğun adı").fill(name);
+    await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+    await expect(addSheet).toBeHidden();
+    await expect(page.getByRole("button", { name: `${name} profilini aç` })).toBeVisible();
   }
 
   for (const viewport of [
@@ -229,7 +239,7 @@ test("öğrenci profili tüm telefon genişliklerinde taşmadan ve erişilebilir
   await page.goto("/");
   await configureNativeClassroom(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
   await page.getByLabel("Çocuğun adı").fill("Görsel QA Çocuğu");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await page
@@ -306,7 +316,7 @@ test("Hediye Alpha PWA yüzeyi portfolyo yatırımını pilot akışından gizle
   await page.goto("/");
   await configureNativeClassroom(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
   await page.getByLabel("Çocuğun adı").fill(childName);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await page

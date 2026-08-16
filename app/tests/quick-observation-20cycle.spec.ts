@@ -50,8 +50,10 @@ async function configureClassroom(page: Page) {
   if (!(await setup.isVisible().catch(() => false))) return;
 
   await setup.getByLabel("Sınıf adı").fill("20 Çevrim Kurgu Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
     .getByLabel("Uygulanan program")
     .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
@@ -64,6 +66,8 @@ async function configureClassroom(page: Page) {
   if (await sourceVersion.isVisible().catch(() => false)) {
     await sourceVersion.fill("2026-test");
   }
+  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
 
   await setup
     .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
@@ -73,7 +77,7 @@ async function configureClassroom(page: Page) {
 
 async function addFictionalChild(page: Page) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
   await page.getByLabel("Çocuğun adı").fill(CHILD_NAME);
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(

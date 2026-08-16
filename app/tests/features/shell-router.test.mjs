@@ -12,11 +12,19 @@ test("route sözleşmesi Hediye Alpha navigasyonundan yalnız ekranları üretir
   assert.deepEqual(APP_ROUTES, [
     { id: "today", path: "/", label: "Bugün" },
     { id: "classroom", path: "/classroom", label: "Sınıfım" },
+    { id: "plans", path: "/plans", label: "Planlar" },
+    { id: "documents", path: "/documents", label: "Belgeler" },
   ]);
   assert.deepEqual(
     APP_ROUTES.map(({ id }) => id),
     visiblePrimaryNavigation()
-      .filter(({ id }) => id === "today" || id === "classroom")
+      .filter(
+        ({ id }) =>
+          id === "today" ||
+          id === "classroom" ||
+          id === "plans" ||
+          id === "documents",
+      )
       .map(({ id }) => id),
   );
   assert.ok(Object.isFrozen(APP_ROUTES));
@@ -27,6 +35,12 @@ test("pathname çözümleme reload ve son slash için kararlıdır", () => {
   assert.equal(routeFromPathname("/").id, "today");
   assert.equal(routeFromPathname("/classroom").id, "classroom");
   assert.equal(routeFromPathname("/classroom/").id, "classroom");
+  assert.equal(routeFromPathname("/plans").id, "plans");
+  assert.equal(routeFromPathname("/plans/").id, "plans");
+  assert.equal(routeFromPathname("/documents").id, "documents");
+  assert.equal(routeFromPathname("/documents/").id, "documents");
   assert.equal(routeFromPathname("/tanimsiz").id, "today");
   assert.equal(routeById("classroom").path, "/classroom");
+  assert.equal(routeById("plans").path, "/plans");
+  assert.equal(routeById("documents").path, "/documents");
 });

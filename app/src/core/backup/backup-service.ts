@@ -43,6 +43,7 @@ import {
   BACKUP_VERSION,
   DATA_SCHEMA_VERSION,
   LEGACY_DATA_SCHEMA_VERSION,
+  VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
   type BackupEnvelope,
   type RestoreMode,
   type RestoreReport,
@@ -242,13 +243,13 @@ async function upgradeLegacyBackupEnvelope(
     ...(envelope.manifest.dataSchemaVersion === LEGACY_DATA_SCHEMA_VERSION
       ? { evidenceCurriculumLinks: [] }
       : {}),
-    ...(envelope.manifest.dataSchemaVersion < DATA_SCHEMA_VERSION
+    ...(envelope.manifest.dataSchemaVersion < VALUE_EVIDENCE_DATA_SCHEMA_VERSION
       ? { valueEvidenceLinks: [] }
       : {}),
     exportPackages: legacyPayload.exportPackages.map((record) => {
       if (
         record.type !== "student_dossier" ||
-        envelope.manifest.dataSchemaVersion >= DATA_SCHEMA_VERSION
+        envelope.manifest.dataSchemaVersion >= VALUE_EVIDENCE_DATA_SCHEMA_VERSION
       ) {
         return record;
       }
