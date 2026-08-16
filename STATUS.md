@@ -77,9 +77,19 @@ haftası; UI üzerinden 3 çocuk, 15 yoklama, 5 günlük plan, 50 günlük akı�
 haftalık değerlendirme, sonraki hafta kararı, PDF/DOCX, şifreli yedek, geçici veri
 değişikliği ve atomik geri yüklemeyi tek senaryoda doğruladı. Ayrıca License API
 15/15, PWA sözleşmesi 9/9, Chromium/WebKit smoke 10/10, Sites sözleşmesi 26/26 ve
-production PWA yükseltme/offline matrisi 4/4 geçti. Bu paragraf yerel release
-adayı kanıtıdır; production dağıtımı ve fiziksel telefon güncellemesi ayrıca
-doğrulanmalıdır.
+production PWA yükseltme/offline matrisi 4/4 geçti.
+
+`16 Ağustos 2026` tarihinde aynı kaynak commit'i
+`c7401f7f25feb5b89782517b5f34745dc1ecf43a`, kurucu production profiliyle
+yeniden üretilerek Sites sürüm `23` olarak production'a dağıtıldı. Yayımlanan
+paketin Sites içerik özeti
+`sha256:c6e65d7d32327cfc7a5913ae070f80f9dd64e786fb27e0152e460ead3b3db70a`
+ve dosya sayısı `62`dir. Canlı kök/derin rota, hassas ve eksik yol matrisi,
+service worker `0.11.0` kimliği ve HTML'nin çağırdığı 13 JS/CSS/görsel varlığın
+yerel production build'iyle SHA-256 eşitliği doğrulandı. Temiz canlı tarayıcıda
+`MaarifOS 0.11.0 hazır` ve `Şimdi güncelle` görünür; `0.10.0` artık güncel diye
+sunulmaz. Bu otomatik/canlı tarayıcı kanıtı fiziksel telefonda öğretmen onaylı
+güncelleme, yeniden açılış ve yerel veri korunumu kabulinin yerine geçmez.
 
 Bir sonraki paragraftan başlayan kalite hükmü, `0.10.0` sürüm adayının tarihsel
 kanıtıdır.
