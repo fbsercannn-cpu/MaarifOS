@@ -39,10 +39,24 @@ test("kilitli kayıt eylemleri chevron yerine kilit ve görünür neden taşır"
 test("kilitli günlük plan eylemi hazırmış gibi görünmez ve çözüm yolunu açıklar", () => {
   assert.match(prototypeSource, /title=\{displayedPlanIsToday \? "Gün planı"/);
   assert.match(prototypeSource, /Günlük plan yazımı kilitli/);
-  assert.match(prototypeSource, /Önce bugün etkin olan eğitim yılını seçin/);
+  assert.match(
+    prototypeSource,
+    /Önce etkin veya hazırlanmış eğitim yılına haftalık plan bağlayın/,
+  );
   assert.match(prototypeSource, /Eğitim yılını aç/);
   assert.match(prototypeSource, /aria-describedby=\{[\s\S]{0,180}"plans-create-readiness"/);
   assert.match(styles, /\.plans-create-button:disabled[\s\S]{0,220}opacity: 1/);
+});
+
+test("hazırlık modunda gelecek planı açar, yoklama ve gözlemi başlangıca kadar kilitli tutar", () => {
+  assert.match(prototypeSource, /const planWritesDisabled =/);
+  assert.match(
+    prototypeSource,
+    /disabled=\{planWritesDisabled\}[\s\S]{0,900}Etkinlik planla/,
+  );
+  assert.match(prototypeSource, /Gelecek günlük planı oluştur/);
+  assert.match(prototypeSource, /Yeni dönem ayarlarını aç/);
+  assert.match(prototypeSource, /Yoklama ve gözlem/);
 });
 
 test("boş sınıfta tek kurulum CTA'sı korunur ve anlamsız araç çubuğu gizlenir", () => {

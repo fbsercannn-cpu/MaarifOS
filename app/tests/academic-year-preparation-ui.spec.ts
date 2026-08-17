@@ -23,7 +23,10 @@ test("yaklaşan eğitim yılı hazırlık modunda uyarır ve eğitimsel yazılar
 
   const warning = page.getByRole("alert", { name: "Eğitim yılı hazırlık uyarısı" });
   await expect(warning.getByText("Hazırlık modu açık")).toBeVisible();
-  await expect(warning).toContainText("2099-09-01 tarihinde başlayacak");
+  await expect(warning).toContainText("gelecek planları şimdi hazırlayabilirsiniz");
+  await expect(warning).toContainText(
+    "Yoklama, uygulama ve gözlem 2099-09-01 tarihinde açılır",
+  );
   await expect(warning.getByRole("button", { name: "Eğitim yılını aç" })).toBeVisible();
   await expect(page.locator(".teacher-control")).toHaveCount(0);
   await expect(page.getByTestId("teacher-day-close")).toHaveCount(0);

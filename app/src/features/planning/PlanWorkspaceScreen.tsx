@@ -18,6 +18,8 @@ import "./plan-workspace.css";
 export interface PlanWorkspaceScreenProps {
   workspace: TeacherWorkCycleWorkspace;
   educationalWritesDisabled: boolean;
+  preparationPlanningAllowed?: boolean;
+  preparationPlanningCivilDate?: string | null;
   dataBusy: boolean;
   onOpenLevel(levelId: PlanWorkbenchLevelId): void;
   onOpenCalendar(): void;
@@ -35,6 +37,8 @@ const LEVEL_ICONS = {
 export function PlanWorkspaceScreen({
   workspace,
   educationalWritesDisabled,
+  preparationPlanningAllowed = false,
+  preparationPlanningCivilDate = null,
   dataBusy,
   onOpenLevel,
   onOpenCalendar,
@@ -43,6 +47,8 @@ export function PlanWorkspaceScreen({
 }: PlanWorkspaceScreenProps) {
   const presentation = createPlanWorkbenchPresentation(workspace, {
     educationalWritesDisabled,
+    preparationPlanningAllowed,
+    preparationPlanningCivilDate,
   });
 
   return (

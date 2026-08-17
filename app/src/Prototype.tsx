@@ -174,6 +174,10 @@ import type {
 } from "./features/planning/PlanCreationFlow.tsx";
 import type { PlanWorkbenchLevelId } from "./features/planning/plan-workbench-model.ts";
 import {
+  isAcademicYearPlanWriteAllowed,
+  resolvePreparationPlanningWindow,
+} from "./features/planning/academic-year-planning-policy.ts";
+import {
   destinationForPlanDocument,
   destinationForPlanLevel,
 } from "./features/planning/teacher-plan-destination.ts";
@@ -2730,6 +2734,16 @@ export default function Prototype() {
       })
     : null;
   const educationalWritesDisabled = educationalWriteNotice !== null;
+  const preparationPlanningWindow = resolvePreparationPlanningWindow({
+    operationalStatus: configuredClassroom?.operationalStatus ?? "ended",
+    academicYearStart: configuredClassroom?.academicYearStart ?? "",
+    academicYearEnd: configuredClassroom?.academicYearEnd ?? "",
+    weeklyPeriodStart: teacherWorkCycle.weekly?.periodStart,
+    weeklyPeriodEnd: teacherWorkCycle.weekly?.periodEnd,
+  });
+  const preparationPlanningAllowed = preparationPlanningWindow.allowed;
+  const planWritesDisabled =
+    educationalWritesDisabled && !preparationPlanningAllowed;
   const premiumMutationAllowed =
     premiumPilotPreviewEnabled ||
     internalStaffExportEnabled ||
@@ -5911,10 +5925,10 @@ export default function Prototype() {
       );
       return;
     }
-    const futurePremiumPreparation =
+    const futurePlanPreparation =
       configuredClassroom.operationalStatus === "preparation" &&
-      initialTemplate !== undefined;
-    if (educationalWriteNotice && !futurePremiumPreparation) {
+      (initialTemplate !== undefined || preparationPlanningAllowed);
+    if (educationalWriteNotice && !futurePlanPreparation) {
       setClassroomOpen(true);
       setAnnouncement(educationalWriteNotice);
       return;
@@ -6470,13 +6484,17 @@ export default function Prototype() {
           civilDateInIstanbul(requestNow),
         )
       : null;
-    const futurePremiumPreparation =
-      configuredClassroom !== null &&
-      requestOperationalStatus === "preparation" &&
-      command.premiumSource !== undefined &&
-      command.civilDate >= configuredClassroom.academicYearStart &&
-      command.civilDate <= configuredClassroom.academicYearEnd;
-    if (configuredClassroom && requestOperationalStatus !== "active" && !futurePremiumPreparation) {
+    const futurePlanPreparation = configuredClassroom !== null &&
+      isAcademicYearPlanWriteAllowed({
+        operationalStatus: requestOperationalStatus ?? "ended",
+        academicYearStart: configuredClassroom.academicYearStart,
+        academicYearEnd: configuredClassroom.academicYearEnd,
+        civilDate: command.civilDate,
+        hasPreparedPlanContext:
+          command.premiumSource !== undefined ||
+          command.teacherOwnedDailyFlowBlocks !== undefined,
+      });
+    if (configuredClassroom && !futurePlanPreparation) {
       throw new Error(
         academicYearOperationalNotice({
           status: requestOperationalStatus!,
@@ -6507,7 +6525,7 @@ export default function Prototype() {
         return created;
       },
       {
-        educationalWrite: command.premiumSource
+        educationalWrite: requestOperationalStatus === "preparation"
           ? { allowPreparationForCivilDate: command.civilDate }
           : {},
         ...(command.premiumSource
@@ -6583,13 +6601,17 @@ export default function Prototype() {
           civilDateInIstanbul(requestNow),
         )
       : null;
-    const futurePremiumPreparation =
-      configuredClassroom !== null &&
-      requestOperationalStatus === "preparation" &&
-      scheduledPlan?.premium === true &&
-      command.civilDate >= configuredClassroom.academicYearStart &&
-      command.civilDate <= configuredClassroom.academicYearEnd;
-    if (configuredClassroom && requestOperationalStatus !== "active" && !futurePremiumPreparation) {
+    const futurePlanPreparation = configuredClassroom !== null &&
+      isAcademicYearPlanWriteAllowed({
+        operationalStatus: requestOperationalStatus ?? "ended",
+        academicYearStart: configuredClassroom.academicYearStart,
+        academicYearEnd: configuredClassroom.academicYearEnd,
+        civilDate: command.civilDate,
+        hasPreparedPlanContext:
+          scheduledPlan?.premium === true ||
+          (scheduledPlan?.premium === false && scheduledPlan.flowBlockCount === 10),
+      });
+    if (configuredClassroom && !futurePlanPreparation) {
       throw new Error(
         academicYearOperationalNotice({
           status: requestOperationalStatus!,
@@ -6610,7 +6632,7 @@ export default function Prototype() {
     const result = await enqueuePersistence(
       () => updateScheduledPlanWithActivity(store, command),
       {
-        educationalWrite: scheduledPlan?.premium
+        educationalWrite: requestOperationalStatus === "preparation"
           ? { allowPreparationForCivilDate: command.civilDate }
           : {},
         ...(scheduledPlan?.premium
@@ -6966,7 +6988,7 @@ export default function Prototype() {
       });
       return;
     }
-    if (educationalWritesDisabled) {
+    if (planWritesDisabled) {
       setClassroomOpen(true);
       setAnnouncement(
         educationalWriteNotice ??
@@ -7401,6 +7423,8 @@ export default function Prototype() {
                   },
                 }}
                 educationalWritesDisabled={educationalWritesDisabled}
+                preparationPlanningAllowed={preparationPlanningAllowed}
+                preparationPlanningCivilDate={preparationPlanningWindow.defaultCivilDate}
                 dataBusy={dataBusy}
                 onOpenLevel={openPlanWorkbenchLevel}
                 onOpenCalendar={() => void openAcademicCalendar(attendanceCivilDate)}
@@ -8004,8 +8028,10 @@ export default function Prototype() {
                 {students.length === 0
                   ? "Kilitli · Önce Sınıfım bölümünden çocuk ekleyin"
                   : educationalWritesDisabled
-                    ? "Kilitli · Etkin bir eğitim yılı seçin"
-                  : "Çocuk veya grup seç → yaz → kaydet"}
+                    ? configuredClassroom?.operationalStatus === "preparation"
+                      ? `Kilitli · ${formatTurkishCivilDate(configuredClassroom.academicYearStart)} tarihinde açılır`
+                      : "Kilitli · Etkin bir eğitim yılı seçin"
+                    : "Çocuk veya grup seç → yaz → kaydet"}
               </small>
             </span>
             {educationalWritesDisabled || students.length === 0 ? (
@@ -8030,7 +8056,9 @@ export default function Prototype() {
                 {students.length === 0
                   ? "Kilitli · Önce sınıf listesini oluşturun"
                   : educationalWritesDisabled
-                    ? "Kilitli · Etkin bir eğitim yılı seçin"
+                    ? configuredClassroom?.operationalStatus === "preparation"
+                      ? `Kilitli · ${formatTurkishCivilDate(configuredClassroom.academicYearStart)} tarihinde açılır`
+                      : "Kilitli · Etkin bir eğitim yılı seçin"
                     : "Çocuklara dokunarak işaretle"}
               </small>
             </span>
@@ -8049,19 +8077,21 @@ export default function Prototype() {
               setCaptureMenuOpen(false);
               openPlanFlow();
             }}
-            disabled={educationalWritesDisabled}
+            disabled={planWritesDisabled}
             aria-describedby="capture-plan-readiness"
           >
             <ReaderIcon aria-hidden="true" />
             <span>
               <strong>Etkinlik planla</strong>
               <small id="capture-plan-readiness">
-                {educationalWritesDisabled
-                  ? "Kilitli · Etkin bir eğitim yılı seçin"
-                  : "Fikir seç → hedef seç → planı kaydet"}
+                {preparationPlanningAllowed
+                  ? `Açık · ${formatTurkishCivilDate(preparationPlanningWindow.defaultCivilDate!)} tarihinden itibaren yeni dönem planı hazırlayın`
+                  : planWritesDisabled
+                    ? "Kilitli · Plan için etkin veya hazırlanmış bir eğitim yılı seçin"
+                    : "Fikir seç → hedef seç → planı kaydet"}
               </small>
             </span>
-            {educationalWritesDisabled ? (
+            {planWritesDisabled ? (
               <LockClosedIcon className="capture-choice-lock" aria-hidden="true" />
             ) : (
               <ChevronRightIcon aria-hidden="true" />
@@ -8109,9 +8139,15 @@ export default function Prototype() {
                 <strong>
                   {students.length === 0
                     ? "Sınıf listesini oluştur"
-                    : "Eğitim yılını etkinleştir"}
+                    : configuredClassroom?.operationalStatus === "preparation"
+                      ? "Yeni dönem ayarlarını aç"
+                      : "Eğitim yılını etkinleştir"}
                 </strong>
-                <small>Kilitli kayıtların açılması için eksik adımı tamamla</small>
+                <small>
+                  {configuredClassroom?.operationalStatus === "preparation"
+                    ? `Yoklama ve gözlem ${formatTurkishCivilDate(configuredClassroom.academicYearStart)} tarihinde açılır`
+                    : "Kilitli kayıtların açılması için eksik adımı tamamla"}
+                </small>
               </span>
               <ChevronRightIcon aria-hidden="true" />
             </button>
@@ -8497,7 +8533,7 @@ export default function Prototype() {
         ) : null}
         {displayedPlanIsToday ? (
           <>
-            {educationalWritesDisabled ? (
+            {planWritesDisabled ? (
               <div
                 className="plans-create-readiness"
                 id="plans-create-readiness"
@@ -8506,7 +8542,7 @@ export default function Prototype() {
                 <LockClosedIcon aria-hidden="true" />
                 <span>
                   <strong>Günlük plan yazımı kilitli</strong>
-                  <small>Önce bugün etkin olan eğitim yılını seçin.</small>
+                  <small>Önce etkin veya hazırlanmış eğitim yılına haftalık plan bağlayın.</small>
                 </span>
                 <button
                   type="button"
@@ -8527,17 +8563,19 @@ export default function Prototype() {
               className="sheet-primary plans-create-button"
               type="button"
               onClick={() => openPlanFlow()}
-              disabled={educationalWritesDisabled}
+              disabled={planWritesDisabled}
               aria-describedby={
-                educationalWritesDisabled ? "plans-create-readiness" : undefined
+                planWritesDisabled ? "plans-create-readiness" : undefined
               }
             >
-              {educationalWritesDisabled ? (
+              {planWritesDisabled ? (
                 <LockClosedIcon aria-hidden="true" />
               ) : (
                 <PlusIcon aria-hidden="true" />
               )}
-              Günlük plan oluştur
+              {preparationPlanningAllowed
+                ? "Gelecek günlük planı oluştur"
+                : "Günlük plan oluştur"}
             </button>
           </>
         ) : null}
@@ -11372,7 +11410,7 @@ export default function Prototype() {
                 scheduledPlans={scheduledPlanWorkspace.plans}
                 initialLevel={teacherPlanRecordsInitialLevel}
                 contentPack={premiumFounderAccess?.pack ?? null}
-                educationalWritesDisabled={educationalWritesDisabled}
+                educationalWritesDisabled={planWritesDisabled}
                 educationalWriteNotice={educationalWriteNotice}
                 onClose={() => setTeacherPlanRecordsOpen(false)}
                 onOpenProviderLibrary={() => {
@@ -11563,7 +11601,11 @@ export default function Prototype() {
               )}
             >
               <PlanCreationFlow
-                civilDate={scheduledPlanEditDraft?.civilDate ?? todayWorkspace.civilDate}
+                civilDate={
+                  scheduledPlanEditDraft?.civilDate ??
+                  preparationPlanningWindow.defaultCivilDate ??
+                  todayWorkspace.civilDate
+                }
                 defaultStartTime={configuredClassroom.schedule.startTime}
                 defaultEndTime={configuredClassroom.schedule.endTime}
                 ageGroup={configuredClassroom.ageGroup ?? ""}

@@ -2,6 +2,16 @@ import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 
 async function ensureClassroomConfigured(page: Page) {
+  await page.waitForFunction(() => {
+    if (document.querySelector('[data-testid="persistence-gate"]')) return false;
+    const main = document.querySelector("main");
+    if (!main) return false;
+    const setupRequired = main.textContent?.includes("Sınıf kurulumu tamamlanmadı") ?? false;
+    if (!setupRequired) return true;
+    return [...document.querySelectorAll('[role="dialog"]')].some((dialog) =>
+      dialog.textContent?.includes("Sınıf kurulumu"),
+    );
+  });
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   if (await setup.isVisible().catch(() => false)) {
     await setup.getByLabel("Sınıf adı").fill("Kurgu Test Sınıfı");
@@ -24,16 +34,15 @@ async function ensureClassroomConfigured(page: Page) {
 }
 
 async function addChild(page: Page, name: string) {
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  if (!(await page.getByRole("main", { name: "Sınıfım" }).isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  }
   await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addSheet.getByLabel("Çocuğun adı").fill(name);
   await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(addSheet).toBeHidden();
   await expect(page.getByRole("button", { name: `${name} profilini aç` })).toBeVisible();
-  await page.getByRole("button", { name: `${name} için diğer işlemler` }).click();
-  await expect(page.getByRole("button", { name: `${name} çocuğunu sınıftan ayır` })).toBeVisible();
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
 async function openStudentActions(page: Page, name: string) {
@@ -68,12 +77,12 @@ async function createD1Observation(page: Page, text: string) {
 
 test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunur", async ({ page }) => {
   const childName = "Kurgu Çocuk Yeni";
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
   await addChild(page, "Kurgu Çocuk İkinci");
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openStudentActions(page, childName);
@@ -81,7 +90,7 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
   await openArchivedStudents(page);
   await expect(page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` })).toBeVisible();
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openArchivedStudents(page);
@@ -90,7 +99,7 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
   await expect(
     page.getByRole("button", { name: `${childName} çocuğunu sınıfa geri al` }),
   ).toHaveCount(0);
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openStudentActions(page, childName);
@@ -100,10 +109,12 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
 test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme veri kaybını önler", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(30_000);
   const childName = "Ada Kurgu";
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await expect(
@@ -126,6 +137,7 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   expect(await readFile(backupPath, "utf8")).not.toContain(childName);
 
   await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await createD1Observation(
     page,
     "Kurgu test gözlemi; yedek geri yükleme sonrasında kaldırılmalı.",
@@ -172,14 +184,14 @@ test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme ver
   await attendanceStudent.click();
   await page.getByRole("dialog").getByRole("button", { name: "Devam durumunu tamamla", exact: true }).click();
   await expect(page.locator(".sr-live")).toContainText("Yoklama tamamlandı.");
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geç geldi", { exact: true })).toBeVisible();
 });
 
 test("bozuk yedek mevcut veriye dokunmadan Türkçe hata verir", async ({ page }) => {
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await expect(
@@ -199,12 +211,13 @@ test("bozuk yedek mevcut veriye dokunmadan Türkçe hata verir", async ({ page }
 
 test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context, page }) => {
   const childName = "Çift Sekme Çocuğu";
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
   const stalePage = await context.newPage();
-  await stalePage.goto("/", { waitUntil: "networkidle" });
+  await stalePage.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(stalePage);
   await stalePage.getByRole("button", { name: /Bugünkü devam\s+0\/1 çocuk/ }).click();
   await expect(stalePage.getByRole("button", { name: new RegExp(childName) }).getByText("İşaretlenmedi", { exact: true })).toBeVisible();
@@ -225,7 +238,7 @@ test("ikinci sekmedeki gözlem eski devam durumunu geri ezmez", async ({ context
       .getByText(/1 gözlem$/),
   ).toBeVisible();
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }).click();
   await expect(page.getByRole("button", { name: new RegExp(childName) }).getByText("Geç geldi", { exact: true })).toBeVisible();
@@ -241,11 +254,11 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
   const homeLanguages = "Türkçe, İngilizce";
   const interests = "Yapılar kurma ve bahçedeki küçük canlıları inceleme";
 
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
 
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
   const childrenRail = page.getByRole("region", { name: /Sınıftaki çocuklar/i });
   await expect(childrenRail).toBeVisible();
   await childrenRail
@@ -265,7 +278,7 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
     .click();
   await expect(profileDialog).toBeHidden();
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   const reloadedChildrenRail = page.getByRole("region", { name: /Sınıftaki çocuklar/i });
@@ -328,12 +341,14 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
 test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güvenli metin aktarımı birlikte çalışır", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(25_000);
   const childName = `Arşiv İletişim ${testInfo.workerIndex + 1}`;
   const longObservation = `Uzun gözlem başlangıcı. ${"Ayrıntılı ve kesilmemiş gözlem cümlesi. ".repeat(90)}Uzun gözlem sonu.`;
 
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await createD1Observation(page, longObservation);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
@@ -387,9 +402,9 @@ test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güv
   await profile.getByRole("button", { name: "Profili kaydet" }).click();
   await expect(profile).toBeHidden();
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
   await page
     .getByRole("region", { name: /Sınıftaki çocuklar/i })
     .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
@@ -434,13 +449,13 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
   page,
 }) => {
   const childNames = ["Ece Toplu", "Arda Toplu", "Mina Toplu"];
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
   for (const childName of childNames) {
     await addChild(page, childName);
   }
 
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
   for (const childName of childNames) {
     await page
       .getByRole("region", { name: /Sınıftaki çocuklar/i })
@@ -461,9 +476,9 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
     page.getByRole("region", { name: /Sınıftaki çocuklar/i }).getByText(/1 gözlem$/),
   ).toHaveCount(3);
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
   await expect(
     page.getByRole("region", { name: /Sınıftaki çocuklar/i }).getByText(/1 gözlem$/),
   ).toHaveCount(3);
@@ -472,7 +487,7 @@ test("her çocuk için sade hızlı gözlem ayrı kaydedilir ve yeniden açılı
 test("Öğretmenin plan ve belge iş alanları ana navigasyondan erişilir", async ({
   page,
 }) => {
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
 
   await expect(page.getByRole("button", { name: "Planlar", exact: true })).toBeVisible();

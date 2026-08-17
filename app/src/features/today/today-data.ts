@@ -68,7 +68,7 @@ export function academicYearOperationalNotice(options: {
 }): string | null {
   if (options.status === "active") return null;
   if (options.status === "preparation") {
-    return `Hazırlık modu: eğitim yılı ${options.startDate} tarihinde başlayacak. Plan, yoklama ve gözlem için bugün etkin olan eğitim yılını seçin.`;
+    return `Hazırlık modu: gelecek planları şimdi hazırlayabilirsiniz. Yoklama, uygulama ve gözlem ${options.startDate} tarihinde açılır.`;
   }
   return `Bu eğitim yılı ${options.endDate} tarihinde sona erdi. Plan, yoklama ve gözlem için yeni veya bugün etkin olan eğitim yılını seçin.`;
 }

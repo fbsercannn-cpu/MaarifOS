@@ -55,7 +55,11 @@ function relationLabel(relation: "current" | "upcoming" | "past"): string {
 
 export function createPlanWorkbenchPresentation(
   workspace: TeacherWorkCycleWorkspace,
-  options: { educationalWritesDisabled?: boolean } = {},
+  options: {
+    educationalWritesDisabled?: boolean;
+    preparationPlanningAllowed?: boolean;
+    preparationPlanningCivilDate?: string | null;
+  } = {},
 ): PlanWorkbenchPresentation {
   const annual: PlanWorkbenchLevel = workspace.annual
     ? {
@@ -155,7 +159,19 @@ export function createPlanWorkbenchPresentation(
             ? "ready"
             : "current",
       }
-    : options.educationalWritesDisabled
+    : options.preparationPlanningAllowed
+      ? {
+          id: "daily",
+          label: "Gün",
+          title: "Yeni dönemin günlük planını hazırlayın",
+          detail: "Planı başlangıç tarihinden önce yazın; uygulama, yoklama ve gözlem plan gününde açılır.",
+          meta: civilDateLabel(
+            options.preparationPlanningCivilDate ?? workspace.civilDate,
+          ),
+          actionLabel: "Gelecek günlük planı oluştur",
+          tone: "attention",
+        }
+      : options.educationalWritesDisabled
       ? {
           id: "daily",
           label: "Gün",
@@ -185,7 +201,7 @@ export function createPlanWorkbenchPresentation(
         : null;
   const priorityLevel =
     hierarchyGap ??
-    (options.educationalWritesDisabled
+    (options.educationalWritesDisabled && !options.preparationPlanningAllowed
       ? daily
       : levels.find((level) => level.tone === "attention") ??
         levels.find((level) => level.tone === "current") ??
@@ -203,7 +219,9 @@ export function createPlanWorkbenchPresentation(
     priority: {
       levelId: priorityLevel.id,
       eyebrow:
-        priorityLevel.id === "daily" && options.educationalWritesDisabled
+        priorityLevel.id === "daily" &&
+          options.educationalWritesDisabled &&
+          !options.preparationPlanningAllowed
           ? "Günlük yazım bekliyor"
           : "Sıradaki planlama işi",
       title: priorityLevel.title,

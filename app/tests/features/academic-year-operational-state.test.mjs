@@ -27,7 +27,7 @@ test("hazırlık ve sona ermiş durumlar öğretmene eylem söyler", () => {
       startDate: "2026-09-01",
       endDate: "2027-08-31",
     }),
-    /Hazırlık modu.*etkin olan eğitim yılını seçin/,
+    /Hazırlık modu.*gelecek planları şimdi hazırlayabilirsiniz.*Yoklama, uygulama ve gözlem 2026-09-01 tarihinde açılır/,
   );
   assert.match(
     academicYearOperationalNotice({
