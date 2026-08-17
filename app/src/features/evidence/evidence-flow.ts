@@ -50,6 +50,7 @@ import {
 } from "./local-teacher-identity.ts";
 import { scheduledPlanIntegrityIssue } from "../planning/scheduled-plan-workspace.ts";
 import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
+import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 
 export {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
@@ -469,7 +470,14 @@ export async function createPlanWithActivity(
         !academicYear ||
         !isCivilDate(academicYear.startDate) ||
         !isCivilDate(academicYear.endDate) ||
-        input.civilDate < academicYear.startDate ||
+        input.civilDate <
+          academicYearEffectiveOperationalStart({
+            startDate: academicYear.startDate,
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.civilDate > academicYear.endDate
       ) {
         throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
@@ -1000,7 +1008,14 @@ export async function updateScheduledPlanWithActivity(
         !academicYear ||
         !isCivilDate(String(academicYear.startDate)) ||
         !isCivilDate(String(academicYear.endDate)) ||
-        input.civilDate < String(academicYear.startDate) ||
+        input.civilDate <
+          academicYearEffectiveOperationalStart({
+            startDate: String(academicYear.startDate),
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.civilDate > String(academicYear.endDate)
       ) {
         throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
@@ -1509,7 +1524,14 @@ export async function createCitedAssessmentDraft(
         !academicYear ||
         !isCivilDate(academicYear.startDate) ||
         !isCivilDate(academicYear.endDate) ||
-        input.periodStart < academicYear.startDate ||
+        input.periodStart <
+          academicYearEffectiveOperationalStart({
+            startDate: academicYear.startDate,
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.periodEnd > academicYear.endDate
       ) {
         throw new Error("Değerlendirme dönemi aktif eğitim yılının tarih aralığında olmalıdır.");

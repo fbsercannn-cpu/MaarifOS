@@ -53,6 +53,9 @@ test("belge çalışma alanı plan, aylık, anekdot ve öğrenci kaynaklarını 
     anecdoteReadyCount: 2,
     monthlyEvaluationCount: 1,
     planDocumentReady: true,
+    planMonthCount: 10,
+    planWeekCount: 44,
+    planDailyCount: 12,
   };
 
   const presentation = createDocumentWorkspacePresentation(workspace, {
@@ -65,7 +68,7 @@ test("belge çalışma alanı plan, aylık, anekdot ve öğrenci kaynaklarını 
   assert.equal(presentation.emptyCount, 0);
   assert.match(
     presentation.items.find(({ id }) => id === "plans")?.detail ?? "",
-    /4 hafta · 12 günlük plan/,
+    /10 ay · 44 hafta · 12 günlük plan/,
   );
   assert.equal(
     presentation.items.find(({ id }) => id === "anecdotes")?.tone,

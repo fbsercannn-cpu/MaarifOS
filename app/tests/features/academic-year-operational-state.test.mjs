@@ -20,6 +20,27 @@ test("eğitim yılı bugünle ilişkisine göre hazırlık, etkin ve sona ermiş
     "ended",
   );
 });
+
+test("öğretmenin operasyon başlangıcı dönem tarihini değiştirmeden kilidi açar", () => {
+  assert.equal(
+    academicYearOperationalStatus(
+      "2026-09-01",
+      "2027-08-31",
+      "2026-08-17",
+      "2026-08-17",
+    ),
+    "active",
+  );
+  assert.equal(
+    academicYearOperationalStatus(
+      "2026-09-01",
+      "2027-08-31",
+      "2026-08-16",
+      "2026-08-17",
+    ),
+    "preparation",
+  );
+});
 test("hazırlık ve sona ermiş durumlar öğretmene eylem söyler", () => {
   assert.match(
     academicYearOperationalNotice({
@@ -27,7 +48,7 @@ test("hazırlık ve sona ermiş durumlar öğretmene eylem söyler", () => {
       startDate: "2026-09-01",
       endDate: "2027-08-31",
     }),
-    /Hazırlık modu.*gelecek planları şimdi hazırlayabilirsiniz.*Yoklama, uygulama ve gözlem 2026-09-01 tarihinde açılır/,
+    /Yeni dönem hazır.*çalışmayı bugün başlatıp yoklama, uygulama ve gözlemi hemen kullanabilirsiniz.*2026-09-01/,
   );
   assert.match(
     academicYearOperationalNotice({

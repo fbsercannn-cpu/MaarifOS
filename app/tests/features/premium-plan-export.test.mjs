@@ -577,7 +577,7 @@ test("doğrulanmamış erişimi ve başka içerik sürümünü fail-closed redde
   );
 });
 
-test("premium plan merkezi Eylül kapsamını ve bekleyen öğretmen kararlarını dürüst dille gösterir", async () => {
+test("premium plan merkezi Eylül–Haziran omurgasını ve bekleyen öğretmen kararlarını dürüst dille gösterir", async () => {
   const source = await readFile(
     new URL(
       "../../src/features/premium-plans/PremiumPlanCenterScreen.tsx",
@@ -585,9 +585,12 @@ test("premium plan merkezi Eylül kapsamını ve bekleyen öğretmen kararların
     ),
     "utf8",
   );
-  assert.match(source, /Eylül plan paketi \+ yıllık omurga/);
-  assert.match(source, /Ekim–Haziran henüz yayımlanmadı/);
-  assert.match(source, /Henüz yayımlanmadı/);
+  assert.match(source, /Eylül–Haziran · 10 aylık omurga/);
+  assert.match(source, /pack\.annualMonths\.map/);
+  assert.match(source, /Bu ayı planla/);
+  assert.match(source, /onOpenTeacherMonth/);
+  assert.doesNotMatch(source, /Henüz yayımlanmadı/);
+  assert.match(source, /Her ay hemen planlanabilir/);
   assert.doesNotMatch(source, /Yıllık, aylık ve haftalık planlar sınıfa eklendi/);
   assert.match(source, /Önceki haftadan öğretmen kararı/);
   assert.match(source, /Henüz otomatik uygulanmadı/);

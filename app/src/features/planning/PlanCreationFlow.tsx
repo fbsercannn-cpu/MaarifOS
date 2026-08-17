@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircledIcon,
   ChevronDownIcon,
@@ -166,10 +166,21 @@ export function PlanCreationScreen({
   initialEdit?: ScheduledPlanEditDraft;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
 }) {
+  const introHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [ids] = useState(() => ({
     planId: initialEdit?.planId ?? crypto.randomUUID(),
     activityId: initialEdit?.activityId ?? crypto.randomUUID(),
   }));
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const heading = introHeadingRef.current;
+      if (!heading) return;
+      const scroll = heading.closest<HTMLElement>(".mobile-scroll");
+      if (scroll) scroll.scrollTop = 0;
+      heading.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const [planTitle, setPlanTitle] = useState(
     initialEdit?.planTitle ?? initialTemplate?.planTitle ?? "Günlük öğrenme planı",
   );
@@ -579,11 +590,12 @@ export function PlanCreationScreen({
   };
 
   return (
+    <>
     <MobileScroll className="d1-flow-scroll">
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">{initialEdit ? "Kayıtlı öğretmen planı" : "Günlük plan hazırlığı"}</span>
-          <h1>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği 10 bölümlü günlük akışınıza yerleştirin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
+          <h1 ref={introHeadingRef} tabIndex={-1}>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği 10 bölümlü günlük akışınıza yerleştirin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
           <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : teacherOwnedDailyFlowEnabled ? "Etkinlik, hedef ve çocuk kapsamından sonra 10 bölümü inceleyin; gerçek etkinliğin uygulanacağı bölümü seçip açıkça onaylayın." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
         </div>
 
@@ -595,45 +607,6 @@ export function PlanCreationScreen({
               ? "Resmî MEB kaynağıyla doğrulanmış program"
               : "Sınıf için seçilen program"}
           </em>
-        </section>
-
-        <section
-          className="plan-save-dock"
-          aria-label="Plan kaydetme durumu"
-          data-error={error ? "true" : "false"}
-        >
-          <div
-            id="plan-save-readiness"
-            className={
-              error
-                ? "plan-readiness is-error"
-                : saveReady
-                  ? "plan-readiness is-ready"
-                  : "plan-readiness"
-            }
-            role={error ? "alert" : "status"}
-            aria-live={error ? "assertive" : "polite"}
-            aria-atomic="true"
-          >
-            {!error && saveReady ? (
-              <CheckCircledIcon aria-hidden="true" />
-            ) : (
-              <ExclamationTriangleIcon aria-hidden="true" />
-            )}
-            <span>
-              <strong>{saveReadinessTitle}</strong>
-              <small>{saveReadinessDetail}</small>
-            </span>
-          </div>
-          <button
-            className="d1-primary"
-            type="button"
-            onClick={() => void save()}
-            disabled={saveDisabled}
-            aria-describedby="plan-save-readiness"
-          >
-            {busy ? "Kaydediliyor…" : initialEdit ? "Değişiklikleri kaydet" : initialTemplate ? "Tam gün planını kaydet" : "Planı kaydet"}
-          </button>
         </section>
 
         {premiumFlowDefinition.length > 0 ? (
@@ -1248,7 +1221,6 @@ export function PlanCreationScreen({
             onChange={(event) => setActivityTitle(event.target.value)}
             placeholder="Örn. Bahçede gölge incelemesi"
             autoComplete="off"
-            autoFocus
           />
 
           <details className="quick-details plan-optional-details">
@@ -1436,6 +1408,45 @@ export function PlanCreationScreen({
         </>}
       </div>
     </MobileScroll>
+    <section
+      className="plan-save-dock"
+      aria-label="Plan kaydetme durumu"
+      data-error={error ? "true" : "false"}
+    >
+      <div
+        id="plan-save-readiness"
+        className={
+          error
+            ? "plan-readiness is-error"
+            : saveReady
+              ? "plan-readiness is-ready"
+              : "plan-readiness"
+        }
+        role={error ? "alert" : "status"}
+        aria-live={error ? "assertive" : "polite"}
+        aria-atomic="true"
+      >
+        {!error && saveReady ? (
+          <CheckCircledIcon aria-hidden="true" />
+        ) : (
+          <ExclamationTriangleIcon aria-hidden="true" />
+        )}
+        <span>
+          <strong>{saveReadinessTitle}</strong>
+          <small>{saveReadinessDetail}</small>
+        </span>
+      </div>
+      <button
+        className="d1-primary"
+        type="button"
+        onClick={() => void save()}
+        disabled={saveDisabled}
+        aria-describedby="plan-save-readiness"
+      >
+        {busy ? "Kaydediliyor…" : initialEdit ? "Değişiklikleri kaydet" : initialTemplate ? "Tam gün planını kaydet" : "Planı kaydet"}
+      </button>
+    </section>
+    </>
   );
 }
 

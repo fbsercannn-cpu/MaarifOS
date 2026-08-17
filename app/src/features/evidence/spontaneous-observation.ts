@@ -9,6 +9,7 @@ import type {
   DataTransaction,
   LocalDataStore,
 } from "../../core/repository/contracts.ts";
+import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 
 export const SPONTANEOUS_OBSERVATION_PLAN_TYPE =
   "spontaneous-observation" as const;
@@ -198,7 +199,14 @@ export async function ensureSpontaneousObservationContext(
         !academicYear ||
         !isCivilDate(academicYear.startDate) ||
         !isCivilDate(academicYear.endDate) ||
-        input.civilDate < academicYear.startDate ||
+        input.civilDate <
+          academicYearEffectiveOperationalStart({
+            startDate: academicYear.startDate,
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.civilDate > academicYear.endDate
       ) {
         throw new Error(

@@ -47,6 +47,7 @@ export interface TodayScreenActions {
   onOpenSettings: () => void;
   onApplyReadyUpdate: () => void;
   onOpenClassroom: () => void;
+  onActivateAcademicYear: () => void | Promise<void>;
   onOpenAttendance: () => void;
   onOpenCalendar: () => void | Promise<void>;
   onOpenWeekDay: (civilDate: string) => void | Promise<void>;
@@ -508,8 +509,17 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
             </strong>
             <small id="academic-year-mode-copy">{educationalWriteNotice}</small>
           </span>
-          <button type="button" onClick={actions.onOpenClassroom}>
-            Eğitim yılını aç
+          <button
+            type="button"
+            onClick={
+              configuredClassroom?.operationalStatus === "preparation"
+                ? () => void actions.onActivateAcademicYear()
+                : actions.onOpenClassroom
+            }
+          >
+            {configuredClassroom?.operationalStatus === "preparation"
+              ? "Çalışmayı bugün başlat"
+              : "Eğitim yılı ayarlarını aç"}
           </button>
         </section>
       ) : null}
@@ -535,8 +545,12 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
                 <strong>Hazırlık modu açık</strong>
                 <small id="academic-year-mode-copy">{educationalWriteNotice}</small>
               </span>
-              <button type="button" onClick={actions.onOpenClassroom}>
-                Eğitim yılını aç
+              <button
+                type="button"
+                disabled={dataBusy}
+                onClick={() => void actions.onActivateAcademicYear()}
+              >
+                Çalışmayı bugün başlat
               </button>
             </div>
           ) : null}
@@ -566,7 +580,13 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
         <button
           type="button"
           className="marif-teacher-agent-action"
-          onClick={() => runMarifAction(marifBrief.action)}
+          onClick={() => {
+            if (preparationNoticeIntegrated) {
+              void actions.onActivateAcademicYear();
+              return;
+            }
+            runMarifAction(marifBrief.action);
+          }}
           disabled={dataBusy}
         >
           {marifBrief.actionLabel}
@@ -1075,7 +1095,7 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
             <small>Premium · yıllık · aylık · haftalık · günlük</small>
             <strong id="premium-entry-title">Plan Kütüphanesi</strong>
           </span>
-          <button type="button" onClick={actions.onOpenPremiumPlans}>
+          <button type="button" onClick={() => actions.onOpenPremiumPlans()}>
             Planları aç <ChevronRightIcon aria-hidden="true" />
           </button>
         </section>

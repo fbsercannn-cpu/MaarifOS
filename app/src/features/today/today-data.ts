@@ -18,6 +18,7 @@ import {
 } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import { migrateLegacyClassroomScopes } from "../../core/migrations/classroom-scope-migration.ts";
+import { migrateLegacyAcademicYearOperationalStart } from "../../core/migrations/academic-year-operational-migration.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import {
   normalizeCurriculumProfile,
@@ -31,6 +32,11 @@ import {
 } from "../archive/academic-year-archive.ts";
 import { isAuthenticSpontaneousObservationActivity } from "../evidence/spontaneous-observation-integrity.ts";
 import { isTeacherOwnedDailyFlow } from "../../core/domain/teacher-owned-daily-flow.ts";
+import {
+  academicYearEffectiveOperationalStart,
+  academicYearOperationalStatus,
+  type AcademicYearOperationalStatus,
+} from "../../core/domain/academic-year-operational.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
@@ -40,26 +46,8 @@ export type TodayPlanItemKind =
   | "premium-flow-block"
   | "teacher-flow-block";
 export type TodayFlowBlockStatus = "planned" | "optional" | "skipped";
-export type AcademicYearOperationalStatus =
-  | "active"
-  | "preparation"
-  | "ended";
-
-export function academicYearOperationalStatus(
-  startDate: string,
-  endDate: string,
-  civilDate: string,
-): AcademicYearOperationalStatus {
-  if (!isCivilDate(startDate) || !isCivilDate(endDate) || !isCivilDate(civilDate)) {
-    throw new Error("Eğitim yılı çalışma durumu için geçerli tarihler gereklidir.");
-  }
-  if (startDate > endDate) {
-    throw new Error("Eğitim yılı bitiş tarihi başlangıç tarihinden önce olamaz.");
-  }
-  if (civilDate < startDate) return "preparation";
-  if (civilDate > endDate) return "ended";
-  return "active";
-}
+export { academicYearOperationalStatus };
+export type { AcademicYearOperationalStatus };
 
 export function academicYearOperationalNotice(options: {
   status: AcademicYearOperationalStatus;
@@ -68,7 +56,7 @@ export function academicYearOperationalNotice(options: {
 }): string | null {
   if (options.status === "active") return null;
   if (options.status === "preparation") {
-    return `Hazırlık modu: gelecek planları şimdi hazırlayabilirsiniz. Yoklama, uygulama ve gözlem ${options.startDate} tarihinde açılır.`;
+    return `Yeni dönem hazır. Planlamaya devam edebilir veya çalışmayı bugün başlatıp yoklama, uygulama ve gözlemi hemen kullanabilirsiniz. Takvim başlangıcı ${options.startDate}.`;
   }
   return `Bu eğitim yılı ${options.endDate} tarihinde sona erdi. Plan, yoklama ve gözlem için yeni veya bugün etkin olan eğitim yılını seçin.`;
 }
@@ -80,6 +68,7 @@ export type ClassroomContext =
       academicYearId: string;
       academicYearName: string;
       academicYearStart: string;
+      academicYearOperationalStart?: string;
       academicYearEnd: string;
       operationalStatus: AcademicYearOperationalStatus;
       classroomId: string;
@@ -148,6 +137,10 @@ export interface TransitionAcademicYearConfigurationInput
   extends SaveClassroomConfigurationInput {
   carryStudentIds: readonly string[];
   closedOn: string;
+}
+
+export interface ActivateAcademicYearNowInput {
+  now?: Date;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -263,11 +256,17 @@ function classroomContext(
     academicYearId: classroom.academicYearId,
     academicYearName: academicYear.name.trim(),
     academicYearStart: academicYear.startDate,
+    ...(isCivilDate(academicYear.operationalStartDate)
+      ? { academicYearOperationalStart: academicYear.operationalStartDate }
+      : {}),
     academicYearEnd: academicYear.endDate,
     operationalStatus: academicYearOperationalStatus(
       academicYear.startDate,
       academicYear.endDate,
       civilDate,
+      isCivilDate(academicYear.operationalStartDate)
+        ? academicYear.operationalStartDate
+        : undefined,
     ),
     classroomId: classroom.id,
     classroomName: classroom.name.trim(),
@@ -694,6 +693,7 @@ export async function loadPlanDayWorkspace(
     throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
   }
   await migrateLegacyClassroomScopes(store, { now: options.now });
+  await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
   return resolvePlanDayWorkspace(await store.readSnapshot(), options.civilDate);
 }
 
@@ -702,6 +702,7 @@ export async function loadTodayWorkspace(
   options: { now?: Date } = {},
 ): Promise<TodayWorkspace> {
   await migrateLegacyClassroomScopes(store, { now: options.now });
+  await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
   return resolveTodayWorkspace(await store.readSnapshot(), options.now ?? new Date());
 }
 
@@ -1113,6 +1114,100 @@ export async function transitionAcademicYearConfiguration(
   const context = (await loadTodayWorkspace(store, { now })).classroom;
   if (context.status !== "configured") {
     throw new Error("Yeni eğitim yılı oluşturuldu ancak etkin sınıf okunamadı.");
+  }
+  return context;
+}
+
+/**
+ * Öğretmen, resmî/veri takvimi başlangıcını değiştirmeden seçili dönemi bu
+ * cihazda gerçek kayıt kullanımına açabilir. Yalnız operasyon başlangıcı ve
+ * denetim izi yazılır; dönem tarihleri ile öğrenci üyelikleri korunur.
+ */
+export async function activateAcademicYearNow(
+  store: LocalDataStore,
+  input: ActivateAcademicYearNowInput = {},
+): Promise<ClassroomContext> {
+  const now = input.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Geçerli bir çalışma başlangıç zamanı gerekli.");
+  }
+  const timestamp = now.toISOString();
+  const civilDate = civilDateInIstanbul(now);
+
+  await store.transaction(
+    "readwrite",
+    ["academicYears", "classrooms", "settings", "auditLogs"],
+    async (transaction) => {
+      const [academicYears, classrooms, settings] =
+        await Promise.all([
+          transaction.getAll("academicYears"),
+          transaction.getAll("classrooms"),
+          transaction.getAll("settings"),
+        ]);
+      const scope = resolveActiveClassroomScope({
+        academicYears,
+        classrooms,
+        settings,
+      });
+      if (!scope) {
+        throw new Error("Çalışmayı başlatmak için etkin sınıf bulunmalıdır.");
+      }
+      const academicYear = academicYears.find(
+        (record) => record.id === scope.academicYearId,
+      );
+      if (
+        !academicYear ||
+        academicYear.status === "archived" ||
+        typeof academicYear.deletedAt === "string" ||
+        !isCivilDate(academicYear.startDate) ||
+        !isCivilDate(academicYear.endDate)
+      ) {
+        throw new Error("Etkin eğitim yılı doğrulanamadı.");
+      }
+      if (civilDate > academicYear.endDate) {
+        throw new Error("Sona ermiş eğitim yılı bugün için yeniden açılamaz.");
+      }
+      const effectiveStart = academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        operationalStartDate:
+          typeof academicYear.operationalStartDate === "string"
+            ? academicYear.operationalStartDate
+            : undefined,
+      });
+      if (civilDate >= effectiveStart) return;
+
+      await transaction.putMany("academicYears", [
+        {
+          ...academicYear,
+          operationalStartDate: civilDate,
+          operationalStartedAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ]);
+      await transaction.putMany("auditLogs", [
+        {
+          id: crypto.randomUUID(),
+          action: "academic-year-activated-early",
+          entityType: "academicYear",
+          entityId: scope.academicYearId,
+          classroomId: scope.classroomId,
+          metadata: {
+            dataStartDate: academicYear.startDate,
+            operationalStartDate: civilDate,
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        },
+      ]);
+    },
+  );
+
+  const context = (await loadTodayWorkspace(store, { now })).classroom;
+  if (context.status !== "configured" || context.operationalStatus !== "active") {
+    throw new Error("Eğitim yılı başlatıldı ancak çalışma alanı yeniden açılamadı.");
   }
   return context;
 }

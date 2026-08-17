@@ -128,7 +128,47 @@
   border: 1px solid #e2e6e3;
   border-radius: 14px;
 }
+.teacher-owned-plan-tree > article.teacher-owned-plan-month-card {
+  gap: 0;
+  padding: 0;
+  overflow: clip;
+}
+.teacher-owned-plan-month-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 76px;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.teacher-owned-plan-month-toggle > span { display: grid; gap: 3px; min-width: 0; }
+.teacher-owned-plan-month-toggle strong,
+.teacher-owned-plan-month-toggle span { overflow-wrap: anywhere; }
+.teacher-owned-plan-month-toggle > svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 160ms ease;
+}
+.teacher-owned-plan-month-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.teacher-owned-plan-month-state { color: #2b7568 !important; font-size: 11px !important; font-weight: 750; }
+.teacher-owned-plan-month-panel { display: grid; gap: 10px; padding: 0 12px 12px; }
+.teacher-owned-plan-month-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.teacher-owned-plan-month-actions > button {
+  min-height: 44px;
+  border: 1px solid #b9cbc6;
+  border-radius: 11px;
+  background: #fff;
+  color: #245f55;
+  font-weight: 750;
+}
 .teacher-owned-plan-tree > article.is-focused { border-color: #2b8a7a; background: #f0f8f5; }
+.teacher-owned-plan-tree > article:focus { outline: 3px solid rgb(43 138 122 / 28%); outline-offset: 2px; }
+.teacher-owned-plan-tree > article[tabindex="-1"] { scroll-margin-top: 76px; }
 .teacher-owned-plan-tree article small { color: #687487; }
 .teacher-owned-plan-tree article span { color: #566478; font-size: 12px; }
 .teacher-owned-plan-tree > article > button,
@@ -272,6 +312,10 @@
   padding: 9px 10px;
 }
 
+@media (max-width: 390px) {
+  .teacher-owned-plan-month-actions { grid-template-columns: 1fr; }
+}
+
 .teacher-owned-plan-carry {
   display: grid;
   gap: 4px;
@@ -412,6 +456,62 @@
   background: #fbfcfb;
 }
 
+.teacher-owned-monthly-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #d8e0dd;
+  border-radius: 14px;
+  background: #f3f6f5;
+}
+
+.teacher-owned-monthly-steps button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  min-height: 48px;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #53645f;
+  text-align: left;
+}
+
+.teacher-owned-monthly-steps button > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e0e8e5;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teacher-owned-monthly-steps button > strong {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.teacher-owned-monthly-steps button[aria-current="step"] {
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(25, 72, 60, 0.12);
+  color: #164f43;
+}
+
+.teacher-owned-monthly-steps button[aria-current="step"] > span {
+  background: #168573;
+  color: #fff;
+}
+
+.teacher-owned-monthly-step-panel {
+  display: grid;
+  gap: 10px;
+}
+
 .teacher-owned-plan-coverage {
   display: grid;
   gap: 4px;
@@ -520,7 +620,52 @@
   font-size: 12px;
 }
 
+.teacher-owned-full-year-status {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #b8d7cd;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #eff8f5 0%, #fffaf0 100%);
+}
+
+.teacher-owned-full-year-status > div,
+.teacher-owned-full-year-status strong,
+.teacher-owned-full-year-status span,
+.teacher-owned-full-year-status small {
+  display: block;
+}
+
+.teacher-owned-full-year-status span,
+.teacher-owned-full-year-status small {
+  margin-top: 4px;
+  color: #53645f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.teacher-owned-full-year-status label {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.teacher-owned-full-year-status input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
 @media (max-width: 390px) {
+  .teacher-owned-monthly-steps button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
   .teacher-owned-plan-criteria label {
     grid-template-columns: 1fr;
   }

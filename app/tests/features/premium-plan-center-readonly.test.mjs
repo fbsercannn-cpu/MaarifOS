@@ -67,7 +67,7 @@ test("lens, haftalık ve aylık kalıcı yazımları entitlement'ı işlem anın
 test("erişim kapanınca düzenleme kontrolleri fail-closed olurken kurulu plan inceleme yolları açık kalır", () => {
   assert.match(
     screenSource,
-    /disabled=\{busy \|\| readOnlyPresentation\.mutationsBlocked\}/,
+    /disabled=\{[\s\S]{0,100}busy \|\|[\s\S]{0,100}readOnlyPresentation\.mutationsBlocked[\s\S]{0,100}!lensPreferenceDirty/,
     "lens tercihi kaydı salt-okunur durumda kapanmalı",
   );
   assert.match(

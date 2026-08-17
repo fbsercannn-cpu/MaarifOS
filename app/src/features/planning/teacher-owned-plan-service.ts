@@ -30,6 +30,7 @@ import {
   type CreateTeacherOwnedPlanGraphInput,
   type TeacherOwnedAnnualPlan,
   type TeacherOwnedMonthlyPlan,
+  type TeacherOwnedMonthlyPlanDraft,
   type TeacherOwnedPlanGraph,
   type TeacherOwnedPlanRecord,
   type TeacherOwnedWeeklyPlanDraft,
@@ -84,6 +85,13 @@ export type TeacherOwnedDailyPlanWithFlow = StoredRecord & {
 
 export interface LoadTeacherOwnedPlanGraphInput {
   annualPlanId?: string;
+}
+
+export interface AppendTeacherOwnedPlanMonthsInput {
+  annualPlanId: string;
+  expectedUpdatedAt: string;
+  months: readonly TeacherOwnedMonthlyPlanDraft[];
+  now?: Date;
 }
 
 export interface TeacherOwnedPlanStarterDraft {
@@ -825,6 +833,181 @@ export async function loadTeacherOwnedPlanGraph(
       const scope = await activeScopeInTransaction(transaction);
       const plans = await transaction.getAll("plans");
       return graphFromRecords(activeTeacherPlans(plans, scope), input.annualPlanId);
+    },
+  );
+}
+
+/**
+ * Mevcut öğretmen yıllık planına eksik aylık ve haftalık omurgaları tek
+ * transaction içinde ekler. Var olan ayları veya kayıt kimliklerini yeniden
+ * üretmez; yıllık üst kaydı optimistic concurrency ile revize eder.
+ */
+export async function appendTeacherOwnedPlanMonths(
+  store: LocalDataStore,
+  input: AppendTeacherOwnedPlanMonthsInput,
+): Promise<TeacherOwnedPlanGraph> {
+  if (!UUID_PATTERN.test(input.annualPlanId)) {
+    fail("invalid-input", "Yıllık plan kimliği UUID biçiminde olmalıdır.");
+  }
+  requiredText(input.expectedUpdatedAt, "Beklenen yıllık plan güncelleme zamanı");
+  if (!Array.isArray(input.months) || input.months.length === 0) {
+    fail("invalid-input", "Eklenecek en az bir aylık plan gereklidir.");
+  }
+  const timestamp = validTimestamp(input.now ?? new Date());
+  return store.transaction(
+    "readwrite",
+    ["academicYears", "classrooms", "settings", "plans"],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [academicYears, storedPlans] = await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("plans"),
+      ]);
+      const academicYear = academicYears.find(
+        (record) =>
+          record.id === scope.academicYearId &&
+          typeof record.deletedAt !== "string",
+      );
+      if (!academicYear) {
+        fail("active-scope-required", "Etkin eğitim yılı bulunamadı.");
+      }
+      const existing = activeTeacherPlans(storedPlans, scope);
+      const graph = graphFromRecords(existing, input.annualPlanId);
+      if (!graph) {
+        fail("plan-not-found", "Genişletilecek yıllık öğretmen planı bulunamadı.");
+      }
+      if (graph.annual.updatedAt !== input.expectedUpdatedAt) {
+        fail(
+          "concurrent-update",
+          "Yıllık plan başka bir işlemde güncellendi; son sürüm yüklenmeden ay eklenmedi.",
+        );
+      }
+      if (Date.parse(timestamp) <= Date.parse(graph.annual.updatedAt)) {
+        fail(
+          "invalid-input",
+          "Ay ekleme zamanı yıllık planın son güncelleme zamanından sonra olmalıdır.",
+        );
+      }
+      const existingMonthKeys = new Set(
+        graph.months.map(({ monthly }) => monthly.monthKey),
+      );
+      if (input.months.some((month) => existingMonthKeys.has(month.monthKey))) {
+        fail(
+          "duplicate-or-overlap",
+          "Yıllık planda bulunan bir ay ikinci kez eklenemez.",
+        );
+      }
+      const combinedDrafts: TeacherOwnedMonthlyPlanDraft[] = [
+        ...graph.months.map(({ monthly, weeks }) => ({
+          title: monthly.title,
+          monthKey: monthly.monthKey,
+          periodStart: monthly.periodStart,
+          periodEnd: monthly.periodEnd,
+          teacherContent: structuredClone(monthly.teacherContent),
+          weeks: weeks.map((week) => ({
+            title: week.title,
+            weekKey: week.weekKey,
+            periodStart: week.periodStart,
+            periodEnd: week.periodEnd,
+            teacherContent: structuredClone(week.teacherContent),
+          })),
+        })),
+        ...input.months.map((month) => structuredClone(month)),
+      ].sort((left, right) => left.periodStart.localeCompare(right.periodStart));
+      validateCreationInput(
+        {
+          title: graph.annual.title,
+          periodStart: graph.annual.periodStart,
+          periodEnd: graph.annual.periodEnd,
+          teacherContent: graph.annual.teacherContent,
+          months: combinedDrafts,
+        },
+        academicYear,
+      );
+
+      const newMonthGroups = input.months.map((month) => {
+        const monthlyId = crypto.randomUUID();
+        const weeklyIds = month.weeks.map(() => crypto.randomUUID());
+        const base = {
+          planOrigin: TEACHER_AUTHORED_PLAN_ORIGIN,
+          status: "active" as const,
+          academicYearId: graph.annual.academicYearId,
+          classroomId: graph.annual.classroomId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+          schemaVersion: TEACHER_OWNED_PLAN_SCHEMA_VERSION,
+          revisionNumber: 1,
+          revisionHistory: [],
+        };
+        const monthly: TeacherOwnedMonthlyPlan = {
+          ...base,
+          id: monthlyId,
+          planType: "monthly",
+          annualPlanId: graph.annual.id,
+          title: requiredText(month.title, "Aylık plan başlığı"),
+          monthKey: month.monthKey,
+          periodStart: month.periodStart,
+          periodEnd: month.periodEnd,
+          civilDate: month.periodStart,
+          teacherContent: cloneContent(month.teacherContent, "Aylık plan içeriği"),
+          weeklySectionIds: weeklyIds,
+        };
+        const weeks: TeacherOwnedWeeklyPlan[] = month.weeks.map(
+          (week, index) => ({
+            ...base,
+            id: weeklyIds[index]!,
+            planType: "weekly",
+            annualPlanId: graph.annual.id,
+            monthlyPlanId: monthlyId,
+            title: requiredText(week.title, "Haftalık plan başlığı"),
+            weekKey: requiredText(week.weekKey, "Haftalık plan anahtarı"),
+            periodStart: week.periodStart,
+            periodEnd: week.periodEnd,
+            civilDate: week.periodStart,
+            teacherContent: cloneContent(week.teacherContent, "Haftalık plan içeriği"),
+            weeklyEvaluations: [],
+            nextPlanDecisionRequired: true,
+          }),
+        );
+        return { monthly, weeks };
+      });
+      const idByMonthKey = new Map([
+        ...graph.months.map(({ monthly }) => [monthly.monthKey, monthly.id] as const),
+        ...newMonthGroups.map(({ monthly }) => [monthly.monthKey, monthly.id] as const),
+      ]);
+      const nextAnnual: TeacherOwnedAnnualPlan = {
+        ...cloneTeacherOwnedPlan(graph.annual),
+        monthlySectionIds: combinedDrafts.map((month) => idByMonthKey.get(month.monthKey)!),
+        revisionNumber: graph.annual.revisionNumber + 1,
+        revisionHistory: [
+          ...graph.annual.revisionHistory.map((snapshot) => structuredClone(snapshot)),
+          {
+            revisionNumber: graph.annual.revisionNumber,
+            title: graph.annual.title,
+            teacherContent: structuredClone(graph.annual.teacherContent),
+            periodStart: graph.annual.periodStart,
+            periodEnd: graph.annual.periodEnd,
+            updatedAt: graph.annual.updatedAt,
+            capturedAt: timestamp,
+          },
+        ],
+        updatedAt: timestamp,
+      };
+      const newRecords: TeacherOwnedPlanRecord[] = newMonthGroups.flatMap(
+        ({ monthly, weeks }) => [monthly, ...weeks],
+      );
+      await transaction.putMany("plans", [nextAnnual, ...newRecords]);
+      const result = graphFromRecords(
+        [
+          ...existing.filter((record) => record.id !== graph.annual.id),
+          nextAnnual,
+          ...newRecords,
+        ],
+        nextAnnual.id,
+      );
+      if (!result) fail("graph-integrity", "Yıllık plan ayları yeniden yüklenemedi.");
+      return result;
     },
   );
 }

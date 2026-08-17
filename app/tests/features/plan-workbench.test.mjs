@@ -156,11 +156,58 @@ test("hazırlık modunda gelecek günlük planını açar, yoklama ve gözlem va
   });
   const daily = presentation.levels.find(({ id }) => id === "daily");
 
-  assert.equal(daily?.title, "Yeni dönemin günlük planını hazırlayın");
-  assert.equal(daily?.actionLabel, "Gelecek günlük planı oluştur");
+  assert.equal(daily?.title, "İlk öğretim gününün planını hazırlayın");
+  assert.equal(daily?.actionLabel, "İlk gün planını oluştur");
   assert.match(daily?.detail ?? "", /uygulama, yoklama ve gözlem plan gününde açılır/);
   assert.equal(presentation.priority.levelId, "daily");
   assert.equal(presentation.priority.eyebrow, "Sıradaki planlama işi");
+});
+
+test("operasyon erken açılmış olsa da yaklaşan haftada bugünü plan günü gibi sunmaz", () => {
+  const workspace = emptyTeacherWorkCycle("2026-08-17");
+  workspace.status = "ready";
+  workspace.annual = {
+    id: "annual-1",
+    title: "2026–2027 Yıllık Plan",
+    periodStart: "2026-09-01",
+    periodEnd: "2027-08-31",
+    relation: "upcoming",
+  };
+  workspace.monthly = {
+    id: "month-1",
+    title: "Eylül Aylık Planı",
+    periodStart: "2026-09-01",
+    periodEnd: "2026-09-30",
+    relation: "upcoming",
+    weeklyPlanCount: 2,
+    dailyPlanCount: 0,
+    observationCount: 0,
+    linkedObservationCount: 0,
+    evaluationCount: 0,
+  };
+  workspace.weekly = {
+    id: "week-1",
+    title: "1 Eylül – 6 Eylül Haftası",
+    periodStart: "2026-09-01",
+    periodEnd: "2026-09-06",
+    relation: "upcoming",
+    dailyPlanCount: 0,
+    observationCount: 0,
+    linkedObservationCount: 0,
+    evaluationCount: 0,
+  };
+
+  const presentation = createPlanWorkbenchPresentation(workspace, {
+    educationalWritesDisabled: false,
+    upcomingPlanningCivilDate: "2026-09-01",
+  });
+  const daily = presentation.levels.find(({ id }) => id === "daily");
+
+  assert.equal(daily?.title, "İlk öğretim gününün planını hazırlayın");
+  assert.equal(daily?.meta, "1 Eyl 2026");
+  assert.equal(daily?.actionLabel, "İlk gün planını oluştur");
+  assert.doesNotMatch(daily?.title ?? "", /Bugünün/);
+  assert.equal(presentation.priority.levelId, "daily");
 });
 
 test("Planlar alt navigasyonu kalıcı route açar; gün planı ayrıntısı ayrı yüzeydir", async () => {

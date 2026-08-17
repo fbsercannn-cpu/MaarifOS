@@ -33,6 +33,12 @@ export interface AcademicYearRecord extends StoredRecord {
   name: string;
   startDate: string;
   endDate: string;
+  operationalStartDate?: string;
+  operationalStartedAt?: string;
+  /** @deprecated yalnız eski prototip kaydını migrasyonda okumak içindir */
+  officialStartDate?: string;
+  /** @deprecated yalnız eski prototip kaydını migrasyonda okumak içindir */
+  activatedEarlyAt?: string;
   status?: "active" | "archived";
   archivedAt?: string;
   closedOn?: string;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
   CalendarIcon,
@@ -11,6 +11,7 @@ import {
 
 import type {
   CreateTeacherOwnedPlanGraphInput,
+  TeacherOwnedMonthlyPlanDraft,
   TeacherNextPlanDecision,
   TeacherOwnedPlanGraph,
   TeacherOwnedPlanRecord,
@@ -47,6 +48,7 @@ import {
   loadTeacherOwnedPlanStarterDraft,
   loadTeacherMonthlyReviewContext,
   loadTeacherWeeklyReviewContext,
+  type AppendTeacherOwnedPlanMonthsInput,
   type ReviewTeacherWeeklyCarryInput,
   type ReviewTeacherMonthlyCarryInput,
   type RecordTeacherMonthlyEvaluationInput,
@@ -56,6 +58,7 @@ import {
   type TeacherMonthlyReviewContext,
   type TeacherWeeklyReviewContext,
 } from "./teacher-owned-plan-service.ts";
+import { buildTeacherFullYearMonthDrafts } from "./teacher-year-outline.ts";
 import "./teacher-owned-plan.css";
 
 export interface TeacherOwnedPlanScreenProps {
@@ -63,6 +66,7 @@ export interface TeacherOwnedPlanScreenProps {
   workspace: TeacherWorkCycleWorkspace;
   scheduledPlans: readonly ScheduledPlanSummary[];
   initialLevel: Exclude<PlanWorkbenchLevelId, "daily">;
+  initialMonthKey?: string | null;
   contentPack?: PremiumContentPack | null;
   educationalWritesDisabled?: boolean;
   educationalWriteNotice?: string | null;
@@ -71,6 +75,9 @@ export interface TeacherOwnedPlanScreenProps {
   onViewDailyPlan(plan: ScheduledPlanSummary): void;
   onEditDailyPlan(plan: ScheduledPlanSummary): void;
   onCreatePlanGraph(input: CreateTeacherOwnedPlanGraphInput): Promise<TeacherOwnedPlanGraph>;
+  onAppendPlanMonths(
+    input: AppendTeacherOwnedPlanMonthsInput,
+  ): Promise<TeacherOwnedPlanGraph>;
   onRevisePlan(input: ReviseTeacherOwnedPlanInput): Promise<TeacherOwnedPlanRecord>;
   onRecordWeeklyEvaluation(
     input: RecordTeacherWeeklyEvaluationInput,
@@ -135,6 +142,7 @@ export function TeacherOwnedPlanScreen({
   workspace,
   scheduledPlans,
   initialLevel,
+  initialMonthKey = null,
   contentPack = null,
   educationalWritesDisabled = false,
   educationalWriteNotice = null,
@@ -143,6 +151,7 @@ export function TeacherOwnedPlanScreen({
   onViewDailyPlan,
   onEditDailyPlan,
   onCreatePlanGraph,
+  onAppendPlanMonths,
   onRevisePlan,
   onRecordWeeklyEvaluation,
   onReviewWeeklyCarry,
@@ -173,6 +182,8 @@ export function TeacherOwnedPlanScreen({
   const [documentPreviewBusy, setDocumentPreviewBusy] = useState(false);
   const [documentApproved, setDocumentApproved] = useState(false);
   const [message, setMessage] = useState("");
+  const [fullYearOutlineConfirmed, setFullYearOutlineConfirmed] = useState(false);
+  const [expandedMonthId, setExpandedMonthId] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<TeacherOwnedPlanRecord | null>(null);
   const [revisionTitle, setRevisionTitle] = useState("");
   const [revisionNarrative, setRevisionNarrative] = useState("");
@@ -201,6 +212,9 @@ export function TeacherOwnedPlanScreen({
   const [monthlyProgramNarrative, setMonthlyProgramNarrative] = useState("");
   const [monthlyTeacherNarrative, setMonthlyTeacherNarrative] = useState("");
   const [monthlyNextRecommendation, setMonthlyNextRecommendation] = useState("");
+  const [monthlyReviewStep, setMonthlyReviewStep] = useState<
+    "children" | "program" | "teacher"
+  >("children");
   const [monthlyCarryReviewPlan, setMonthlyCarryReviewPlan] =
     useState<TeacherOwnedPlanRecord | null>(null);
   const [monthlyCarryReviewBusy, setMonthlyCarryReviewBusy] = useState(false);
@@ -213,6 +227,31 @@ export function TeacherOwnedPlanScreen({
   const [monthlyTeacherCriteria, setMonthlyTeacherCriteria] = useState<
     TeacherMonthlyCriterionResponse[]
   >(() => defaultMonthlyCriteria(TEACHER_MONTHLY_TEACHER_CRITERIA));
+  const initialMonthRef = useRef<HTMLElement | null>(null);
+  const weeklyReviewRef = useRef<HTMLElement | null>(null);
+  const monthlyReviewRef = useRef<HTMLElement | null>(null);
+  const weeklyReviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const monthlyReviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (contentPack) {
+      setPack(contentPack);
+      return () => {
+        active = false;
+      };
+    }
+    void loadPremiumPilotPreviewPack()
+      .then((loadedPack) => {
+        if (active) setPack(loadedPack);
+      })
+      .catch(() => {
+        if (active) setPack(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [contentPack]);
 
   useEffect(() => {
     let active = true;
@@ -272,6 +311,71 @@ export function TeacherOwnedPlanScreen({
   );
   const monthlyDocumentOptions = teacherGraph?.months.map(({ monthly }) => monthly) ?? [];
   const weeklyDocumentOptions = teacherGraph?.months.flatMap(({ weeks }) => weeks) ?? [];
+  const fullYearMonthDrafts = useMemo<readonly TeacherOwnedMonthlyPlanDraft[]>(() => {
+    const annualPeriodStart = teacherGraph?.annual.periodStart ?? starter?.annualPeriodStart;
+    const annualPeriodEnd = teacherGraph?.annual.periodEnd ?? starter?.annualPeriodEnd;
+    if (!pack || !annualPeriodStart || !annualPeriodEnd) return [];
+    return buildTeacherFullYearMonthDrafts({
+      annualPeriodStart,
+      annualPeriodEnd,
+      months: pack.annualMonths,
+    });
+  }, [pack, starter?.annualPeriodEnd, starter?.annualPeriodStart, teacherGraph]);
+  const missingFullYearMonthDrafts = useMemo(() => {
+    if (!teacherGraph) return fullYearMonthDrafts;
+    const existing = new Set(
+      teacherGraph.months.map(({ monthly }) => monthly.monthKey),
+    );
+    return fullYearMonthDrafts.filter((month) => !existing.has(month.monthKey));
+  }, [fullYearMonthDrafts, teacherGraph]);
+
+  useEffect(() => {
+    if (!teacherGraph) {
+      setExpandedMonthId(null);
+      return;
+    }
+    const preferredMonthKey = initialMonthKey ?? workspace.civilDate.slice(0, 7);
+    setExpandedMonthId((current) => {
+      if (
+        current &&
+        teacherGraph.months.some(({ monthly }) => monthly.id === current)
+      ) {
+        return current;
+      }
+      return (
+        teacherGraph.months.find(
+          ({ monthly }) => monthly.monthKey === preferredMonthKey,
+        )?.monthly.id ?? teacherGraph.months[0]?.monthly.id ?? null
+      );
+    });
+  }, [initialMonthKey, teacherGraph, workspace.civilDate]);
+
+  useEffect(() => {
+    if (!initialMonthKey || !teacherGraph) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      initialMonthRef.current?.scrollIntoView({ block: "start" });
+      initialMonthRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialMonthKey, teacherGraph]);
+
+  useEffect(() => {
+    if (!reviewContext) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      weeklyReviewRef.current?.scrollIntoView({ block: "start" });
+      weeklyReviewRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [reviewContext]);
+
+  useEffect(() => {
+    if (!monthlyReviewContext) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      monthlyReviewRef.current?.scrollIntoView({ block: "start" });
+      monthlyReviewRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [monthlyReviewContext]);
 
   useEffect(() => {
     if (!documentMonthlyPlanId && monthlyDocumentOptions[0]) {
@@ -340,12 +444,39 @@ export function TeacherOwnedPlanScreen({
     setSaveBusy(true);
     setMessage("");
     try {
+      const authoredYearDrafts = fullYearMonthDrafts.map((month) => ({
+        ...month,
+        teacherContent:
+          month.monthKey === starter.monthKey
+            ? {
+                ...month.teacherContent,
+                narrative: monthlyNarrative.trim(),
+                teacherPriority: annualNarrative.trim(),
+              }
+            : month.monthKey === starter.nextMonthKey
+              ? {
+                  ...month.teacherContent,
+                  narrative: nextMonthNarrative.trim(),
+                }
+              : month.teacherContent,
+        weeks: month.weeks.map((week) =>
+          week.weekKey === starter.weekKey
+            ? {
+                ...week,
+                teacherContent: {
+                  ...week.teacherContent,
+                  narrative: weeklyNarrative.trim(),
+                },
+              }
+            : week,
+        ),
+      }));
       const graph = await onCreatePlanGraph({
         title: starter.annualTitle,
         periodStart: starter.annualPeriodStart,
         periodEnd: starter.annualPeriodEnd,
         teacherContent: { narrative: annualNarrative.trim() },
-        months: [
+        months: authoredYearDrafts.length > 0 ? authoredYearDrafts : [
           {
             title: starter.monthTitle,
             monthKey: starter.monthKey,
@@ -415,6 +546,37 @@ export function TeacherOwnedPlanScreen({
     }
   };
 
+  const appendFullYearPlan = async () => {
+    if (
+      !teacherGraph ||
+      saveBusy ||
+      !fullYearOutlineConfirmed ||
+      missingFullYearMonthDrafts.length === 0
+    ) return;
+    setSaveBusy(true);
+    setMessage("");
+    try {
+      const graph = await onAppendPlanMonths({
+        annualPlanId: teacherGraph.annual.id,
+        expectedUpdatedAt: teacherGraph.annual.updatedAt,
+        months: missingFullYearMonthDrafts,
+      });
+      setTeacherGraph(graph);
+      setFullYearOutlineConfirmed(false);
+      setMessage(
+        `Eylül–Haziran plan omurgası tamamlandı: ${graph.months.length} ay ve ${graph.months.reduce((total, month) => total + month.weeks.length, 0)} hafta kullanılabilir.`,
+      );
+    } catch (reason) {
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Yıllık planın eksik ayları eklenemedi.",
+      );
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
   const beginRevision = (record: TeacherOwnedPlanRecord) => {
     setEditingPlan(record);
     setRevisionTitle(record.title);
@@ -446,8 +608,19 @@ export function TeacherOwnedPlanScreen({
     }
   };
 
-  const beginWeeklyReview = async (weekly: TeacherOwnedWeeklyPlan) => {
+  const closeWeeklyReview = () => {
+    setReviewContext(null);
+    const target = weeklyReviewReturnFocusRef.current;
+    weeklyReviewReturnFocusRef.current = null;
+    window.requestAnimationFrame(() => target?.focus());
+  };
+
+  const beginWeeklyReview = async (
+    weekly: TeacherOwnedWeeklyPlan,
+    trigger?: HTMLButtonElement,
+  ) => {
     if (reviewBusy || educationalWritesDisabled) return;
+    weeklyReviewReturnFocusRef.current = trigger ?? null;
     setReviewBusy(true);
     setMessage("");
     try {
@@ -482,7 +655,7 @@ export function TeacherOwnedPlanScreen({
         nextPlanDecision: weeklyDecision,
       });
       setTeacherGraph(await loadTeacherOwnedPlanGraph(store));
-      setReviewContext(null);
+      closeWeeklyReview();
       setSelectedObservationIds([]);
       setMessage(
         "Haftalık değerlendirme kaydedildi; sonraki hafta için öneri yalnız öğretmen incelemesine taşındı.",
@@ -548,17 +721,30 @@ export function TeacherOwnedPlanScreen({
     }
   };
 
-  const beginMonthlyReview = async (monthly: TeacherOwnedPlanRecord) => {
+  const closeMonthlyReview = () => {
+    setMonthlyReviewContext(null);
+    setMonthlyReviewStep("children");
+    const target = monthlyReviewReturnFocusRef.current;
+    monthlyReviewReturnFocusRef.current = null;
+    window.requestAnimationFrame(() => target?.focus());
+  };
+
+  const beginMonthlyReview = async (
+    monthly: TeacherOwnedPlanRecord,
+    trigger?: HTMLButtonElement,
+  ) => {
     if (
       monthly.planType !== "monthly" ||
       monthlyReviewBusy ||
       educationalWritesDisabled
     ) return;
+    monthlyReviewReturnFocusRef.current = trigger ?? null;
     setMonthlyReviewBusy(true);
     setMessage("");
     try {
       const context = await loadTeacherMonthlyReviewContext(store, monthly.id);
       setMonthlyReviewContext(context);
+      setMonthlyReviewStep("children");
       const usable = context.observations.filter(
         (observation) => observation.curriculumLinks.length > 0,
       );
@@ -607,7 +793,7 @@ export function TeacherOwnedPlanScreen({
         nextMonthRecommendation: monthlyNextRecommendation,
       });
       setTeacherGraph(await loadTeacherOwnedPlanGraph(store));
-      setMonthlyReviewContext(null);
+      closeMonthlyReview();
       setMessage(
         "Aylık üç yönlü değerlendirme kaydedildi; sonraki ay önerisi öğretmen kaydı olarak korundu.",
       );
@@ -889,6 +1075,48 @@ export function TeacherOwnedPlanScreen({
               <span>Kayıt zinciri</span>
               <h2 id="teacher-plan-tree-title">Yıl → Ay → Hafta</h2>
             </div>
+            <div className="teacher-owned-full-year-status" role="status">
+              <div>
+                <strong>Eylül–Haziran yıllık plan omurgası</strong>
+                <span>
+                  {teacherGraph.months.length}/10 ay · {teacherGraph.months.reduce(
+                    (total, month) => total + month.weeks.length,
+                    0,
+                  )} hafta bu cihazda kayıtlı
+                </span>
+              </div>
+              {missingFullYearMonthDrafts.length > 0 ? (
+                <>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={fullYearOutlineConfirmed}
+                      onChange={(event) =>
+                        setFullYearOutlineConfirmed(event.target.checked)
+                      }
+                    />
+                    <span>
+                      Eksik {missingFullYearMonthDrafts.length} ayın başlık, dönem ve
+                      hafta omurgasını inceledim; ayrıntıları sınıfıma göre düzenleyeceğim.
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="teacher-owned-plan-primary"
+                    disabled={saveBusy || !fullYearOutlineConfirmed}
+                    onClick={() => void appendFullYearPlan()}
+                  >
+                    {saveBusy
+                      ? "Yıllık omurga tamamlanıyor…"
+                      : `Kalan ${missingFullYearMonthDrafts.length} ayı planıma ekle`}
+                  </button>
+                </>
+              ) : (
+                <small>
+                  Tüm eğitim yılı kullanılabilir. Her ay ve hafta ayrı ayrı düzenlenebilir.
+                </small>
+              )}
+            </div>
             <article className={initialLevel === "annual" ? "is-focused" : undefined}>
               <small>Yıllık planlama omurgası · revizyon {teacherGraph.annual.revisionNumber}</small>
               <strong>{teacherGraph.annual.title}</strong>
@@ -897,80 +1125,145 @@ export function TeacherOwnedPlanScreen({
                 <Pencil1Icon aria-hidden="true" /> Yıllık planı düzenle
               </button>
             </article>
-            {teacherGraph.months.map(({ monthly, weeks }) => (
-              <article key={monthly.id} className={initialLevel === "monthly" ? "is-focused" : undefined}>
-                <small>Aylık plan · revizyon {monthly.revisionNumber}</small>
-                <strong>{monthly.title}</strong>
-                <span>{weeks.length} hafta · {formatCivilDate(monthly.periodStart)} – {formatCivilDate(monthly.periodEnd)}</span>
-                <button type="button" onClick={() => beginRevision(monthly)}>
-                  <Pencil1Icon aria-hidden="true" /> Aylık planı düzenle
-                </button>
+            {teacherGraph.months.map(({ monthly, weeks }) => {
+              const expanded = expandedMonthId === monthly.id;
+              const evaluationCount = monthly.monthlyEvaluations?.length ?? 0;
+              const monthPanelId = `teacher-owned-month-${monthly.id}`;
+              return (
+              <article
+                key={monthly.id}
+                ref={monthly.monthKey === initialMonthKey ? initialMonthRef : undefined}
+                tabIndex={monthly.monthKey === initialMonthKey ? -1 : undefined}
+                className={`teacher-owned-plan-month-card${
+                  initialLevel === "monthly" &&
+                  (!initialMonthKey || monthly.monthKey === initialMonthKey)
+                    ? " is-focused"
+                    : ""
+                }`}
+              >
                 <button
                   type="button"
-                  className="teacher-owned-plan-review-button"
-                  onClick={() => void beginMonthlyReview(monthly)}
-                  disabled={monthlyReviewBusy || educationalWritesDisabled}
-                  aria-describedby={
-                    educationalWritesDisabled
-                      ? "teacher-owned-evaluation-write-notice"
-                      : undefined
+                  className="teacher-owned-plan-month-toggle"
+                  aria-expanded={expanded}
+                  aria-controls={monthPanelId}
+                  onClick={() =>
+                    setExpandedMonthId((current) =>
+                      current === monthly.id ? null : monthly.id,
+                    )
                   }
                 >
-                  {monthly.monthlyEvaluations?.length
-                    ? `Aylık değerlendirmeleri aç (${monthly.monthlyEvaluations.length})`
-                    : "Ayı üç yönden değerlendir"}
+                  <span>
+                    <small>Aylık plan · revizyon {monthly.revisionNumber}</small>
+                    <strong>{monthly.title}</strong>
+                    <span>
+                      {weeks.length} hafta · {formatCivilDate(monthly.periodStart)} – {formatCivilDate(monthly.periodEnd)}
+                    </span>
+                    <span className="teacher-owned-plan-month-state">
+                      {evaluationCount > 0
+                        ? `${evaluationCount} değerlendirme`
+                        : "Değerlendirme bekliyor"}
+                      {monthly.nextMonthDecisionContext
+                        ? " · Önceki aydan öneri var"
+                        : ""}
+                    </span>
+                  </span>
+                  <ChevronRightIcon aria-hidden="true" />
                 </button>
-                {monthly.nextMonthDecisionContext ? (
-                  <div
-                    className={`teacher-owned-plan-carry is-${monthly.nextMonthDecisionContext.applicationStatus}`}
-                    role="group"
-                    aria-label="Önceki aydan taşınan öğretmen önerisi"
-                  >
-                    <strong>Önceki aydan kanıta dayalı öneri</strong>
-                    <span>{monthly.nextMonthDecisionContext.recommendation}</span>
-                    <small>
-                      {monthly.nextMonthDecisionContext.applicationStatus ===
-                      "pending-teacher-review"
-                        ? "Aylık plan değişmedi · öğretmen kararı bekleniyor."
-                        : monthly.nextMonthDecisionContext.applicationStatus ===
-                            "accepted"
-                          ? "Öğretmen düzenleyip kabul etti · aylık plan revizyonuna uygulandı."
-                          : "Öğretmen gerekçesiyle reddetti · aylık plan içeriği değişmedi."}
-                    </small>
+                {expanded ? (
+                <div className="teacher-owned-plan-month-panel" id={monthPanelId}>
+                  <div className="teacher-owned-plan-month-actions">
                     <button
                       type="button"
-                      onClick={() => beginMonthlyCarryReview(monthly)}
-                      disabled={monthlyCarryReviewBusy || educationalWritesDisabled}
+                      aria-label={`${monthly.title} aylık planını düzenle`}
+                      onClick={() => beginRevision(monthly)}
+                    >
+                      <Pencil1Icon aria-hidden="true" /> Aylık planı düzenle
+                    </button>
+                    <button
+                      type="button"
+                      className="teacher-owned-plan-review-button"
+                      onClick={(event) =>
+                        void beginMonthlyReview(monthly, event.currentTarget)
+                      }
+                      disabled={monthlyReviewBusy || educationalWritesDisabled}
                       aria-describedby={
                         educationalWritesDisabled
                           ? "teacher-owned-evaluation-write-notice"
                           : undefined
                       }
+                      aria-label={
+                        evaluationCount
+                          ? `${monthly.title} değerlendirmelerini aç; ${evaluationCount} kayıt`
+                          : `${monthly.title} ayını üç yönden değerlendir`
+                      }
                     >
-                      {monthly.nextMonthDecisionContext.applicationStatus ===
-                      "pending-teacher-review"
-                        ? "Aylık öneriyi incele ve karar ver"
-                        : "Aylık kararı ve geçmişi aç"}
+                      {evaluationCount
+                        ? `Aylık değerlendirmeleri aç (${evaluationCount})`
+                        : "Ayı üç yönden değerlendir"}
                     </button>
                   </div>
-                ) : null}
-                <div className="teacher-owned-plan-weeks">
+                  {monthly.nextMonthDecisionContext ? (
+                    <div
+                      className={`teacher-owned-plan-carry is-${monthly.nextMonthDecisionContext.applicationStatus}`}
+                      role="group"
+                      aria-label="Önceki aydan taşınan öğretmen önerisi"
+                    >
+                      <strong>Önceki aydan kanıta dayalı öneri</strong>
+                      <span>{monthly.nextMonthDecisionContext.recommendation}</span>
+                      <small>
+                        {monthly.nextMonthDecisionContext.applicationStatus ===
+                        "pending-teacher-review"
+                          ? "Aylık plan değişmedi · öğretmen kararı bekleniyor."
+                          : monthly.nextMonthDecisionContext.applicationStatus ===
+                              "accepted"
+                            ? "Öğretmen düzenleyip kabul etti · aylık plan revizyonuna uygulandı."
+                            : "Öğretmen gerekçesiyle reddetti · aylık plan içeriği değişmedi."}
+                      </small>
+                      <button
+                        type="button"
+                        onClick={() => beginMonthlyCarryReview(monthly)}
+                        disabled={monthlyCarryReviewBusy || educationalWritesDisabled}
+                        aria-describedby={
+                          educationalWritesDisabled
+                            ? "teacher-owned-evaluation-write-notice"
+                            : undefined
+                        }
+                      >
+                        {monthly.nextMonthDecisionContext.applicationStatus ===
+                        "pending-teacher-review"
+                          ? "Aylık öneriyi incele ve karar ver"
+                          : "Aylık kararı ve geçmişi aç"}
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="teacher-owned-plan-weeks">
                    {weeks.map((weekly) => (
                      <div className="teacher-owned-plan-week-record" key={weekly.id}>
                       <span><CalendarIcon aria-hidden="true" /><strong>{weekly.title}</strong></span>
                       <small>{formatCivilDate(weekly.periodStart)} – {formatCivilDate(weekly.periodEnd)} · revizyon {weekly.revisionNumber}</small>
-                       <button type="button" onClick={() => beginRevision(weekly)}>
+                       <button
+                         type="button"
+                         aria-label={`${weekly.title} haftalık planını düzenle`}
+                         onClick={() => beginRevision(weekly)}
+                       >
                          <Pencil1Icon aria-hidden="true" /> Haftalık planı düzenle
                        </button>
                        <button
                          type="button"
                          className="teacher-owned-plan-review-button"
-                         onClick={() => void beginWeeklyReview(weekly)}
+                         onClick={(event) =>
+                           void beginWeeklyReview(weekly, event.currentTarget)
+                         }
                          disabled={reviewBusy || educationalWritesDisabled}
                          aria-describedby={
                            educationalWritesDisabled
                              ? "teacher-owned-evaluation-write-notice"
                              : undefined
+                         }
+                         aria-label={
+                           weekly.weeklyEvaluations?.length
+                             ? `${weekly.title} değerlendirmelerini aç; ${weekly.weeklyEvaluations.length} kayıt`
+                             : `${weekly.title} haftasını kanıtlarla değerlendir`
                          }
                        >
                          {weekly.weeklyEvaluations?.length
@@ -1020,14 +1313,18 @@ export function TeacherOwnedPlanScreen({
                        ) : null}
                      </div>
                    ))}
+                  </div>
                 </div>
+                ) : null}
               </article>
-            ))}
+            );})}
           </section>
         ) : null}
 
         {reviewContext ? (
           <section
+            ref={weeklyReviewRef}
+            tabIndex={-1}
             className="teacher-owned-plan-review"
             aria-labelledby="teacher-weekly-review-title"
             data-testid="teacher-weekly-review"
@@ -1152,7 +1449,7 @@ export function TeacherOwnedPlanScreen({
             <div className="teacher-owned-plan-revision-actions">
               <button
                 type="button"
-                onClick={() => setReviewContext(null)}
+                onClick={closeWeeklyReview}
                 disabled={reviewBusy}
               >
                 Vazgeç
@@ -1445,6 +1742,8 @@ export function TeacherOwnedPlanScreen({
 
         {monthlyReviewContext ? (
           <section
+            ref={monthlyReviewRef}
+            tabIndex={-1}
             className="teacher-owned-plan-review teacher-owned-plan-monthly-review"
             aria-labelledby="teacher-monthly-review-title"
             data-testid="teacher-monthly-review"
@@ -1460,6 +1759,29 @@ export function TeacherOwnedPlanScreen({
               </p>
             </div>
 
+            <nav
+              className="teacher-owned-monthly-steps"
+              aria-label="Aylık değerlendirme adımları"
+            >
+              {([
+                ["children", "1", "Kanıt ve çocuklar"],
+                ["program", "2", "Program"],
+                ["teacher", "3", "Öğretmen ve sonraki ay"],
+              ] as const).map(([step, number, label]) => (
+                <button
+                  key={step}
+                  type="button"
+                  aria-current={monthlyReviewStep === step ? "step" : undefined}
+                  onClick={() => setMonthlyReviewStep(step)}
+                >
+                  <span>{number}</span>
+                  <strong>{label}</strong>
+                </button>
+              ))}
+            </nav>
+
+            {monthlyReviewStep === "children" ? (
+              <div className="teacher-owned-monthly-step-panel" data-step="children">
             <div className="teacher-owned-plan-coverage" role="status">
               <strong>
                 {selectedMonthlyCoverage.observationCount} gözlem ·{" "}
@@ -1563,7 +1885,11 @@ export function TeacherOwnedPlanScreen({
               maxLength={2000}
               placeholder="Seçili kanıtların ne gösterdiğini ve neyi henüz göstermediğini yazın."
             />
+              </div>
+            ) : null}
 
+            {monthlyReviewStep === "program" ? (
+              <div className="teacher-owned-monthly-step-panel" data-step="program">
             <fieldset className="teacher-owned-plan-criteria">
               <legend>2. Program yönü ölçütleri</legend>
               {TEACHER_MONTHLY_PROGRAM_CRITERIA.map(([criterionId, label], index) => (
@@ -1592,7 +1918,11 @@ export function TeacherOwnedPlanScreen({
               maxLength={2000}
               placeholder="Planlanan programın uygulamada nasıl işlediğini yazın."
             />
+              </div>
+            ) : null}
 
+            {monthlyReviewStep === "teacher" ? (
+              <div className="teacher-owned-monthly-step-panel" data-step="teacher">
             <fieldset className="teacher-owned-plan-criteria">
               <legend>3. Öğretmen yönü ölçütleri</legend>
               {TEACHER_MONTHLY_TEACHER_CRITERIA.map(([criterionId, label], index) => (
@@ -1644,33 +1974,63 @@ export function TeacherOwnedPlanScreen({
                 ))}
               </details>
             ) : null}
+              </div>
+            ) : null}
 
             <div className="teacher-owned-plan-revision-actions">
               <button
                 type="button"
-                onClick={() => setMonthlyReviewContext(null)}
+                onClick={closeMonthlyReview}
                 disabled={monthlyReviewBusy}
               >
                 Vazgeç
               </button>
-              <button
-                type="button"
-                className="teacher-owned-plan-primary"
-                onClick={() => void saveMonthlyReview()}
-                disabled={
-                  monthlyReviewBusy ||
-                  monthlyChildNarrative.trim().length < 3 ||
-                  monthlyProgramNarrative.trim().length < 3 ||
-                  monthlyTeacherNarrative.trim().length < 3 ||
-                  monthlyNextRecommendation.trim().length < 3 ||
-                  (monthlyEvidenceState === "sufficient-evidence" &&
-                    !selectedMonthlyEvidenceIsSufficient)
-                }
-              >
-                {monthlyReviewBusy
-                  ? "Aylık değerlendirme kaydediliyor…"
-                  : "Üç yönlü değerlendirmeyi kaydet"}
-              </button>
+              {monthlyReviewStep !== "children" ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthlyReviewStep(
+                      monthlyReviewStep === "teacher" ? "program" : "children",
+                    )
+                  }
+                  disabled={monthlyReviewBusy}
+                >
+                  Önceki adım
+                </button>
+              ) : null}
+              {monthlyReviewStep !== "teacher" ? (
+                <button
+                  type="button"
+                  className="teacher-owned-plan-primary"
+                  onClick={() =>
+                    setMonthlyReviewStep(
+                      monthlyReviewStep === "children" ? "program" : "teacher",
+                    )
+                  }
+                  disabled={monthlyReviewBusy}
+                >
+                  Sonraki adım
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="teacher-owned-plan-primary"
+                  onClick={() => void saveMonthlyReview()}
+                  disabled={
+                    monthlyReviewBusy ||
+                    monthlyChildNarrative.trim().length < 3 ||
+                    monthlyProgramNarrative.trim().length < 3 ||
+                    monthlyTeacherNarrative.trim().length < 3 ||
+                    monthlyNextRecommendation.trim().length < 3 ||
+                    (monthlyEvidenceState === "sufficient-evidence" &&
+                      !selectedMonthlyEvidenceIsSufficient)
+                  }
+                >
+                  {monthlyReviewBusy
+                    ? "Aylık değerlendirme kaydediliyor…"
+                    : "Üç yönlü değerlendirmeyi kaydet"}
+                </button>
+              )}
             </div>
           </section>
         ) : null}

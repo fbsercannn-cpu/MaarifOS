@@ -126,7 +126,7 @@ test("MARİF eksik kurulumu tüm günlük işlerden önce gerekçeli olarak öne
   assert.match(brief.rationale, /çocuk listesi/);
   assert.ok(brief.critiques.some((item) => item.id === "academic-year-write-lock"));
   assert.ok(!brief.critiques.some((item) => item.id === "attendance-unmarked"));
-  assert.ok(brief.evidence.includes("Yoklama dönem etkinleşince açılacak"));
+  assert.ok(brief.evidence.includes("Yoklama öğretmen başlatınca açılacak"));
 });
 
 test("MARİF tamamlanmamış yoklamayı gözlem ve değerlendirmeden önce seçer", () => {

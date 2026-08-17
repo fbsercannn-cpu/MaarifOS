@@ -23,7 +23,7 @@ test("eğitim yılı yazma guardı hem enqueue hem commit anında canlı İstanb
   assert.doesNotMatch(prototypeSource, /^const currentCivilDate\s*=/m);
 });
 
-test("Kayıt Ekle gözlem seçimi chooser'ı async açılıştan önce kapatmaz ve evidence geçişini kilitler", () => {
+test("Kayıt Ekle gözlem seçimi chooser'ı evidence geçiş kilidiyle kapatır ve iki dialogu birlikte bırakmaz", () => {
   const captureOpenIndex = prototypeSource.indexOf("void openStudentObservation();");
   assert.notEqual(captureOpenIndex, -1);
   const captureAction = prototypeSource.slice(
@@ -41,9 +41,21 @@ test("Kayıt Ekle gözlem seçimi chooser'ı async açılıştan önce kapatmaz 
     /const liveEvidence = await loadEvidenceWorkspace\(store, \{ now: new Date\(\) \}\)/,
   );
   assert.match(observationOpen, /resolveObservationContext\(liveEvidence/);
+  assert.match(
+    observationOpen,
+    /surfaceTransitionRef\.current = "evidence-flow";\s*setCaptureMenuOpen\(false\);\s*setDataBusy\(true\)/,
+  );
   assert.match(observationOpen, /resolution\.kind === "choose-activity"/);
   assert.match(observationOpen, /await openSpontaneousObservation\(/);
   assert.match(observationOpen, /catch \(reason\) \{\s*surfaceTransitionRef\.current = null/);
+  const activityChoice = prototypeSource.slice(
+    prototypeSource.indexOf("const initialStudentId = observationContextChoice.initialStudentId"),
+    prototypeSource.indexOf("className=\"is-spontaneous\""),
+  );
+  assert.match(
+    activityChoice,
+    /surfaceTransitionRef\.current = "evidence-flow";\s*setCaptureMenuOpen\(false\)/,
+  );
   assert.match(
     prototypeSource,
     /previousSurface === "evidence-flow"[\s\S]{0,100}activeSurface === "capture-menu"[\s\S]{0,120}window\.history\.back\(\)/,

@@ -167,6 +167,10 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "name",
     "startDate",
     "endDate",
+    "operationalStartDate",
+    "operationalStartedAt",
+    "officialStartDate",
+    "activatedEarlyAt",
     "status",
     "archivedAt",
     "closedOn",
@@ -707,6 +711,23 @@ function validateCollectionRecordSemantics(
       !isValidCivilDate(record.startDate) ||
       !isValidCivilDate(record.endDate) ||
       record.startDate > record.endDate ||
+      (record.operationalStartDate !== undefined &&
+        !isValidCivilDate(record.operationalStartDate)) ||
+      (record.operationalStartedAt !== undefined &&
+        !isValidUtcIso(record.operationalStartedAt)) ||
+      ((record.operationalStartDate === undefined) !==
+        (record.operationalStartedAt === undefined)) ||
+      (typeof record.operationalStartDate === "string" &&
+        record.operationalStartDate > record.endDate) ||
+      (record.officialStartDate !== undefined &&
+        !isValidCivilDate(record.officialStartDate)) ||
+      (record.activatedEarlyAt !== undefined &&
+        !isValidUtcIso(record.activatedEarlyAt)) ||
+      ((record.officialStartDate === undefined) !==
+        (record.activatedEarlyAt === undefined)) ||
+      (typeof record.officialStartDate === "string" &&
+        (record.startDate > record.officialStartDate ||
+          record.officialStartDate > record.endDate)) ||
       (record.status !== undefined &&
         record.status !== "active" &&
         record.status !== "archived") ||

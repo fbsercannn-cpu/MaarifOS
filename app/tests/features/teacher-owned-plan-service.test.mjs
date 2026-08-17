@@ -7,11 +7,13 @@ import {
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
+  appendTeacherOwnedPlanMonths,
   createTeacherOwnedPlanGraph,
   loadTeacherOwnedPlanGraph,
   loadTeacherOwnedPlanStarterDraft,
   reviseTeacherOwnedPlan,
 } from "../../src/features/planning/teacher-owned-plan-service.ts";
+import { buildTeacherFullYearMonthDrafts } from "../../src/features/planning/teacher-year-outline.ts";
 
 class MemoryStore {
   constructor(snapshot = createEmptySnapshot()) {
@@ -201,6 +203,74 @@ test("premium erişiminden bağımsız yıllık → aylık → haftalık öğret
     annualPlanId: graph.annual.id,
   });
   assert.deepEqual(loaded, graph);
+});
+
+test("Eylül–Haziran omurgası 10 ayı haftalara böler ve mevcut grafa eksik ayları atomik ekler", async () => {
+  const store = activeStore();
+  const input = validDraft();
+  input.periodEnd = "2027-06-25";
+  const graph = await createTeacherOwnedPlanGraph(store, input);
+  const outline = buildTeacherFullYearMonthDrafts({
+    annualPeriodStart: "2026-09-07",
+    annualPeriodEnd: "2027-06-25",
+    months: [
+      ["2026-09", "Eylül odağı"],
+      ["2026-10", "Ekim odağı"],
+      ["2026-11", "Kasım odağı"],
+      ["2026-12", "Aralık odağı"],
+      ["2027-01", "Ocak odağı"],
+      ["2027-02", "Şubat odağı"],
+      ["2027-03", "Mart odağı"],
+      ["2027-04", "Nisan odağı"],
+      ["2027-05", "Mayıs odağı"],
+      ["2027-06", "Haziran odağı"],
+    ].map(([monthKey, title]) => ({
+      monthKey,
+      title,
+      purpose: `${title} öğretmen planlama amacı`,
+    })),
+  });
+  assert.equal(outline.length, 10);
+  assert.equal(outline[0].periodStart, "2026-09-07");
+  assert.equal(outline.at(-1).periodEnd, "2027-06-25");
+  assert.equal(
+    outline.every((month) => month.weeks.length >= 4),
+    true,
+  );
+  const missing = outline.filter(
+    (month) => !graph.months.some(({ monthly }) => monthly.monthKey === month.monthKey),
+  );
+  assert.equal(missing.length, 8);
+  const expanded = await appendTeacherOwnedPlanMonths(store, {
+    annualPlanId: graph.annual.id,
+    expectedUpdatedAt: graph.annual.updatedAt,
+    months: missing,
+    now: new Date("2026-09-03T06:00:00.000Z"),
+  });
+  assert.equal(expanded.months.length, 10);
+  assert.deepEqual(
+    expanded.months.map(({ monthly }) => monthly.monthKey),
+    outline.map((month) => month.monthKey),
+  );
+  assert.equal(expanded.annual.revisionNumber, 2);
+  assert.equal(expanded.annual.revisionHistory.length, 1);
+  const snapshot = await store.readSnapshot();
+  assert.equal(
+    new Set(snapshot.plans.map((record) => record.id)).size,
+    snapshot.plans.length,
+  );
+
+  const before = structuredClone(snapshot.plans);
+  await assert.rejects(
+    appendTeacherOwnedPlanMonths(store, {
+      annualPlanId: expanded.annual.id,
+      expectedUpdatedAt: expanded.annual.updatedAt,
+      months: [outline[0]],
+      now: new Date("2026-09-04T06:00:00.000Z"),
+    }),
+    /ikinci kez eklenemez/,
+  );
+  assert.deepEqual((await store.readSnapshot()).plans, before);
 });
 
 test("aktif eğitim yılından tek dokunuşluk plan başlangıç dönemini UTC ve sivil tarih sınırlarıyla hazırlar", async () => {

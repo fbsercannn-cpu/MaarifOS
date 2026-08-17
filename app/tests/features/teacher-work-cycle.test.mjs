@@ -85,7 +85,7 @@ test("çalışma döngüsü yapılandırılmamış sınıfta plan veya belge uyd
     educationalWritesDisabled: true,
   });
   assert.equal(preparation.stages[0].title, "Günlük yazım henüz açık değil");
-  assert.equal(preparation.stages[0].actionLabel, "Eğitim yılını aç");
+  assert.equal(preparation.stages[0].actionLabel, "Çalışmayı bugün başlat");
 });
 
 test("yıllık → aylık → haftalık → günlük → kanıt → değerlendirme → belge zincirini aynı kimliklerden özetler", () => {
@@ -277,10 +277,14 @@ test("gelecek hafta ve ayı mevcutmuş gibi göstermeden en yakın plan dönemin
   assert.equal(workspace.monthly?.relation, "upcoming");
   assert.equal(workspace.weekly?.relation, "upcoming");
   assert.equal(workspace.weekly?.id, weeklyId);
-  assert.equal(presentation.stages.find((stage) => stage.id === "weekly")?.tone, "waiting");
+  assert.equal(presentation.stages.find((stage) => stage.id === "weekly")?.tone, "current");
+  assert.equal(
+    presentation.stages.find((stage) => stage.id === "weekly")?.actionLabel,
+    "Planı şimdi düzenle",
+  );
   assert.match(
     presentation.stages.find((stage) => stage.id === "monthly")?.detail ?? "",
-    /henüz başlamadı/,
+    /Plan şimdi düzenlenebilir/,
   );
 });
 

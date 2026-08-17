@@ -48,6 +48,9 @@ export interface TeacherWorkCycleWorkspace {
     anecdoteReadyCount: number;
     monthlyEvaluationCount: number;
     planDocumentReady: boolean;
+    planMonthCount?: number;
+    planWeekCount?: number;
+    planDailyCount?: number;
   };
   pendingCurriculumLinkCount: number;
 }
@@ -169,6 +172,9 @@ export function emptyTeacherWorkCycle(
       ...EMPTY_DOCUMENT_COUNTS,
       monthlyEvaluationCount: 0,
       planDocumentReady: false,
+      planMonthCount: 0,
+      planWeekCount: 0,
+      planDailyCount: 0,
     },
     pendingCurriculumLinkCount: 0,
   };
@@ -268,6 +274,26 @@ export function resolveTeacherWorkCycle(
   const monthlyEvaluationCount = monthlyRecord && Array.isArray(monthlyRecord.monthlyEvaluations)
     ? monthlyRecord.monthlyEvaluations.length
     : 0;
+  const annualMonthlyPlans = annualRecord
+    ? plans.filter(
+        (record) =>
+          record.planType === "monthly" && record.annualPlanId === annualRecord.id,
+      )
+    : [];
+  const annualMonthlyPlanIds = new Set(annualMonthlyPlans.map((record) => record.id));
+  const annualWeeklyPlans = plans.filter(
+    (record) =>
+      record.planType === "weekly" &&
+      typeof record.monthlyPlanId === "string" &&
+      annualMonthlyPlanIds.has(record.monthlyPlanId),
+  );
+  const annualWeeklyPlanIds = new Set(annualWeeklyPlans.map((record) => record.id));
+  const annualDailyPlans = plans.filter(
+    (record) =>
+      record.planType === "daily" &&
+      typeof record.sourceWeeklyPlanId === "string" &&
+      annualWeeklyPlanIds.has(record.sourceWeeklyPlanId),
+  );
 
   return {
     status: "ready",
@@ -319,6 +345,9 @@ export function resolveTeacherWorkCycle(
       ...documents,
       monthlyEvaluationCount,
       planDocumentReady: annualRecord !== null && monthlyRecord !== null,
+      planMonthCount: annualMonthlyPlans.length,
+      planWeekCount: annualWeeklyPlans.length,
+      planDailyCount: annualDailyPlans.length,
     },
     pendingCurriculumLinkCount: observations.filter(
       (record) => !linkedObservationIds.has(record.id),

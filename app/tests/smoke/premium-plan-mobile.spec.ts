@@ -40,19 +40,55 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
   await page.getByRole("button", { name: "Planları aç" }).click();
   const center = page.getByTestId("premium-plan-center");
   await expect(center).toBeVisible();
-  const reviewPendingMonth = center.locator(".premium-month-list li.is-review-pending");
-  await expect(reviewPendingMonth).toHaveCount(1);
-  await expect(reviewPendingMonth).not.toHaveClass(/is-ready/);
+  const libraryTabs = center.getByRole("navigation", {
+    name: "Plan Kütüphanesi bölümleri",
+  });
+  await expect(libraryTabs.getByRole("button")).toHaveCount(3);
   await expect(
-    reviewPendingMonth.getByText("Uzman incelemesi bekliyor", { exact: true }),
-  ).toBeVisible();
-  await expect(reviewPendingMonth.locator("svg")).toHaveCount(1);
-  const monthListOverflows = await reviewPendingMonth.evaluate((item) =>
-    item.scrollWidth > item.clientWidth + 1
+    libraryTabs.getByRole("button", { name: "Yıllık omurga" }),
+  ).toHaveAttribute("aria-current", "page");
+  const centerHasHorizontalOverflow = await center.evaluate(
+    (element) => element.scrollWidth > element.clientWidth + 1,
+  );
+  expect(centerHasHorizontalOverflow).toBe(false);
+  const monthList = center.locator(".premium-month-list");
+  await expect(monthList.locator("li")).toHaveCount(10);
+  await expect(monthList.getByRole("button", { name: "Bu ayı planla" })).toHaveCount(9);
+  await expect(center.getByText(/insan uzman incelemeleri bekliyor/)).toBeVisible();
+  const monthListOverflows = await monthList.evaluate((item) =>
+    item.scrollWidth > item.clientWidth + 1,
   );
   expect(monthListOverflows).toBe(false);
-  await center.getByRole("button", { name: "Eylül paketini + yıllık omurgayı ekle" }).click();
-  await expect(center.getByText("Eylül plan paketi ve yıllık omurga sınıfa eklendi")).toBeVisible();
+  await center.getByRole("button", { name: "Eylül hazır içeriğini ekle" }).click();
+  const installPanel = center.getByTestId("premium-install-panel");
+  await expect(installPanel).toBeFocused();
+  await expect(
+    installPanel.getByText("Eylül hazır içerik paketi sınıfa eklendi"),
+  ).toBeVisible();
+
+  await libraryTabs.getByRole("button", { name: "Değerlendirme ve belge" }).click();
+  await expect(
+    libraryTabs.getByRole("button", { name: "Değerlendirme ve belge" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await center
+    .getByRole("button", {
+      name: "Eylül ayını kanıtlar ve yansıtmayla değerlendir",
+    })
+    .click();
+  const monthlySave = center.getByRole("button", {
+    name: "Aylık değerlendirmeyi yeni kayıt olarak ekle",
+  });
+  await expect(monthlySave).toBeDisabled();
+  await expect(center.getByText("Kaydetmek için kalanlar", { exact: true })).toBeVisible();
+  await expect(
+    center.getByText("Program yönü öğretmen değerlendirmesini yazın.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await center
+    .getByRole("button", { name: "Aylık değerlendirme kayıtlarını kapat" })
+    .click();
 
   const wordDownloadPromise = page.waitForEvent("download");
   await center.getByTestId("premium-export-word").click();
@@ -79,7 +115,28 @@ test("premium tam gün planı telefonda 10 düzenlenebilir blok üretir ve gelec
   }
 
   const mainActivities = center.locator('article[data-activity-role="main"]');
+  await libraryTabs.getByRole("button", { name: "Eylül içeriği" }).click();
+  const weekSections = center.locator("details.premium-week-block");
+  await expect(weekSections).toHaveCount(4);
+  await weekSections.first().locator(":scope > summary").click();
   await expect(mainActivities).toHaveCount(8);
+  await weekSections
+    .first()
+    .getByRole("button", { name: "Haftayı kanıtlarla değerlendir" })
+    .click();
+  await expect(
+    center.getByRole("button", {
+      name: "Değerlendirmeyi kaydet ve sonraki haftaya taşı",
+    }),
+  ).toBeDisabled();
+  await expect(
+    center.getByText("En az bir bağlı ham gözlem seçin.", { exact: true }),
+  ).toBeVisible();
+  await weekSections
+    .first()
+    .getByRole("button", { name: "Hafta kayıtlarını kapat" })
+    .click();
+  await weekSections.first().locator(":scope > summary").click();
   await mainActivities.nth(0).getByRole("button", { name: "Tam gün planını hazırla" }).click();
 
   const flow = page.locator(".premium-daily-flow-preview");

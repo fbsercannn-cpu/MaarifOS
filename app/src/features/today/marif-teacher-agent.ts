@@ -78,8 +78,8 @@ export function createMarifTeacherAgentBrief(
   if (input.educationalWritesDisabled) {
     critiques.push({
       id: "academic-year-write-lock",
-      title: "Pedagojik yazım güvenle kilitli",
-      detail: "Etkin eğitim yılı başlamadan yoklama, gözlem ve günlük plan kaydı açılmaz.",
+      title: "Yeni dönem kullanıma hazır",
+      detail: "Öğretmen isterse planlamayı sürdürür, isterse dönemi bugün gerçek kayıt kullanımına açar.",
     });
   }
   if (!input.educationalWritesDisabled && input.control.attendance.unmarked > 0) {
@@ -137,7 +137,7 @@ export function createMarifTeacherAgentBrief(
   const evidence = [
     `Kurulum ${input.setup.completedCount}/${input.setup.totalCount}`,
     input.educationalWritesDisabled
-      ? "Yoklama dönem etkinleşince açılacak"
+      ? "Yoklama öğretmen başlatınca açılacak"
       : `Yoklama ${input.control.attendance.expected - input.control.attendance.unmarked}/${input.control.attendance.expected}`,
     input.educationalWritesDisabled
       ? "Program bağı yazımı kapalı"
@@ -161,9 +161,9 @@ export function createMarifTeacherAgentBrief(
     return {
       tone: "attention",
       eyebrow: "MARİF · öğretmen asistanı",
-      title: "Etkin eğitim yılına güvenli geçiş yapın",
-      rationale: "Bugünkü kayıtları yanlış döneme yazmamak için önce sınıfın resmî çalışma dönemini doğrulayın.",
-      actionLabel: "Eğitim yılını aç",
+      title: "Yeni dönemle bugün çalışmaya başlayın",
+      rationale: "Sınıf ve çocuklar hazır. Beklemek zorunda değilsiniz; çalışma başlangıcını bugüne alarak gerçek kayda geçebilirsiniz.",
+      actionLabel: "Çalışmayı bugün başlat",
       action: { kind: "setup", stepId: "classroom" },
       evidence,
       critiques: critiques.slice(0, 4),

@@ -30,9 +30,20 @@ const teacherPlanDocumentSource = await readFile(
   new URL("../../src/features/planning/teacher-owned-plan-document.ts", import.meta.url),
   "utf8",
 );
+const prototypeCssSource = await readFile(
+  new URL("../../src/prototype.css", import.meta.url),
+  "utf8",
+);
 
 test("öğretmen planı gerçek haftada 10 bölümlü düzenleme yüzeyini açar ve komuta taşır", () => {
   assert.match(planFlowSource, /data-testid="teacher-owned-daily-flow-editor"/);
+  assert.match(planFlowSource, /introHeadingRef/);
+  assert.match(planFlowSource, /scroll\.scrollTop = 0/);
+  assert.match(planFlowSource, /heading\.focus\(\{ preventScroll: true \}\)/);
+  assert.doesNotMatch(planFlowSource, /placeholder="Örn\. Bahçede gölge incelemesi"[\s\S]{0,120}autoFocus/);
+  assert.match(prototypeCssSource, /\.plan-save-dock\s*\{[\s\S]{0,80}position:\s*fixed/);
+  assert.match(prototypeCssSource, /\.d1-flow-scroll \.d1-flow-content[\s\S]{0,100}176px/);
+  assert.match(planFlowSource, /<\/MobileScroll>[\s\S]{0,120}<section[\s\S]{0,100}className="plan-save-dock"/);
   assert.match(planFlowSource, /defaultTeacherOwnedDailyFlowBlockDrafts/);
   assert.match(planFlowSource, /teacherOwnedDailyFlowBlocks/);
   assert.match(prototypeSource, /teacherOwnedDailyFlowContext=\{/);

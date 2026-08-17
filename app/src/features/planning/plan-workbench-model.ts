@@ -59,6 +59,7 @@ export function createPlanWorkbenchPresentation(
     educationalWritesDisabled?: boolean;
     preparationPlanningAllowed?: boolean;
     preparationPlanningCivilDate?: string | null;
+    upcomingPlanningCivilDate?: string | null;
   } = {},
 ): PlanWorkbenchPresentation {
   const annual: PlanWorkbenchLevel = workspace.annual
@@ -159,16 +160,18 @@ export function createPlanWorkbenchPresentation(
             ? "ready"
             : "current",
       }
-    : options.preparationPlanningAllowed
+    : options.preparationPlanningAllowed || options.upcomingPlanningCivilDate
       ? {
           id: "daily",
           label: "Gün",
-          title: "Yeni dönemin günlük planını hazırlayın",
-          detail: "Planı başlangıç tarihinden önce yazın; uygulama, yoklama ve gözlem plan gününde açılır.",
+          title: "İlk öğretim gününün planını hazırlayın",
+          detail: "Planı şimdi hazırlayın; uygulama, yoklama ve gözlem plan gününde açılır.",
           meta: civilDateLabel(
-            options.preparationPlanningCivilDate ?? workspace.civilDate,
+            options.preparationPlanningCivilDate ??
+              options.upcomingPlanningCivilDate ??
+              workspace.civilDate,
           ),
-          actionLabel: "Gelecek günlük planı oluştur",
+          actionLabel: "İlk gün planını oluştur",
           tone: "attention",
         }
       : options.educationalWritesDisabled
@@ -178,7 +181,7 @@ export function createPlanWorkbenchPresentation(
           title: "Günlük plan yazımı kilitli",
           detail: "Bugün etkin olan eğitim yılını seçmeden yeni plan yazılamaz.",
           meta: civilDateLabel(workspace.civilDate),
-          actionLabel: "Eğitim yılını aç",
+          actionLabel: "Çalışmayı bugün başlat",
           tone: "waiting",
         }
       : {

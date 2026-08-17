@@ -95,16 +95,22 @@ test("kalıcı aylık değerlendirme telefonda Ek 18 PDF/DOCX indirir ve yeniden
 
   const center = page.getByTestId("premium-plan-center");
   await expect(center).toBeVisible();
+  await center
+    .getByRole("navigation", { name: "Plan Kütüphanesi bölümleri" })
+    .getByRole("button", { name: "Değerlendirme ve belge" })
+    .click();
   const pdfButton = center.getByTestId("premium-monthly-ek18-pdf");
   const wordButton = center.getByTestId("premium-monthly-ek18-word");
   await expect(pdfButton).toBeDisabled();
   await expect(wordButton).toBeDisabled();
 
   await center
-    .getByRole("button", { name: "Eylül paketini + yıllık omurgayı ekle" })
+    .getByRole("button", { name: "Eylül hazır içeriğini ekle" })
     .click();
   await expect(
-    center.getByText("Eylül plan paketi ve yıllık omurga sınıfa eklendi"),
+    center
+      .getByTestId("premium-install-panel")
+      .getByText("Eylül hazır içerik paketi sınıfa eklendi", { exact: true }),
   ).toBeVisible();
   await expect(pdfButton).toBeDisabled();
   await expect(wordButton).toBeDisabled();
@@ -176,6 +182,9 @@ test("kalıcı aylık değerlendirme telefonda Ek 18 PDF/DOCX indirir ve yeniden
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Planları aç" }).click();
   const reloadedCenter = page.getByTestId("premium-plan-center");
+  await reloadedCenter
+    .getByRole("button", { name: "Değerlendirme ve belge" })
+    .click();
   await expect(reloadedCenter.getByTestId("premium-monthly-ek18-pdf")).toBeEnabled();
   await expect(reloadedCenter.getByTestId("premium-monthly-ek18-word")).toBeEnabled();
   await expect(

@@ -181,6 +181,7 @@ export interface PremiumPlanCenterScreenProps {
   initialSection?: "overview" | "weekly" | "monthly";
   onRecordsChanged?: () => void | Promise<void>;
   onClose: () => void;
+  onOpenTeacherMonth: (monthKey: string) => void;
   onUseActivity: (selection: PremiumDailyTemplateSelection) => void;
 }
 
@@ -195,6 +196,7 @@ export function PremiumPlanCenterScreen({
   initialSection = "overview",
   onRecordsChanged,
   onClose,
+  onOpenTeacherMonth,
   onUseActivity,
 }: PremiumPlanCenterScreenProps) {
   const [pack, setPack] = useState<PremiumContentPack | null>(null);
@@ -206,6 +208,7 @@ export function PremiumPlanCenterScreen({
     useState<PremiumPlanLensId[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [actionFeedback, setActionFeedback] = useState("");
   const [reviewContext, setReviewContext] = useState<PremiumWeeklyReviewContext | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewReflection, setReviewReflection] = useState("");
@@ -243,8 +246,18 @@ export function PremiumPlanCenterScreen({
   const [valueEvidenceEditorObservationId, setValueEvidenceEditorObservationId] =
     useState<string | null>(null);
   const valueEvidenceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const installPanelRef = useRef<HTMLElement | null>(null);
   const weeklySectionRef = useRef<HTMLElement | null>(null);
   const monthlySectionRef = useRef<HTMLElement | null>(null);
+  const [activeLibrarySection, setActiveLibrarySection] = useState<
+    "year" | "september" | "review"
+  >(
+    initialSection === "weekly"
+      ? "september"
+      : initialSection === "monthly"
+        ? "review"
+        : "year",
+  );
   const [exportBusy, setExportBusy] = useState<PremiumPlanExportFormat | null>(null);
   const [exportMessage, setExportMessage] = useState("");
   const [, setAccessClockTick] = useState(0);
@@ -304,7 +317,14 @@ export function PremiumPlanCenterScreen({
   }, [contentPack, store]);
 
   useEffect(() => {
-    if (!pack || initialSection === "overview") return undefined;
+    if (!pack) return undefined;
+    const nextSection = initialSection === "weekly"
+      ? "september"
+      : initialSection === "monthly"
+        ? "review"
+        : "year";
+    setActiveLibrarySection(nextSection);
+    if (initialSection === "overview") return undefined;
     const frame = window.requestAnimationFrame(() => {
       const target = initialSection === "weekly"
         ? weeklySectionRef.current
@@ -395,11 +415,11 @@ export function PremiumPlanCenterScreen({
   const accessPresentation = useMemo(() => {
     if (effectivePremiumAccess?.source === "development-preview") {
       return {
-        header: "geliştirme önizlemesi",
-        title: "Geliştirme önizlemesi",
+        header: "içerik erişimi",
+        title: "İçerik kütüphanesi bu cihazda açık",
         detail:
-          "Bu yerel önizleme yalnız ürün doğrulaması içindir; üretim erişimi imzalı cihaz yetkisiyle açılır.",
-        access: "Yerel önizleme",
+          "Öğretmenin kendi planları yayın takviminden ve premium erişimden bağımsızdır; bu alan yalnız ek hazır içerik sunar.",
+        access: "Bu cihazda etkin",
       };
     }
     if (readOnlyPresentation.mutationsBlocked && effectivePremiumAccess) {
@@ -449,6 +469,7 @@ export function PremiumPlanCenterScreen({
     if (!pack || busy) return;
     setBusy(true);
     setError("");
+    setActionFeedback("");
     try {
       assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       await installPremiumPlanBoard(store, {
@@ -457,11 +478,22 @@ export function PremiumPlanCenterScreen({
         teacherPreferredLensId,
         teacherPreferredSupportingLensIds,
       });
-      setInstalled(await loadInstalledPremiumPlan(store, pack));
+      const installedPlan = await loadInstalledPremiumPlan(store, pack);
+      if (!installedPlan) {
+        throw new Error("Eylül içerik paketi kaydedildi ancak kurulum sonucu yeniden okunamadı.");
+      }
+      setInstalled(installedPlan);
       setLatestMonthlyEvaluation(null);
       setSelectedMonthlyEvaluationId(null);
       setWeeklyCarryForwardContexts([]);
+      setActionFeedback(
+        "Eylül hazır içerik paketi sınıfa eklendi. Öğretmenin Eylül–Haziran plan omurgası değiştirilmedi.",
+      );
       notifyRecordsChanged();
+      window.requestAnimationFrame(() => {
+        installPanelRef.current?.scrollIntoView({ block: "start" });
+        installPanelRef.current?.focus({ preventScroll: true });
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Plan panosu eklenemedi.");
     } finally {
@@ -484,6 +516,7 @@ export function PremiumPlanCenterScreen({
     if (!pack || !installed || busy) return;
     setBusy(true);
     setError("");
+    setActionFeedback("");
     try {
       assertPremiumPlanMutationAccess(effectivePremiumAccess, pack);
       await updatePremiumPlanLensPreferences(store, {
@@ -492,12 +525,39 @@ export function PremiumPlanCenterScreen({
         teacherPreferredSupportingLensIds,
       });
       setInstalled(await loadInstalledPremiumPlan(store, pack));
+      setActionFeedback(
+        "Pedagojik yaklaşım tercihi bu sınıfın plan kaydına kaydedildi.",
+      );
       notifyRecordsChanged();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Pedagojik yaklaşım güncellenemedi.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const lensPreferenceDirty = Boolean(
+    installed &&
+      (installed.teacherPreferredLensId !== teacherPreferredLensId ||
+        installed.teacherPreferredSupportingLensIds.length !==
+          teacherPreferredSupportingLensIds.length ||
+        installed.teacherPreferredSupportingLensIds.some(
+          (lensId) => !teacherPreferredSupportingLensIds.includes(lensId),
+        )),
+  );
+
+  const openAnnualMonth = (monthKey: string) => {
+    setActionFeedback("");
+    if (monthKey === pack?.monthlyPlan.monthKey) {
+      setActiveLibrarySection("september");
+      window.requestAnimationFrame(() => {
+        weeklySectionRef.current?.scrollIntoView({ block: "start" });
+        weeklySectionRef.current?.focus({ preventScroll: true });
+      });
+      setActionFeedback("Eylül hazır içerik ayrıntıları açıldı.");
+      return;
+    }
+    onOpenTeacherMonth(monthKey);
   };
 
   const useActivity = (activityId: string) => {
@@ -608,6 +668,7 @@ export function PremiumPlanCenterScreen({
       setReviewContext(null);
       setValueEvidenceEditorObservationId(null);
       setReviewMessage("");
+      setActionFeedback("Haftalık değerlendirme kapatıldı.");
       return;
     }
     const weeklyPlanId = installed.weeklyPlanIds.find(
@@ -624,6 +685,11 @@ export function PremiumPlanCenterScreen({
       setReviewReflection("");
       setReviewEvidenceSummary("");
       setReviewDecision("keep");
+      setActionFeedback(
+        context.observations.length === 0
+          ? "Haftalık değerlendirme açıldı. Kaydetmek için önce bu haftaya bağlı en az bir gözlem ve öğretmen onaylı program bağı gerekir."
+          : `Haftalık değerlendirme açıldı. ${context.observations.length} gözlem kaydı incelemeye hazır.`,
+      );
     } catch (reason) {
       setReviewMessage(reason instanceof Error ? reason.message : "Haftalık değerlendirme açılamadı.");
     } finally {
@@ -703,6 +769,7 @@ export function PremiumPlanCenterScreen({
     if (monthlyReviewContext) {
       setMonthlyReviewContext(null);
       setMonthlyReviewMessage("");
+      setActionFeedback("Aylık değerlendirme kapatıldı.");
       return;
     }
     setMonthlyReviewBusy(true);
@@ -724,6 +791,11 @@ export function PremiumPlanCenterScreen({
       } else {
         resetMonthlyEvaluationForm();
       }
+      setActionFeedback(
+        context.observations.length === 0
+          ? "Aylık değerlendirme açıldı. Onay için farklı gün ve haftalara yayılan öğretmen gözlemleri ile program bağları gerekir."
+          : `Aylık değerlendirme açıldı. ${context.observations.length} gözlem kaydı kanıt havuzunda.`,
+      );
     } catch (reason) {
       setMonthlyReviewMessage(
         reason instanceof Error
@@ -840,6 +912,33 @@ export function PremiumPlanCenterScreen({
       : null;
   };
 
+  const weeklyReviewBlockers = [
+    reviewObservationIds.length === 0 ? "En az bir bağlı ham gözlem seçin." : null,
+    !reviewEvidenceSummary.trim() ? "Kanıt özetini yazın." : null,
+    !reviewReflection.trim() ? "Öğretmen değerlendirmesini yazın." : null,
+  ].filter((item): item is string => item !== null);
+
+  const monthlyReviewBlockers = [
+    !monthlyProgramNarrative.trim()
+      ? "Program yönü öğretmen değerlendirmesini yazın."
+      : null,
+    !monthlyTeacherNarrative.trim()
+      ? "Öğretmen yönü yansıtmasını yazın."
+      : null,
+    !monthlyNextRecommendation.trim()
+      ? "Sonraki ay için öğretmen önerisini yazın."
+      : null,
+    monthlyEvidenceState === "sufficient-evidence" &&
+    !monthlyChildNarrative.trim()
+      ? "Çocuklar yönü öğretmen notunu yazın."
+      : null,
+    monthlyEvidenceState === "sufficient-evidence" &&
+    (!monthlySelectedCoverage ||
+      !premiumMonthlyEvidenceMeetsMinimum(monthlySelectedCoverage))
+      ? "En az iki gün ve iki haftaya yayılan, tüm aktif çocukları temsil eden öğretmen onaylı program bağlı kanıt seçin."
+      : null,
+  ].filter((item): item is string => item !== null);
+
   return (
     <div className="premium-plan-center" data-testid="premium-plan-center">
       <header className="premium-plan-header">
@@ -864,6 +963,12 @@ export function PremiumPlanCenterScreen({
 
         {busy && !pack ? <p className="premium-loading">İçerik paketi doğrulanıyor…</p> : null}
         {error ? <p className="premium-error" role="alert">{error}</p> : null}
+        {actionFeedback ? (
+          <p className="premium-action-feedback" role="status" aria-live="polite">
+            <CheckCircledIcon aria-hidden="true" />
+            <span>{actionFeedback}</span>
+          </p>
+        ) : null}
 
         {pack && readOnlyPresentation.mutationsBlocked ? (
           <section
@@ -880,16 +985,16 @@ export function PremiumPlanCenterScreen({
         {pack ? (
           <>
             <section className="premium-plan-hero">
-              <span className="premium-plan-eyebrow">İlk çalışan dilim</span>
+              <span className="premium-plan-eyebrow">2026–2027 eğitim yılı</span>
               <h2>{pack.displayName}</h2>
-              <p>Eylül 2026 için 4 hafta, 12 öğretmen incelemeli etkinlik, 10 bloklu tam gün akışı ve öğretmen kontrollü günlük plan köprüsü.</p>
+              <p>Eylül–Haziran için öğretmenin düzenleyebildiği 10 aylık plan omurgası; Eylül ayında ayrıca 4 hafta, makine eşlemesi tamamlanmış 12 taslak etkinlik ve 10 bloklu tam gün akışı.</p>
               <dl>
                 <div><dt>Program</dt><dd>TYMM 2024</dd></div>
                 <div><dt>Yaş</dt><dd>60–72 ay</dd></div>
                 <div><dt>Erişim</dt><dd>{accessPresentation.access}</dd></div>
                 <div>
                   <dt>Değer omurgası</dt>
-                  <dd>{pack.valuesMappingStatus === "legacy-unmapped" ? "Eski sürüm · eşlenmemiş" : "12/12 etkinlik · doğrulandı"}</dd>
+                  <dd>{pack.valuesMappingStatus === "legacy-unmapped" ? "Eski sürüm · eşlenmemiş" : "12/12 etkinlik · makine eşlemesi tamamlandı"}</dd>
                 </div>
               </dl>
             </section>
@@ -900,6 +1005,50 @@ export function PremiumPlanCenterScreen({
                 <span>Resmî katalogla doğrulanmış TYMM 2024 · 60–72 ay sınıfı gereklidir.</span>
               </section>
             ) : null}
+
+            <section
+              className={`premium-install-panel${installed ? " premium-install-panel--installed" : ""}`}
+              ref={installPanelRef}
+              tabIndex={-1}
+              aria-label="Eylül hazır içerik kurulumu"
+              data-testid="premium-install-panel"
+            >
+              {installed ? (
+                <>
+                  <CheckCircledIcon aria-hidden="true" />
+                  <span>
+                    <strong>Eylül hazır içerik paketi sınıfa eklendi</strong>
+                    <small>
+                      {installed.weeklyPlanIds.length} hafta · {installed.activityCount} etkinlik ·
+                      sürüm {installed.contentVersion}. Öğretmenin 10 aylık plan omurgası
+                      bağımsız ve düzenlenebilir kalır.
+                    </small>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    <strong>Eylül hazır içerik paketini sınıfa ekleyin</strong>
+                    <small>
+                      Yalnız Eylül’e ait 4 hafta ve 12 etkinlik ayrı kaynak kayıtlarıyla
+                      eklenir. Öğretmenin Eylül–Haziran plan omurgası değiştirilmez.
+                    </small>
+                  </span>
+                  <button
+                    type="button"
+                    aria-describedby={
+                      readOnlyPresentation.mutationsBlocked
+                        ? PREMIUM_READ_ONLY_REASON_ID
+                        : undefined
+                    }
+                    onClick={() => void install()}
+                    disabled={!eligible || busy || !premiumContentAllowed}
+                  >
+                    {busy ? "Eylül paketi ekleniyor…" : "Eylül hazır içeriğini ekle"}
+                  </button>
+                </>
+              )}
+            </section>
 
             {legacyInstalled.length > 0 ? (
               <section className="premium-legacy-plans" aria-labelledby="premium-legacy-title">
@@ -919,6 +1068,32 @@ export function PremiumPlanCenterScreen({
               </section>
             ) : null}
 
+            <nav className="premium-library-tabs" aria-label="Plan Kütüphanesi bölümleri">
+              <button
+                type="button"
+                aria-current={activeLibrarySection === "year" ? "page" : undefined}
+                onClick={() => setActiveLibrarySection("year")}
+              >
+                Yıllık omurga
+              </button>
+              <button
+                type="button"
+                aria-current={activeLibrarySection === "september" ? "page" : undefined}
+                onClick={() => setActiveLibrarySection("september")}
+              >
+                Eylül içeriği
+              </button>
+              <button
+                type="button"
+                aria-current={activeLibrarySection === "review" ? "page" : undefined}
+                onClick={() => setActiveLibrarySection("review")}
+              >
+                Değerlendirme ve belge
+              </button>
+            </nav>
+
+            {activeLibrarySection === "year" ? (
+              <div className="premium-library-panel" data-testid="premium-library-year-panel">
             <section className="premium-values-constitution" aria-labelledby="premium-values-title">
               <div className="premium-section-heading">
                 <span>Değerler Pedagojisi Anayasası</span>
@@ -1018,52 +1193,62 @@ export function PremiumPlanCenterScreen({
                       ? PREMIUM_READ_ONLY_REASON_ID
                       : undefined
                   }
-                  disabled={busy || readOnlyPresentation.mutationsBlocked}
+                  disabled={
+                    busy ||
+                    readOnlyPresentation.mutationsBlocked ||
+                    !lensPreferenceDirty
+                  }
                   onClick={() => void applyLensPreference()}
                 >
-                  Yaklaşım tercihini plana kaydet
+                  {lensPreferenceDirty
+                    ? "Yaklaşım tercihini plana kaydet"
+                    : "Yaklaşım tercihleri güncel"}
                 </button>
               ) : null}
             </section>
 
             <section className="premium-section" aria-labelledby="premium-year-title">
               <div className="premium-section-heading">
-                <span>Yıllık omurga</span>
-                <h2 id="premium-year-title">Eylül plan paketi + yıllık omurga</h2>
+                <span>Yıllık plan kütüphanesi</span>
+                <h2 id="premium-year-title">Eylül–Haziran · 10 aylık omurga</h2>
                 <p>
-                  Uygulanabilir aylık içerik Eylül paketidir. Ekim–Haziran başlıkları
-                  yayımlanmış plan değil, ileride hazırlanacak omurgayı gösterir.
+                  Her ay hemen planlanabilir. Eylül hazır etkinlik paketiyle,
+                  diğer aylar öğretmenin düzenleyebileceği aylık ve haftalık
+                  omurgayla açılır.
                 </p>
               </div>
               <ol className="premium-month-list">
-                {pack.annualMonths.map((month) => (
-                  <li
-                    key={month.monthKey}
-                    className={month.releaseStatus === "ready"
-                      ? "is-ready"
-                      : month.releaseStatus === "internal-review-ready"
-                        ? "is-review-pending"
-                        : ""}
-                  >
-                    <span>{month.monthKey.slice(5)}</span>
-                    <div><strong>{month.title}</strong><small>{month.purpose}</small></div>
-                    {month.releaseStatus === "ready" ? (
-                      <CheckCircledIcon
-                        aria-label="Eski pilot içerik kullanılabilir; değer tasarımı bulunmuyor"
-                      />
-                    ) : month.releaseStatus === "internal-review-ready" ? (
-                      <span className="premium-month-review-pending">
-                        <ClockIcon aria-hidden="true" focusable="false" />
-                        <span>Uzman incelemesi bekliyor</span>
-                      </span>
-                    ) : (
-                      <span>Henüz yayımlanmadı</span>
-                    )}
-                  </li>
-                ))}
+                {pack.annualMonths.map((month) => {
+                  const readyContent = month.monthKey === pack.monthlyPlan.monthKey;
+                  const monthName = new Intl.DateTimeFormat("tr-TR", {
+                    month: "long",
+                    year: "numeric",
+                    timeZone: "UTC",
+                  }).format(new Date(`${month.monthKey}-01T12:00:00.000Z`));
+                  return (
+                    <li key={month.monthKey} className={readyContent ? "is-ready" : undefined}>
+                      <span>{month.monthKey.slice(5)}</span>
+                      <div>
+                        <strong>{monthName} · {month.title}</strong>
+                        <small>{month.purpose}</small>
+                      </div>
+                      <button
+                        type="button"
+                        className="premium-month-action"
+                        onClick={() => openAnnualMonth(month.monthKey)}
+                      >
+                        {readyContent ? "Hazır içeriği aç" : "Bu ayı planla"}
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
             </section>
+              </div>
+            ) : null}
 
+            {activeLibrarySection === "september" ? (
+              <div className="premium-library-panel" data-testid="premium-library-september-panel">
             <section className="premium-section" aria-labelledby="premium-monthly-title">
               <div className="premium-section-heading">
                 <span>Aylık uygulama özeti</span>
@@ -1093,12 +1278,12 @@ export function PremiumPlanCenterScreen({
               ) : null}
             </section>
 
-            <section className="premium-section" aria-labelledby="premium-flow-title">
-              <div className="premium-section-heading">
+            <details className="premium-section premium-flow-disclosure">
+              <summary className="premium-section-heading">
                 <span>Otomatik ve esnek</span>
                 <h2 id="premium-flow-title">10 bloklu tam gün akışı</h2>
                 <p>Bloklar önerilen sırada yerleşir; öğretmen sınıfın ihtiyacına göre süreyi ve geçişi değiştirebilir.</p>
-              </div>
+              </summary>
               <ol className="premium-full-day-flow">
                 {pack.fullDayFlow.map((block, index) => (
                   <li key={block.id}>
@@ -1111,7 +1296,7 @@ export function PremiumPlanCenterScreen({
                   </li>
                 ))}
               </ol>
-            </section>
+            </details>
 
             <section
               className="premium-section"
@@ -1125,13 +1310,22 @@ export function PremiumPlanCenterScreen({
                 <h2 id="premium-activities-title">Öğretmen incelemeli etkinlikler</h2>
               </div>
               <div className="premium-activity-list">
-                {pack.weeks.map((week) => (
-                  <section className="premium-week-block" key={week.id} data-week-id={week.id}>
-                    <div className="premium-week-header">
+                {pack.weeks.map((week, weekIndex) => (
+                  <details
+                    className="premium-week-block"
+                    key={week.id}
+                    data-week-id={week.id}
+                    open={reviewContext?.weekId === week.id ? true : undefined}
+                  >
+                    <summary className="premium-week-header">
                       <span>{week.dateRange}</span>
-                      <h3>{week.title}</h3>
-                      <p>{week.inquiryQuestion}</p>
-                    </div>
+                      <strong>{week.title}</strong>
+                      <small>{week.inquiryQuestion}</small>
+                      <em>
+                        {pack.activities.filter((activity) => activity.weekId === week.id).length}
+                        {" "}etkinlik · {weekIndex + 1}. hafta
+                      </em>
+                    </summary>
                     {(() => {
                       const carryForward = weeklyCarryForwardForWeek(week.id);
                       return carryForward ? (
@@ -1417,7 +1611,9 @@ export function PremiumPlanCenterScreen({
                           aria-describedby={
                             readOnlyPresentation.mutationsBlocked
                               ? PREMIUM_READ_ONLY_REASON_ID
-                              : undefined
+                              : weeklyReviewBlockers.length > 0
+                                ? `premium-weekly-save-requirements-${week.id}`
+                                : undefined
                           }
                           disabled={
                             reviewBusy ||
@@ -1430,17 +1626,39 @@ export function PremiumPlanCenterScreen({
                         >
                           {reviewBusy ? "Kaydediliyor…" : "Değerlendirmeyi kaydet ve sonraki haftaya taşı"}
                         </button>
+                        {weeklyReviewBlockers.length > 0 ? (
+                          <div
+                            className="premium-action-requirements"
+                            id={`premium-weekly-save-requirements-${week.id}`}
+                            role="status"
+                          >
+                            <strong>Kaydetmek için kalanlar</strong>
+                            <ul>
+                              {weeklyReviewBlockers.map((blocker) => (
+                                <li key={blocker}>{blocker}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : (
+                          <p className="premium-action-ready" role="status">
+                            Haftalık değerlendirme kayda hazır.
+                          </p>
+                        )}
                         {reviewMessage ? <p className="premium-review-message" role="status">{reviewMessage}</p> : null}
                         {reviewContext.evaluations.length > 0 ? (
                           <small>{reviewContext.evaluations.length} değerlendirme kaydı korunuyor.</small>
                         ) : null}
                       </section>
                     ) : null}
-                  </section>
+                  </details>
                 ))}
               </div>
             </section>
+              </div>
+            ) : null}
 
+            {activeLibrarySection === "review" ? (
+              <div className="premium-library-panel" data-testid="premium-library-review-panel">
             <section
               className="premium-section premium-monthly-evaluation"
               aria-labelledby="premium-monthly-evaluation-title"
@@ -1801,7 +2019,9 @@ export function PremiumPlanCenterScreen({
                     aria-describedby={
                       readOnlyPresentation.mutationsBlocked
                         ? PREMIUM_READ_ONLY_REASON_ID
-                        : undefined
+                        : monthlyReviewBlockers.length > 0
+                          ? "premium-monthly-save-requirements"
+                          : undefined
                     }
                     disabled={
                       monthlyReviewBusy ||
@@ -1822,6 +2042,24 @@ export function PremiumPlanCenterScreen({
                       ? "Kaydediliyor…"
                       : "Aylık değerlendirmeyi yeni kayıt olarak ekle"}
                   </button>
+                  {monthlyReviewBlockers.length > 0 ? (
+                    <div
+                      className="premium-action-requirements"
+                      id="premium-monthly-save-requirements"
+                      role="status"
+                    >
+                      <strong>Kaydetmek için kalanlar</strong>
+                      <ul>
+                        {monthlyReviewBlockers.map((blocker) => (
+                          <li key={blocker}>{blocker}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="premium-action-ready" role="status">
+                      Aylık değerlendirme yeni kayıt olarak eklenmeye hazır.
+                    </p>
+                  )}
                   {monthlyReviewMessage ? (
                     <p className="premium-review-message" role="status">
                       {monthlyReviewMessage}
@@ -1941,33 +2179,6 @@ export function PremiumPlanCenterScreen({
               </section>
             </section>
 
-            <section
-              className={`premium-install-panel${installed ? " premium-install-panel--installed" : ""}`}
-            >
-              {installed ? (
-                <>
-                  <CheckCircledIcon aria-hidden="true" />
-                  <span><strong>Eylül plan paketi ve yıllık omurga sınıfa eklendi</strong><small>Eylül için {installed.weeklyPlanIds.length} hafta · {installed.activityCount} etkinlik · sürüm {installed.contentVersion}; Ekim–Haziran henüz yayımlanmadı</small></span>
-                </>
-              ) : (
-                <>
-                  <span><strong>Önce Eylül paketini ve yıllık omurgayı sınıfa ekleyin</strong><small>İşlem bir yıllık omurga, yalnız Eylül’e ait bir aylık plan ve dört haftalık kayıt oluşturur; var olan kayıtları değiştirmez.</small></span>
-                  <button
-                    type="button"
-                    aria-describedby={
-                      readOnlyPresentation.mutationsBlocked
-                        ? PREMIUM_READ_ONLY_REASON_ID
-                        : undefined
-                    }
-                    onClick={() => void install()}
-                    disabled={!eligible || busy || !premiumContentAllowed}
-                  >
-                    Eylül paketini + yıllık omurgayı ekle
-                  </button>
-                </>
-              )}
-            </section>
-
             <section className="premium-export-panel" aria-labelledby="premium-export-title">
               <div>
                 <span>Çevrimdışı belge merkezi</span>
@@ -1999,6 +2210,8 @@ export function PremiumPlanCenterScreen({
               ) : null}
               {exportMessage ? <p className="premium-export-message" role="status">{exportMessage}</p> : null}
             </section>
+              </div>
+            ) : null}
           </>
         ) : null}
       </main>

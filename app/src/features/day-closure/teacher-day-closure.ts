@@ -16,6 +16,7 @@ import {
 } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import { studentEnrollments } from "../archive/academic-year-archive.ts";
+import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 
 export const TEACHER_DAY_CLOSURE_SETTING_TYPE = "teacher-day-closure" as const;
 export const TEACHER_DAY_CLOSURE_LEGACY_SCHEMA_VERSION = 1 as const;
@@ -383,6 +384,7 @@ function studentWasEnrolledOn(
     readonly academicYearId: string;
     readonly classroomId: string;
     readonly civilDate: string;
+    readonly operationalStartDate?: string;
   },
 ): boolean {
   const matchingEnrollments = studentEnrollments(record).filter(
@@ -393,7 +395,10 @@ function studentWasEnrolledOn(
   if (matchingEnrollments.length > 0) {
     return matchingEnrollments.some(
       (enrollment) =>
-        enrollment.startedOn <= input.civilDate &&
+        (enrollment.startedOn <= input.civilDate ||
+          (enrollment.status === "active" &&
+            input.operationalStartDate !== undefined &&
+            input.operationalStartDate <= input.civilDate)) &&
         (enrollment.endedOn === undefined || enrollment.endedOn >= input.civilDate),
     );
   }
@@ -425,8 +430,23 @@ export function teacherDayClosureSemanticFingerprint(
   }
   const inScope = (record: StoredRecord) =>
     exactScope(record, input.academicYearId, input.classroomId);
+  const academicYear = snapshot.academicYears.find(
+    (record) => isLive(record) && record.id === input.academicYearId,
+  );
+  const operationalStartDate = academicYear &&
+    typeof academicYear.startDate === "string"
+    ? academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        operationalStartDate:
+          typeof academicYear.operationalStartDate === "string"
+            ? academicYear.operationalStartDate
+            : undefined,
+      })
+    : undefined;
   const activeStudentIds = snapshot.students
-    .filter((record) => studentWasEnrolledOn(record, input))
+    .filter((record) =>
+      studentWasEnrolledOn(record, { ...input, operationalStartDate }),
+    )
     .map((record) => record.id)
     .sort();
   const activeStudentIdSet = new Set(activeStudentIds);
@@ -886,7 +906,14 @@ export function resolveTeacherDayClosureWorkspace(
     typeof academicYear.endDate !== "string" ||
     !isCivilDate(academicYear.startDate) ||
     !isCivilDate(academicYear.endDate) ||
-    civilDate < academicYear.startDate ||
+    civilDate <
+      academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        operationalStartDate:
+          typeof academicYear.operationalStartDate === "string"
+            ? academicYear.operationalStartDate
+            : undefined,
+      }) ||
     civilDate > academicYear.endDate
   ) {
     return {
@@ -909,6 +936,13 @@ export function resolveTeacherDayClosureWorkspace(
       academicYearId: scope.academicYearId,
       classroomId: scope.classroomId,
       civilDate,
+      operationalStartDate: academicYearEffectiveOperationalStart({
+        startDate: String(academicYear.startDate),
+        operationalStartDate:
+          typeof academicYear.operationalStartDate === "string"
+            ? academicYear.operationalStartDate
+            : undefined,
+      }),
     })
   );
   const activeStudentIds = new Set(activeStudents.map((record) => record.id));

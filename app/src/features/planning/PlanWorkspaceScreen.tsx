@@ -20,6 +20,7 @@ export interface PlanWorkspaceScreenProps {
   educationalWritesDisabled: boolean;
   preparationPlanningAllowed?: boolean;
   preparationPlanningCivilDate?: string | null;
+  upcomingPlanningCivilDate?: string | null;
   dataBusy: boolean;
   onOpenLevel(levelId: PlanWorkbenchLevelId): void;
   onOpenCalendar(): void;
@@ -39,6 +40,7 @@ export function PlanWorkspaceScreen({
   educationalWritesDisabled,
   preparationPlanningAllowed = false,
   preparationPlanningCivilDate = null,
+  upcomingPlanningCivilDate = null,
   dataBusy,
   onOpenLevel,
   onOpenCalendar,
@@ -49,6 +51,7 @@ export function PlanWorkspaceScreen({
     educationalWritesDisabled,
     preparationPlanningAllowed,
     preparationPlanningCivilDate,
+    upcomingPlanningCivilDate,
   });
 
   return (

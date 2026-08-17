@@ -7,6 +7,8 @@ import {
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
+  activateAcademicYearNow,
+  loadTodayWorkspace,
   transitionAcademicYearConfiguration,
 } from "../../src/features/today/today-data.ts";
 
@@ -214,6 +216,87 @@ test("geçiş yazma hatasında eski eğitim yılı ve öğrenciler atomik korunu
   const before = await store.readSnapshot();
   await assert.rejects(
     transitionAcademicYearConfiguration(store, transitionInput),
+    /Kurgu geçiş hatası/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+});
+
+function preparationStore(failCollection = null) {
+  const store = transitionStore(failCollection);
+  const year = store.snapshot.academicYears[0];
+  year.name = "2026–2027 Eğitim Yılı";
+  year.startDate = "2026-09-01";
+  year.endDate = "2027-08-31";
+  for (const student of store.snapshot.students) {
+    student.civilDate = "2026-09-01";
+    student.enrollments[0].startedOn = "2026-09-01";
+  }
+  return store;
+}
+
+test("öğretmen hazırlanan dönemi bugün gerçek kayıt kullanımına açar", async () => {
+  const store = preparationStore();
+  const context = await activateAcademicYearNow(store, {
+    now: new Date("2026-08-17T10:00:00.000Z"),
+  });
+
+  assert.equal(context.operationalStatus, "active");
+  assert.equal(context.academicYearStart, "2026-09-01");
+  assert.equal(context.academicYearOperationalStart, "2026-08-17");
+  const snapshot = await store.readSnapshot();
+  assert.equal(snapshot.academicYears[0].startDate, "2026-09-01");
+  assert.equal(
+    snapshot.academicYears[0].operationalStartDate,
+    "2026-08-17",
+  );
+  assert.equal(
+    snapshot.academicYears[0].operationalStartedAt,
+    "2026-08-17T10:00:00.000Z",
+  );
+  assert.ok(
+    snapshot.students.every(
+      (student) => student.enrollments[0].startedOn === "2026-09-01",
+    ),
+  );
+  assert.equal(
+    snapshot.auditLogs.at(-1)?.action,
+    "academic-year-activated-early",
+  );
+});
+
+test("eski erken-başlatma kaydı dönem tarihini değiştirmeden operasyon alanına taşınır", async () => {
+  const store = preparationStore();
+  const year = store.snapshot.academicYears[0];
+  year.startDate = "2026-08-17";
+  year.officialStartDate = "2026-09-01";
+  year.activatedEarlyAt = "2026-08-17T10:00:00.000Z";
+
+  const workspace = await loadTodayWorkspace(store, {
+    now: new Date("2026-08-17T11:00:00.000Z"),
+  });
+
+  assert.equal(workspace.classroom.status, "configured");
+  assert.equal(workspace.classroom.academicYearStart, "2026-09-01");
+  assert.equal(workspace.classroom.academicYearOperationalStart, "2026-08-17");
+  assert.equal(workspace.classroom.operationalStatus, "active");
+  const migrated = store.snapshot.academicYears[0];
+  assert.equal(migrated.startDate, "2026-09-01");
+  assert.equal(migrated.operationalStartDate, "2026-08-17");
+  assert.equal(
+    migrated.operationalStartedAt,
+    "2026-08-17T10:00:00.000Z",
+  );
+  assert.equal(migrated.officialStartDate, undefined);
+  assert.equal(migrated.activatedEarlyAt, undefined);
+});
+
+test("bugün başlatma yazma hatasında dönem ve öğrenci üyeliklerini değiştirmez", async () => {
+  const store = preparationStore("academicYears");
+  const before = await store.readSnapshot();
+  await assert.rejects(
+    activateAcademicYearNow(store, {
+      now: new Date("2026-08-17T10:00:00.000Z"),
+    }),
     /Kurgu geçiş hatası/,
   );
   assert.deepEqual(await store.readSnapshot(), before);

@@ -191,15 +191,10 @@ import {
   type TeacherOwnedDailyFlowCopySource,
 } from "./features/planning/scheduled-plan-workspace.ts";
 import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
-import {
-  activatePremiumFounderAccess,
-  loadStoredPremiumFounderAccess,
-  premiumFounderActivationErrorPresentation,
-  premiumFounderConfigurationFromEnvironment,
-  resetPremiumFounderLocalLicenseAccess,
-  type PremiumFounderActivationErrorPresentation,
-  type PremiumFounderAccessResult,
-  type PremiumFounderConfiguration,
+import type {
+  PremiumFounderActivationErrorPresentation,
+  PremiumFounderAccessResult,
+  PremiumFounderConfiguration,
 } from "./features/premium-access/founder-client.ts";
 import {
   assertPremiumPackActionAccess,
@@ -231,6 +226,7 @@ import {
   type CurriculumTargetSnapshot,
 } from "./features/curriculum/curriculum-catalog";
 import {
+  activateAcademicYearNow,
   academicYearOperationalNotice,
   academicYearOperationalStatus,
   loadPlanDayWorkspace,
@@ -2403,22 +2399,16 @@ export default function Prototype() {
     isCapabilityEnabled("premiumPlanCenter") ||
     (import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get("premiumPilot") === "1");
-  const premiumFounderConfigurationState = useMemo<{
+  const [premiumFounderConfigurationState, setPremiumFounderConfigurationState] =
+    useState<{
     configuration: PremiumFounderConfiguration | null;
     error: string;
-  }>(() => {
-    try {
-      return {
-        configuration: premiumFounderConfigurationFromEnvironment(),
-        error: "",
-      };
-    } catch {
-      return {
-        configuration: null,
-        error: "Kurucu Premium yapılandırması geçersiz. Ücretli premium erişimi etkilenmedi.",
-      };
-    }
-  }, []);
+    ready: boolean;
+  }>({
+    configuration: null,
+    error: "",
+    ready: false,
+  });
   const internalStaffExportEnabled =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("premiumPilot") === "1";
@@ -2584,6 +2574,8 @@ export default function Prototype() {
   const [teacherPlanRecordsOpen, setTeacherPlanRecordsOpen] = useState(false);
   const [teacherPlanRecordsInitialLevel, setTeacherPlanRecordsInitialLevel] =
     useState<Exclude<PlanWorkbenchLevelId, "daily">>("annual");
+  const [teacherPlanRecordsInitialMonthKey, setTeacherPlanRecordsInitialMonthKey] =
+    useState<string | null>(null);
   const [scheduledPlanEditDraft, setScheduledPlanEditDraft] =
     useState<ScheduledPlanEditDraft | null>(null);
   const [teacherOwnedDailyFlowCopySources, setTeacherOwnedDailyFlowCopySources] =
@@ -2604,9 +2596,7 @@ export default function Prototype() {
   const [premiumGateMounted, setPremiumGateMounted] = useState(false);
   const [premiumFounderAccess, setPremiumFounderAccess] =
     useState<PremiumFounderAccessResult | null>(null);
-  const [premiumFounderBusy, setPremiumFounderBusy] = useState(
-    premiumFounderConfigurationState.configuration !== null,
-  );
+  const [premiumFounderBusy, setPremiumFounderBusy] = useState(true);
   const [premiumFounderError, setPremiumFounderError] = useState(
     premiumFounderConfigurationState.error,
   );
@@ -2742,6 +2732,14 @@ export default function Prototype() {
     weeklyPeriodEnd: teacherWorkCycle.weekly?.periodEnd,
   });
   const preparationPlanningAllowed = preparationPlanningWindow.allowed;
+  const upcomingPlanningCivilDate =
+    teacherWorkCycle.weekly?.relation === "upcoming"
+      ? teacherWorkCycle.weekly.periodStart
+      : null;
+  const defaultPlanFlowCivilDate =
+    preparationPlanningWindow.defaultCivilDate ??
+    upcomingPlanningCivilDate ??
+    todayWorkspace.civilDate;
   const planWritesDisabled =
     educationalWritesDisabled && !preparationPlanningAllowed;
   const premiumMutationAllowed =
@@ -2813,6 +2811,7 @@ export default function Prototype() {
       classroom.academicYearStart,
       classroom.academicYearEnd,
       civilDateInIstanbul(now),
+      classroom.academicYearOperationalStart,
     );
     if (status === "active") return;
     const preparationDate = guard.allowPreparationForCivilDate;
@@ -2871,8 +2870,10 @@ export default function Prototype() {
   const officialAcademicCalendarApplied =
     classroomForm.academicYearName ===
       OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName &&
-    classroomForm.academicYearStart ===
-      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
+    (classroomForm.academicYearStart ===
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate ||
+      classroomForm.academicYearStart ===
+        configuredClassroom?.academicYearStart) &&
     classroomForm.academicYearEnd ===
       OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate;
   const academicYearTransitionRequired =
@@ -3320,12 +3321,46 @@ export default function Prototype() {
   }, [documentsOpen, persistenceState.phase, store]);
 
   useEffect(() => {
+    let cancelled = false;
+    void import("./features/premium-access/founder-client.ts")
+      .then(({ premiumFounderConfigurationFromEnvironment }) => {
+        if (cancelled) return;
+        const configuration = premiumFounderConfigurationFromEnvironment();
+        setPremiumFounderConfigurationState({
+          configuration,
+          error: "",
+          ready: true,
+        });
+        if (!configuration) setPremiumFounderBusy(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const message =
+          "Kurucu Premium yapılandırması geçersiz. Ücretli premium erişimi etkilenmedi.";
+        setPremiumFounderConfigurationState({
+          configuration: null,
+          error: message,
+          ready: true,
+        });
+        setPremiumFounderError(message);
+        setPremiumFounderBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!premiumFounderConfigurationState.ready) return undefined;
     const configuration = premiumFounderConfigurationState.configuration;
     if (!configuration) return undefined;
     let cancelled = false;
     setPremiumFounderBusy(true);
     setPremiumFounderErrorPresentation(null);
-    void loadStoredPremiumFounderAccess({ configuration })
+    void import("./features/premium-access/founder-client.ts")
+      .then(({ loadStoredPremiumFounderAccess }) =>
+        loadStoredPremiumFounderAccess({ configuration }),
+      )
       .then((result) => {
         if (cancelled) return;
         setPremiumFounderAccess(result);
@@ -3334,9 +3369,14 @@ export default function Prototype() {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const presentation = premiumFounderActivationErrorPresentation(error);
-        setPremiumFounderError(presentation.message);
-        setPremiumFounderErrorPresentation(presentation);
+        void import("./features/premium-access/founder-client.ts").then(
+          ({ premiumFounderActivationErrorPresentation }) => {
+            if (cancelled) return;
+            const presentation = premiumFounderActivationErrorPresentation(error);
+            setPremiumFounderError(presentation.message);
+            setPremiumFounderErrorPresentation(presentation);
+          },
+        );
       })
       .finally(() => {
         if (!cancelled) setPremiumFounderBusy(false);
@@ -3344,7 +3384,10 @@ export default function Prototype() {
     return () => {
       cancelled = true;
     };
-  }, [premiumFounderConfigurationState.configuration]);
+  }, [
+    premiumFounderConfigurationState.configuration,
+    premiumFounderConfigurationState.ready,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5532,6 +5575,58 @@ export default function Prototype() {
     setAnnouncement("2026–2027 MEB takvim tarihleri forma uygulandı.");
   };
 
+  const startAcademicYearWorkToday = async () => {
+    if (writesBlocked || dataBusy) {
+      setAnnouncement(
+        "Cihaz verileri yazmaya hazır değil. Çalışma başlangıcı uygulanmadı.",
+      );
+      return;
+    }
+    if (configuredClassroom?.operationalStatus !== "preparation") {
+      setAnnouncement("Seçili eğitim yılı zaten kullanıma açık.");
+      return;
+    }
+    setDataBusy(true);
+    setClassroomError("");
+    try {
+      const context = await enqueuePersistence(
+        () => activateAcademicYearNow(store),
+        {
+          failureDetail:
+            "Eğitim yılı bugün için açılamadı. Mevcut kayıtlar değiştirilmedi.",
+          successDetail:
+            "Eğitim yılı bugünden itibaren gerçek kayıt kullanımına açıldı.",
+        },
+      );
+      if (context.status !== "configured") {
+        throw new Error("Eğitim yılı açıldı ancak sınıf çalışma alanı okunamadı.");
+      }
+      const [refreshed, dashboard] = await Promise.all([
+        refreshD1Workspaces(),
+        loadDashboardState(store, fallbackDashboardState),
+      ]);
+      setStudents(dashboard.students);
+      setArchivedStudents(dashboard.archivedStudents);
+      setAttendanceCompleted(dashboard.attendanceCompleted);
+      setAttendanceCivilDate(dashboard.attendanceCivilDate);
+      setClassroomOpen(false);
+      setAnnouncement(
+        refreshed.today.classroom.status === "configured"
+          ? `${refreshed.today.classroom.classroomName} bugünden itibaren kullanıma açıldı.`
+          : `${context.classroomName} bugünden itibaren kullanıma açıldı.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Eğitim yılı bugün için açılamadı.";
+      setClassroomError(message);
+      setAnnouncement(message);
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
   const saveClassroom = async () => {
     if (writesBlocked) {
       setClassroomError(
@@ -5943,7 +6038,7 @@ export default function Prototype() {
       try {
         copySources = await loadTeacherOwnedDailyFlowCopySources(store, {
           weeklyPlanId: teacherWorkCycle.weekly.id,
-          beforeCivilDate: todayWorkspace.civilDate,
+          beforeCivilDate: defaultPlanFlowCivilDate,
         });
       } catch {
         copySources = [];
@@ -6022,6 +6117,9 @@ export default function Prototype() {
     setPremiumFounderError("");
     setPremiumFounderErrorPresentation(null);
     try {
+      const { activatePremiumFounderAccess } = await import(
+        "./features/premium-access/founder-client.ts"
+      );
       const result = await activatePremiumFounderAccess({
         code,
         appVersion: CURRENT_RELEASE.version,
@@ -6043,6 +6141,9 @@ export default function Prototype() {
         );
       }
     } catch (error) {
+      const { premiumFounderActivationErrorPresentation } = await import(
+        "./features/premium-access/founder-client.ts"
+      );
       const presentation = premiumFounderActivationErrorPresentation(error);
       setPremiumFounderError(presentation.message);
       setPremiumFounderErrorPresentation(presentation);
@@ -6055,6 +6156,9 @@ export default function Prototype() {
     if (premiumFounderBusy || premiumFounderResetBusy) return;
     setPremiumFounderResetBusy(true);
     try {
+      const { resetPremiumFounderLocalLicenseAccess } = await import(
+        "./features/premium-access/founder-client.ts"
+      );
       await resetPremiumFounderLocalLicenseAccess();
       setPremiumFounderAccess(null);
       setPremiumFounderError("");
@@ -6063,6 +6167,9 @@ export default function Prototype() {
         "Yalnız bu telefondaki premium lisans alanı onarıldı. Sunucu cihaz hakkı boşaltılmadı; kodu yeniden girdiğinizde bu telefon yeni cihaz sayılabilir.",
       );
     } catch (error) {
+      const { premiumFounderActivationErrorPresentation } = await import(
+        "./features/premium-access/founder-client.ts"
+      );
       const presentation = premiumFounderActivationErrorPresentation(error);
       setPremiumFounderError(presentation.message);
       setPremiumFounderErrorPresentation(presentation);
@@ -6240,6 +6347,9 @@ export default function Prototype() {
       return;
     }
 
+    keyboard.hide();
+    surfaceTransitionRef.current = "evidence-flow";
+    setCaptureMenuOpen(false);
     setDataBusy(true);
     try {
       const liveEvidence = await loadEvidenceWorkspace(store, { now: new Date() });
@@ -6482,6 +6592,7 @@ export default function Prototype() {
           configuredClassroom.academicYearStart,
           configuredClassroom.academicYearEnd,
           civilDateInIstanbul(requestNow),
+          configuredClassroom.academicYearOperationalStart,
         )
       : null;
     const futurePlanPreparation = configuredClassroom !== null &&
@@ -6599,6 +6710,7 @@ export default function Prototype() {
           configuredClassroom.academicYearStart,
           configuredClassroom.academicYearEnd,
           civilDateInIstanbul(requestNow),
+          configuredClassroom.academicYearOperationalStart,
         )
       : null;
     const futurePlanPreparation = configuredClassroom !== null &&
@@ -6949,9 +7061,11 @@ export default function Prototype() {
 
   const openTeacherPlanRecords = (
     levelId: Exclude<PlanWorkbenchLevelId, "daily">,
+    monthKey: string | null = null,
   ) => {
     keyboard.hide();
     setTeacherPlanRecordsInitialLevel(levelId);
+    setTeacherPlanRecordsInitialMonthKey(monthKey);
     setPlansOpen(false);
     setDocumentsOpen(false);
     setPremiumGateOpen(false);
@@ -7425,6 +7539,7 @@ export default function Prototype() {
                 educationalWritesDisabled={educationalWritesDisabled}
                 preparationPlanningAllowed={preparationPlanningAllowed}
                 preparationPlanningCivilDate={preparationPlanningWindow.defaultCivilDate}
+                upcomingPlanningCivilDate={upcomingPlanningCivilDate}
                 dataBusy={dataBusy}
                 onOpenLevel={openPlanWorkbenchLevel}
                 onOpenCalendar={() => void openAcademicCalendar(attendanceCivilDate)}
@@ -7520,6 +7635,7 @@ export default function Prototype() {
                 },
                 onApplyReadyUpdate: applyReadyUpdate,
                 onOpenClassroom: () => setClassroomOpen(true),
+                onActivateAcademicYear: startAcademicYearWorkToday,
                 onOpenAttendance: () => changeAttendanceOpen(true),
                 onOpenDayClosure: () => void openDayClosure(),
                 onOpenCalendar: openAcademicCalendar,
@@ -7534,7 +7650,7 @@ export default function Prototype() {
                 onOpenActivityEvidence: openActivityEvidence,
                 onCompleteCurrentActivity: completeCurrentActivity,
                 onOpenPlanFlow: () => openPlanFlow(),
-                onOpenPremiumPlans: openPremiumPlans,
+                onOpenPremiumPlans: () => openPremiumPlans("overview"),
                 onOpenTeacherCycleStage: (stage) => {
                   if (stage === "daily") {
                     if (todayWorkspace.planItems.length > 0) {
@@ -7955,6 +8071,8 @@ export default function Prototype() {
                   key={activity.id}
                   onClick={() => {
                     const initialStudentId = observationContextChoice.initialStudentId;
+                    surfaceTransitionRef.current = "evidence-flow";
+                    setCaptureMenuOpen(false);
                     setObservationContextChoice(null);
                     void openActivityEvidence(
                       activity.id,
@@ -7989,6 +8107,8 @@ export default function Prototype() {
                     return;
                   }
                   setObservationContextChoice(null);
+                  surfaceTransitionRef.current = "evidence-flow";
+                  setCaptureMenuOpen(false);
                   void openSpontaneousObservation(
                     student,
                     choice.civilDate,
@@ -8127,6 +8247,10 @@ export default function Prototype() {
                   );
                   return;
                 }
+                if (configuredClassroom?.operationalStatus === "preparation") {
+                  void startAcademicYearWorkToday();
+                  return;
+                }
                 setClassroomOpen(true);
                 setAnnouncement(
                   educationalWriteNotice ??
@@ -8140,12 +8264,12 @@ export default function Prototype() {
                   {students.length === 0
                     ? "Sınıf listesini oluştur"
                     : configuredClassroom?.operationalStatus === "preparation"
-                      ? "Yeni dönem ayarlarını aç"
+                      ? "Çalışmayı bugün başlat"
                       : "Eğitim yılını etkinleştir"}
                 </strong>
                 <small>
                   {configuredClassroom?.operationalStatus === "preparation"
-                    ? `Yoklama ve gözlem ${formatTurkishCivilDate(configuredClassroom.academicYearStart)} tarihinde açılır`
+                    ? "Yoklama, uygulama ve gözlemi gerçek kayıt kullanımına aç"
                     : "Kilitli kayıtların açılması için eksik adımı tamamla"}
                 </small>
               </span>
@@ -8311,11 +8435,20 @@ export default function Prototype() {
                 <div className="academic-year-form-warning" role="alert">
                   <CalendarIcon aria-hidden="true" />
                   <span>
-                    <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazırlığı" : "Seçili tarihler bugün etkin değil"}</strong>
+                    <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazır" : "Seçili tarihler bugün etkin değil"}</strong>
                     {classroomForm.academicYearStart > attendanceCivilDate
-                      ? `Sınıf, çocuk listesi ve plan omurgası şimdi hazırlanabilir. Yoklama ve gözlem ${formatTurkishCivilDate(classroomForm.academicYearStart)} tarihinde açılır.`
+                      ? `Sınıf, çocuk listesi ve plan omurgası hazır. Resmî başlangıcı bekleyebilir veya bu sınıfı bugün gerçek kayıt kullanımına açabilirsiniz.`
                       : classroomFormOperationalNotice}
                   </span>
+                  {configuredClassroom?.operationalStatus === "preparation" ? (
+                    <button
+                      type="button"
+                      disabled={dataBusy}
+                      onClick={() => void startAcademicYearWorkToday()}
+                    >
+                      Çalışmayı bugün başlat
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </section>
@@ -8548,6 +8681,10 @@ export default function Prototype() {
                   type="button"
                   onClick={() => {
                     setPlansOpen(false);
+                    if (configuredClassroom?.operationalStatus === "preparation") {
+                      void startAcademicYearWorkToday();
+                      return;
+                    }
                     setClassroomOpen(true);
                     setAnnouncement(
                       educationalWriteNotice ??
@@ -8555,7 +8692,9 @@ export default function Prototype() {
                     );
                   }}
                 >
-                  Eğitim yılını aç
+                  {configuredClassroom?.operationalStatus === "preparation"
+                    ? "Çalışmayı bugün başlat"
+                    : "Eğitim yılı ayarlarını aç"}
                 </button>
               </div>
             ) : null}
@@ -11409,6 +11548,7 @@ export default function Prototype() {
                 workspace={teacherWorkCycle}
                 scheduledPlans={scheduledPlanWorkspace.plans}
                 initialLevel={teacherPlanRecordsInitialLevel}
+                initialMonthKey={teacherPlanRecordsInitialMonthKey}
                 contentPack={premiumFounderAccess?.pack ?? null}
                 educationalWritesDisabled={planWritesDisabled}
                 educationalWriteNotice={educationalWriteNotice}
@@ -11450,6 +11590,30 @@ export default function Prototype() {
                   void refreshD1Workspaces().catch(() => {
                     setAnnouncement(
                       "Plan zinciri kaydedildi; özet yenilenemedi. Aynı planı yeniden kaydetmeyin.",
+                    );
+                  });
+                  return graph;
+                }}
+                onAppendPlanMonths={async (input) => {
+                  const { appendTeacherOwnedPlanMonths } = await import(
+                    "./features/planning/teacher-owned-plan-service.ts"
+                  );
+                  const graph = await enqueuePersistence(
+                    () => appendTeacherOwnedPlanMonths(store, input),
+                    {
+                      educationalWrite: {
+                        allowPreparationForCivilDate:
+                          input.months[0]?.periodStart ?? attendanceCivilDate,
+                      },
+                      failureDetail:
+                        "Yıllık planın eksik ayları eklenemedi. Mevcut planlar değiştirilmedi.",
+                      successDetail:
+                        "Eylül–Haziran plan omurgası bu cihaza kaydedildi.",
+                    },
+                  );
+                  void refreshD1Workspaces().catch(() => {
+                    setAnnouncement(
+                      "Yıllık plan tamamlandı; özet yenilenemedi. Aynı ayları yeniden eklemeyin.",
                     );
                   });
                   return graph;
@@ -11603,8 +11767,7 @@ export default function Prototype() {
               <PlanCreationFlow
                 civilDate={
                   scheduledPlanEditDraft?.civilDate ??
-                  preparationPlanningWindow.defaultCivilDate ??
-                  todayWorkspace.civilDate
+                  defaultPlanFlowCivilDate
                 }
                 defaultStartTime={configuredClassroom.schedule.startTime}
                 defaultEndTime={configuredClassroom.schedule.endTime}
@@ -11673,6 +11836,13 @@ export default function Prototype() {
                   });
                 }}
                 onClose={() => setPremiumPlanOpen(false)}
+                onOpenTeacherMonth={(monthKey) => {
+                  setPremiumPlanOpen(false);
+                  openTeacherPlanRecords("monthly", monthKey);
+                  setAnnouncement(
+                    `${monthKey} dönemi öğretmenin yıllık plan alanında açıldı. Eksik ay varsa yıllık omurgaya tek onayla ekleyebilirsiniz.`,
+                  );
+                }}
                 onUseActivity={(selection) => {
                   setPremiumPlanOpen(false);
                   openPlanFlow(selection);

@@ -24,13 +24,24 @@ export function createDocumentWorkspacePresentation(
   workspace: TeacherWorkCycleWorkspace,
   options: { studentCount: number; observationCount: number },
 ): DocumentWorkspacePresentation {
+  const fullYearPlanCountsAvailable =
+    typeof workspace.documents.planMonthCount === "number" &&
+    typeof workspace.documents.planWeekCount === "number" &&
+    typeof workspace.documents.planDailyCount === "number";
+  const planScopeDetail = fullYearPlanCountsAvailable
+    ? `${workspace.documents.planMonthCount} ay · ${workspace.documents.planWeekCount} hafta · ${workspace.documents.planDailyCount} günlük plan`
+    : `${workspace.monthly?.weeklyPlanCount ?? 0} hafta · ${workspace.monthly?.dailyPlanCount ?? 0} günlük plan`;
   const planItem: DocumentWorkspaceItem = workspace.documents.planDocumentReady
     ? {
         id: "plans",
         label: "Plan belgeleri",
-        title: "Yıllık ve aylık kaynak bağlı",
-        detail: `${workspace.monthly?.weeklyPlanCount ?? 0} hafta · ${workspace.monthly?.dailyPlanCount ?? 0} günlük plan`,
-        source: "Kalıcı yıllık ve aylık plan kayıtları",
+        title: fullYearPlanCountsAvailable
+          ? "Eğitim yılı plan grafiği bağlı"
+          : "Yıllık ve aylık kaynak bağlı",
+        detail: planScopeDetail,
+        source: fullYearPlanCountsAvailable
+          ? "Seçili eğitim yılının kalıcı plan grafiği"
+          : "Kalıcı yıllık ve aylık plan kayıtları",
         actionLabel: "Plan belgelerini aç",
         tone: "ready",
       }

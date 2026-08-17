@@ -43,20 +43,20 @@ test("kilitli günlük plan eylemi hazırmış gibi görünmez ve çözüm yolun
     prototypeSource,
     /Önce etkin veya hazırlanmış eğitim yılına haftalık plan bağlayın/,
   );
-  assert.match(prototypeSource, /Eğitim yılını aç/);
+  assert.match(prototypeSource, /Çalışmayı bugün başlat/);
   assert.match(prototypeSource, /aria-describedby=\{[\s\S]{0,180}"plans-create-readiness"/);
   assert.match(styles, /\.plans-create-button:disabled[\s\S]{0,220}opacity: 1/);
 });
 
-test("hazırlık modunda gelecek planı açar, yoklama ve gözlemi başlangıca kadar kilitli tutar", () => {
+test("hazırlık modunda gelecek planı açar ve gerçek kayıtları öğretmen başlatmasına bağlar", () => {
   assert.match(prototypeSource, /const planWritesDisabled =/);
   assert.match(
     prototypeSource,
     /disabled=\{planWritesDisabled\}[\s\S]{0,900}Etkinlik planla/,
   );
   assert.match(prototypeSource, /Gelecek günlük planı oluştur/);
-  assert.match(prototypeSource, /Yeni dönem ayarlarını aç/);
-  assert.match(prototypeSource, /Yoklama ve gözlem/);
+  assert.match(prototypeSource, /Çalışmayı bugün başlat/);
+  assert.match(prototypeSource, /Yoklama, uygulama ve gözlemi gerçek kayıt kullanımına aç/);
 });
 
 test("boş sınıfta tek kurulum CTA'sı korunur ve anlamsız araç çubuğu gizlenir", () => {

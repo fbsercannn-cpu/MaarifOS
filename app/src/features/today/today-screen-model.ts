@@ -119,7 +119,7 @@ export function createTeacherCyclePresentation(
           label: "Günlük",
           title: "Günlük yazım henüz açık değil",
           detail: "Eğitim yılı etkin olduğunda bugünün planı hazırlanır.",
-          actionLabel: "Eğitim yılını aç",
+          actionLabel: "Çalışmayı bugün başlat",
           tone: "waiting",
         }
       : {
@@ -145,9 +145,9 @@ export function createTeacherCyclePresentation(
           id: "weekly",
           label: "Haftalık",
           title: workspace.weekly.title,
-          detail: `${periodLabel(workspace.weekly.periodStart, workspace.weekly.periodEnd)} · henüz başlamadı`,
-          actionLabel: "Haftayı incele",
-          tone: "waiting",
+          detail: `Plan şimdi düzenlenebilir · ${periodLabel(workspace.weekly.periodStart, workspace.weekly.periodEnd)}`,
+          actionLabel: "Planı şimdi düzenle",
+          tone: "current",
         }
       : workspace.weekly.evaluationCount > 0
         ? {
@@ -191,9 +191,9 @@ export function createTeacherCyclePresentation(
           id: "monthly",
           label: "Aylık",
           title: workspace.monthly.title,
-          detail: `${periodLabel(workspace.monthly.periodStart, workspace.monthly.periodEnd)} · henüz başlamadı`,
-          actionLabel: "Ayı incele",
-          tone: "waiting",
+          detail: `Plan şimdi düzenlenebilir · ${periodLabel(workspace.monthly.periodStart, workspace.monthly.periodEnd)}`,
+          actionLabel: "Planı şimdi düzenle",
+          tone: "current",
         }
       : workspace.monthly.evaluationCount > 0
         ? {
