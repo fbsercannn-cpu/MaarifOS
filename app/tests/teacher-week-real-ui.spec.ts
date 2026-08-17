@@ -64,6 +64,21 @@ async function dismissReleaseNoticeIfPresent(page: Page): Promise<void> {
   if (await dismiss.isVisible().catch(() => false)) await dismiss.click();
 }
 
+async function waitForAppReady(page: Page): Promise<void> {
+  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByTestId("persistence-gate")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+}
+
+async function reloadApp(page: Page): Promise<void> {
+  // A registered service worker may legitimately keep background requests
+  // alive. Hydration completion is the product-ready contract; global
+  // network-idle can remain false forever on CI and on an installed PWA.
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+  await waitForAppReady(page);
+}
+
 async function configureClassroomFromUi(page: Page): Promise<void> {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await expect(setup).toBeVisible();
@@ -104,7 +119,7 @@ async function addStudentFromUi(page: Page, name: string): Promise<void> {
   await sheet.getByLabel("Çocuğun adı").fill(name);
   await sheet.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(sheet).toHaveAttribute("data-state", "closed");
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "Sınıfım" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
@@ -173,7 +188,7 @@ async function takeAttendanceFromUi(page: Page): Promise<void> {
   // The fixed civil clock deliberately advances between teaching days. Reloading
   // after the committed write also proves the attendance survives a cold read
   // and prevents an in-flight exit animation from spanning the next clock jump.
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -232,7 +247,7 @@ async function createDailyPlanAndObservationFromUi(
     name: /1 gözlem program bağlantısı bekliyor/,
   });
   await expect(pendingLink).toBeVisible({ timeout: 20_000 });
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -253,7 +268,7 @@ async function createDailyPlanAndObservationFromUi(
   // Re-open from storage after the committed curriculum link. This validates
   // persistence and avoids carrying nested sheet exit animations across the
   // fixed-clock teaching-day journey.
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -273,7 +288,7 @@ async function createDailyPlanAndObservationFromUi(
 
   // Günün kanıtı sabah üretilir; kapanış sınıfın 16:30 bitişinden sonra yapılır.
   await page.clock.setFixedTime(new Date(day.closureInstant));
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -298,7 +313,7 @@ async function createDailyPlanAndObservationFromUi(
   await expect(closureDialog).toHaveAttribute("data-state", "closed", {
     timeout: 30_000,
   });
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   if (!(await page.getByRole("main", { name: "MaarifOS Bugün ekranı" }).isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
@@ -308,7 +323,7 @@ async function createDailyPlanAndObservationFromUi(
 
 async function moveToTeachingDay(page: Page, instant: string): Promise<void> {
   await page.clock.setFixedTime(new Date(instant));
-  await page.reload({ waitUntil: "networkidle" });
+  await reloadApp(page);
   await dismissReleaseNoticeIfPresent(page);
   await expect(page.getByRole("main", { name: "MaarifOS Bugün ekranı" })).toBeVisible();
 }
@@ -348,7 +363,8 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
   // beş gün + belge + şifreli geri yükleme zincirine 15 dakika tanıyoruz.
   test.setTimeout(900_000);
   await page.clock.setFixedTime(new Date(teachingDays[0].instant));
-  await page.goto("/?native=1", { waitUntil: "networkidle" });
+  await page.goto("/?native=1", { waitUntil: "domcontentloaded" });
+  await waitForAppReady(page);
   await dismissReleaseNoticeIfPresent(page);
 
   await configureClassroomFromUi(page);
