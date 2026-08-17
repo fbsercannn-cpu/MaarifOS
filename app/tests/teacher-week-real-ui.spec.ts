@@ -343,7 +343,10 @@ test.use({
 test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 kararını ve yedeğini geri yükler", async ({
   page,
 }) => {
-  test.setTimeout(540_000);
+  // GitHub'ın paylaşımlı Linux koşucusu, aynı gerçek tarayıcı yolculuğunu yerel
+  // 6,3 dakikalık kanıttan daha yavaş tamamlıyor. Kapsamı azaltmak yerine
+  // beş gün + belge + şifreli geri yükleme zincirine 15 dakika tanıyoruz.
+  test.setTimeout(900_000);
   await page.clock.setFixedTime(new Date(teachingDays[0].instant));
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   await dismissReleaseNoticeIfPresent(page);

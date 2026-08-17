@@ -43,7 +43,7 @@
     "test:runtime:ui:workflows:teacher-owned-create": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/teacher-owned-plan-ui.spec.ts --grep=\"öğretmen premium olmadan\" --workers=1",
     "test:runtime:ui:workflows:teacher-owned-weekly": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/teacher-owned-plan-ui.spec.ts --grep=\"öğretmen eksik gün\" --workers=1",
     "test:runtime:ui:workflows:daily-flow": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/core/teacher-owned-daily-flow-backup.spec.ts --workers=1",
-    "test:runtime:ui:workflows:teacher-week": "node scripts/run-runtime-tests.mjs --budget-ms=600000 tests/teacher-week-real-ui.spec.ts --workers=1",
+    "test:runtime:ui:workflows:teacher-week": "node scripts/run-runtime-tests.mjs --budget-ms=900000 tests/teacher-week-real-ui.spec.ts --workers=1",
     "test:runtime:ui:teacher": "npm run test:runtime:ui:teacher:legacy && npm run test:runtime:ui:teacher:cycles && npm run test:runtime:ui:teacher:scheduled",
     "test:runtime:ui:teacher:legacy": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/quick-observation-legacy-ui.spec.ts --workers=1",
     "test:runtime:ui:teacher:cycles": "node scripts/run-runtime-tests.mjs --budget-ms=180000 tests/quick-observation-20cycle.spec.ts --workers=1",
