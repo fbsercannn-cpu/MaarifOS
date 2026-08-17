@@ -2438,6 +2438,7 @@ export default function Prototype() {
   const pendingDraftFlushersRef = useRef(new Set<() => Promise<void>>());
   const appLockSessionRef = useRef<AppLockSession | null>(null);
   const d1ReturnFocusRef = useRef<HTMLElement | null>(null);
+  const d1ReturnFocusSelectorRef = useRef<string | null>(null);
   const attendanceMutationSequenceRef = useRef(0);
   const dayRefreshInFlightRef = useRef(false);
   const historyInitializedRef = useRef(false);
@@ -3295,6 +3296,25 @@ export default function Prototype() {
       setClassroomToolsMounted(true);
     }
   }, [classExportPreviewOpen, studentAddOpen]);
+
+  useEffect(() => {
+    const selector = d1ReturnFocusSelectorRef.current;
+    if (!captureMenuOpen || evidenceFlowRequest || !selector) return undefined;
+    let focusFrame = 0;
+    const renderFrame = window.requestAnimationFrame(() => {
+      focusFrame = window.requestAnimationFrame(() => {
+        const target = document.querySelector<HTMLElement>(selector);
+        if (!target) return;
+        target.focus();
+        d1ReturnFocusSelectorRef.current = null;
+        d1ReturnFocusRef.current = null;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(renderFrame);
+      if (focusFrame) window.cancelAnimationFrame(focusFrame);
+    };
+  }, [captureMenuOpen, evidenceFlowRequest]);
 
   useEffect(() => {
     if (premiumGateOpen) setPremiumGateMounted(true);
@@ -8127,8 +8147,9 @@ export default function Prototype() {
         ) : (
         <div className="capture-choice-grid">
           <button
+            id="capture-observation-action"
             type="button"
-            onClick={() => {
+            onClick={(event) => {
               if (students.length === 0) {
                 navigate("classroom");
                 setAnnouncement(
@@ -8136,6 +8157,8 @@ export default function Prototype() {
                 );
                 return;
               }
+              d1ReturnFocusRef.current = event.currentTarget;
+              d1ReturnFocusSelectorRef.current = "#capture-observation-action";
               void openStudentObservation();
             }}
             disabled={educationalWritesDisabled || students.length === 0}
