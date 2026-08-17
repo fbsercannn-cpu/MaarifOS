@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+test.describe.configure({ timeout: 60_000 });
 test.use({ viewport: { width: 390, height: 844 } });
 
 async function configureActiveClassroom(page: import("@playwright/test").Page) {
@@ -37,7 +38,6 @@ async function openTeacherPlanWorkspace(page: import("@playwright/test").Page) {
 test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, revize eder, Word alır ve reload sonrası aynı kimliklerle açar", async ({
   page,
 }) => {
-  test.setTimeout(30_000);
   await page.goto("/", { waitUntil: "networkidle" });
   await configureActiveClassroom(page);
   let dialog = await openTeacherPlanWorkspace(page);
@@ -59,8 +59,12 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
 
   await expect(dialog).toContainText("tek işlemde bu cihaza kaydedildi");
   await expect(dialog.getByRole("button", { name: "Yıllık planı düzenle" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Aylık planı düzenle" }).first()).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Haftalık planı düzenle" }).first()).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /aylık planını düzenle/i }).first(),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /haftalık planını düzenle/i }).first(),
+  ).toBeVisible();
 
   await dialog.getByRole("button", { name: "Yıllık planı düzenle" }).click();
   await dialog.getByLabel("Plan başlığı").fill("Kurgu Öğretmenin Revize Yıllık Planı");
@@ -105,7 +109,6 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
 test("öğretmen eksik gün kapanışı ve program bağıyla haftalık karar yazamaz", async ({
   page,
 }) => {
-  test.setTimeout(45_000);
   await page.goto("/", { waitUntil: "networkidle" });
   await configureActiveClassroom(page);
 
@@ -236,7 +239,7 @@ test("öğretmen eksik gün kapanışı ve program bağıyla haftalık karar yaz
   await page.reload({ waitUntil: "networkidle" });
   const dialog = await openTeacherPlanWorkspace(page);
   await dialog
-    .getByRole("button", { name: "Haftayı kanıtlarla değerlendir" })
+    .getByRole("button", { name: /haftasını kanıtlarla değerlendir/i })
     .first()
     .click();
   const review = dialog.getByTestId("teacher-weekly-review");

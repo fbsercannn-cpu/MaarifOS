@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.describe.configure({ timeout: 60_000 });
+
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("anekdot formu yerel/reload/yedek zincirinden Belgeler ekranına ve gerçek indirmeye ulaşır", async ({

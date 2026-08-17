@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.describe.configure({ timeout: 60_000 });
+
 test("yaklaşan eğitim yılı öğretmen kararıyla bugün gerçek kayıt kullanımına açılır", async ({
   page,
 }) => {

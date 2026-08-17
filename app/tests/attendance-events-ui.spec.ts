@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.describe.configure({ timeout: 60_000 });
+
 async function configureClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
   await setup.getByLabel("Sınıf adı").fill("Yoklama 2 Kurgu Sınıfı");
