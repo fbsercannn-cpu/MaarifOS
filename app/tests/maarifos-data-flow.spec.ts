@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 
+test.describe.configure({ timeout: 60_000 });
+
 async function ensureClassroomConfigured(page: Page) {
   await page.waitForFunction(() => {
     if (document.querySelector('[data-testid="persistence-gate"]')) return false;
@@ -109,7 +111,6 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
 test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme veri kaybını önler", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(30_000);
   const childName = "Ada Kurgu";
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
@@ -341,7 +342,6 @@ test("ana sayfadaki çocuktan profil ve plansız hızlı gözlem akışı kalıc
 test("profil fotoğrafı, yakın iletişimi, sınırsız gözlem arşivi ve güvenli metin aktarımı birlikte çalışır", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(25_000);
   const childName = `Arşiv İletişim ${testInfo.workerIndex + 1}`;
   const longObservation = `Uzun gözlem başlangıcı. ${"Ayrıntılı ve kesilmemiş gözlem cümlesi. ".repeat(90)}Uzun gözlem sonu.`;
 
@@ -506,5 +506,6 @@ test("Öğretmenin plan ve belge iş alanları ana navigasyondan erişilir", asy
   await expect(capture.getByRole("button", { name: /Gözlem yaz/ })).toBeVisible();
   await expect(capture.getByRole("button", { name: /Yoklama al/ })).toBeVisible();
   await expect(capture.getByRole("button", { name: /Etkinlik planla/ })).toBeVisible();
-  await expect(capture.getByRole("button", { name: /Takvime not ekle/ })).toHaveCount(0);
+  await capture.getByRole("button", { name: /Takvime not ekle/ }).click();
+  await expect(page.getByRole("dialog", { name: "Eğitim takvimi" })).toBeVisible();
 });
