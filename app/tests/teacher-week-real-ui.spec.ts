@@ -147,7 +147,7 @@ async function createTeacherPlanGraphFromUi(page: Page): Promise<void> {
     .getByRole("button", { name: "Yıl → ay → hafta planını oluştur" })
     .click();
   await expect(
-    dialog.getByRole("button", { name: "Haftalık planı düzenle" }).first(),
+    dialog.getByRole("button", { name: /haftalık planını düzenle/i }).first(),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
 }
@@ -365,8 +365,9 @@ test("öğretmen gerçek UI ile Pazartesi–Cuma haftasını kapatır, W2 karar�
   await page.clock.setFixedTime(new Date("2026-09-11T14:00:00.000Z"));
   const planDialog = await openTeacherPlanWorkspace(page);
   await planDialog
-    .getByRole("button", { name: "Haftayı kanıtlarla değerlendir" })
-    .first()
+    .getByRole("button", {
+      name: /7 Eylül.*13 Eylül.*haftasını kanıtlarla değerlendir/i,
+    })
     .click();
   const review = planDialog.getByTestId("teacher-weekly-review");
   await expect(review).toContainText("5/5 öğretim günü kapandı");
