@@ -66,6 +66,8 @@ export function createMarifTeacherAgentBrief(
   const activeCarryCount = input.dayClosure.carryForwardItems.filter(
     (item) => item.state === "open" || item.isDeferredDue,
   ).length;
+  const teachingContextReady =
+    !input.educationalWritesDisabled && input.control.attendance.expected > 0;
   const critiques: MarifTeacherAgentCritique[] = [];
 
   if (!input.setup.isComplete && input.setup.currentStep) {
@@ -145,7 +147,11 @@ export function createMarifTeacherAgentBrief(
     input.educationalWritesDisabled ? "Gün kapanışı beklemede" : `Taşınan iş ${activeCarryCount}`,
   ];
 
-  if (!input.setup.isComplete && input.setup.currentStep) {
+  if (
+    input.educationalWritesDisabled &&
+    !input.setup.isComplete &&
+    input.setup.currentStep
+  ) {
     return {
       tone: "attention",
       eyebrow: "MARİF · öğretmen asistanı",
@@ -169,7 +175,7 @@ export function createMarifTeacherAgentBrief(
       critiques: critiques.slice(0, 4),
     };
   }
-  if (activeCarryCount > 0) {
+  if (teachingContextReady && activeCarryCount > 0) {
     return {
       tone: "attention",
       eyebrow: "MARİF · öğretmen asistanı",
@@ -181,7 +187,7 @@ export function createMarifTeacherAgentBrief(
       critiques: critiques.slice(0, 4),
     };
   }
-  if (input.control.attendance.unmarked > 0) {
+  if (teachingContextReady && input.control.attendance.unmarked > 0) {
     return {
       tone: "attention",
       eyebrow: "MARİF · öğretmen asistanı",
@@ -194,7 +200,7 @@ export function createMarifTeacherAgentBrief(
     };
   }
   const daily = input.cycle.stages[0];
-  if (daily?.tone === "attention") {
+  if (teachingContextReady && daily?.tone === "attention") {
     return {
       tone: "attention",
       eyebrow: "MARİF · öğretmen asistanı",
@@ -214,6 +220,18 @@ export function createMarifTeacherAgentBrief(
       rationale: `${input.control.plan.detail}. Uygulama tamamlandığında aynı etkinlikten gözlem kaydı açılacak.`,
       actionLabel: "Akışı aç",
       action: { kind: "plan" },
+      evidence,
+      critiques: critiques.slice(0, 4),
+    };
+  }
+  if (!input.setup.isComplete && input.setup.currentStep) {
+    return {
+      tone: "attention",
+      eyebrow: "MARİF · bakım ve hazırlık",
+      title: input.setup.currentStep.title,
+      rationale: `${input.setup.currentStep.detail} Bugünün öğretim işi engellenmeden bu hazırlığı ayrıca tamamlayabilirsiniz.`,
+      actionLabel: input.setup.currentStep.actionLabel,
+      action: { kind: "setup", stepId: input.setup.currentStep.id },
       evidence,
       critiques: critiques.slice(0, 4),
     };

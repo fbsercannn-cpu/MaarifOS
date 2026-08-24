@@ -22,6 +22,8 @@ import {
   curriculumTargetsForProfile,
 } from "../../src/features/curriculum/curriculum-catalog.ts";
 import { persistDashboardObservation } from "../../src/features/dashboard/dashboard-data.ts";
+import { ACTIVITY_STUDIO_ITEMS } from "../../src/features/activity-studio/activity-studio-model.ts";
+import { createPedagogicalPlanBridge } from "../../src/features/pedagogical-os/pedagogical-plan-bridge.ts";
 
 class MemoryStore {
   snapshot;
@@ -124,6 +126,51 @@ function activeStore() {
   });
   return new MemoryStore(snapshot);
 }
+
+test("pedagojik öneri kaynağı plan ve etkinliğe aynı atomik snapshot olarak yazılır", async () => {
+  const store = activeStore();
+  const sourceActivity = ACTIVITY_STUDIO_ITEMS.find((item) =>
+    item.ageBands.includes("48-60"),
+  );
+  assert.ok(sourceActivity);
+  const pedagogicalProvenance = createPedagogicalPlanBridge({
+    activity: sourceActivity,
+    civilDate: "2026-09-01",
+    ageBand: "48-60",
+    scenarioId: "low-energy",
+    participationRouteId: "movement",
+    now: new Date("2026-09-01T06:05:00.000Z"),
+  });
+
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planId,
+    planTitle: `${sourceActivity.title} planı`,
+    activityId,
+    activityTitle: sourceActivity.title,
+    startTime: "09:30",
+    endTime: "10:00",
+    curriculumProfile,
+    ...planAssignment,
+    pedagogicalProvenance,
+    now: new Date("2026-09-01T06:10:00.000Z"),
+  });
+
+  assert.deepEqual(
+    result.plan.pedagogicalProvenance,
+    pedagogicalProvenance,
+  );
+  assert.deepEqual(
+    result.activity.pedagogicalProvenance,
+    pedagogicalProvenance,
+  );
+  const snapshot = await store.readSnapshot();
+  assert.deepEqual(
+    snapshot.plans[0].pedagogicalProvenance,
+    snapshot.activities[0].pedagogicalProvenance,
+  );
+
+});
 
 async function createEvidenceChain(store) {
   const planActivity = await createPlanWithActivity(store, {

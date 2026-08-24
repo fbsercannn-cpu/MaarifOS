@@ -10,6 +10,7 @@ import {
 
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import { KeyboardTextarea } from "../../mobile";
+import { downloadBrowserFile } from "../documents/browser-file-download.ts";
 import type { CurriculumProfileSnapshot } from "../evidence/evidence-flow.ts";
 import {
   assertPremiumPackActionAccess,
@@ -600,13 +601,7 @@ export function PremiumPlanCenterScreen({
         effectivePremiumAccess,
         format,
       );
-      const blob = new Blob([file.bytes.buffer as ArrayBuffer], { type: file.mimeType });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = file.fileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      downloadBrowserFile(file);
       setExportMessage(`${format === "pdf" ? "PDF" : "Word"} dosyası cihazda hazırlandı.`);
     } catch (reason) {
       setExportMessage(reason instanceof Error ? reason.message : "Plan dosyası hazırlanamadı.");
@@ -639,15 +634,7 @@ export function PremiumPlanCenterScreen({
         selectedMonthlyEvaluationId,
         format,
       );
-      const blob = new Blob([file.bytes.buffer as ArrayBuffer], {
-        type: file.mimeType,
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = file.fileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      downloadBrowserFile(file);
       setMonthlyExportMessage(
         `${format === "pdf" ? "PDF" : "Düzenlenebilir Word"} dosyası seçili kalıcı değerlendirmeden hazırlandı.`,
       );

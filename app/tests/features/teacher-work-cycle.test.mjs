@@ -228,6 +228,89 @@ test("aynı sınıf ve tarihteki mükerrer günlük planları birleştirmeden de
   assert.doesNotMatch(daily?.detail ?? "", /tamamland/);
 });
 
+test("bugün tarihli fakat etkin haftaya bağlı olmayan planı yok saymak yerine bağlantı incelemesine ayırır", () => {
+  const snapshot = configuredSnapshot();
+  const otherWeeklyId = "00000000-0000-4000-8000-000000000190";
+  snapshot.plans.push(
+    scoped({
+      id: annualId,
+      planType: "annual",
+      title: "Yıllık Plan",
+      periodStart: "2026-09-07",
+      periodEnd: "2027-06-25",
+    }),
+    scoped({
+      id: monthlyId,
+      planType: "monthly",
+      annualPlanId: annualId,
+      title: "Eylül",
+      periodStart: "2026-09-01",
+      periodEnd: "2026-09-30",
+      weeklySectionIds: [weeklyId],
+    }),
+    scoped({
+      id: weeklyId,
+      planType: "weekly",
+      monthlyPlanId: monthlyId,
+      title: "Etkin hafta",
+      periodStart: "2026-09-07",
+      periodEnd: "2026-09-11",
+    }),
+    scoped({
+      id: dailyId,
+      planType: "daily",
+      sourceWeeklyPlanId: otherWeeklyId,
+      title: "Korunan eski günlük plan",
+      civilDate: "2026-09-08",
+    }),
+  );
+
+  const workspace = resolveTeacherWorkCycle(snapshot, { civilDate: "2026-09-08" });
+  assert.equal(workspace.daily.status, "chain-mismatch");
+  assert.equal(workspace.daily.planId, null);
+  assert.equal(workspace.daily.referencePlanId, dailyId);
+  assert.equal(workspace.daily.referenceCivilDate, "2026-09-08");
+  assert.equal(workspace.daily.referenceTitle, "Korunan eski günlük plan");
+
+  const daily = createTeacherCyclePresentation(workspace).stages[0];
+  assert.equal(daily.title, "Bugün tarihli plan bağlantı bekliyor");
+  assert.equal(daily.actionLabel, "Bağı takvimde incele");
+  assert.match(daily.detail, /Kayıt korundu/);
+});
+
+test("bugün plan yokken en yakın gelecek planını kalıcı karar bağlamında taşır", () => {
+  const snapshot = configuredSnapshot();
+  const futurePlanId = "00000000-0000-4000-8000-000000000191";
+  snapshot.plans.push(
+    scoped({
+      id: futurePlanId,
+      planType: "daily",
+      title: "1 Ekim günlük planı",
+      civilDate: "2026-10-01",
+    }),
+    scoped({
+      id: "00000000-0000-4000-8000-000000000192",
+      planType: "daily",
+      title: "20 Eylül günlük planı",
+      civilDate: "2026-09-20",
+    }),
+  );
+
+  const workspace = resolveTeacherWorkCycle(snapshot, { civilDate: "2026-09-08" });
+  assert.equal(workspace.daily.status, "future-only");
+  assert.equal(workspace.daily.planId, null);
+  assert.equal(
+    workspace.daily.referencePlanId,
+    "00000000-0000-4000-8000-000000000192",
+  );
+  assert.equal(workspace.daily.referenceCivilDate, "2026-09-20");
+  assert.equal(workspace.daily.referenceTitle, "20 Eylül günlük planı");
+
+  const daily = createTeacherCyclePresentation(workspace).stages[0];
+  assert.match(daily.title, /sıradaki plan 20 Eyl/);
+  assert.equal(daily.actionLabel, "Yaklaşan planı aç");
+});
+
 test("gelecek hafta ve ayı mevcutmuş gibi göstermeden en yakın plan dönemini sunar", () => {
   const snapshot = configuredSnapshot();
   snapshot.plans.push(
@@ -458,7 +541,7 @@ test("arayüz çalışma döngüsü kartlarını gerçek hedeflere ve belge merk
   assert.match(todaySource, /onOpenTeacherCycleStage\(stage\.id\)/);
   assert.match(prototypeSource, /openTeacherPlanRecords\(stage\)/);
   assert.match(prototypeSource, /Plan ve değerlendirme belgeleri/);
-  assert.match(prototypeSource, /openPremiumPlans\("monthly"\)/);
+  assert.match(prototypeSource, /openTeacherPlanRecords\("monthly"\)/);
   assert.match(premiumSource, /data-testid="premium-weekly-work"/);
   assert.match(premiumSource, /data-testid="premium-monthly-work"/);
   assert.match(premiumSource, /scrollIntoView/);

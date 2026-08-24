@@ -5,11 +5,12 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useDrag } from "@use-gesture/react";
 import { useMobileDevice } from "./Device";
 import { useKeyboard, useKeyboardDismissDrag, useKeyboardInsets } from "./Keyboard";
@@ -56,12 +57,14 @@ function FlowProvider({ value, children }: PropsWithChildren<{ value: FlowContro
 
 export function FlowStack({ initial }: { initial: FlowScreen }) {
   const { device, native } = useMobileDevice();
+  const prefersReducedMotion = useReducedMotion();
   const keyboard = useKeyboard();
   const { bottomInset, keyboardDragging } = useKeyboardInsets();
   const dismissKeyboardDrag = useKeyboardDismissDrag();
   const sequence = useRef(1);
   const gestureStartedAtEdge = useRef(false);
   const initialEntry = useRef<FlowEntry>({ ...initial, key: `${initial.id}-0` });
+  const scenesRef = useRef<HTMLDivElement | null>(null);
   const [stack, setStack] = useState<FlowEntry[]>(() => [initialEntry.current]);
   const [direction, setDirection] = useState(1);
   const [swipeX, setSwipeX] = useState(0);
@@ -109,6 +112,22 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
     };
   }, [keyboard, pop, stack, toEntry]);
 
+  useEffect(() => {
+    const focusFrame = window.requestAnimationFrame(() => {
+      const currentScene = scenesRef.current?.querySelector<HTMLElement>(
+        '[data-flow-current="true"]',
+      );
+      const heading = currentScene?.querySelector<HTMLElement>(
+        '[data-flow-focus-heading], h1, h2, [role="heading"]',
+      );
+      if (!heading) return;
+      if (!heading.hasAttribute("tabindex")) heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [controls.current.key]);
+
   const bindEdgeSwipe = useDrag(
     (state) => {
       if (!controls.canGoBack) return;
@@ -127,7 +146,7 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
       const nextX = Math.max(0, Math.min(movementX, device.geometry.screen.width));
 
       if (!state.last) {
-        setSwipeX(nextX);
+        if (!prefersReducedMotion) setSwipeX(nextX);
         return;
       }
 
@@ -164,12 +183,28 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
 
   const screenVariants = {
     enter: (animationDirection: number) => ({
-      x: animationDirection > 0 ? screenWidth : parkedX,
-      scale: animationDirection > 0 ? 1 : 0.985,
+      x: prefersReducedMotion
+        ? 0
+        : animationDirection > 0
+          ? screenWidth
+          : parkedX,
+      scale: prefersReducedMotion
+        ? 1
+        : animationDirection > 0
+          ? 1
+          : 0.985,
     }),
     exit: (animationDirection: number) => ({
-      x: animationDirection < 0 ? screenWidth : parkedX,
-      scale: animationDirection < 0 ? 1 : 0.985,
+      x: prefersReducedMotion
+        ? 0
+        : animationDirection < 0
+          ? screenWidth
+          : parkedX,
+      scale: prefersReducedMotion
+        ? 1
+        : animationDirection < 0
+          ? 1
+          : 0.985,
     }),
   };
 
@@ -195,7 +230,7 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
             {header}
           </header>
         ) : null}
-        <div className="flow-scenes">
+        <div className="flow-scenes" ref={scenesRef}>
           <AnimatePresence initial={false} custom={direction}>
             {stack.map((entry, index) => {
               const isTop = index === topIndex;
@@ -207,15 +242,21 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
                   className="flow-screen"
                   data-flow-current={isTop ? "true" : "false"}
                   data-testid={isTop ? "flow-current" : undefined}
+                  aria-hidden={isTop ? undefined : true}
+                  inert={isTop ? undefined : true}
                   custom={direction}
                   variants={screenVariants}
                   initial={isTop ? "enter" : false}
                   animate={{
-                    x: isTop ? swipeX : parkedX,
-                    scale: isTop ? 1 : 0.985,
+                    x: prefersReducedMotion ? 0 : isTop ? swipeX : parkedX,
+                    scale: prefersReducedMotion ? 1 : isTop ? 1 : 0.985,
                   }}
                   exit="exit"
-                  transition={{ type: "spring", stiffness: 360, damping: 38, mass: 0.9 }}
+                  transition={
+                    prefersReducedMotion
+                      ? { duration: 0 }
+                      : { type: "spring", stiffness: 360, damping: 38, mass: 0.9 }
+                  }
                   style={{
                     opacity: isVisible ? 1 : 0,
                     pointerEvents: isTop ? "auto" : "none",

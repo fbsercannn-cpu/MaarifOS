@@ -63,16 +63,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.11.0",
-  releasedOn: "2026-08-16",
-  title: "Öğretmen planlama ve kanıt zinciri tek akışta birleştirildi",
+  version: "0.16.0",
+  releasedOn: "2026-08-22",
+  title: "Bir yıllık öğretmen asistanı ve telefon güvenilirliği",
   notes: Object.freeze([
-    "Öğretmene ait yıllık, aylık, haftalık ve günlük plan zinciri premium erişimden bağımsız olarak oluşturulur, düzenlenir ve aynı kaynak kimlikleriyle yeniden açılır.",
-    "Günlük planın öğretmen tarafından gözden geçirilen 10 bölümü; tek gerçek etkinlik, gözlem ve program bağıyla kanıt zincirinde birleşir.",
-    "Gün kapanışı, ertelenen işler, haftalık ve aylık değerlendirme ile sonraki plan kararları öğretmen onayı ve değişmez kaynak izleriyle korunur.",
-    "Günlük, haftalık, aylık veya birleşik plan belgesi indirilmeden önce kapsamı ve revizyonu seçilerek önizlenir ve öğretmen tarafından onaylanır.",
-    "Önceki günden veya haftadan getirilen plan akışı kaynağını korur; süre düzeltmeleri sınıf gününün toplamını bozmadan tek adımda dengelenebilir.",
-    "Bugün, Sınıfım, Planlar ve Belgeler yüzeyleri öğretmenin sıradaki işini görünür kılan daha tutarlı bir çalışma düzeninde birleşir.",
+    "Etkinlik bankası 120 özgün çekirdek etkinliğe, 180 okul günlük rotasyona ve 540 tarihe bağlı öneri yuvasına çıkarıldı.",
+    "Her etkinlik uygulama adımları, katılım uyarlaması, gözlem odağı, aile köprüsü ve üç resmî yaş bandı desteğiyle sunulur.",
+    "Çocuk Modu'nun son düğmeleri 320 piksel telefonda alt gezinmenin üstüne taşınır ve dokunulabilir kalır.",
+    "Sınıf listesi şablonu A4 ve 320 piksel için yenilendi; sürümlü dosya adı eski Android indirmeleriyle karışmayı önler.",
+    "PWA kabuk sürümü yenilendi; kurulu telefonlar yeni etkinlik, belge ve mobil düzeltmeleri güvenli güncelleme akışından alır.",
   ]),
 });
 

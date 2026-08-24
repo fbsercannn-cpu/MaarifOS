@@ -18,6 +18,7 @@ import {
   classroomRosterStatus,
   classroomScreenDescription,
   classroomStudentDisplayName,
+  classroomStudentProfileMissingFields,
   createClassroomTaskCenterSummary,
   resolveClassroomPriorityTask,
   type ClassroomScreenSummary,
@@ -25,6 +26,11 @@ import {
 } from "./classroom-screen-model";
 import "./classroom-screen.css";
 
+type ClassroomProfileSection = "flow" | "details" | "contacts" | "care";
+type ClassroomProfileAction = (
+  studentId: string,
+  section?: ClassroomProfileSection,
+) => void | Promise<void>;
 type ClassroomAction = (studentId: string) => void | Promise<void>;
 type ClassroomStudentAction = (
   student: ClassroomStudentViewModel,
@@ -48,7 +54,7 @@ export interface ClassroomScreenProps {
   onOpenAddStudent: () => void;
   onOpenAttendance: () => void;
   onOpenExport: () => void;
-  onOpenProfile: ClassroomAction;
+  onOpenProfile: ClassroomProfileAction;
   onOpenObservation: ClassroomAction;
   onToggleStudentActions: (studentId: string) => void;
   onArchiveStudent: ClassroomAction;
@@ -354,6 +360,7 @@ export function ClassroomScreen({
               const actionsOpen = openActionsStudentId === student.id;
               const actionsId = `${componentId}-student-actions-${index}`;
               const rosterStatus = classroomRosterStatus(student);
+              const missingProfileFields = classroomStudentProfileMissingFields(student);
 
               return (
                 <li
@@ -382,6 +389,17 @@ export function ClassroomScreen({
                           />
                           {CLASSROOM_STATUS_LABELS[rosterStatus]} · {observationCount} gözlem
                         </span>
+                        <em
+                          className={
+                            missingProfileFields.length > 0
+                              ? "roster-profile-completeness is-missing"
+                              : "roster-profile-completeness is-complete"
+                          }
+                        >
+                          {missingProfileFields.length > 0
+                            ? `${missingProfileFields.length} bilgi tamamlanacak`
+                            : "Temel bilgiler tamam"}
+                        </em>
                       </span>
                       <span className="roster-profile-cta" aria-hidden="true">
                         <ReaderIcon />
@@ -430,8 +448,40 @@ export function ClassroomScreen({
                       role="group"
                       aria-label={`${student.name} işlemleri`}
                     >
-                      <span>Geçmiş gözlem ve devam kayıtları korunur.</span>
+                      <span className="roster-card-actions__note">
+                        {missingProfileFields.length > 0
+                          ? `Eksik: ${missingProfileFields.join(", ")}.`
+                          : "Kimlik ve veli iletişim bilgileri tamam."}
+                      </span>
                       <button
+                        className="roster-card-profile-link"
+                        type="button"
+                        onClick={() => void onOpenProfile(student.id, "details")}
+                        disabled={isBusy}
+                      >
+                        <ReaderIcon aria-hidden="true" />
+                        Bilgileri düzenle
+                      </button>
+                      <button
+                        className="roster-card-profile-link"
+                        type="button"
+                        onClick={() => void onOpenProfile(student.id, "contacts")}
+                        disabled={isBusy}
+                      >
+                        <PersonIcon aria-hidden="true" />
+                        Veli / yakınlar
+                      </button>
+                      <button
+                        className="roster-card-profile-link"
+                        type="button"
+                        onClick={() => void onOpenProfile(student.id, "care")}
+                        disabled={isBusy}
+                      >
+                        <ReaderIcon aria-hidden="true" />
+                        Sağlık / teslim
+                      </button>
+                      <button
+                        className="roster-card-archive-link"
                         type="button"
                         onClick={() => void onArchiveStudent(student.id)}
                         disabled={isBusy}

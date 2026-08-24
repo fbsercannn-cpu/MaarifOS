@@ -481,6 +481,7 @@ test("14–18 Eylül normal dönem kanıtını değerlendirir ve sonraki haftaya
   const documentText = buildStandaloneTeacherOwnedPlanParagraphs(
     reloaded,
     dailyExports,
+    { includeAuditAppendix: true },
   )
     .map((paragraph) => paragraph.text)
     .join("\n");

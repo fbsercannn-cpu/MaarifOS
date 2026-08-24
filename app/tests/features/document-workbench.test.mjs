@@ -76,11 +76,11 @@ test("belge çalışma alanı plan, aylık, anekdot ve öğrenci kaynaklarını 
   );
 });
 
-test("Belgeler navigasyonu kalıcı route açar ve ayrıntı yüzeylerine gerçek handler bağlar", async () => {
+test("Çıktılar navigasyonu kalıcı route açar ve tek dokunuş handler'larını bağlar", async () => {
   const [prototypeSource, screenSource] = await Promise.all([
     readFile(new URL("../../src/Prototype.tsx", import.meta.url), "utf8"),
     readFile(
-      new URL("../../src/features/documents/DocumentWorkspaceScreen.tsx", import.meta.url),
+      new URL("../../src/features/simple-experience/SimpleDocumentWorkspaceScreen.tsx", import.meta.url),
       "utf8",
     ),
   ]);
@@ -88,7 +88,12 @@ test("Belgeler navigasyonu kalıcı route açar ve ayrıntı yüzeylerine gerçe
   assert.match(prototypeSource, /navigate\("documents"\)/);
   assert.match(prototypeSource, /route\.id === "documents"/);
   assert.match(prototypeSource, /openDocumentWorkspaceItem/);
-  assert.match(screenSource, /Kaynak → onay → çıktı/);
-  assert.match(screenSource, /Sürümlü üretim geçmişi henüz tutulmuyor/);
-  assert.match(screenSource, /onOpenPreparationCenter/);
+  assert.match(screenSource, /TEK DOKUNUŞLA HAZIRLA/);
+  assert.match(screenSource, /Sınıf listesi/);
+  assert.match(screenSource, /onDownloadClassRoster/);
+  assert.match(screenSource, /onDownloadPlan/);
+  assert.match(screenSource, /state === "needs-setup"/);
+  assert.match(screenSource, /onOpenSetup\(\)/);
+  assert.match(prototypeSource, /onOpenSetup=\{\(\) =>/);
+  assert.doesNotMatch(screenSource, /onay/iu);
 });

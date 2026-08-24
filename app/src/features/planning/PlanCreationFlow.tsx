@@ -18,6 +18,7 @@ import {
   type FlowScreen,
 } from "../../mobile";
 import { isCivilDate } from "../../core/domain/attendance.ts";
+import type { PedagogicalPlanProvenance } from "../../core/domain/pedagogical-plan-provenance.ts";
 import {
   isLocalTime,
   type ClassroomSchedule,
@@ -105,6 +106,7 @@ export type PlanCreationCommand = {
   teacherOwnedDailyFlowBlocks?: TeacherOwnedDailyFlowBlockDraft[];
   teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
   teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
+  pedagogicalProvenance?: PedagogicalPlanProvenance;
   premiumAlternativeActivated?: boolean;
 };
 
@@ -152,6 +154,8 @@ export function PlanCreationScreen({
   onUpdate,
   initialTemplate,
   initialEdit,
+  initialActivityTitle,
+  initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
 }: {
   civilDate: string;
@@ -164,6 +168,8 @@ export function PlanCreationScreen({
   onUpdate?: (command: PlanUpdateCommand) => Promise<void>;
   initialTemplate?: PremiumDailyTemplateSelection;
   initialEdit?: ScheduledPlanEditDraft;
+  initialActivityTitle?: string;
+  initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
 }) {
   const introHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -182,10 +188,11 @@ export function PlanCreationScreen({
     return () => window.cancelAnimationFrame(frame);
   }, []);
   const [planTitle, setPlanTitle] = useState(
-    initialEdit?.planTitle ?? initialTemplate?.planTitle ?? "Günlük öğrenme planı",
+    initialEdit?.planTitle ?? initialTemplate?.planTitle ??
+      (initialActivityTitle ? `${initialActivityTitle} planı` : "Günlük öğrenme planı"),
   );
   const [activityTitle, setActivityTitle] = useState(
-    initialEdit?.activityTitle ?? initialTemplate?.activityTitle ?? "",
+    initialEdit?.activityTitle ?? initialTemplate?.activityTitle ?? initialActivityTitle ?? "",
   );
   const [startTime, setStartTime] = useState(initialEdit?.startTime ?? defaultStartTime);
   const [endTime, setEndTime] = useState(
@@ -279,7 +286,7 @@ export function PlanCreationScreen({
   );
   const visibleTargets = useMemo(() => {
     const query = targetQuery.trim().toLocaleLowerCase("tr-TR");
-    if (!query && !targetDomain) return [];
+    if (!query && !targetDomain) return availableTargets.slice(0, 6);
     return availableTargets
       .filter(
         (target) =>
@@ -471,9 +478,6 @@ export function PlanCreationScreen({
     teacherOwnedDailyFlowTotalMinutes === expectedTeacherOwnedDailyFlowMinutes
       ? "Öğretmenin 10 bölümlü günlük akışındaki başlık, süre ve notları kontrol edin."
       : null,
-    teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed
-      ? "10 bölümlü günlük akışı gözden geçirdiğinizi onaylayın."
-      : null,
     !teacherOwnedActivityBlockValid
       ? "Gerçek etkinliğin uygulanacağı, atlanmamış bir akış bölümü seçin."
       : null,
@@ -497,7 +501,7 @@ export function PlanCreationScreen({
         ? initialEdit
           ? "Değişiklikler kontrol edildi; kaydedebilirsiniz."
           : teacherOwnedDailyFlowEnabled
-            ? "Etkinlik, hedef, çocuk kapsamı, 10 akış bölümü ve öğretmen onayı tamamlandı."
+            ? "Etkinlik, hedef, çocuk kapsamı ve 10 akış bölümü tamamlandı."
             : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
         : saveBlockingReasons.join(" ");
   const selectPremiumApplication = (useAlternative: boolean) => {
@@ -528,7 +532,6 @@ export function PlanCreationScreen({
       !premiumDailyFlowValid ||
       !teacherOwnedDailyFlowValid ||
       !teacherOwnedActivityBlockValid ||
-      (teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed) ||
       busy
     ) return;
     setBusy(true);
@@ -581,6 +584,9 @@ export function PlanCreationScreen({
                 : {}),
             }
           : {}),
+        ...(initialPedagogicalProvenance
+          ? { pedagogicalProvenance: initialPedagogicalProvenance }
+          : {}),
         ...(initialTemplate ? { premiumAlternativeActivated } : {}),
       });
     } catch (reason) {
@@ -595,8 +601,8 @@ export function PlanCreationScreen({
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">{initialEdit ? "Kayıtlı öğretmen planı" : "Günlük plan hazırlığı"}</span>
-          <h1 ref={introHeadingRef} tabIndex={-1}>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği 10 bölümlü günlük akışınıza yerleştirin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
-          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : teacherOwnedDailyFlowEnabled ? "Etkinlik, hedef ve çocuk kapsamından sonra 10 bölümü inceleyin; gerçek etkinliğin uygulanacağı bölümü seçip açıkça onaylayın." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
+          <h1 ref={introHeadingRef} tabIndex={-1}>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği seçin, TYMM hedefini işaretleyin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
+          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : teacherOwnedDailyFlowEnabled ? "Günün 10 bölümlük akışı hazırdır. Yalnız ihtiyaç duyarsanız açıp düzenleyin; etkinlik ve program hedefi seçiminizden sonra planı kaydedin." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
         </div>
 
         <section className="d1-context-card" aria-label="Plan bağlamı">
@@ -611,7 +617,7 @@ export function PlanCreationScreen({
 
         {premiumFlowDefinition.length > 0 ? (
           <>
-            <section className="premium-template-source" aria-label="Premium plan kaynağı">
+            <section className="premium-template-source" aria-label="Kayıtlı plan kaynağı">
               <StarIcon aria-hidden="true" />
               <span>
                 <strong>{initialEdit ? "Kayıtlı kaynak zinciri korunuyor" : "Plan Kütüphanesi’nden hazırlandı"}</strong>
@@ -779,11 +785,20 @@ export function PlanCreationScreen({
         ) : null}
 
         {teacherOwnedDailyFlowEnabled ? (
-          <section
+          <details
             className="premium-daily-flow-preview teacher-owned-daily-flow-editor"
-            aria-labelledby="teacher-owned-daily-flow-title"
             data-testid="teacher-owned-daily-flow-editor"
           >
+            <summary className="teacher-owned-daily-flow-summary">
+              <span>
+                <strong>Günün akışı hazır</strong>
+                <small>
+                  10 bölüm · {teacherOwnedDailyFlowTotalMinutes} dakika · İsterseniz düzenleyin
+                </small>
+              </span>
+              <ChevronDownIcon aria-hidden="true" />
+            </summary>
+            <div className="teacher-owned-daily-flow-details">
             <div>
               <span className="d1-kicker">Öğretmenin günlük akışı</span>
               <h2 id="teacher-owned-daily-flow-title">
@@ -1135,24 +1150,8 @@ export function PlanCreationScreen({
                 </li>
               ))}
             </ol>
-            <label className="teacher-owned-flow-review-confirmation">
-              <input
-                type="checkbox"
-                checked={teacherOwnedDailyFlowReviewed}
-                disabled={!teacherOwnedDailyFlowValid}
-                onChange={(event) =>
-                  setTeacherOwnedDailyFlowReviewed(event.target.checked)
-                }
-              />
-              <span>
-                <strong>10 bölümü gözden geçirdim</strong>
-                <small>
-                  Bu onaydan sonra akış “öğretmenin hazırladığı günlük akış”
-                  olarak kaydedilir. Bir alan değişirse yeniden onay gerekir.
-                </small>
-              </span>
-            </label>
-          </section>
+            </div>
+          </details>
         ) : null}
 
         {!initialEdit ? <section className="plan-ideas" aria-labelledby="plan-ideas-title">
@@ -1281,7 +1280,7 @@ export function PlanCreationScreen({
             <span className="d1-kicker">Korunan program kapsamı</span>
             <h2>{selectedTargets.length} hedef · {assignedStudentIds.length} çocuk</h2>
             <p>
-              Kaynak program hedefleri, çocuk atamaları ve premium etkinlik görüntüleri bu düzenlemede değişmez. Başlık, tarih, saat ve 10 bloktaki öğretmen notları güncellenebilir.
+              Kaynak program hedefleri ve çocuk atamaları bu düzenlemede değişmez. Başlık, tarih, saat ve 10 bloktaki öğretmen notları güncellenebilir.
             </p>
           </section>
         ) : <>
@@ -1345,7 +1344,7 @@ export function PlanCreationScreen({
           <p className="catalog-scope-note">
             {targetDomain || targetQuery.trim()
               ? "İlk 16 eşleşme gösterilir; arayarak daha da daraltabilirsiniz."
-              : "Önce bir program alanına dokunun veya hedef kodunu arayın."}
+              : "Seçili yaş bandındaki ilk 6 hedef gösteriliyor. Alan seçerek veya arayarak daraltabilirsiniz."}
           </p>
         </section>
 
@@ -1462,6 +1461,8 @@ export function PlanCreationFlow({
   onClose,
   initialTemplate,
   initialEdit,
+  initialActivityTitle,
+  initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
 }: {
   civilDate: string;
@@ -1475,6 +1476,8 @@ export function PlanCreationFlow({
   onClose: () => void;
   initialTemplate?: PremiumDailyTemplateSelection;
   initialEdit?: ScheduledPlanEditDraft;
+  initialActivityTitle?: string;
+  initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
 }) {
   const initial = useMemo<FlowScreen>(
@@ -1495,6 +1498,8 @@ export function PlanCreationFlow({
           onUpdate={onUpdate}
           initialTemplate={initialTemplate}
           initialEdit={initialEdit}
+          initialActivityTitle={initialActivityTitle}
+          initialPedagogicalProvenance={initialPedagogicalProvenance}
           teacherOwnedDailyFlowContext={teacherOwnedDailyFlowContext}
         />
       ),
@@ -1511,6 +1516,8 @@ export function PlanCreationFlow({
       onUpdate,
       initialTemplate,
       initialEdit,
+      initialActivityTitle,
+      initialPedagogicalProvenance,
       teacherOwnedDailyFlowContext,
     ],
   );

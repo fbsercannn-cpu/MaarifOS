@@ -1,7 +1,11 @@
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
 import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import { sha256Hex } from "../../core/backup/crypto.ts";
-import { formatStudentPhone, studentContactsFromRecord } from "../../core/domain/student.ts";
+import {
+  formatStudentPhone,
+  studentCareDetailsFromRecord,
+  studentContactsFromRecord,
+} from "../../core/domain/student.ts";
 import {
   COLLECTION_NAMES,
   createEmptySnapshot,
@@ -1144,6 +1148,7 @@ export function buildStudentDossier(
         record.periodEnd >= options.periodStart,
     );
   const contacts = studentContactsFromRecord(student.contacts);
+  const careDetails = studentCareDetailsFromRecord(student.careDetails);
   const redact = dossierTextRedactor(
     student,
     options,
@@ -1173,8 +1178,62 @@ export function buildStudentDossier(
               contact.name ? ` · ${contact.name}` : ""
             }: ${formatStudentPhone(contact.phone)}${
               contact.isPrimary ? " (öncelikli)" : ""
+            }${
+              contact.isEmergencyContact ? " (acil iletişim)" : ""
+            }${
+              contact.isAuthorizedPickup ? " (teslim yetkili)" : ""
             }`,
         )
+      : [];
+  const careLines =
+    options.includeContacts && options.identityMode === "full" && careDetails
+      ? [
+          ...(careDetails.allergies
+            ? [`Bilinen alerjiler: ${careDetails.allergies}`]
+            : []),
+          ...(careDetails.dietaryNeeds
+            ? [`Beslenme gereksinimleri: ${careDetails.dietaryNeeds}`]
+            : []),
+          ...(careDetails.medicationNotes
+            ? [`İlaç ve uygulama notu: ${careDetails.medicationNotes}`]
+            : []),
+          ...(careDetails.emergencyNotes
+            ? [`Acil durumda bilinmesi gerekenler: ${careDetails.emergencyNotes}`]
+            : []),
+          ...(careDetails.physicianName
+            ? [`Hekim / sağlık birimi: ${careDetails.physicianName}`]
+            : []),
+          ...(careDetails.physicianPhone
+            ? [`Hekim telefonu: ${careDetails.physicianPhone}`]
+            : []),
+          ...(careDetails.medicalDevices
+            ? [`Sağlık cihazı veya sürekli destek: ${careDetails.medicalDevices}`]
+            : []),
+          ...(careDetails.homeAddress
+            ? [`Ev adresi: ${careDetails.homeAddress}`]
+            : []),
+          ...(careDetails.guardianEmail
+            ? [`Veli e-posta adresi: ${careDetails.guardianEmail}`]
+            : []),
+          ...(careDetails.familyEducationNeeds
+            ? [`Aile eğitimi ihtiyaçları (Ek 11 çalışma notu): ${careDetails.familyEducationNeeds}`]
+            : []),
+          ...(careDetails.familyParticipationPreferences
+            ? [`Aile katılım tercihleri (Ek 12 çalışma notu): ${careDetails.familyParticipationPreferences}`]
+            : []),
+          ...(careDetails.photoVideoPermissionOnFile
+            ? ["İmzalı fotoğraf / video kullanım formu: Dosyada"]
+            : []),
+          ...(careDetails.fieldTripPermissionOnFile
+            ? ["İmzalı okul dışı gezi / öğrenme formu: Dosyada"]
+            : []),
+          ...(careDetails.digitalCommunicationPermissionOnFile
+            ? ["İmzalı dijital iletişim formu: Dosyada"]
+            : []),
+          ...(careDetails.permissionFormDate
+            ? [`İzin formları son kontrol tarihi: ${careDetails.permissionFormDate}`]
+            : []),
+        ]
       : [];
   const portfolioLines = portfolio.map((selection, index) => {
     const source = observations.find(
@@ -1226,6 +1285,9 @@ export function buildStudentDossier(
     ...profileLines,
     ...(contactLines.length > 0
       ? ["", "YAKIN İLETİŞİM BİLGİLERİ", ...contactLines]
+      : []),
+    ...(careLines.length > 0
+      ? ["", "SAĞLIK VE GÜVENLİK BİLGİLERİ", ...careLines]
       : []),
     ...(options.includeAttendance
       ? [

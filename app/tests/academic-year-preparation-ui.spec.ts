@@ -6,28 +6,30 @@ test("yaklaşan eğitim yılı öğretmen kararıyla bugün gerçek kayıt kulla
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Hazırlık Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Hazırlık Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Hazırlık Kurgu Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup
+    .locator("details")
+    .filter({ hasText: "Takvim ayrıntıları" })
+    .locator("summary")
+    .click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2099-09-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2100-08-31");
   await expect(setup.getByText("Yeni dönem hazır")).toBeVisible();
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .locator("details")
+    .filter({ hasText: "İleri ayarlar" })
+    .locator("summary")
     .click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 
-  const warning = page.getByRole("alert", { name: "Eğitim yılı hazırlık uyarısı" });
-  await expect(warning.getByText("Hazırlık modu açık")).toBeVisible();
-  await expect(warning).toContainText("çalışmayı bugün başlatıp");
-  await expect(warning).toContainText("Takvim başlangıcı 2099-09-01");
-  await expect(warning.getByRole("button", { name: "Çalışmayı bugün başlat" })).toBeVisible();
   await expect(page.locator(".teacher-control")).toHaveCount(0);
   await expect(page.getByTestId("teacher-day-close")).toHaveCount(0);
   await expect(page.getByTestId("current-work")).toHaveCount(0);
@@ -37,24 +39,27 @@ test("yaklaşan eğitim yılı öğretmen kararıyla bugün gerçek kayıt kulla
 
   const childName = "Hazırlık Kurgu Öğrencisi";
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "İlk çocuğu ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill(childName);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.keyboard.press("Escape");
-  const quickObservation = page.getByRole("button", {
-    name: `${childName} için gözlem ekle`,
-  });
+  await page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true }).click();
+  const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addStudent.getByLabel("Çocuğun adı").fill(childName);
+  await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
+  const studentRow = page.locator(".simple-student-list li").filter({ hasText: childName });
+  const quickObservation = studentRow.getByRole("button", { name: "Gözlem", exact: true });
   await expect(quickObservation).toBeDisabled();
-  await expect(quickObservation).toHaveAttribute(
-    "aria-describedby",
-    "academic-year-mode-copy",
-  );
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await page
-    .getByRole("button", { name: "Çalışmayı bugün başlat" })
-    .last()
+    .getByRole("region", { name: "Sıradaki en iyi adım" })
+    .getByRole("button")
     .click();
-  await expect(warning).toBeHidden();
+  await expect(setup).toBeVisible();
+  const calendarDetails = setup
+    .locator("details")
+    .filter({ hasText: "Takvim ayrıntıları" });
+  await calendarDetails.locator("summary").click();
+  await expect(setup.getByText("Yeni dönem hazır")).toBeVisible();
+  await expect(setup.getByLabel("Eğitim yılı başlangıcı")).toHaveValue("2099-09-01");
+  await setup.getByRole("button", { name: "Çalışmayı bugün başlat" }).click();
+  await expect(setup).toBeHidden();
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await expect(quickObservation).toBeEnabled();
   await expect(
@@ -66,28 +71,31 @@ test("boş sınıf ile arama sonucu olmayan sınıf farklı ve eyleme dönük me
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Boş Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Boş Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Boş Kurgu Sınıfı");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
   await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .locator("details")
+    .filter({ hasText: "İleri ayarlar" })
+    .locator("summary")
     .click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await expect(page.getByText("Henüz çocuk eklenmedi", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "İlk çocuğu ekle", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "İlk çocuğu ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill("Arama Kurgu Öğrencisi");
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(page.getByText("Henüz öğrenci eklenmedi", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true }).click();
+  const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addStudent.getByLabel("Çocuğun adı").fill("Arama Kurgu Öğrencisi");
+  await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
 
   await page.getByLabel("Öğrenci ara").fill("olmayan");
-  await expect(page.getByText("Eşleşen çocuk bulunamadı", { exact: true })).toBeVisible();
-  await expect(page.getByText("Arama ifadesini değiştirerek yeniden deneyin.")).toBeVisible();
+  await expect(page.getByText("Eşleşen öğrenci yok", { exact: true })).toBeVisible();
+  await expect(page.getByText("Arama metnini değiştirin.", { exact: true })).toBeVisible();
 });

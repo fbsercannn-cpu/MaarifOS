@@ -211,7 +211,12 @@ test("satın alınan veya STAFF erişimli seçili paket eksiksiz çıktı belges
     assert.equal(document.activities.length, 12);
     assert.equal(document.fullDayFlow.length, 10);
     assert.equal(document.contentPackVersion, content.version);
-    assert.match(document.fileName, kind === "purchased" ? /\.pdf$/ : /\.docx$/);
+    assert.match(
+      document.fileName,
+      kind === "purchased"
+        ? /^MaarifOS_TYMM_60_72_2026_09_v.+\.pdf$/
+        : /^MaarifOS_TYMM_60_72_2026_09_v.+\.docx$/,
+    );
     const paragraphs = buildPremiumPlanExportParagraphs(document);
     assert.ok(paragraphs.length > 150);
     assert.ok(paragraphs.some((paragraph) => paragraph.text.includes("Öğretmen yansıtması")));

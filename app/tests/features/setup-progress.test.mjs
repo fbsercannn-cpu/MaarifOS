@@ -263,5 +263,9 @@ test("Bugün kurulum adımlarını gerçek hedeflere bağlar ve yedek bölümün
   assert.match(prototypeSource, /setSettingsInitialSection\("backup"\)/);
   assert.match(prototypeSource, /data-settings-section="backup"/);
   assert.match(prototypeSource, /Başlangıç planı · 4\. adım/);
-  assert.match(prototypeSource, /OFFICIAL_ACADEMIC_CALENDAR_2026_2027\.academicYearName/);
+  assert.match(prototypeSource, /academicYearMatchesCalendarProfile/);
+  assert.doesNotMatch(
+    prototypeSource,
+    /planningAcademicYearReady:[\s\S]{0,240}academicYearName/,
+  );
 });

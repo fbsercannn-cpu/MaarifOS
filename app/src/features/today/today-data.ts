@@ -73,6 +73,8 @@ export type ClassroomContext =
       operationalStatus: AcademicYearOperationalStatus;
       classroomId: string;
       classroomName: string;
+      schoolName?: string;
+      teacherName?: string;
       ageGroup?: string;
       curriculumProgram?: string;
       curriculumCatalogLabel?: string;
@@ -124,6 +126,8 @@ export interface SaveClassroomConfigurationInput {
   classroom: {
     id?: string;
     name: string;
+    schoolName?: string;
+    teacherName?: string;
     ageGroup?: string;
     curriculumProgram?: string;
     curriculumCatalogLabel?: string;
@@ -137,6 +141,7 @@ export interface TransitionAcademicYearConfigurationInput
   extends SaveClassroomConfigurationInput {
   carryStudentIds: readonly string[];
   closedOn: string;
+  transitionKind?: "academic-year" | "same-period-curriculum";
 }
 
 export interface ActivateAcademicYearNowInput {
@@ -154,6 +159,18 @@ function requiredText(value: string, fieldName: string): string {
 function optionalText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
+}
+
+function normalizeIdentityText(value: string, fieldName: string): string {
+  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  if (!normalized) throw new Error(`${fieldName} boş bırakılamaz.`);
+  return normalized;
+}
+
+function existingIdentityText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  return normalized || undefined;
 }
 
 function validUuid(value: string | undefined, fieldName: string): string {
@@ -251,6 +268,9 @@ function classroomContext(
     }
   }
 
+  const schoolName = existingIdentityText(classroom.schoolName);
+  const teacherName = existingIdentityText(classroom.teacherName);
+
   return {
     status: "configured",
     academicYearId: classroom.academicYearId,
@@ -270,6 +290,8 @@ function classroomContext(
     ),
     classroomId: classroom.id,
     classroomName: classroom.name.trim(),
+    ...(schoolName ? { schoolName } : {}),
+    ...(teacherName ? { teacherName } : {}),
     ...(classroom.ageGroup ? { ageGroup: classroom.ageGroup } : {}),
     ...(classroom.curriculumProgram ? { curriculumProgram: classroom.curriculumProgram } : {}),
     ...(classroom.curriculumCatalogLabel
@@ -723,6 +745,14 @@ export async function saveClassroomConfiguration(
   const classroomId = validUuid(input.classroom.id, "Sınıf");
   const academicYearName = requiredText(input.academicYear.name, "Eğitim yılı adı");
   const classroomName = requiredText(input.classroom.name, "Sınıf adı");
+  const requestedSchoolName =
+    input.classroom.schoolName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.schoolName, "Okul adı");
+  const requestedTeacherName =
+    input.classroom.teacherName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.teacherName, "Öğretmen adı soyadı");
   const schedule = normalizeClassroomSchedule(input.schedule);
   const curriculumProfile = input.classroom.curriculumProfile
     ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
@@ -761,6 +791,10 @@ export async function saveClassroomConfiguration(
           resolvedCurriculumProfile = undefined;
         }
       }
+      const resolvedSchoolName =
+        requestedSchoolName ?? existingIdentityText(existingClassroom?.schoolName);
+      const resolvedTeacherName =
+        requestedTeacherName ?? existingIdentityText(existingClassroom?.teacherName);
       const preservedClassroom: Record<string, unknown> = existingClassroom
         ? { ...existingClassroom }
         : {};
@@ -771,6 +805,8 @@ export async function saveClassroomConfiguration(
       delete preservedClassroom.curriculumProgram;
       delete preservedClassroom.curriculumCatalogLabel;
       delete preservedClassroom.curriculumProfileSnapshot;
+      delete preservedClassroom.schoolName;
+      delete preservedClassroom.teacherName;
       delete preservedSelection.archivedAt;
 
       await transaction.putMany("academicYears", [
@@ -794,6 +830,8 @@ export async function saveClassroomConfiguration(
           id: classroomId,
           academicYearId,
           name: classroomName,
+          ...(resolvedSchoolName ? { schoolName: resolvedSchoolName } : {}),
+          ...(resolvedTeacherName ? { teacherName: resolvedTeacherName } : {}),
           ...(optionalText(input.classroom.ageGroup)
             ? { ageGroup: optionalText(input.classroom.ageGroup) }
             : {}),
@@ -863,6 +901,14 @@ export async function transitionAcademicYearConfiguration(
     "Yeni eğitim yılı adı",
   );
   const nextClassroomName = requiredText(input.classroom.name, "Yeni sınıf adı");
+  const requestedSchoolName =
+    input.classroom.schoolName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.schoolName, "Okul adı");
+  const requestedTeacherName =
+    input.classroom.teacherName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.teacherName, "Öğretmen adı soyadı");
   const schedule = normalizeClassroomSchedule(input.schedule);
   const curriculumProfile = input.classroom.curriculumProfile
     ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
@@ -922,6 +968,12 @@ export async function transitionAcademicYearConfiguration(
       if (!currentAcademicYear || !currentClassroom) {
         throw new Error("Arşivlenecek etkin eğitim yılı veya sınıf bulunamadı.");
       }
+      const samePeriodCurriculumTransition =
+        input.transitionKind === "same-period-curriculum";
+      const nextSchoolName =
+        requestedSchoolName ?? existingIdentityText(currentClassroom.schoolName);
+      const nextTeacherName =
+        requestedTeacherName ?? existingIdentityText(currentClassroom.teacherName);
       if (
         typeof currentAcademicYear.startDate !== "string" ||
         typeof currentAcademicYear.endDate !== "string" ||
@@ -932,7 +984,46 @@ export async function transitionAcademicYearConfiguration(
           "Önceki eğitim yılı kapanış günü kendi tarih aralığında olmalıdır.",
         );
       }
-      if (input.academicYear.startDate <= input.closedOn) {
+      if (samePeriodCurriculumTransition) {
+        const currentAcademicYearName =
+          typeof currentAcademicYear.name === "string"
+            ? currentAcademicYear.name.trim()
+            : "";
+        if (
+          nextAcademicYearName !== currentAcademicYearName ||
+          input.academicYear.startDate !== currentAcademicYear.startDate ||
+          input.academicYear.endDate !== currentAcademicYear.endDate
+        ) {
+          throw new Error(
+            "Aynı dönem program geçişinde eğitim yılı adı ve tarihleri değiştirilemez.",
+          );
+        }
+        if (curriculumProfile?.framework !== "tymm") {
+          throw new Error(
+            "Aynı dönem program geçişi yalnız yeni bir Maarif Modeli profiliyle yapılabilir.",
+          );
+        }
+        if (
+          typeof currentClassroom.curriculumProfileSnapshot === "object" &&
+          currentClassroom.curriculumProfileSnapshot !== null &&
+          !Array.isArray(currentClassroom.curriculumProfileSnapshot)
+        ) {
+          let currentFramework: CurriculumProfileSnapshot["framework"] | null =
+            null;
+          try {
+            currentFramework = normalizeCurriculumProfile(
+              currentClassroom.curriculumProfileSnapshot as unknown as CurriculumProfileInput,
+            ).framework;
+          } catch {
+            currentFramework = null;
+          }
+          if (currentFramework === "tymm") {
+            throw new Error(
+              "Etkin sınıf zaten Türkiye Yüzyılı Maarif Modeli profilini kullanıyor.",
+            );
+          }
+        }
+      } else if (input.academicYear.startDate <= input.closedOn) {
         throw new Error(
           "Yeni eğitim yılı başlangıcı önceki yılın kapanışından sonra olmalıdır.",
         );
@@ -998,7 +1089,9 @@ export async function transitionAcademicYearConfiguration(
           id: crypto.randomUUID(),
           academicYearId: nextAcademicYearId,
           classroomId: nextClassroomId,
-          startedOn: input.academicYear.startDate,
+          startedOn: samePeriodCurriculumTransition
+            ? input.closedOn
+            : input.academicYear.startDate,
           status: "active",
           schemaVersion: STUDENT_ENROLLMENT_VERSION,
         };
@@ -1047,6 +1140,8 @@ export async function transitionAcademicYearConfiguration(
           id: nextClassroomId,
           academicYearId: nextAcademicYearId,
           name: nextClassroomName,
+          ...(nextSchoolName ? { schoolName: nextSchoolName } : {}),
+          ...(nextTeacherName ? { teacherName: nextTeacherName } : {}),
           ...(optionalText(input.classroom.ageGroup)
             ? { ageGroup: optionalText(input.classroom.ageGroup) }
             : {}),
@@ -1096,7 +1191,9 @@ export async function transitionAcademicYearConfiguration(
       await transaction.putMany("auditLogs", [
         {
           id: crypto.randomUUID(),
-          action: "academic-year-transitioned",
+          action: samePeriodCurriculumTransition
+            ? "curriculum-profile-transitioned"
+            : "academic-year-transitioned",
           entityType: "academicYear",
           entityId: nextAcademicYearId,
           classroomCount: 1,

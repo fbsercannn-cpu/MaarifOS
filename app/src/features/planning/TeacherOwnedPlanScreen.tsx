@@ -27,6 +27,7 @@ import {
 } from "../../core/domain/teacher-owned-monthly-evaluation.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import { KeyboardInput, KeyboardTextarea } from "../../mobile";
+import { downloadBrowserFile } from "../documents/browser-file-download.ts";
 import type { TeacherWorkCycleWorkspace } from "../teacher-cycle/teacher-work-cycle.ts";
 import type { PremiumContentPack } from "../premium-plans/domain.ts";
 import { loadPremiumPilotPreviewPack } from "../premium-plans/content-repository.ts";
@@ -38,9 +39,10 @@ import type { PremiumPlanExportFormat } from "../premium-plans/export-document.t
 import type { PlanWorkbenchLevelId } from "./plan-workbench-model.ts";
 import type { ScheduledPlanSummary } from "./scheduled-plan-workspace.ts";
 import {
-  buildStandaloneTeacherOwnedPlanPreview,
   generateStandaloneTeacherOwnedPlanExportFile,
   generateTeacherOwnedPlanExportFile,
+  teacherOwnedPlanDocumentBasisLabel,
+  type TeacherOwnedPlanDocumentContext,
   type TeacherOwnedPlanDocumentScope,
 } from "./teacher-owned-plan-document.ts";
 import {
@@ -58,7 +60,10 @@ import {
   type TeacherMonthlyReviewContext,
   type TeacherWeeklyReviewContext,
 } from "./teacher-owned-plan-service.ts";
-import { buildTeacherFullYearMonthDrafts } from "./teacher-year-outline.ts";
+import {
+  buildNeutralTeacherYearOutline,
+  buildTeacherFullYearMonthDrafts,
+} from "./teacher-year-outline.ts";
 import "./teacher-owned-plan.css";
 
 export interface TeacherOwnedPlanScreenProps {
@@ -70,8 +75,10 @@ export interface TeacherOwnedPlanScreenProps {
   contentPack?: PremiumContentPack | null;
   educationalWritesDisabled?: boolean;
   educationalWriteNotice?: string | null;
+  documentContext?: TeacherOwnedPlanDocumentContext;
   onClose(): void;
-  onOpenProviderLibrary(): void;
+  onOpenProviderLibrary?(): void;
+  showProviderLibrary?: boolean;
   onViewDailyPlan(plan: ScheduledPlanSummary): void;
   onEditDailyPlan(plan: ScheduledPlanSummary): void;
   onCreatePlanGraph(input: CreateTeacherOwnedPlanGraphInput): Promise<TeacherOwnedPlanGraph>;
@@ -103,13 +110,7 @@ function downloadFile(file: {
   mimeType: string;
   fileName: string;
 }): void {
-  const blob = new Blob([file.bytes as BlobPart], { type: file.mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.fileName;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadBrowserFile(file);
 }
 
 function formatCivilDate(civilDate: string): string {
@@ -137,6 +138,17 @@ function narrativeFromRecord(record: TeacherOwnedPlanRecord): string {
     .join("\n");
 }
 
+const TYMM_STARTER_NARRATIVES = {
+  annual:
+    "Her çocuğun güvenli, aktif ve çok yönlü katılımını destekleyen Türkiye Yüzyılı Maarif Modeli öğrenme yaşantıları.",
+  monthly:
+    "Uyum, aidiyet, sınıf rutinleri ve çocukların ilgi alanlarını oyun ve gözlem yoluyla tanıma.",
+  weekly:
+    "Karşılama, oyun, sanat, hareket, açık hava ve günlük gözlemi dengeli biçimde uygulama.",
+  nextMonth:
+    "İlk ayın gözlem ve öğrenme kanıtlarına göre katılım yollarını çeşitlendirme.",
+} as const;
+
 export function TeacherOwnedPlanScreen({
   store,
   workspace,
@@ -146,8 +158,10 @@ export function TeacherOwnedPlanScreen({
   contentPack = null,
   educationalWritesDisabled = false,
   educationalWriteNotice = null,
+  documentContext = {},
   onClose,
   onOpenProviderLibrary,
+  showProviderLibrary = false,
   onViewDailyPlan,
   onEditDailyPlan,
   onCreatePlanGraph,
@@ -162,10 +176,18 @@ export function TeacherOwnedPlanScreen({
   const [source, setSource] = useState<InstalledPremiumPlanExportSource | null>(null);
   const [teacherGraph, setTeacherGraph] = useState<TeacherOwnedPlanGraph | null>(null);
   const [starter, setStarter] = useState<TeacherOwnedPlanStarterDraft | null>(null);
-  const [annualNarrative, setAnnualNarrative] = useState("");
-  const [monthlyNarrative, setMonthlyNarrative] = useState("");
-  const [weeklyNarrative, setWeeklyNarrative] = useState("");
-  const [nextMonthNarrative, setNextMonthNarrative] = useState("");
+  const [annualNarrative, setAnnualNarrative] = useState<string>(
+    TYMM_STARTER_NARRATIVES.annual,
+  );
+  const [monthlyNarrative, setMonthlyNarrative] = useState<string>(
+    TYMM_STARTER_NARRATIVES.monthly,
+  );
+  const [weeklyNarrative, setWeeklyNarrative] = useState<string>(
+    TYMM_STARTER_NARRATIVES.weekly,
+  );
+  const [nextMonthNarrative, setNextMonthNarrative] = useState<string>(
+    TYMM_STARTER_NARRATIVES.nextMonth,
+  );
   const [busy, setBusy] = useState(true);
   const [saveBusy, setSaveBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState<PremiumPlanExportFormat | null>(null);
@@ -175,14 +197,7 @@ export function TeacherOwnedPlanScreen({
   const [documentMonthlyPlanId, setDocumentMonthlyPlanId] = useState("");
   const [documentWeeklyPlanId, setDocumentWeeklyPlanId] = useState("");
   const [documentDailyPlanId, setDocumentDailyPlanId] = useState("");
-  const [documentPreview, setDocumentPreview] = useState<{
-    signature: string;
-    lines: string[];
-  } | null>(null);
-  const [documentPreviewBusy, setDocumentPreviewBusy] = useState(false);
-  const [documentApproved, setDocumentApproved] = useState(false);
   const [message, setMessage] = useState("");
-  const [fullYearOutlineConfirmed, setFullYearOutlineConfirmed] = useState(false);
   const [expandedMonthId, setExpandedMonthId] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<TeacherOwnedPlanRecord | null>(null);
   const [revisionTitle, setRevisionTitle] = useState("");
@@ -234,23 +249,7 @@ export function TeacherOwnedPlanScreen({
   const monthlyReviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    let active = true;
-    if (contentPack) {
-      setPack(contentPack);
-      return () => {
-        active = false;
-      };
-    }
-    void loadPremiumPilotPreviewPack()
-      .then((loadedPack) => {
-        if (active) setPack(loadedPack);
-      })
-      .catch(() => {
-        if (active) setPack(null);
-      });
-    return () => {
-      active = false;
-    };
+    setPack(contentPack);
   }, [contentPack]);
 
   useEffect(() => {
@@ -314,13 +313,16 @@ export function TeacherOwnedPlanScreen({
   const fullYearMonthDrafts = useMemo<readonly TeacherOwnedMonthlyPlanDraft[]>(() => {
     const annualPeriodStart = teacherGraph?.annual.periodStart ?? starter?.annualPeriodStart;
     const annualPeriodEnd = teacherGraph?.annual.periodEnd ?? starter?.annualPeriodEnd;
-    if (!pack || !annualPeriodStart || !annualPeriodEnd) return [];
+    if (!annualPeriodStart || !annualPeriodEnd) return [];
     return buildTeacherFullYearMonthDrafts({
       annualPeriodStart,
       annualPeriodEnd,
-      months: pack.annualMonths,
+      months: buildNeutralTeacherYearOutline({
+        annualPeriodStart,
+        annualPeriodEnd,
+      }),
     });
-  }, [pack, starter?.annualPeriodEnd, starter?.annualPeriodStart, teacherGraph]);
+  }, [starter?.annualPeriodEnd, starter?.annualPeriodStart, teacherGraph]);
   const missingFullYearMonthDrafts = useMemo(() => {
     if (!teacherGraph) return fullYearMonthDrafts;
     const existing = new Set(
@@ -550,7 +552,6 @@ export function TeacherOwnedPlanScreen({
     if (
       !teacherGraph ||
       saveBusy ||
-      !fullYearOutlineConfirmed ||
       missingFullYearMonthDrafts.length === 0
     ) return;
     setSaveBusy(true);
@@ -562,7 +563,6 @@ export function TeacherOwnedPlanScreen({
         months: missingFullYearMonthDrafts,
       });
       setTeacherGraph(graph);
-      setFullYearOutlineConfirmed(false);
       setMessage(
         `Eylül–Haziran plan omurgası tamamlandı: ${graph.months.length} ay ve ${graph.months.reduce((total, month) => total + month.weeks.length, 0)} hafta kullanılabilir.`,
       );
@@ -876,44 +876,18 @@ export function TeacherOwnedPlanScreen({
 
   const selectedDocumentScope = (): TeacherOwnedPlanDocumentScope => {
     if (documentScopeKind === "daily") {
-      if (!documentDailyPlanId) throw new Error("Önizleme için bir günlük plan seçin.");
+      if (!documentDailyPlanId) throw new Error("Çıktı için bir günlük plan seçin.");
       return { kind: "daily", dailyPlanId: documentDailyPlanId };
     }
     if (documentScopeKind === "weekly") {
-      if (!documentWeeklyPlanId) throw new Error("Önizleme için bir hafta seçin.");
+      if (!documentWeeklyPlanId) throw new Error("Çıktı için bir hafta seçin.");
       return { kind: "weekly", weeklyPlanId: documentWeeklyPlanId };
     }
     if (documentScopeKind === "monthly") {
-      if (!documentMonthlyPlanId) throw new Error("Önizleme için bir ay seçin.");
+      if (!documentMonthlyPlanId) throw new Error("Çıktı için bir ay seçin.");
       return { kind: "monthly", monthlyPlanId: documentMonthlyPlanId };
     }
     return { kind: "combined" };
-  };
-
-  const resetDocumentApproval = () => {
-    setDocumentPreview(null);
-    setDocumentApproved(false);
-  };
-
-  const previewDocument = async () => {
-    if (!teacherGraph || documentPreviewBusy) return;
-    setDocumentPreviewBusy(true);
-    setMessage("");
-    setDocumentApproved(false);
-    try {
-      const paragraphs = await buildStandaloneTeacherOwnedPlanPreview(
-        teacherGraph,
-        store,
-        selectedDocumentScope(),
-      );
-      const lines = paragraphs.map((paragraph) => paragraph.text);
-      setDocumentPreview({ signature: JSON.stringify(lines), lines });
-    } catch (reason) {
-      setDocumentPreview(null);
-      setMessage(reason instanceof Error ? reason.message : "Belge önizlemesi hazırlanamadı.");
-    } finally {
-      setDocumentPreviewBusy(false);
-    }
   };
 
   const exportPlan = async (format: PremiumPlanExportFormat) => {
@@ -922,24 +896,23 @@ export function TeacherOwnedPlanScreen({
     setMessage("");
     try {
       if (teacherGraph) {
-        if (!documentPreview || !documentApproved) {
-          throw new Error("Önce belge kapsamını önizleyip öğretmen onayını verin.");
-        }
         const file = await generateStandaloneTeacherOwnedPlanExportFile(
           teacherGraph,
           store,
           format,
           selectedDocumentScope(),
+          documentContext,
         );
-        const signature = JSON.stringify(file.paragraphs.map((paragraph) => paragraph.text));
-        if (signature !== documentPreview.signature) {
-          setDocumentPreview(null);
-          setDocumentApproved(false);
-          throw new Error("Plan kaydı önizlemeden sonra değişti. Güncel belgeyi yeniden önizleyin.");
-        }
         downloadFile(file);
       } else if (pack && source) {
-        downloadFile(await generateTeacherOwnedPlanExportFile(pack, source, format));
+        downloadFile(
+          await generateTeacherOwnedPlanExportFile(
+            pack,
+            source,
+            format,
+            documentContext,
+          ),
+        );
       } else {
         throw new Error("Belge için doğrulanmış bir plan zinciri bulunamadı.");
       }
@@ -969,10 +942,10 @@ export function TeacherOwnedPlanScreen({
 
       <main className="teacher-owned-plan-scroll">
         <section className="teacher-owned-plan-notice" role="status">
-          <strong>Plan emeğiniz premium kilidinden bağımsızdır</strong>
+          <strong>Planlarınız bu cihazda size aittir</strong>
           <p>
             Kendi Yıl → Ay → Hafta planınızı oluşturabilir, revize edebilir ve
-            temel PDF/Word belgesini alabilirsiniz. Hazır içerik kütüphanesi ayrı kalır.
+            PDF/Word belgesini doğrudan alabilirsiniz.
           </p>
         </section>
 
@@ -998,10 +971,10 @@ export function TeacherOwnedPlanScreen({
           <section className="teacher-owned-plan-starter" aria-labelledby="teacher-plan-starter-title">
             <div className="teacher-owned-plan-section-heading">
               <span>İlk plan omurgası</span>
-              <h2 id="teacher-plan-starter-title">Dört kısa kararla başlayın</h2>
+              <h2 id="teacher-plan-starter-title">TYMM başlangıç öneriniz hazır</h2>
               <p>
-                Tarihler etkin eğitim yılından otomatik alındı. Kaydettiğinizde yıllık,
-                aylık ve haftalık kayıtlar birlikte oluşturulur.
+                Tarihler ve başlangıç metinleri otomatik hazırlandı. Tek dokunuşla
+                kaydedebilir, isterseniz metinleri önce düzenleyebilirsiniz.
               </p>
             </div>
             <div className="teacher-owned-plan-period-preview">
@@ -1013,44 +986,6 @@ export function TeacherOwnedPlanScreen({
                 {starter.nextMonthTitle ? ` · ${starter.nextMonthTitle}` : ""}
               </small>
             </div>
-            <label htmlFor="teacher-plan-annual-narrative">Bu yıl sınıfınız için en önemli öncelik nedir?</label>
-            <KeyboardTextarea
-              id="teacher-plan-annual-narrative"
-              value={annualNarrative}
-              onChange={(event) => setAnnualNarrative(event.target.value)}
-              maxLength={2000}
-              placeholder="Örn. güvenli sınıf topluluğu ve her çocuğun katılımı"
-            />
-            <label htmlFor="teacher-plan-monthly-narrative">Bu ay neye odaklanacaksınız?</label>
-            <KeyboardTextarea
-              id="teacher-plan-monthly-narrative"
-              value={monthlyNarrative}
-              onChange={(event) => setMonthlyNarrative(event.target.value)}
-              maxLength={2000}
-              placeholder="Örn. uyum, aidiyet ve sınıf rutinleri"
-            />
-            <label htmlFor="teacher-plan-weekly-narrative">Bu haftanın öğretmen akışı nedir?</label>
-            <KeyboardTextarea
-              id="teacher-plan-weekly-narrative"
-              value={weeklyNarrative}
-              onChange={(event) => setWeeklyNarrative(event.target.value)}
-              maxLength={2000}
-              placeholder="Örn. karşılama, oyun, açık hava ve günlük gözlem"
-            />
-            {starter.nextMonthTitle ? (
-              <>
-                <label htmlFor="teacher-plan-next-month-narrative">
-                  Sonraki ay için başlangıç niyetiniz nedir?
-                </label>
-                <KeyboardTextarea
-                  id="teacher-plan-next-month-narrative"
-                  value={nextMonthNarrative}
-                  onChange={(event) => setNextMonthNarrative(event.target.value)}
-                  maxLength={2000}
-                  placeholder="Örn. ilk ayın kanıtlarına göre katılım yollarını çeşitlendirmek"
-                />
-              </>
-            ) : null}
             <button
               type="button"
               className="teacher-owned-plan-primary"
@@ -1066,6 +1001,49 @@ export function TeacherOwnedPlanScreen({
             >
               {saveBusy ? "Plan zinciri kaydediliyor…" : "Yıl → ay → hafta planını oluştur"}
             </button>
+            <details className="teacher-owned-plan-editor">
+              <summary>Başlangıç metinlerini düzenle</summary>
+              <div>
+                <label htmlFor="teacher-plan-annual-narrative">Bu yıl sınıfınız için en önemli öncelik nedir?</label>
+                <KeyboardTextarea
+                  id="teacher-plan-annual-narrative"
+                  value={annualNarrative}
+                  onChange={(event) => setAnnualNarrative(event.target.value)}
+                  maxLength={2000}
+                  placeholder="Örn. güvenli sınıf topluluğu ve her çocuğun katılımı"
+                />
+                <label htmlFor="teacher-plan-monthly-narrative">Bu ay neye odaklanacaksınız?</label>
+                <KeyboardTextarea
+                  id="teacher-plan-monthly-narrative"
+                  value={monthlyNarrative}
+                  onChange={(event) => setMonthlyNarrative(event.target.value)}
+                  maxLength={2000}
+                  placeholder="Örn. uyum, aidiyet ve sınıf rutinleri"
+                />
+                <label htmlFor="teacher-plan-weekly-narrative">Bu haftanın öğretmen akışı nedir?</label>
+                <KeyboardTextarea
+                  id="teacher-plan-weekly-narrative"
+                  value={weeklyNarrative}
+                  onChange={(event) => setWeeklyNarrative(event.target.value)}
+                  maxLength={2000}
+                  placeholder="Örn. karşılama, oyun, açık hava ve günlük gözlem"
+                />
+                {starter.nextMonthTitle ? (
+                  <>
+                    <label htmlFor="teacher-plan-next-month-narrative">
+                      Sonraki ay için başlangıç niyetiniz nedir?
+                    </label>
+                    <KeyboardTextarea
+                      id="teacher-plan-next-month-narrative"
+                      value={nextMonthNarrative}
+                      onChange={(event) => setNextMonthNarrative(event.target.value)}
+                      maxLength={2000}
+                      placeholder="Örn. ilk ayın kanıtlarına göre katılım yollarını çeşitlendirmek"
+                    />
+                  </>
+                ) : null}
+              </div>
+            </details>
           </section>
         ) : null}
 
@@ -1087,23 +1065,14 @@ export function TeacherOwnedPlanScreen({
               </div>
               {missingFullYearMonthDrafts.length > 0 ? (
                 <>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={fullYearOutlineConfirmed}
-                      onChange={(event) =>
-                        setFullYearOutlineConfirmed(event.target.checked)
-                      }
-                    />
-                    <span>
-                      Eksik {missingFullYearMonthDrafts.length} ayın başlık, dönem ve
-                      hafta omurgasını inceledim; ayrıntıları sınıfıma göre düzenleyeceğim.
-                    </span>
-                  </label>
+                  <p>
+                    Eksik {missingFullYearMonthDrafts.length} ay, kayıtlı eğitim
+                    yılı takviminden hazırlanacak; ayrıntılar daha sonra düzenlenebilir.
+                  </p>
                   <button
                     type="button"
                     className="teacher-owned-plan-primary"
-                    disabled={saveBusy || !fullYearOutlineConfirmed}
+                    disabled={saveBusy}
                     onClick={() => void appendFullYearPlan()}
                   >
                     {saveBusy
@@ -2117,11 +2086,12 @@ export function TeacherOwnedPlanScreen({
 
         <section className="teacher-owned-plan-export" aria-labelledby="teacher-plan-export-title">
           <div className="teacher-owned-plan-section-heading">
-            <span>Önizlemeli belge merkezi</span>
-            <h2 id="teacher-plan-export-title">Kapsamı seçin, kontrol edin, sonra indirin</h2>
+            <span>Tek tıkla çıktı</span>
+            <h2 id="teacher-plan-export-title">Kapsamı seçin ve indirin</h2>
             <p>
-              Yıl, ay, hafta, günlük plan, gerçek etkinlik ve kanıt kimlikleri
-              aynı kayıt zincirinden belgeye girer; eksik içerik uydurulmaz.
+              Planın şema, tarih, kaynak ve yıl → ay → hafta → gün zinciri
+              içeride doğrulanır. Kapsamı ve kayıt adını burada kontrol edip
+              PDF veya Word belgesini hazırlayın.
             </p>
           </div>
           {teacherGraph ? (
@@ -2134,13 +2104,12 @@ export function TeacherOwnedPlanScreen({
                   setDocumentScopeKind(
                     event.target.value as TeacherOwnedPlanDocumentScope["kind"],
                   );
-                  resetDocumentApproval();
                 }}
               >
-                <option value="daily">Günlük plan</option>
-                <option value="weekly">Haftalık plan ve değerlendirme</option>
-                <option value="monthly">Aylık plan ve değerlendirme</option>
-                <option value="combined">Yılın birleşik plan zinciri</option>
+                <option value="daily">Günlük</option>
+                <option value="weekly">Haftalık</option>
+                <option value="monthly">Aylık</option>
+                <option value="combined">Yıllık / birleşik</option>
               </select>
               {documentScopeKind === "daily" ? (
                 <select
@@ -2148,7 +2117,6 @@ export function TeacherOwnedPlanScreen({
                   value={documentDailyPlanId}
                   onChange={(event) => {
                     setDocumentDailyPlanId(event.target.value);
-                    resetDocumentApproval();
                   }}
                 >
                   {dailyPlans.map((plan) => (
@@ -2164,7 +2132,6 @@ export function TeacherOwnedPlanScreen({
                   value={documentWeeklyPlanId}
                   onChange={(event) => {
                     setDocumentWeeklyPlanId(event.target.value);
-                    resetDocumentApproval();
                   }}
                 >
                   {weeklyDocumentOptions.map((weekly) => (
@@ -2178,7 +2145,6 @@ export function TeacherOwnedPlanScreen({
                   value={documentMonthlyPlanId}
                   onChange={(event) => {
                     setDocumentMonthlyPlanId(event.target.value);
-                    resetDocumentApproval();
                   }}
                 >
                   {monthlyDocumentOptions.map((monthly) => (
@@ -2186,46 +2152,30 @@ export function TeacherOwnedPlanScreen({
                   ))}
                 </select>
               ) : null}
-              <button
-                type="button"
-                className="teacher-owned-plan-primary"
-                onClick={() => void previewDocument()}
-                disabled={documentPreviewBusy}
+              <p
+                className="teacher-owned-document-basis"
+                data-testid="teacher-owned-document-basis"
+                role="status"
               >
-                {documentPreviewBusy ? "Önizleme hazırlanıyor…" : "Belgeyi önizle"}
-              </button>
-              {documentPreview ? (
-                <div className="teacher-owned-document-preview" data-testid="teacher-owned-document-preview">
-                  <div>
-                    {documentPreview.lines.map((line, index) => (
-                      <p key={`${index}-${line.slice(0, 24)}`}>{line}</p>
-                    ))}
-                  </div>
-                  <label className="teacher-owned-document-approval">
-                    <input
-                      type="checkbox"
-                      checked={documentApproved}
-                      onChange={(event) => setDocumentApproved(event.target.checked)}
-                    />
-                    <span>Bu önizlemenin seçtiğim kapsamı ve güncel plan revizyonunu yansıttığını onaylıyorum.</span>
-                  </label>
-                </div>
-              ) : null}
+                {teacherOwnedPlanDocumentBasisLabel(documentScopeKind)}
+              </p>
             </div>
           ) : null}
           <div>
-            <button type="button" onClick={() => void exportPlan("pdf")} disabled={!exportReady || exportBusy !== null || Boolean(teacherGraph && (!documentPreview || !documentApproved))}>
-              <DownloadIcon aria-hidden="true" /> {exportBusy === "pdf" ? "PDF hazırlanıyor…" : "PDF indir"}
+            <button type="button" onClick={() => void exportPlan("pdf")} disabled={!exportReady || exportBusy !== null}>
+              <DownloadIcon aria-hidden="true" /> {exportBusy === "pdf" ? "PDF hazırlanıyor…" : "PDF hazırla"}
             </button>
-            <button type="button" onClick={() => void exportPlan("word")} disabled={!exportReady || exportBusy !== null || Boolean(teacherGraph && (!documentPreview || !documentApproved))}>
-              <FileTextIcon aria-hidden="true" /> {exportBusy === "word" ? "Word hazırlanıyor…" : "Word indir"}
+            <button type="button" onClick={() => void exportPlan("word")} disabled={!exportReady || exportBusy !== null}>
+              <FileTextIcon aria-hidden="true" /> {exportBusy === "word" ? "Word hazırlanıyor…" : "Word hazırla"}
             </button>
           </div>
         </section>
 
-        <button type="button" className="teacher-owned-plan-library" onClick={onOpenProviderLibrary}>
-          Hazır içerik ve sağlayıcı şablonlarına git <ChevronRightIcon aria-hidden="true" />
-        </button>
+        {showProviderLibrary && onOpenProviderLibrary ? (
+          <button type="button" className="teacher-owned-plan-library" onClick={onOpenProviderLibrary}>
+            Hazır içerik ve sağlayıcı şablonlarına git <ChevronRightIcon aria-hidden="true" />
+          </button>
+        ) : null}
       </main>
     </div>
   );

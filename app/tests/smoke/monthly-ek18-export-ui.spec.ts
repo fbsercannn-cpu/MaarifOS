@@ -1,211 +1,72 @@
 import { readFile } from "node:fs/promises";
-import { expect, test, type Download, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-type CapturedBlob = {
-  size: number;
-  type: string;
-};
-
-async function configurePremiumClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
-  await setup.getByLabel("Sınıf adı").fill("Ek 18 Mobil Kabul Sınıfı");
-  await expect(setup.getByText("Resmî tarihler uygulandı", { exact: true })).toBeVisible();
-  await expect(setup.getByLabel("Eğitim yılı başlangıcı")).toHaveValue("2026-09-01");
-  await expect(setup.getByLabel("Eğitim yılı bitişi")).toHaveValue("2027-08-31");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
+async function configureClassroomWithStudent(page: Page) {
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Aylık Plan Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Kurgu Öğretmen");
+  await setup.getByLabel("Sınıf adı").fill("Aylık Plan Mobil Kabul Sınıfı");
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("full_day");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
-    .click();
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await expect(setup.locator(".official-calendar-applied")).toHaveText(/Uygulandı/);
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
-  await addSheet.getByLabel("Çocuğun adı").fill("Ek 18 Kurgu Çocuk");
-  await addSheet.getByRole("button", { name: "Ekle", exact: true }).click();
+  await addSheet.getByLabel("Çocuğun adı").fill("Aylık Plan Kurgu Çocuk");
+  await addSheet.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
   await expect(addSheet).toBeHidden();
-  await expect(page.getByRole("button", { name: "Ek 18 Kurgu Çocuk profilini aç" })).toBeVisible();
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await expect(
+    page
+      .locator("button.simple-student-list__profile")
+      .filter({ hasText: "Aylık Plan Kurgu Çocuk" }),
+  ).toBeVisible();
 }
 
-async function captureDownload(
-  page: Page,
-  testId: string,
-): Promise<{ blob: CapturedBlob; bytes: Buffer; download: Download }> {
-  const capturedCount = await page.evaluate(
-    () => (window as Window & { __ek18CapturedBlobs?: CapturedBlob[] })
-      .__ek18CapturedBlobs?.length ?? 0,
-  );
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByTestId(testId).click();
-  const download = await downloadPromise;
-  const downloadPath = await download.path();
-  expect(downloadPath).toBeTruthy();
-  const bytes = await readFile(downloadPath!);
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () => (window as Window & { __ek18CapturedBlobs?: CapturedBlob[] })
-          .__ek18CapturedBlobs?.length ?? 0,
-      ),
-    )
-    .toBeGreaterThan(capturedCount);
-  const blob = await page.evaluate(
-    () => (window as Window & { __ek18CapturedBlobs?: CapturedBlob[] })
-      .__ek18CapturedBlobs?.at(-1) ?? null,
-  );
-  expect(blob).not.toBeNull();
-  return { blob: blob!, bytes, download };
-}
-
-test("kalıcı aylık değerlendirme telefonda Ek 18 PDF/DOCX indirir ve yeniden yüklemede seçimi korur", async ({
-  browserName,
+test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-  await page.addInitScript(() => {
-    const capturedWindow = window as Window & {
-      __ek18CapturedBlobs?: CapturedBlob[];
-      __ek18CreateObjectUrlWrapped?: boolean;
-    };
-    capturedWindow.__ek18CapturedBlobs = [];
-    if (capturedWindow.__ek18CreateObjectUrlWrapped) return;
-    const originalCreateObjectURL = URL.createObjectURL.bind(URL);
-    URL.createObjectURL = (value: Blob | MediaSource) => {
-      if (value instanceof Blob) {
-        capturedWindow.__ek18CapturedBlobs?.push({
-          size: value.size,
-          type: value.type,
-        });
-      }
-      return originalCreateObjectURL(value);
-    };
-    capturedWindow.__ek18CreateObjectUrlWrapped = true;
-  });
-
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?premiumPilot=1", { waitUntil: "networkidle" });
-  await configurePremiumClassroom(page);
-  await page.getByRole("button", { name: "Planları aç" }).click();
+  await configureClassroomWithStudent(page);
 
-  const center = page.getByTestId("premium-plan-center");
-  await expect(center).toBeVisible();
-  await center
-    .getByRole("navigation", { name: "Plan Kütüphanesi bölümleri" })
-    .getByRole("button", { name: "Değerlendirme ve belge" })
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Neyi hazırlayacaksınız?" })
+    .getByRole("button", { name: /Aylık eğitim planı/i })
     .click();
-  const pdfButton = center.getByTestId("premium-monthly-ek18-pdf");
-  const wordButton = center.getByTestId("premium-monthly-ek18-word");
-  await expect(pdfButton).toBeDisabled();
-  await expect(wordButton).toBeDisabled();
 
-  await center
-    .getByRole("button", { name: "Eylül hazır içeriğini ekle" })
+  const planDialog = page.getByRole("dialog", { name: "Kayıtlı öğretmen planı" });
+  await expect(planDialog.getByRole("heading", { name: "TYMM başlangıç öneriniz hazır" })).toBeVisible();
+  await planDialog
+    .getByRole("button", { name: "Yıl → ay → hafta planını oluştur" })
     .click();
-  await expect(
-    center
-      .getByTestId("premium-install-panel")
-      .getByText("Eylül hazır içerik paketi sınıfa eklendi", { exact: true }),
-  ).toBeVisible();
-  await expect(pdfButton).toBeDisabled();
-  await expect(wordButton).toBeDisabled();
+  await expect(planDialog).toContainText("tek işlemde bu cihaza kaydedildi");
+  await planDialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
 
-  await center
-    .getByRole("button", {
-      name: "Eylül ayını kanıtlar ve yansıtmayla değerlendir",
-    })
-    .click();
-  const review = center.getByRole("region", {
-    name: "Eylül aylık değerlendirme formu",
+  await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
+  let monthlyOutput = page.getByRole("button", {
+    name: /^Aylık eğitim planı\. Durum: Hazır\. PDF\./,
   });
-  await expect(review).toBeVisible();
-  const details = review.locator("details");
-  await details.nth(1).locator("summary").click();
-  await details.nth(2).locator("summary").click();
-  await review
-    .getByLabel("Program yönü öğretmen değerlendirmesi")
-    .fill("Program bileşenleri aylık planın resmî hedefleriyle uyumlu uygulandı.");
-  await review
-    .getByLabel("Öğretmen yönü yansıtması")
-    .fill("Geçiş süreleri ve materyal erişimi bir sonraki ay yeniden düzenlenecek.");
-  await review
-    .getByLabel("Sonraki ay için öğretmen önerisi")
-    .fill("Aynı hedefler farklı merkezlerde yeniden gözlenecek.");
-  const saveReview = review.getByRole("button", {
-    name: "Aylık değerlendirmeyi yeni kayıt olarak ekle",
-  });
-  await expect(saveReview).toBeEnabled();
-  await saveReview.click();
-  await expect(
-    review.getByText(
-      "Aylık değerlendirme üç boyutuyla kaydedildi. Önceki kayıtlar değiştirilmeden korunuyor.",
-    ),
-  ).toBeVisible();
-  await expect(pdfButton).toBeEnabled();
-  await expect(wordButton).toBeEnabled();
-  await expect(
-    center.getByText(/Belge kaynağı: son kalıcı değerlendirme/),
-  ).toBeVisible();
-
-  const word = await captureDownload(page, "premium-monthly-ek18-word");
-  if (process.env.MONTHLY_EK18_WORD_QA_PATH) {
-    await word.download.saveAs(process.env.MONTHLY_EK18_WORD_QA_PATH);
-  }
-  expect(word.download.suggestedFilename()).toMatch(
-    /^MaarifOS_Ek18_Aylik_Plan_Kontrol_2026-09_[0-9a-z-]{8}\.docx$/,
-  );
-  expect(word.blob.type).toBe(
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  );
-  expect(word.blob.size).toBe(word.bytes.length);
-  expect([...word.bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
-
-  if (browserName === "chromium") {
-    const pdf = await captureDownload(page, "premium-monthly-ek18-pdf");
-    if (process.env.MONTHLY_EK18_PDF_QA_PATH) {
-      await pdf.download.saveAs(process.env.MONTHLY_EK18_PDF_QA_PATH);
-    }
-    expect(pdf.download.suggestedFilename()).toMatch(
-      /^MaarifOS_Ek18_Aylik_Plan_Kontrol_2026-09_[0-9a-z-]{8}\.pdf$/,
-    );
-    expect(pdf.blob.type).toBe("application/pdf");
-    expect(pdf.blob.size).toBe(pdf.bytes.length);
-    expect(pdf.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-");
-    expect(pdf.bytes.subarray(-5).toString("ascii")).toBe("%%EOF");
-  }
+  await expect(monthlyOutput).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await monthlyOutput.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const bytes = await readFile(downloadPath!);
+  expect(bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  expect(bytes.subarray(-5).toString("ascii")).toBe("%%EOF");
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Planları aç" }).click();
-  const reloadedCenter = page.getByTestId("premium-plan-center");
-  await reloadedCenter
-    .getByRole("button", { name: "Değerlendirme ve belge" })
-    .click();
-  await expect(reloadedCenter.getByTestId("premium-monthly-ek18-pdf")).toBeEnabled();
-  await expect(reloadedCenter.getByTestId("premium-monthly-ek18-word")).toBeEnabled();
-  await expect(
-    reloadedCenter.getByText(/Belge kaynağı: son kalıcı değerlendirme/),
-  ).toBeVisible();
-
-  await reloadedCenter
-    .getByRole("button", {
-      name: "Eylül ayını kanıtlar ve yansıtmayla değerlendir",
-    })
-    .click();
-  const reloadedReview = reloadedCenter.getByRole("region", {
-    name: "Eylül aylık değerlendirme formu",
+  await expect(page.getByTestId("premium-plan-center")).toHaveCount(0);
+  monthlyOutput = page.getByRole("button", {
+    name: /^Aylık eğitim planı\. Durum: Hazır\. PDF\./,
   });
-  const history = reloadedReview.locator("details.premium-monthly-history");
-  await history.locator("summary").click();
-  await history
-    .getByRole("button", { name: "Bu kaydı belge için seç ve yeniden aç" })
-    .click();
-  await expect(
-    reloadedReview.getByText(/Seçili eski kayıt forma ve Ek 18 belge çıktısına açıldı/),
-  ).toBeVisible();
-  await expect(reloadedCenter.getByTestId("premium-monthly-ek18-word")).toBeEnabled();
+  await expect(monthlyOutput).toBeVisible();
 });

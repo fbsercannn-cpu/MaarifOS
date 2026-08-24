@@ -128,6 +128,23 @@ export const OFFICIAL_ACADEMIC_CALENDAR_2026_2027:
     ],
   };
 
+export function academicYearMatchesCalendarProfile(
+  scope: {
+    academicYearId: string;
+    classroomId: string;
+    academicYearStart: string;
+    academicYearEnd: string;
+  },
+  profile: OfficialAcademicCalendarProfile,
+): boolean {
+  return (
+    scope.academicYearId.trim().length > 0 &&
+    scope.classroomId.trim().length > 0 &&
+    scope.academicYearStart === profile.dataStartDate &&
+    scope.academicYearEnd === profile.dataEndDate
+  );
+}
+
 export interface AcademicCalendarWorkspace {
   academicYearId: string | null;
   classroomId: string | null;

@@ -245,7 +245,11 @@ test("öğretmene ait aylık değerlendirme gerçek iki hafta kanıtını, tüm 
   assert.equal(reloaded.evaluations.length, 1);
   assert.deepEqual(reloaded.evaluations[0], evaluation);
   const graph = await loadTeacherOwnedPlanGraph(store);
-  const documentText = buildStandaloneTeacherOwnedPlanParagraphs(graph)
+  const documentText = buildStandaloneTeacherOwnedPlanParagraphs(
+    graph,
+    [],
+    { includeAuditAppendix: true },
+  )
     .map((paragraph) => paragraph.text)
     .join("\n");
   assert.match(documentText, /Aylık üç yönlü değerlendirme/);

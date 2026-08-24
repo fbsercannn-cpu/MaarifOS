@@ -15,7 +15,7 @@ function sourceBetween(startMarker, endMarker) {
   return prototypeSource.slice(start, end);
 }
 
-test("Today taşınan iş geçişini güvenli yazma kuyruğuna ve güncel read-model'e bağlar", () => {
+test("legacy taşınan iş geçişi görünür sade Today akışından ayrılırken güvenli yazma kuyruğunu korur", () => {
   const handler = sourceBetween(
     "const transitionDayCarryForward = async",
     "const completeReleaseNotice =",
@@ -29,8 +29,5 @@ test("Today taşınan iş geçişini güvenli yazma kuyruğuna ve güncel read-m
   assert.ok(refreshIndex > transitionIndex, "commit sonrasında read-model yenilenmeli");
   assert.match(handler, /educationalWrite: \{\}/);
   assert.match(handler, /cihazda kaydedildi; güncel liste yenilenemedi/);
-  assert.match(
-    prototypeSource,
-    /onTransitionCarryForward: transitionDayCarryForward/,
-  );
+  assert.doesNotMatch(prototypeSource, /onTransitionCarryForward:/);
 });

@@ -43,7 +43,7 @@ export interface PremiumPlanExportDocument {
   fileName: string;
   title: string;
   programLabel: "TYMM 2024";
-  ageLabel: "60–72 ay";
+  ageLabel: string;
   academicRelease: string;
   contentPackId: string;
   contentPackVersion: string;
@@ -143,12 +143,15 @@ export function preparePremiumPlanExportDocument(
     dailyPlans: structuredClone(week.dailyPlans),
     evaluations: structuredClone(week.evaluations),
   }));
+  const ageFileLabel = pack.ageProfile.replaceAll("-", "_");
+  const ageLabel = `${pack.ageProfile.replace("-", "–")} ay`;
+  const monthFileLabel = monthlyPlan.monthKey.replaceAll("-", "_");
   return {
     format,
-    fileName: `MaarifOS_TYMM_6072_Eylul_2026_v${pack.version}.${extension}`,
+    fileName: `MaarifOS_TYMM_${ageFileLabel}_${monthFileLabel}_v${pack.version}.${extension}`,
     title: monthlyPlan.title,
     programLabel: "TYMM 2024",
-    ageLabel: "60–72 ay",
+    ageLabel,
     academicRelease: pack.academicRelease,
     contentPackId: installedIdentity.id,
     contentPackVersion: installedIdentity.version,

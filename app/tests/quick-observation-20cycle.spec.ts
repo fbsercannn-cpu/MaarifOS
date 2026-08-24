@@ -45,46 +45,45 @@ async function acknowledgeReleaseIfNeeded(page: Page) {
 }
 
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   await setup.waitFor({ state: "visible", timeout: 2_000 }).catch(() => undefined);
   if (!(await setup.isVisible().catch(() => false))) return;
 
+  await setup.getByLabel("Okul adı").fill("20 Çevrim Kurgu Okulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("20 Çevrim Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("20 Çevrim Kurgu Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup.getByText("Takvim ayrıntıları", { exact: true }).click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
-  await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-
-  const catalogId = setup.getByLabel("Program katalog kimliği");
-  if (await catalogId.isVisible().catch(() => false)) {
-    await catalogId.fill("KURGU-20-CEVRIM");
-  }
-  const sourceVersion = setup.getByLabel("Kaynak sürümü");
-  if (await sourceVersion.isVisible().catch(() => false)) {
-    await sourceVersion.fill("2026-test");
-  }
-  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByText("İleri ayarlar", { exact: true }).click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
-    .click();
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
-async function addFictionalChild(page: Page) {
+async function addFictionalChild(page: Page, childName = CHILD_NAME) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
-  await page.getByLabel("Çocuğun adı").fill(CHILD_NAME);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(
-    page
-      .getByRole("region", { name: /Sınıftaki çocuklar/i })
-      .getByRole("button", { name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i") }),
-  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
+    .last()
+    .click();
+  await page.getByLabel("Çocuğun adı").fill(childName);
+  await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
+  await expect(classroomList(page).getByText(childName, { exact: false })).toBeVisible();
+}
+
+function classroomList(page: Page) {
+  return page.getByRole("region", { name: /Sınıf(?:taki çocuklar| listesi)/i });
+}
+
+function studentObservationShortcut(page: Page) {
+  return classroomList(page)
+    .getByRole("listitem")
+    .filter({ hasText: CHILD_NAME })
+    .getByRole("button", { name: "Gözlem", exact: true });
 }
 
 async function assertRemovedDuplicateFields(page: Page) {
@@ -119,6 +118,7 @@ async function readObservations(page: Page) {
         Array<{
           id: string;
           studentId: string;
+          studentIds?: string[];
           rawText: string;
           rawTextImmutable: boolean;
           observationType: string;
@@ -159,10 +159,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
 
   // Sınıfım kısayolu ilk çocuğu seçili açar. Aşağıdaki etkileşim sözleşmesi
   // tam olarak "çocuk seçildikten sonra" ölçülür.
-  await page
-    .getByRole("region", { name: /Sınıftaki çocuklar/i })
-    .getByRole("button", { name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i") })
-    .click();
+  await studentObservationShortcut(page).click();
   const initialStudent = page
     .getByRole("region", { name: "Gözlem yapılacak çocuk" })
     .getByRole("button", { name: new RegExp(CHILD_NAME) });
@@ -175,11 +172,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
     let teacherInteractions = 0;
 
     if (index > 0) {
-      const quickObservationShortcut = page
-        .getByRole("region", { name: /Sınıftaki çocuklar/i })
-        .getByRole("button", {
-          name: new RegExp(`${CHILD_NAME}.*gözlem ekle`, "i"),
-        });
+      const quickObservationShortcut = studentObservationShortcut(page);
       teacherInteractions += await interact(
         "click",
         quickObservationShortcut,
@@ -208,7 +201,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
       page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
     ).toBeHidden();
     await expect(
-      page.getByRole("region", { name: /Sınıftaki çocuklar/i }),
+      classroomList(page),
     ).toBeVisible();
 
     const finishedAt = await page.evaluate(() => performance.now());
@@ -261,9 +254,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
   await acknowledgeReleaseIfNeeded(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await expect(
-    page
-      .getByRole("region", { name: /Sınıftaki çocuklar/i })
-      .getByText(new RegExp(`${CYCLE_COUNT} gözlem$`)),
+    classroomList(page).getByText(new RegExp(`${CYCLE_COUNT} gözlem$`)),
   ).toBeVisible();
 
   const afterReload = await readObservations(page);
@@ -282,4 +273,74 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
         .map((metric) => metric.automatedTechnicalLatencyMs.toFixed(1))
         .join(",")}ms`,
   );
+});
+
+test("390×844 yarım kalan toplu gözlem çocukları ve metniyle geri açılır", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const childNames = ["Ada Kurgu", "Ece Kurgu", "Mert Kurgu"];
+  await clearLocalDatabase(page);
+  await page.goto("/", { waitUntil: "networkidle" });
+  await acknowledgeReleaseIfNeeded(page);
+  await configureClassroom(page);
+  for (const childName of childNames) {
+    await addFictionalChild(page, childName);
+  }
+
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await page.getByRole("button", { name: "Hızlı gözlem", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Gözlem ve değerlendirme akışı",
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Birden çok çocuk" }).click();
+  await dialog.getByRole("button", { name: "Tüm sınıfı seç" }).click();
+  const draftText =
+    "Üç çocuk ortak yapıyı sırayla birer parça ekleyerek birlikte sürdürdü.";
+  await dialog.getByLabel("Ne oldu?").fill(draftText);
+  await page.waitForTimeout(700);
+  await dialog
+    .getByRole("button", { name: "Gözlem notu akışını kapat" })
+    .click();
+  await expect(dialog).toBeHidden();
+
+  await page.getByRole("button", { name: "Hızlı gözlem", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  const restoredHeaderBox = await dialog.locator(".quick-observation-header").boundingBox();
+  expect(restoredHeaderBox).not.toBeNull();
+  expect(restoredHeaderBox?.y ?? -1).toBeGreaterThanOrEqual(0);
+  expect(restoredHeaderBox?.y ?? 99).toBeLessThanOrEqual(1);
+  await expect(
+    dialog.getByRole("button", { name: "Birden çok çocuk" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  for (const childName of childNames) {
+    await expect(
+      dialog
+        .getByRole("region", { name: "Gözlem yapılacak çocuk" })
+        .getByRole("button", { name: new RegExp(childName) }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+  await expect(dialog.getByLabel("Ne oldu?")).toHaveValue(draftText);
+  await expect(
+    dialog.getByRole("button", { name: `${childNames.length} çocuk için gözlemi kaydet` }),
+  ).toBeDisabled();
+  await dialog
+    .getByLabel(`${childNames.length} çocuk için aynı gözlem geçerli`)
+    .check();
+  await dialog
+    .getByRole("button", { name: `${childNames.length} çocuk için gözlemi kaydet` })
+    .click();
+  await expect(dialog).toBeHidden();
+
+  const observations = await readObservations(page);
+  expect(observations).toHaveLength(childNames.length);
+  expect(
+    new Set(
+      observations.map((record) => record.studentIds?.[0] ?? record.studentId),
+    ).size,
+  ).toBe(
+    childNames.length,
+  );
+  expect(observations.every((record) => record.rawText === draftText)).toBe(true);
 });

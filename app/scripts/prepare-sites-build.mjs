@@ -42,6 +42,10 @@ const FOUNDER_PROFILE_COMMENT_PATTERN = /^\s*(?:#.*)?$/u;
 const FOUNDER_PROFILE_ASSIGNMENT_PATTERN = /^([A-Z][A-Z0-9_]*)=(.*)$/u;
 const TEXT_CLIENT_ASSET_PATTERN = /\.(?:c?js|mjs|json|html?)$/iu;
 const FOUNDER_ATTESTATION_SCHEMA_VERSION = 1;
+export const PRECACHE_MANIFEST_FILENAME = "maarifos-precache-manifest.json";
+export const PRECACHE_MANIFEST_SCHEMA_VERSION = 1;
+const APP_RELEASE_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const PRECACHE_ASSET_DIRECTORY = "assets";
 
 const LICENSE_ORIGIN_INJECTION_MARKER =
   "/* @maarifos-sites-build:premium-license-api-origin */ null";
@@ -79,7 +83,9 @@ const canonicalFounderProfileBytes = (environment) => Buffer.from(
 );
 
 const isCanonicalPublicHostname = (hostname) => {
-  const normalized = hostname.toLocaleLowerCase("en-US");
+  // URL.hostname is already canonicalized by the URL parser; host names are
+  // protocol identifiers, so no human-language case transform belongs here.
+  const normalized = hostname;
   const labels = normalized.split(".");
   if (
     !normalized.includes(".") ||
@@ -362,12 +368,88 @@ const profileContext = ({ environment, mode, requireFounder, root }) => {
   return Object.freeze({ configuration, profileBytes });
 };
 
+const readAppRelease = (root) => {
+  let packageMetadata;
+  try {
+    packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  } catch {
+    throw new Error("Sites precache manifest requires valid app package metadata.");
+  }
+  if (
+    typeof packageMetadata !== "object" ||
+    packageMetadata === null ||
+    Array.isArray(packageMetadata) ||
+    typeof packageMetadata.version !== "string" ||
+    !APP_RELEASE_PATTERN.test(packageMetadata.version)
+  ) {
+    throw new Error("Sites precache manifest requires a valid app release version.");
+  }
+  return packageMetadata.version;
+};
+
+export function createPrecacheManifest({ clientRoot, release }) {
+  if (typeof release !== "string" || !APP_RELEASE_PATTERN.test(release)) {
+    throw new Error("Sites precache manifest requires a valid app release version.");
+  }
+  const assetRoot = path.join(clientRoot, PRECACHE_ASSET_DIRECTORY);
+  if (!existsSync(assetRoot)) {
+    throw new Error("Sites precache manifest requires the Vite assets directory.");
+  }
+
+  const assets = [];
+  const visit = (directory, relativeDirectory = "") => {
+    const entries = readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name, "en"));
+    for (const entry of entries) {
+      const relativePath = path.join(relativeDirectory, entry.name);
+      const absolutePath = path.join(directory, entry.name);
+      const stat = lstatSync(absolutePath);
+      if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) {
+        throw new Error("Sites precache assets may contain only regular files and directories.");
+      }
+      if (entry.isDirectory()) {
+        visit(absolutePath, relativePath);
+        continue;
+      }
+
+      const bytes = readFileSync(absolutePath);
+      assets.push(Object.freeze({
+        path: path.posix.join(
+          PRECACHE_ASSET_DIRECTORY,
+          relativePath.split(path.sep).join("/"),
+        ),
+        sha256: sha256(bytes),
+        size: bytes.length,
+      }));
+    }
+  };
+  visit(assetRoot);
+  assets.sort((left, right) => left.path.localeCompare(right.path, "en"));
+
+  if (
+    !assets.some((asset) => asset.path.endsWith(".js")) ||
+    !assets.some((asset) => asset.path.endsWith(".css"))
+  ) {
+    throw new Error("Sites precache manifest requires the built Vite script and stylesheet assets.");
+  }
+
+  return Object.freeze({
+    schemaVersion: PRECACHE_MANIFEST_SCHEMA_VERSION,
+    release,
+    assets: Object.freeze(assets),
+  });
+}
+
+export const renderPrecacheManifest = (manifest) =>
+  Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
 const deploymentOutputs = (root) => {
   const dist = path.join(root, "dist");
   return Object.freeze({
     attestation: path.join(dist, ".openai", FOUNDER_BUILD_ATTESTATION),
     headers: path.join(dist, "client", "_headers"),
     hosting: path.join(dist, ".openai", "hosting.json"),
+    precacheManifest: path.join(dist, "client", PRECACHE_MANIFEST_FILENAME),
     server: path.join(dist, "server", "index.js"),
   });
 };
@@ -544,6 +626,11 @@ export function prepareSitesBuild({
       assertFounderConfigurationEmbeddedInClient(clientRoot, context.configuration);
     }
 
+    const precacheManifestBytes = renderPrecacheManifest(createPrecacheManifest({
+      clientRoot,
+      release: readAppRelease(resolvedRoot),
+    }));
+
     const workerOutput = renderSitesWorker(readFileSync(worker, "utf8"), licenseApiOrigin);
     const headersOutputBytes = renderStaticAssetHeadersFile(
       createSecurityHeaders(licenseApiOrigin),
@@ -553,6 +640,11 @@ export function prepareSitesBuild({
     const stagedWorker = path.join(stagingRoot, "server", "index.js");
     const stagedHeaders = path.join(stagingRoot, "client", "_headers");
     const stagedHosting = path.join(stagingRoot, ".openai", "hosting.json");
+    const stagedPrecacheManifest = path.join(
+      stagingRoot,
+      "client",
+      PRECACHE_MANIFEST_FILENAME,
+    );
     const stagedAttestation = path.join(
       stagingRoot,
       ".openai",
@@ -562,12 +654,15 @@ export function prepareSitesBuild({
     mkdirSync(path.dirname(stagedWorker), { recursive: true });
     mkdirSync(path.dirname(stagedHeaders), { recursive: true });
     mkdirSync(path.dirname(stagedHosting), { recursive: true });
+    mkdirSync(path.dirname(stagedPrecacheManifest), { recursive: true });
     writeFileSync(stagedWorker, workerOutput, { encoding: "utf8", flag: "wx" });
     writeFileSync(stagedHeaders, headersOutputBytes, { encoding: "utf8", flag: "wx" });
     writeFileSync(stagedHosting, hostingOutputBytes, { flag: "wx" });
+    writeFileSync(stagedPrecacheManifest, precacheManifestBytes, { flag: "wx" });
 
     moveStagedFile(stagedHosting, outputs.hosting);
     moveStagedFile(stagedHeaders, outputs.headers);
+    moveStagedFile(stagedPrecacheManifest, outputs.precacheManifest);
     if (context.configuration !== null) {
       const attestationBytes = createFounderBuildAttestation({
         clientRoot,
@@ -586,6 +681,7 @@ export function prepareSitesBuild({
       headersOutput: outputs.headers,
       hostingOutput: outputs.hosting,
       licenseApiOrigin,
+      precacheManifestOutput: outputs.precacheManifest,
       serverOutput: outputs.server,
     });
   } catch (error) {
@@ -634,7 +730,7 @@ if (invokedAsScript) {
   } else {
     const result = prepareSitesBuild(options);
     console.log(
-      `Prepared Sites build: headers, Worker, hosting metadata, and ${result.founderEnabled ? "founder attestation" : "self-only policy"}.`,
+      `Prepared Sites build: deterministic precache manifest, headers, Worker, hosting metadata, and ${result.founderEnabled ? "founder attestation" : "self-only policy"}.`,
     );
   }
 }

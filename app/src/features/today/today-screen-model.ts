@@ -81,6 +81,16 @@ function periodLabel(periodStart: string, periodEnd: string): string {
   return `${periodStart}–${periodEnd}`;
 }
 
+function shortCivilDateLabel(civilDate: string): string {
+  const [year, month, day] = civilDate.split("-").map(Number);
+  if (!year || !month || !day) return civilDate;
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
 export function createTeacherCyclePresentation(
   workspace: TeacherWorkCycleWorkspace,
   options: { educationalWritesDisabled?: boolean } = {},
@@ -94,6 +104,30 @@ export function createTeacherCyclePresentation(
         actionLabel: "Planları incele",
         tone: "attention",
       }
+    : workspace.daily.status === "chain-mismatch"
+      ? {
+          id: "daily",
+          label: "Günlük",
+          title: "Bugün tarihli plan bağlantı bekliyor",
+          detail: "Kayıt korundu; seçili haftalık plan zincirine bağlı olmadığı için bugünün akışına alınmadı.",
+          actionLabel: "Bağı takvimde incele",
+          tone: "attention",
+        }
+    : workspace.daily.status === "future-only"
+      ? {
+          id: "daily",
+          label: "Günlük",
+          title: `Bugün plan yok; sıradaki plan ${
+            workspace.daily.referenceCivilDate
+              ? shortCivilDateLabel(workspace.daily.referenceCivilDate)
+              : "yaklaşan tarihte"
+          }`,
+          detail: workspace.daily.referenceTitle
+            ? `Yaklaşan kayıt: ${workspace.daily.referenceTitle}`
+            : "Yaklaşan günlük plan kaydı korunuyor.",
+          actionLabel: "Yaklaşan planı aç",
+          tone: "attention",
+        }
     : workspace.daily.planId
     ? workspace.daily.activityCount > 0 &&
       workspace.daily.completedActivityCount >= workspace.daily.activityCount
@@ -318,8 +352,9 @@ export function createTodayControlCenterSummary(options: {
   workspace: TodayWorkspace;
   attendance: TodayAttendanceSummary;
   pendingObservationCount: number;
+  teacherCycle?: TeacherWorkCycleWorkspace;
 }): TodayControlCenterSummary {
-  const { workspace, attendance, pendingObservationCount } = options;
+  const { workspace, attendance, pendingObservationCount, teacherCycle } = options;
   const item = focusActivityFromToday(workspace);
   const inClass = attendance.present + attendance.late;
   const unmarked = Math.max(0, attendance.total - attendance.marked);
@@ -332,8 +367,15 @@ export function createTodayControlCenterSummary(options: {
     ? item.startTime ??
       (item.durationMinutes ? `${item.durationMinutes} dk` : "Akış sırası")
     : null;
+  const referencedDaily = teacherCycle?.daily;
   const planDetail = item
     ? `${planTime}${item.endTime ? `–${item.endTime}` : ""} · ${todayPlanItemStatusLabel(item)}`
+    : referencedDaily?.status === "chain-mismatch"
+      ? "Kayıt korundu · haftalık plan bağı takvimde incelenmeli"
+      : referencedDaily?.status === "future-only"
+        ? referencedDaily.referenceTitle
+          ? `Yaklaşan kayıt: ${referencedDaily.referenceTitle}`
+          : "Yaklaşan günlük plan takvimde kayıtlı"
     : workspace.classroom.status === "configured"
       ? "Günlük plan oluştur"
       : "Sınıf ve program bilgilerini tamamla";
@@ -366,7 +408,15 @@ export function createTodayControlCenterSummary(options: {
               : "Sıradaki etkinlik",
       title:
         item?.title ??
-        (workspace.classroom.status === "configured"
+        (referencedDaily?.status === "chain-mismatch"
+          ? "Bugün tarihli plan bağlantı bekliyor"
+          : referencedDaily?.status === "future-only"
+            ? `Bugün plan yok; sıradaki plan ${
+                referencedDaily.referenceCivilDate
+                  ? shortCivilDateLabel(referencedDaily.referenceCivilDate)
+                  : "yaklaşan tarihte"
+              }`
+        : workspace.classroom.status === "configured"
           ? "Bugün için plan yok"
           : "Sınıf kurulumu gerekli"),
       detail: planDetail,
@@ -376,7 +426,7 @@ export function createTodayControlCenterSummary(options: {
       title:
         pendingObservationCount > 0
           ? `${pendingObservationCount} gözlem program bağlantısı bekliyor`
-          : "Program bağlantıları tamam",
+          : "Bağlantı bekleyen gözlem yok",
       detail:
         pendingObservationCount > 0
           ? "Değerlendirme ve belge zinciri için tamamlayın."

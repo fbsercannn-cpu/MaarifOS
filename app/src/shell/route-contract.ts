@@ -3,8 +3,18 @@ import {
   type AlphaPrimaryNavigationItem,
 } from "../core/capabilities/alpha-capabilities.ts";
 
-export type AppRouteId = "today" | "classroom" | "plans" | "documents";
-export type AppRoutePath = "/" | "/classroom" | "/plans" | "/documents";
+export type AppRouteId =
+  | "today"
+  | "classroom"
+  | "activities"
+  | "plans"
+  | "documents";
+export type AppRoutePath =
+  | "/"
+  | "/classroom"
+  | "/activities"
+  | "/plans"
+  | "/documents";
 
 export interface AppRouteDefinition {
   readonly id: AppRouteId;
@@ -15,6 +25,7 @@ export interface AppRouteDefinition {
 const ROUTE_PATHS: Readonly<Record<AppRouteId, AppRoutePath>> = Object.freeze({
   today: "/",
   classroom: "/classroom",
+  activities: "/activities",
   plans: "/plans",
   documents: "/documents",
 });
@@ -22,20 +33,14 @@ const ROUTE_PATHS: Readonly<Record<AppRouteId, AppRoutePath>> = Object.freeze({
 /** Hediye Alpha ana navigasyonu, kullanıcıya açık route'ların tek kaynağıdır. */
 export const APP_ROUTES: readonly AppRouteDefinition[] = Object.freeze(
   visiblePrimaryNavigation()
-    .filter(
-      (item): item is AlphaPrimaryNavigationItem & { id: AppRouteId } =>
-        item.id === "today" ||
-        item.id === "classroom" ||
-        item.id === "plans" ||
-        item.id === "documents",
-    )
-    .map((item) =>
-      Object.freeze({
-        id: item.id,
-        path: ROUTE_PATHS[item.id],
+    .map((item) => {
+      const routeId: AppRouteId = item.id === "capture" ? "activities" : item.id;
+      return Object.freeze({
+        id: routeId,
+        path: ROUTE_PATHS[routeId],
         label: item.label,
-      }),
-    ),
+      });
+    }),
 );
 
 export function routeById(routeId: AppRouteId): AppRouteDefinition {

@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.16.0",
   "type": "module",
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",
@@ -58,6 +58,7 @@
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:pwa": "node --test tests/pwa-contract.test.mjs",
     "test:pwa:production": "node scripts/run-pwa-tests.mjs",
+    "test:pwa:legacy-scheduled": "node scripts/run-pwa-tests.mjs scheduled-plan-offline.spec.ts",
     "test:typecheck": "tsc --noEmit",
     "lint": "node scripts/lint-policy.mjs",
     "test:coverage": "node --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=65 --test-coverage-functions=85 --test tests/features/*.test.mjs",

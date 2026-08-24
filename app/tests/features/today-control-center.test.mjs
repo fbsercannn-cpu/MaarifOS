@@ -90,7 +90,7 @@ test("öğretmen kontrolü sıradaki gerçek plan kaydını ve açıklanabilir z
   assert.equal(summary.plan.title, plannedItem.title);
   assert.equal(summary.plan.detail, "09:30–10:00 · Sıradaki");
   assert.equal(summary.attendance.stateLabel, "Yoklama tamam");
-  assert.equal(summary.priority.title, "Program bağlantıları tamam");
+  assert.equal(summary.priority.title, "Bağlantı bekleyen gözlem yok");
 });
 
 test("plan yoksa yeni alan uydurmak yerine mevcut sınıf bağlamından doğru sonraki işi üretir", () => {
@@ -109,4 +109,42 @@ test("plan yoksa yeni alan uydurmak yerine mevcut sınıf bağlamından doğru s
   assert.equal(configured.plan.detail, "Günlük plan oluştur");
   assert.equal(notConfigured.plan.title, "Sınıf kurulumu gerekli");
   assert.equal(notConfigured.plan.detail, "Sınıf ve program bilgilerini tamamla");
+});
+
+test("bugün plan yokken yaklaşan planı yok saymadan tarih ve başlığıyla açıklar", () => {
+  const summary = createTodayControlCenterSummary({
+    workspace: workspace(),
+    attendance: { present: 0, late: 0, absent: 0, marked: 0, total: 0 },
+    pendingObservationCount: 0,
+    teacherCycle: {
+      status: "ready",
+      civilDate: "2026-09-15",
+      annual: null,
+      monthly: null,
+      weekly: null,
+      daily: {
+        status: "future-only",
+        planId: null,
+        conflictingPlanIds: [],
+        referencePlanId: "future-plan-1",
+        referenceCivilDate: "2026-09-20",
+        referenceTitle: "Pazar hazırlık planı",
+        title: "Bugün için plan yok",
+        activityCount: 0,
+        completedActivityCount: 0,
+        observationCount: 0,
+      },
+      documents: {
+        anecdoteIncompleteCount: 0,
+        anecdoteReviewRequiredCount: 0,
+        anecdoteReadyCount: 0,
+        monthlyEvaluationCount: 0,
+        planDocumentReady: false,
+      },
+      pendingCurriculumLinkCount: 0,
+    },
+  });
+
+  assert.equal(summary.plan.title, "Bugün plan yok; sıradaki plan 20 Eyl");
+  assert.equal(summary.plan.detail, "Yaklaşan kayıt: Pazar hazırlık planı");
 });

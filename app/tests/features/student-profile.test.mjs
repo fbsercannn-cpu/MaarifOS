@@ -7,13 +7,63 @@ import {
   composeStudentDisplayName,
   formatStudentPhone,
   isStudentProfilePhotoDataUrl,
+  isValidStudentNationalIdentityNumber,
   normalizeStudentContacts,
+  normalizeStudentCareDetails,
   normalizeStudentPhone,
   normalizeStudentProfile,
   normalizeTurkishSearchText,
   splitStudentDisplayName,
   studentProfileFromRecord,
 } from "../../src/core/domain/student.ts";
+
+test("sağlık ve güvenlik bilgilerini veri-minimum ve sınırlı biçimde normalleştirir", () => {
+  assert.deepEqual(
+    normalizeStudentCareDetails({
+      homeAddress: "  Merkezefendi / Denizli  ",
+      allergies: " Fındık ",
+      dietaryNeeds: " Laktozsuz ",
+      medicationNotes: " Veli yazılı talimatı dosyada ",
+      emergencyNotes: " Önce anne aranır ",
+      physicianName: " Dr. Kurgu ",
+      physicianPhone: " (0258) 123 45 67 ",
+      medicalDevices: " Gözlük ",
+      guardianEmail: " veli@example.com ",
+      familyEducationNeeds: " Oyunla öğrenme ",
+      familyParticipationPreferences: " Cuma çevrim içi ",
+      photoVideoPermissionOnFile: true,
+      fieldTripPermissionOnFile: true,
+      digitalCommunicationPermissionOnFile: true,
+      permissionFormDate: "2026-08-24",
+    }),
+    {
+      homeAddress: "Merkezefendi / Denizli",
+      allergies: "Fındık",
+      dietaryNeeds: "Laktozsuz",
+      medicationNotes: "Veli yazılı talimatı dosyada",
+      emergencyNotes: "Önce anne aranır",
+      physicianName: "Dr. Kurgu",
+      physicianPhone: "(0258) 123 45 67",
+      medicalDevices: "Gözlük",
+      guardianEmail: "veli@example.com",
+      familyEducationNeeds: "Oyunla öğrenme",
+      familyParticipationPreferences: "Cuma çevrim içi",
+      photoVideoPermissionOnFile: true,
+      fieldTripPermissionOnFile: true,
+      digitalCommunicationPermissionOnFile: true,
+      permissionFormDate: "2026-08-24",
+    },
+  );
+  assert.equal(normalizeStudentCareDetails({ allergies: " " }), undefined);
+  assert.throws(
+    () => normalizeStudentCareDetails({ emergencyNotes: "x".repeat(1_001) }),
+    /1_?000|1000/,
+  );
+  assert.throws(
+    () => normalizeStudentCareDetails({ guardianEmail: "gecersiz" }),
+    /e-posta/,
+  );
+});
 import {
   ACTIVE_CLASSROOM_SETTING_ID,
   ACTIVE_CLASSROOM_SETTING_TYPE,
@@ -68,7 +118,8 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
       preferredName: "  Deniz  ",
       birthDate: "2021-04-18",
       optionalCode: "  KELEBEK-07  ",
-      enrollmentDate: "  2025-09-01  ",
+      nationalIdentityNumber: "  10000000146  ",
+      enrollmentYear: "  2025  ",
       homeLanguages: "  Türkçe, İngilizce  ",
       interests: "  Su deneyleri ve ritim oyunları  ",
       strengths: "  Akranlarını oyuna davet ediyor  ",
@@ -84,7 +135,8 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
     preferredName: "Deniz",
     birthDate: "2021-04-18",
     optionalCode: "KELEBEK-07",
-    enrollmentDate: "2025-09-01",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe, İngilizce",
     interests: "Su deneyleri ve ritim oyunları",
     strengths: "Akranlarını oyuna davet ediyor",
@@ -94,7 +146,7 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
   });
 });
 
-test("gelecek tarihleri, doğumdan önce kaydı ve kimlik numarası gibi uzun sayısal kodu reddeder", () => {
+test("gelecek tarihleri, geçersiz kayıt yılını ve T.C. kimlik numarasını reddeder", () => {
   assert.throws(
     () =>
       normalizeStudentProfile(
@@ -117,30 +169,44 @@ test("gelecek tarihleri, doğumdan önce kaydı ve kimlik numarası gibi uzun sa
         {
           displayName: "Deniz Yılmaz",
           birthDate: "2021-04-18",
-          enrollmentDate: "2021-04-17",
+          enrollmentYear: "2020",
         },
         "2026-07-28",
       ),
-    /doğum tarihinden önce/i,
+    /doğum yılından önce/i,
   );
   assert.throws(
     () =>
       normalizeStudentProfile(
         {
           displayName: "Deniz Yılmaz",
-          enrollmentDate: "2026-07-29",
+          enrollmentYear: "2027",
         },
         "2026-07-28",
       ),
-    /kayıt tarihi gelecekte olamaz/i,
+    /kayıt yılı gelecekte olamaz/i,
   );
+  assert.throws(
+    () =>
+      normalizeStudentProfile(
+        {
+          displayName: "Deniz Yılmaz",
+          nationalIdentityNumber: "10000000145",
+        },
+        "2026-07-28",
+      ),
+    /11 haneli ve geçerli/i,
+  );
+  assert.equal(isValidStudentNationalIdentityNumber("10000000146"), true);
+  assert.equal(isValidStudentNationalIdentityNumber("00000000146"), false);
 });
 
 test("boş isteğe bağlı alanları saklamaz ve veri-minimum metin sınırlarını uygular", () => {
   const profile = normalizeStudentProfile(
     {
       displayName: "Deniz Yılmaz",
-      enrollmentDate: " ",
+      nationalIdentityNumber: " ",
+      enrollmentYear: " ",
       homeLanguages: "  ",
       interests: "",
       strengths: "\n",
@@ -315,7 +381,7 @@ test("zengin profil alanlarını eski kayıt biçiminden güvenle okur", () => {
     displayName: "Kurgu Öğrenci",
     firstName: "Kurgu",
     lastName: "Öğrenci",
-    enrollmentDate: "2025-09-01",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe",
     interests: "Blok oyunları",
     strengths: "Grup oyununa katılım",
@@ -406,6 +472,8 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
     preferredName: "Kurgu",
     birthDate: "2021-04-18",
     optionalCode: "K-7",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     enrollmentDate: "2025-09-01",
     homeLanguages: "Türkçe",
     interests: "Su oyunları",
@@ -423,7 +491,8 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
       preferredName: " ",
       birthDate: "",
       optionalCode: " ",
-      enrollmentDate: "",
+      nationalIdentityNumber: "",
+      enrollmentYear: "",
       homeLanguages: " ",
       interests: "",
       strengths: "\n",
@@ -437,6 +506,8 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
     "preferredName",
     "birthDate",
     "optionalCode",
+    "nationalIdentityNumber",
+    "enrollmentYear",
     "enrollmentDate",
     "homeLanguages",
     "interests",

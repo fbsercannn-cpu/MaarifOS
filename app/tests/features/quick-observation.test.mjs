@@ -22,6 +22,7 @@ import {
   persistQuickObservationDraftBatch,
   persistQuickObservationDraft,
 } from "../../src/features/evidence/quick-observation.ts";
+import { loadQuickObservationDraftBatch } from "../../src/features/evidence/quick-observation-batch-recovery.ts";
 import { verifyCommittedObservationRefresh } from "../../src/features/evidence/observation-commit-refresh.ts";
 
 class MemoryStore {
@@ -827,6 +828,45 @@ test("toplu final yazma hatasında hiçbir kanıt yazmaz ve bütün taslakları 
         typeof record.deletedAt !== "string",
     ).length,
     2,
+  );
+});
+
+test("yarım kalan toplu hızlı gözlem aynı batch, çocuklar ve içerikle geri yüklenir", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraft(store, draftAInput);
+  const persisted = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+
+  const restored = await loadQuickObservationDraftBatch(store, {
+    planId,
+    activityId,
+  });
+
+  assert.ok(restored);
+  assert.equal(restored.batchId, persisted.batchId);
+  assert.deepEqual(
+    restored.drafts.map((draft) => draft.studentId).sort(),
+    [studentAId, studentBId].sort(),
+  );
+  assert.ok(
+    restored.drafts.every(
+      (draft) =>
+        draft.rawText === selectedChildrenDraftInput.rawText &&
+        draft.context === selectedChildrenDraftInput.context &&
+        draft.childQuote === selectedChildrenDraftInput.childQuote &&
+        draft.observationType === selectedChildrenDraftInput.observationType &&
+        draft.captureScope === "selected-children",
+    ),
+  );
+  assert.equal(
+    (await loadQuickObservationDraft(store, {
+      studentId: studentAId,
+      planId,
+      activityId,
+    }))?.rawText,
+    draftAInput.rawText,
   );
 });
 

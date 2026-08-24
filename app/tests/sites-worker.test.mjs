@@ -22,7 +22,9 @@ import {
   PREMIUM_LICENSE_API_ORIGIN_ENV,
   PREMIUM_LICENSE_ISSUER_ENV,
   PREMIUM_LICENSE_TRUSTED_KEYS_ENV,
+  PRECACHE_MANIFEST_FILENAME,
   PRODUCTION_FOUNDER_KEY_ID,
+  createPrecacheManifest,
   parseFounderProductionProfile,
   preflightSitesBuild,
   prepareSitesBuild,
@@ -219,12 +221,21 @@ const createSitesFixture = async ({ projectId = "test" } = {}) => {
   const root = await mkdtemp(path.join(tmpdir(), "maarifos-sites-build-"));
   await Promise.all([
     mkdir(path.join(root, "dist", "client"), { recursive: true }),
+    mkdir(path.join(root, "dist", "client", "assets"), { recursive: true }),
     mkdir(path.join(root, "worker"), { recursive: true }),
     mkdir(path.join(root, ".openai"), { recursive: true }),
   ]);
   await Promise.all([
-    writeFile(path.join(root, "package.json"), JSON.stringify({ type: "module" })),
-    writeFile(path.join(root, "dist", "client", "index.html"), "<!doctype html>"),
+    writeFile(
+      path.join(root, "package.json"),
+      JSON.stringify({ type: "module", version: "9.8.7" }),
+    ),
+    writeFile(
+      path.join(root, "dist", "client", "index.html"),
+      '<!doctype html><script type="module" src="/assets/index-fixture.js"></script><link rel="stylesheet" href="/assets/index-fixture.css">',
+    ),
+    writeFile(path.join(root, "dist", "client", "assets", "index-fixture.js"), "export {};"),
+    writeFile(path.join(root, "dist", "client", "assets", "index-fixture.css"), ":root{}"),
     writeFile(
       path.join(root, "worker", "index.js"),
       await readFile(new URL("../worker/index.js", import.meta.url), "utf8"),
@@ -324,6 +335,62 @@ test("allows non-reserved static paths that merely share a prefix", async () => 
     assert.doesNotThrow(() => prepareSitesBuild({ root, environment: {} }));
     await access(path.join(root, "dist", "server", "index.js"));
     await access(path.join(root, "dist", "client", "_headers"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("writes one deterministic integrity manifest for every Vite asset and lazy chunk", async () => {
+  const root = await createSitesFixture();
+  try {
+    const clientRoot = path.join(root, "dist", "client");
+    const lazyPath = path.join(clientRoot, "assets", "lazy", "activity-studio-A1b2C3.js");
+    const imagePath = path.join(clientRoot, "assets", "brand", "icon.png");
+    await Promise.all([
+      mkdir(path.dirname(lazyPath), { recursive: true }),
+      mkdir(path.dirname(imagePath), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(lazyPath, "export const lazy = true;"),
+      writeFile(imagePath, Buffer.from([0, 1, 2, 3, 255])),
+    ]);
+
+    const expected = createPrecacheManifest({ clientRoot, release: "9.8.7" });
+    const firstResult = prepareSitesBuild({ root, environment: {} });
+    assert.equal(
+      firstResult.precacheManifestOutput,
+      path.join(clientRoot, PRECACHE_MANIFEST_FILENAME),
+    );
+    const firstBytes = await readFile(firstResult.precacheManifestOutput);
+    const actual = JSON.parse(firstBytes.toString("utf8"));
+    assert.deepEqual(actual, expected);
+    assert.deepEqual(
+      actual.assets.map((asset) => asset.path),
+      [...actual.assets.map((asset) => asset.path)].sort((left, right) =>
+        left.localeCompare(right, "en")),
+    );
+    assert.ok(actual.assets.some((asset) => asset.path === "assets/lazy/activity-studio-A1b2C3.js"));
+    assert.ok(actual.assets.some((asset) => asset.path === "assets/brand/icon.png"));
+    assert.equal(
+      actual.assets.some((asset) => /^(?:\/)?(?:api|auth)(?:\/|$)/u.test(asset.path)),
+      false,
+    );
+
+    const lazyEntry = actual.assets.find(
+      (asset) => asset.path === "assets/lazy/activity-studio-A1b2C3.js",
+    );
+    const lazyBytes = await readFile(lazyPath);
+    assert.deepEqual(lazyEntry, {
+      path: "assets/lazy/activity-studio-A1b2C3.js",
+      sha256: sha256Bytes(lazyBytes),
+      size: lazyBytes.length,
+    });
+
+    prepareSitesBuild({ root, environment: {} });
+    assert.equal(
+      (await readFile(firstResult.precacheManifestOutput)).equals(firstBytes),
+      true,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

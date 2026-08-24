@@ -18,6 +18,7 @@ import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   type ActiveClassroomScope,
 } from "../domain/classroom-scope";
+import { assertPedagogicalPlanProvenance } from "../domain/pedagogical-plan-provenance";
 import {
   isTeacherMonthlyEvaluation,
 } from "../domain/teacher-owned-monthly-evaluation";
@@ -36,8 +37,11 @@ import { isTeacherOwnedDailyFlow } from "../domain/teacher-owned-daily-flow";
 import {
   composeStudentDisplayName,
   isStudentProfilePhotoDataUrl,
+  isValidStudentNationalIdentityNumber,
+  normalizeStudentCareDetails,
   normalizeStudentContacts,
   studentContactsFromRecord,
+  type StudentCareDetailsInput,
   type StudentContactInput,
 } from "../domain/student";
 import {
@@ -199,12 +203,15 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "preferredName",
     "optionalCode",
     "birthDate",
+    "nationalIdentityNumber",
+    "enrollmentYear",
     "enrollmentDate",
     "homeLanguages",
     "interests",
     "strengths",
     "supportPreferences",
     "contacts",
+    "careDetails",
     "profilePhotoDataUrl",
     "profileSchemaVersion",
     "profileMediaId",
@@ -305,6 +312,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "teacherPreferredSupportingLensIds",
     "lensSelectionMode",
     "teacherOwnedFlowBlockId",
+    "pedagogicalProvenance",
   ],
   mediaAssets: [
     ...BASE_RECORD_KEYS,
@@ -352,6 +360,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "teacherPreferredLensId",
     "teacherPreferredSupportingLensIds",
     "lensSelectionMode",
+    "pedagogicalProvenance",
     "monthlySectionIds",
     "weeklySectionIds",
     "weekKey",
@@ -1553,7 +1562,12 @@ function validateStudentProfile(
   }
   validateOptionalStudentText(student, "firstName", "adı", 80);
   validateOptionalStudentText(student, "lastName", "soyadı", 80);
-  if (student.profileSchemaVersion === 5) {
+  if (
+    student.profileSchemaVersion === 5 ||
+    student.profileSchemaVersion === 6 ||
+    student.profileSchemaVersion === 7 ||
+    student.profileSchemaVersion === 8
+  ) {
     if (typeof student.firstName !== "string" || !student.firstName.trim()) {
       throw new Error(`students/${student.id} adı eksik veya geçersiz.`);
     }
@@ -1588,6 +1602,23 @@ function validateStudentProfile(
       /^\d{10,11}$/.test(student.optionalCode.trim()))
   ) {
     throw new Error(`students/${student.id} okul içi kodu geçersiz.`);
+  }
+  if (
+    student.nationalIdentityNumber !== undefined &&
+    !isValidStudentNationalIdentityNumber(student.nationalIdentityNumber)
+  ) {
+    throw new Error(`students/${student.id} T.C. kimlik numarası geçersiz.`);
+  }
+  if (
+    student.enrollmentYear !== undefined &&
+    (typeof student.enrollmentYear !== "string" ||
+      !/^\d{4}$/.test(student.enrollmentYear) ||
+      student.enrollmentYear > currentCivilDate.slice(0, 4) ||
+      (typeof student.birthDate === "string" &&
+        isValidCivilDate(student.birthDate) &&
+        student.enrollmentYear < student.birthDate.slice(0, 4)))
+  ) {
+    throw new Error(`students/${student.id} kayıt yılı geçersiz.`);
   }
   if (
     student.enrollmentDate !== undefined &&
@@ -1644,13 +1675,23 @@ function validateStudentProfile(
             source.relationship === contact.relationship &&
             source.name === contact.name &&
             source.phone === contact.phone &&
-            source.isPrimary === contact.isPrimary
+            source.isPrimary === contact.isPrimary &&
+            (source.isEmergencyContact === true) ===
+              (contact.isEmergencyContact === true) &&
+            (source.isAuthorizedPickup === true) ===
+              (contact.isAuthorizedPickup === true)
           );
         });
     } catch {
       contactsMatch = false;
     }
-    if (!contactsMatch && student.profileSchemaVersion !== 5) {
+    if (
+      !contactsMatch &&
+      student.profileSchemaVersion !== 5 &&
+      student.profileSchemaVersion !== 6 &&
+      student.profileSchemaVersion !== 7 &&
+      student.profileSchemaVersion !== 8
+    ) {
       const legacyContacts = studentContactsFromRecord(sourceContacts);
       contactsMatch =
         legacyContacts.length === sourceContacts.length &&
@@ -1663,12 +1704,40 @@ function validateStudentProfile(
             source.relationship === contact.relationship &&
             source.name === contact.name &&
             source.phone === contact.phone &&
-            source.isPrimary === contact.isPrimary
+            source.isPrimary === contact.isPrimary &&
+            (source.isEmergencyContact === true) ===
+              (contact.isEmergencyContact === true) &&
+            (source.isAuthorizedPickup === true) ===
+              (contact.isAuthorizedPickup === true)
           );
         });
     }
     if (!contactsMatch) {
       throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
+    }
+  }
+  if (student.careDetails !== undefined) {
+    if (!isRecord(student.careDetails)) {
+      throw new Error(`students/${student.id} sağlık ve güvenlik bilgileri geçersiz.`);
+    }
+    const sourceCareDetails = student.careDetails;
+    let normalizedCareDetails;
+    try {
+      normalizedCareDetails = normalizeStudentCareDetails(
+        student.careDetails as StudentCareDetailsInput,
+      );
+    } catch {
+      normalizedCareDetails = undefined;
+    }
+    if (
+      !normalizedCareDetails ||
+      Object.keys(sourceCareDetails).length !==
+        Object.keys(normalizedCareDetails).length ||
+      Object.entries(normalizedCareDetails).some(
+        ([key, value]) => sourceCareDetails[key] !== value,
+      )
+    ) {
+      throw new Error(`students/${student.id} sağlık ve güvenlik bilgileri geçersiz.`);
     }
   }
   if (
@@ -1682,7 +1751,10 @@ function validateStudentProfile(
     student.profileSchemaVersion !== 2 &&
     student.profileSchemaVersion !== 3 &&
     student.profileSchemaVersion !== 4 &&
-    student.profileSchemaVersion !== 5
+    student.profileSchemaVersion !== 5 &&
+    student.profileSchemaVersion !== 6 &&
+    student.profileSchemaVersion !== 7 &&
+    student.profileSchemaVersion !== 8
   ) {
     throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
   }
@@ -2929,6 +3001,29 @@ function assertBackupRelationships(
         typeof activity.planId === "string"
           ? plansById.get(activity.planId)
           : undefined;
+      if (
+        activity.pedagogicalProvenance !== undefined ||
+        plan?.pedagogicalProvenance !== undefined
+      ) {
+        assertPedagogicalPlanProvenance(
+          activity.pedagogicalProvenance,
+          `activities/${activity.id} pedagojik plan kaynağı`,
+        );
+        assertPedagogicalPlanProvenance(
+          plan?.pedagogicalProvenance,
+          `plans/${String(activity.planId)} pedagojik plan kaynağı`,
+        );
+        if (
+          activity.pedagogicalProvenance.civilDate !== activity.civilDate ||
+          plan?.pedagogicalProvenance.civilDate !== plan.civilDate ||
+          canonicalJson(activity.pedagogicalProvenance) !==
+            canonicalJson(plan.pedagogicalProvenance)
+        ) {
+          throw new Error(
+            `activities/${activity.id} pedagojik plan kaynak zinciri geçersiz.`,
+          );
+        }
+      }
       const planScope = plan ? planScopes.get(plan.id) ?? null : null;
       if (
         !plan ||

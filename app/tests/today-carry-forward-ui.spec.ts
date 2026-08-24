@@ -1,27 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
-function addCivilDays(civilDate: string, days: number): string {
-  const [year, month, day] = civilDate.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days))
-    .toISOString()
-    .slice(0, 10);
-}
-
 async function configureClassroom(page: Page, civilDate: string) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Taşınan İşler Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Kurgu Öğretmen");
   await setup.getByLabel("Sınıf adı").fill("Taşınan İşler Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup.locator("details.classroom-calendar-details > summary").click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill(civilDate);
   await setup.getByLabel("Eğitim yılı bitişi").fill(civilDate);
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
-  await setup
-    .getByLabel("Uygulanan program", { exact: true })
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("full_day");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
-    .click();
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
@@ -186,7 +176,7 @@ async function seedCarryForwardHistory(page: Page, currentCivilDate: string) {
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-test("taşınan işler ana önceliği sınırlar; erteleme, çözme ve geri açma gerçek kayda gider", async ({
+test("taşınan iş geçmişi korunur ve sade Bugün ekranını kalabalıklaştırmaz", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -199,49 +189,33 @@ test("taşınan işler ana önceliği sınırlar; erteleme, çözme ve geri açm
   await seedCarryForwardHistory(page, civilDate);
   await page.reload({ waitUntil: "networkidle" });
 
-  const carry = page.getByTestId("teacher-carry-forward");
-  await expect(carry).toBeVisible();
-  await expect(carry.locator(".teacher-carry-primary .teacher-carry-item")).toHaveCount(3);
-  await expect(carry.locator(".teacher-carry-primary")).toContainText("Günlük plan yok");
-  await expect(carry.locator(".teacher-carry-primary")).toContainText("Uygulama akışı açık");
-  await expect(carry.locator(".teacher-carry-primary")).toContainText("Program bağı bekliyor");
-  await expect(carry.getByText("Yoklama tamamlanmadı", { exact: true })).toBeHidden();
-  await expect(carry.getByText("Sınıf listesi boş", { exact: true })).toBeHidden();
+  await expect(page.getByTestId("teacher-carry-forward")).toHaveCount(0);
+  await expect(page.getByTestId("today-screen")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sıradaki en iyi adım" })).toContainText(
+    "İlk çocuğu ekle",
+  );
 
-  const details = carry.locator(".teacher-carry-details");
-  await details.locator("summary").click();
-  await expect(details.getByText("Yoklama tamamlanmadı", { exact: true })).toBeVisible();
-  await expect(details.getByText("Sınıf listesi boş", { exact: true })).toBeVisible();
-  await expect(details).toContainText("Ertelendi");
-  await expect(details).toContainText("Çözüldü");
-
-  const futureDeferred = details.locator(".teacher-carry-item").filter({
-    hasText: "Yoklama tamamlanmadı",
+  const preservedRecords = await page.evaluate(async () => {
+    const request = indexedDB.open("maarifos-local");
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const read = database.transaction(["settings"], "readonly");
+    const recordsRequest = read.objectStore("settings").getAll();
+    const records = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+      recordsRequest.onsuccess = () => resolve(recordsRequest.result);
+      recordsRequest.onerror = () => reject(recordsRequest.error);
+    });
+    database.close();
+    return {
+      closures: records.filter(
+        (record) => record.settingType === "teacher-day-closure",
+      ).length,
+      transitions: records.filter(
+        (record) => record.settingType === "teacher-day-carry-forward-transition",
+      ).length,
+    };
   });
-  await futureDeferred.getByRole("button", { name: "Tarihi değiştir" }).click();
-  const deferDate = futureDeferred.getByLabel("Yeni açık tarih");
-  await deferDate.fill(civilDate);
-  await expect(futureDeferred.getByRole("button", { name: "Ertelemeyi kaydet" })).toBeDisabled();
-  await expect(futureDeferred).toContainText("Erteleme tarihi bugünden sonra olmalıdır.");
-  await deferDate.fill(addCivilDays(civilDate, 3));
-  await futureDeferred.getByRole("button", { name: "Ertelemeyi kaydet" }).click();
-  await expect(futureDeferred).toContainText("tarihine ertelendi");
-
-  const resolved = details.locator(".teacher-carry-item").filter({
-    hasText: "Sınıf listesi boş",
-  });
-  await resolved.getByRole("button", { name: "Geri aç" }).click();
-  await expect(carry.locator(".teacher-carry-primary")).toContainText("Sınıf listesi boş");
-
-  const openDailyPlan = carry.locator(".teacher-carry-primary .teacher-carry-item").filter({
-    hasText: "Günlük plan yok",
-  });
-  await openDailyPlan.getByRole("button", { name: "Çözüldü" }).click();
-  await expect(carry.locator(".teacher-carry-primary")).not.toContainText("Günlük plan yok");
-
-  const targets = carry.locator("button, summary, input");
-  for (let index = 0; index < (await targets.count()); index += 1) {
-    const box = await targets.nth(index).boundingBox();
-    if (box) expect(box.height).toBeGreaterThanOrEqual(44);
-  }
+  expect(preservedRecords).toEqual({ closures: 5, transitions: 2 });
 });

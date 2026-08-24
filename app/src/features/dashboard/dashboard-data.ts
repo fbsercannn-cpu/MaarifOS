@@ -14,6 +14,7 @@ import type { StoredRecord } from "../../core/domain/model.ts";
 import {
   normalizeStudentProfile,
   studentProfileFromRecord,
+  type StudentCareDetails,
   type StudentContact,
 } from "../../core/domain/student.ts";
 import {
@@ -45,12 +46,14 @@ export type DashboardStudent = {
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
-  enrollmentDate?: string;
+  nationalIdentityNumber?: string;
+  enrollmentYear?: string;
   homeLanguages?: string;
   interests?: string;
   strengths?: string;
   supportPreferences?: string;
   contacts?: StudentContact[];
+  careDetails?: StudentCareDetails;
   profilePhotoDataUrl?: string;
 };
 
@@ -117,8 +120,11 @@ const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
     ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
     ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
     ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
-    ...(profile.enrollmentDate
-      ? { enrollmentDate: profile.enrollmentDate }
+    ...(profile.nationalIdentityNumber
+      ? { nationalIdentityNumber: profile.nationalIdentityNumber }
+      : {}),
+    ...(profile.enrollmentYear
+      ? { enrollmentYear: profile.enrollmentYear }
       : {}),
     ...(profile.homeLanguages
       ? { homeLanguages: profile.homeLanguages }
@@ -129,6 +135,7 @@ const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
       ? { supportPreferences: profile.supportPreferences }
       : {}),
     ...(profile.contacts ? { contacts: profile.contacts } : {}),
+    ...(profile.careDetails ? { careDetails: profile.careDetails } : {}),
     ...(profile.profilePhotoDataUrl
       ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
       : {}),
@@ -435,12 +442,14 @@ export async function persistStudentRosterChange(
       preferredName: options.student.preferredName,
       birthDate: options.student.birthDate,
       optionalCode: options.student.optionalCode,
-      enrollmentDate: options.student.enrollmentDate,
+      nationalIdentityNumber: options.student.nationalIdentityNumber,
+      enrollmentYear: options.student.enrollmentYear,
       homeLanguages: options.student.homeLanguages,
       interests: options.student.interests,
       strengths: options.student.strengths,
       supportPreferences: options.student.supportPreferences,
       contacts: options.student.contacts,
+      careDetails: options.student.careDetails,
       profilePhotoDataUrl: options.student.profilePhotoDataUrl,
     },
     civilDateInIstanbul(now),
@@ -460,12 +469,15 @@ export async function persistStudentRosterChange(
     delete preserved.preferredName;
     delete preserved.birthDate;
     delete preserved.optionalCode;
+    delete preserved.nationalIdentityNumber;
+    delete preserved.enrollmentYear;
     delete preserved.enrollmentDate;
     delete preserved.homeLanguages;
     delete preserved.interests;
     delete preserved.strengths;
     delete preserved.supportPreferences;
     delete preserved.contacts;
+    delete preserved.careDetails;
     delete preserved.profilePhotoDataUrl;
     delete preserved.profileSchemaVersion;
     const enrollments = existing ? studentEnrollments(existing) : [];
@@ -506,8 +518,11 @@ export async function persistStudentRosterChange(
         ...(profile.preferredName ? { preferredName: profile.preferredName } : {}),
         ...(profile.birthDate ? { birthDate: profile.birthDate } : {}),
         ...(profile.optionalCode ? { optionalCode: profile.optionalCode } : {}),
-        ...(profile.enrollmentDate
-          ? { enrollmentDate: profile.enrollmentDate }
+        ...(profile.nationalIdentityNumber
+          ? { nationalIdentityNumber: profile.nationalIdentityNumber }
+          : {}),
+        ...(profile.enrollmentYear
+          ? { enrollmentYear: profile.enrollmentYear }
           : {}),
         ...(profile.homeLanguages
           ? { homeLanguages: profile.homeLanguages }
@@ -518,6 +533,7 @@ export async function persistStudentRosterChange(
           ? { supportPreferences: profile.supportPreferences }
           : {}),
         ...(profile.contacts ? { contacts: profile.contacts } : {}),
+        ...(profile.careDetails ? { careDetails: profile.careDetails } : {}),
         ...(profile.profilePhotoDataUrl
           ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
           : {}),
@@ -667,12 +683,14 @@ export async function persistDashboardState(
           preferredName: student.preferredName,
           birthDate: student.birthDate,
           optionalCode: student.optionalCode,
-          enrollmentDate: student.enrollmentDate,
+          nationalIdentityNumber: student.nationalIdentityNumber,
+          enrollmentYear: student.enrollmentYear,
           homeLanguages: student.homeLanguages,
           interests: student.interests,
           strengths: student.strengths,
           supportPreferences: student.supportPreferences,
           contacts: student.contacts,
+          careDetails: student.careDetails,
           profilePhotoDataUrl: student.profilePhotoDataUrl,
         },
         civilDateInIstanbul(now),
@@ -752,12 +770,15 @@ export async function persistDashboardState(
           delete preserved.preferredName;
           delete preserved.birthDate;
           delete preserved.optionalCode;
+          delete preserved.nationalIdentityNumber;
+          delete preserved.enrollmentYear;
           delete preserved.enrollmentDate;
           delete preserved.homeLanguages;
           delete preserved.interests;
           delete preserved.strengths;
           delete preserved.supportPreferences;
           delete preserved.contacts;
+          delete preserved.careDetails;
           delete preserved.profilePhotoDataUrl;
           delete preserved.profileSchemaVersion;
           return {
@@ -773,8 +794,11 @@ export async function persistDashboardState(
             ...(profile.optionalCode
               ? { optionalCode: profile.optionalCode }
               : {}),
-            ...(profile.enrollmentDate
-              ? { enrollmentDate: profile.enrollmentDate }
+            ...(profile.nationalIdentityNumber
+              ? { nationalIdentityNumber: profile.nationalIdentityNumber }
+              : {}),
+            ...(profile.enrollmentYear
+              ? { enrollmentYear: profile.enrollmentYear }
               : {}),
             ...(profile.homeLanguages
               ? { homeLanguages: profile.homeLanguages }
@@ -785,6 +809,7 @@ export async function persistDashboardState(
               ? { supportPreferences: profile.supportPreferences }
               : {}),
             ...(profile.contacts ? { contacts: profile.contacts } : {}),
+            ...(profile.careDetails ? { careDetails: profile.careDetails } : {}),
             ...(profile.profilePhotoDataUrl
               ? { profilePhotoDataUrl: profile.profilePhotoDataUrl }
               : {}),

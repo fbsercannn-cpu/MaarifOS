@@ -24,6 +24,10 @@ import type {
 import type { AttendanceRecord } from "../domain/attendance";
 import { canonicalJson } from "../backup/canonical-json";
 import {
+  StudentSensitiveVault,
+  type StudentSensitiveVaultOptions,
+} from "../security/student-sensitive-vault.ts";
+import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
   SCOPE_INDEX_DEFINITIONS,
@@ -64,6 +68,8 @@ export interface IndexedDbDataStoreOptions {
   databaseName?: string;
   version?: number;
   onStatusChange?: (event: IndexedDbStatusEvent) => void;
+  /** Test doubles may inject browser-compatible crypto/IDB implementations. */
+  sensitiveVault?: Pick<StudentSensitiveVaultOptions, "crypto" | "indexedDb">;
 }
 
 const INDEXES_BY_COLLECTION: Partial<
@@ -339,6 +345,110 @@ class IndexedDbTransaction implements DataTransaction {
   }
 }
 
+type RawCollectionState = Partial<
+  Record<CollectionName, StoredRecord[]>
+>;
+
+function uniqueCollections(
+  collections: readonly CollectionName[],
+): CollectionName[] {
+  return [...new Set(collections)];
+}
+
+function recordsEqual(
+  left: readonly unknown[],
+  right: readonly unknown[],
+): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+function studentSubject(studentId: string): string {
+  return `student:${studentId}`;
+}
+
+class StagedDataTransaction implements DataTransaction {
+  private readonly state = new Map<CollectionName, StoredRecord[]>();
+  private readonly allowedCollections: ReadonlySet<CollectionName>;
+
+  constructor(
+    private readonly mode: TransactionMode,
+    collections: readonly CollectionName[],
+    initial: RawCollectionState,
+  ) {
+    this.allowedCollections = new Set(collections);
+    for (const collection of collections) {
+      this.state.set(collection, structuredClone(initial[collection] ?? []));
+    }
+  }
+
+  async getAll<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<EntityMap[Collection][]> {
+    this.assertAllowed(collection);
+    return structuredClone(
+      (this.state.get(collection) ?? [])
+        .slice()
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    ) as EntityMap[Collection][];
+  }
+
+  async putMany<Collection extends CollectionName>(
+    collection: Collection,
+    records: readonly EntityMap[Collection][],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void>;
+  async putMany(
+    collection: CollectionName,
+    records: readonly StoredRecord[],
+  ): Promise<void> {
+    this.assertWritable(collection);
+    const current = new Map(
+      (this.state.get(collection) ?? []).map((record) => [record.id, record]),
+    );
+    for (const record of records) {
+      if (!record || typeof record.id !== "string") {
+        throw new Error("IndexedDB kaydı geçerli bir kimlik içermelidir.");
+      }
+      current.set(record.id, structuredClone(record));
+    }
+    this.state.set(collection, [...current.values()]);
+  }
+
+  async clear<Collection extends CollectionName>(
+    collection: Collection,
+  ): Promise<void> {
+    this.assertWritable(collection);
+    this.state.set(collection, []);
+  }
+
+  snapshot(): RawCollectionState {
+    return Object.fromEntries(
+      [...this.state.entries()].map(([collection, records]) => [
+        collection,
+        structuredClone(records),
+      ]),
+    ) as RawCollectionState;
+  }
+
+  private assertAllowed(collection: CollectionName): void {
+    if (!this.allowedCollections.has(collection)) {
+      throw new Error(
+        `${collection} koleksiyonu bu IndexedDB işleminin kapsamında değil.`,
+      );
+    }
+  }
+
+  private assertWritable(collection: CollectionName): void {
+    this.assertAllowed(collection);
+    if (this.mode !== "readwrite") {
+      throw new Error("Salt okunur IndexedDB işleminde veri değiştirilemez.");
+    }
+  }
+}
+
 export class IndexedDbDataStore
   implements
     LocalDataStore,
@@ -347,8 +457,13 @@ export class IndexedDbDataStore
     ClassroomDataQueryRepository
 {
   private databasePromise: Promise<IDBDatabase> | undefined;
+  private studentWriteQueue: Promise<void> = Promise.resolve();
   private readonly databaseName: string;
   private readonly version: number;
+  private sensitiveVault: StudentSensitiveVault | undefined;
+  private readonly sensitiveVaultOptions:
+    | Pick<StudentSensitiveVaultOptions, "crypto" | "indexedDb">
+    | undefined;
   private readonly onStatusChange:
     | ((event: IndexedDbStatusEvent) => void)
     | undefined;
@@ -356,6 +471,7 @@ export class IndexedDbDataStore
   constructor(options: IndexedDbDataStoreOptions = {}) {
     this.databaseName = options.databaseName ?? DEFAULT_DATABASE_NAME;
     this.version = options.version ?? MAARIFOS_DATABASE_VERSION;
+    this.sensitiveVaultOptions = options.sensitiveVault;
     this.onStatusChange = options.onStatusChange;
     if (
       !Number.isInteger(this.version) ||
@@ -375,8 +491,55 @@ export class IndexedDbDataStore
       throw new Error("IndexedDB işlemi için en az bir koleksiyon gerekir.");
     }
 
+    const scopedCollections = uniqueCollections(collections);
     const database = await this.open();
-    const nativeTransaction = database.transaction([...collections], mode);
+    if (scopedCollections.includes("students")) {
+      const execute = async (): Promise<T> => {
+        const baseline = await this.readRawCollections(
+          database,
+          scopedCollections,
+        );
+        const publicState = await this.openSensitiveCollections(
+          baseline,
+          scopedCollections,
+        );
+        const transaction = new StagedDataTransaction(
+          mode,
+          scopedCollections,
+          publicState,
+        );
+        const result = await task(transaction);
+        if (mode === "readwrite") {
+          const finalPublicState = transaction.snapshot();
+          const changed = scopedCollections.some(
+            (collection) =>
+              !recordsEqual(
+                publicState[collection] ?? [],
+                finalPublicState[collection] ?? [],
+              ),
+          );
+          if (!changed) return result;
+          const finalRawState = await this.sealSensitiveCollections(
+            finalPublicState,
+            scopedCollections,
+            publicState,
+            baseline,
+          );
+          await this.commitRawCollections(
+            database,
+            scopedCollections,
+            baseline,
+            finalRawState,
+          );
+        }
+        return result;
+      };
+      return mode === "readwrite"
+        ? this.enqueueStudentWrite(execute)
+        : execute();
+    }
+
+    const nativeTransaction = database.transaction(scopedCollections, mode);
     const completion = transactionResult(nativeTransaction);
     const transaction = new IndexedDbTransaction(nativeTransaction);
 
@@ -413,7 +576,11 @@ export class IndexedDbDataStore
     classroomId: string,
   ): Promise<StudentRecord[]> {
     validUuid(classroomId, "Sınıf kimliği");
-    return this.queryIndex("students", "by-classroom", classroomId);
+    return this.transaction("readonly", ["students"], async (transaction) =>
+      (await transaction.getAll("students")).filter(
+        (student) => student.classroomId === classroomId,
+      ),
+    );
   }
 
   async listAttendanceByClassroomDate(
@@ -481,56 +648,42 @@ export class IndexedDbDataStore
       options.retentionLimit,
     );
     const database = await this.openRecoveryDatabase();
-    const nativeTransaction = database.transaction(
-      [RECOVERY_SNAPSHOT_STORE_NAME, ...COLLECTION_NAMES],
-      "readwrite",
+    const baselineCollections = await this.readRawCollections(
+      database,
+      COLLECTION_NAMES,
     );
-    const completion = transactionResult(nativeTransaction);
-    try {
-      const currentSnapshot = createEmptySnapshot();
-      for (const collection of COLLECTION_NAMES) {
-        currentSnapshot[collection] = structuredClone(
-          await requestResult(
-            nativeTransaction.objectStore(collection).getAll() as IDBRequest<
-              StoredRecord[]
-            >,
-          ),
-        );
-      }
-      if (
-        canonicalJson(currentSnapshot) !==
-        canonicalJson(verified.envelope.payload)
-      ) {
-        throw new Error(
-          "Kurtarma snapshot kaydedilmedi; yerel veri snapshot oluşturulduktan sonra değişti.",
-        );
-      }
-      const store = nativeTransaction.objectStore(
-        RECOVERY_SNAPSHOT_STORE_NAME,
+    const currentSnapshot = await this.openSensitiveCollections(
+      baselineCollections,
+      COLLECTION_NAMES,
+    );
+    if (
+      canonicalJson(currentSnapshot) !== canonicalJson(verified.envelope.payload)
+    ) {
+      throw new Error(
+        "Kurtarma snapshot kaydedilmedi; yerel veri snapshot oluşturulduktan sonra değişti.",
       );
-      await requestResult(store.put(structuredClone(verified)));
-      const all = await requestResult(
-        store.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
-      );
-      const newest = [...all].sort(
+    }
+    const baselineRecovery = await this.readRawRecoverySnapshots(database);
+    const sealed = await this.getSensitiveVault().sealRecoverySnapshot(verified);
+    const byId = new Map(
+      baselineRecovery.map((record) => [record.id, structuredClone(record)]),
+    );
+    byId.set(sealed.id, sealed);
+    const finalRecovery = [...byId.values()]
+      .sort(
         (left, right) =>
           right.createdAt.localeCompare(left.createdAt) ||
           right.id.localeCompare(left.id),
-      );
-      for (const stale of newest.slice(retentionLimit)) {
-        await requestResult(store.delete(stale.id));
-      }
-      await completion;
-      return recoverySnapshotMetadata(verified);
-    } catch (error) {
-      try {
-        nativeTransaction.abort();
-      } catch {
-        // Tamamlanmış işlemin asıl hatasını koru.
-      }
-      await completion.catch(() => undefined);
-      throw error;
-    }
+      )
+      .slice(0, retentionLimit);
+    await this.commitRawCollections(
+      database,
+      COLLECTION_NAMES,
+      baselineCollections,
+      baselineCollections,
+      { baseline: baselineRecovery, final: finalRecovery },
+    );
+    return recoverySnapshotMetadata(verified);
   }
 
   async listRecoverySnapshots(): Promise<RecoverySnapshotMetadata[]> {
@@ -568,7 +721,9 @@ export class IndexedDbDataStore
         .get(id) as IDBRequest<RecoverySnapshotRecord | undefined>,
     );
     await completion;
-    return value ? verifyRecoverySnapshotRecord(value) : null;
+    if (!value) return null;
+    const opened = await this.getSensitiveVault().openRecoverySnapshot(value);
+    return verifyRecoverySnapshotRecord(opened);
   }
 
   async deleteRecoverySnapshot(id: string): Promise<void> {
@@ -630,24 +785,32 @@ export class IndexedDbDataStore
     task: (transaction: DataTransaction) => Promise<T>,
   ): Promise<StudentRecoveryPurgeResult<T>> {
     validUuid(studentId, "Öğrenci kimliği");
-    const database = await this.openRecoveryDatabase();
-    const nativeTransaction = database.transaction(
-      [...COLLECTION_NAMES, RECOVERY_SNAPSHOT_STORE_NAME],
-      "readwrite",
-    );
-    const completion = transactionResult(nativeTransaction);
-    const transaction = new IndexedDbTransaction(nativeTransaction);
-
-    try {
+    return this.enqueueStudentWrite(async () => {
+      const database = await this.openRecoveryDatabase();
+      const baselineCollections = await this.readRawCollections(
+        database,
+        COLLECTION_NAMES,
+      );
+      const publicState = await this.openSensitiveCollections(
+        baselineCollections,
+        COLLECTION_NAMES,
+      );
+      const transaction = new StagedDataTransaction(
+        "readwrite",
+        COLLECTION_NAMES,
+        publicState,
+      );
       const result = await task(transaction);
-      const recoveryStore = nativeTransaction.objectStore(
-        RECOVERY_SNAPSHOT_STORE_NAME,
+      const finalRawCollections = await this.sealSensitiveCollections(
+        transaction.snapshot(),
+        COLLECTION_NAMES,
+        publicState,
+        baselineCollections,
       );
-      const snapshots = await requestResult(
-        recoveryStore.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
-      );
-      const matchingSnapshots: RecoverySnapshotRecord[] = [];
-      for (const snapshot of snapshots) {
+      const baselineRecovery = await this.readRawRecoverySnapshots(database);
+      const finalRecovery: RecoverySnapshotRecord[] = [];
+      let purgedRecoverySnapshotCount = 0;
+      for (const snapshot of baselineRecovery) {
         const students = snapshot?.envelope?.payload?.students;
         if (!Array.isArray(students)) {
           throw new Error(
@@ -655,26 +818,20 @@ export class IndexedDbDataStore
           );
         }
         if (students.some((student) => student.id === studentId)) {
-          matchingSnapshots.push(snapshot);
+          purgedRecoverySnapshotCount += 1;
+        } else {
+          finalRecovery.push(snapshot);
         }
       }
-      for (const snapshot of matchingSnapshots) {
-        await requestResult(recoveryStore.delete(snapshot.id));
-      }
-      await completion;
-      return {
-        result,
-        purgedRecoverySnapshotCount: matchingSnapshots.length,
-      };
-    } catch (error) {
-      try {
-        nativeTransaction.abort();
-      } catch {
-        // Tamamlanmış işlemin asıl hatasını koru.
-      }
-      await completion.catch(() => undefined);
-      throw error;
-    }
+      await this.commitRawCollections(
+        database,
+        COLLECTION_NAMES,
+        baselineCollections,
+        finalRawCollections,
+        { baseline: baselineRecovery, final: finalRecovery },
+      );
+      return { result, purgedRecoverySnapshotCount };
+    });
   }
 
   close(): void {
@@ -685,11 +842,283 @@ export class IndexedDbDataStore
         .then((database) => database.close())
         .catch(() => undefined);
     }
+    this.sensitiveVault?.close();
+    this.sensitiveVault = undefined;
     this.emitStatus({ status: "closed" });
   }
 
   private emitStatus(event: IndexedDbStatusEvent): void {
     this.onStatusChange?.(event);
+  }
+
+  private getSensitiveVault(): StudentSensitiveVault {
+    if (!this.sensitiveVault) {
+      this.sensitiveVault = new StudentSensitiveVault({
+        databaseName: this.databaseName,
+        ...this.sensitiveVaultOptions,
+      });
+    }
+    return this.sensitiveVault;
+  }
+
+  private enqueueStudentWrite<T>(task: () => Promise<T>): Promise<T> {
+    const execute = (): Promise<T> => {
+      const locks = globalThis.navigator?.locks;
+      if (!locks) return task();
+      return locks.request(
+        `maarifos:${this.databaseName}:student-sensitive-write`,
+        { mode: "exclusive" },
+        () => task(),
+      );
+    };
+    const run = this.studentWriteQueue.then(execute, execute);
+    this.studentWriteQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async readRawCollections(
+    database: IDBDatabase,
+    collections: readonly CollectionName[],
+  ): Promise<RawCollectionState> {
+    const scopedCollections = uniqueCollections(collections);
+    const nativeTransaction = database.transaction(
+      scopedCollections,
+      "readonly",
+    );
+    const completion = transactionResult(nativeTransaction);
+    const pending = scopedCollections.map((collection) =>
+      requestResult(
+        nativeTransaction.objectStore(collection).getAll() as IDBRequest<
+          StoredRecord[]
+        >,
+      ),
+    );
+    const values = await Promise.all(pending);
+    await completion;
+    return Object.fromEntries(
+      scopedCollections.map((collection, index) => [
+        collection,
+        structuredClone(values[index]),
+      ]),
+    ) as RawCollectionState;
+  }
+
+  private async openSensitiveCollections(
+    rawState: RawCollectionState,
+    collections: readonly CollectionName[],
+  ): Promise<RawCollectionState> {
+    const opened: RawCollectionState = structuredClone(rawState);
+    if (collections.includes("students")) {
+      opened.students = await Promise.all(
+        (rawState.students ?? []).map((student) =>
+          this.getSensitiveVault().openStudentRecord(
+            student,
+            studentSubject(student.id),
+          ),
+        ),
+      );
+    }
+    return opened;
+  }
+
+  private async sealSensitiveCollections(
+    publicState: RawCollectionState,
+    collections: readonly CollectionName[],
+    baselinePublicState?: RawCollectionState,
+    baselineRawState?: RawCollectionState,
+  ): Promise<RawCollectionState> {
+    const sealed: RawCollectionState = structuredClone(publicState);
+    if (collections.includes("students")) {
+      const baselinePublicById = new Map(
+        (baselinePublicState?.students ?? []).map((student) => [
+          student.id,
+          student,
+        ]),
+      );
+      const baselineRawById = new Map(
+        (baselineRawState?.students ?? []).map((student) => [
+          student.id,
+          student,
+        ]),
+      );
+      sealed.students = await Promise.all(
+        (publicState.students ?? []).map((student) => {
+          const baselinePublic = baselinePublicById.get(student.id);
+          const baselineRaw = baselineRawById.get(student.id);
+          if (
+            baselinePublic &&
+            baselineRaw &&
+            recordsEqual([baselinePublic], [student])
+          ) {
+            return structuredClone(baselineRaw);
+          }
+          return this.getSensitiveVault().sealStudentRecord(
+            student,
+            studentSubject(student.id),
+          );
+        }),
+      );
+    }
+    return sealed;
+  }
+
+  private async commitRawCollections(
+    database: IDBDatabase,
+    collections: readonly CollectionName[],
+    baseline: RawCollectionState,
+    finalState: RawCollectionState,
+    recovery?: {
+      baseline: readonly RecoverySnapshotRecord[];
+      final: readonly RecoverySnapshotRecord[];
+    },
+  ): Promise<void> {
+    const scopedCollections = uniqueCollections(collections);
+    const storeNames: string[] = [...scopedCollections];
+    if (recovery) storeNames.push(RECOVERY_SNAPSHOT_STORE_NAME);
+    const nativeTransaction = database.transaction(storeNames, "readwrite");
+    const completion = transactionResult(nativeTransaction);
+    try {
+      const collectionReads = scopedCollections.map((collection) =>
+        requestResult(
+          nativeTransaction.objectStore(collection).getAll() as IDBRequest<
+            StoredRecord[]
+          >,
+        ),
+      );
+      const recoveryRead = recovery
+        ? requestResult(
+            nativeTransaction
+              .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
+              .getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+          )
+        : undefined;
+      const currentCollections = await Promise.all(collectionReads);
+      const currentRecovery = recoveryRead ? await recoveryRead : undefined;
+      for (const [index, collection] of scopedCollections.entries()) {
+        if (
+          !recordsEqual(
+            currentCollections[index],
+            baseline[collection] ?? [],
+          )
+        ) {
+          throw new Error(
+            "Yerel veri işlem sırasında değişti; güvenli yazma uygulanmadı.",
+          );
+        }
+      }
+      if (
+        recovery &&
+        !recordsEqual(
+          currentRecovery ?? [],
+          recovery.baseline,
+        )
+      ) {
+        throw new Error(
+          "Kurtarma snapshot verisi işlem sırasında değişti; güvenli yazma uygulanmadı.",
+        );
+      }
+
+      const writes: Promise<unknown>[] = [];
+      for (const collection of scopedCollections) {
+        const store = nativeTransaction.objectStore(collection);
+        writes.push(requestResult(store.clear()));
+        for (const record of finalState[collection] ?? []) {
+          writes.push(requestResult(store.put(structuredClone(record))));
+        }
+      }
+      if (recovery) {
+        const store = nativeTransaction.objectStore(
+          RECOVERY_SNAPSHOT_STORE_NAME,
+        );
+        writes.push(requestResult(store.clear()));
+        for (const snapshot of recovery.final) {
+          writes.push(requestResult(store.put(structuredClone(snapshot))));
+        }
+      }
+      await Promise.all(writes);
+      await completion;
+    } catch (error) {
+      try {
+        nativeTransaction.abort();
+      } catch {
+        // Tamamlanmış işlemin özgün hatasını koru.
+      }
+      await completion.catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async migrateLegacySensitiveData(
+    database: IDBDatabase,
+  ): Promise<void> {
+    const includesRecovery = database.objectStoreNames.contains(
+      RECOVERY_SNAPSHOT_STORE_NAME,
+    );
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const baselineStudents = await this.readRawCollections(database, [
+        "students",
+      ]);
+      const baselineRecovery = includesRecovery
+        ? await this.readRawRecoverySnapshots(database)
+        : [];
+      let changed = false;
+      const migratedStudents = await Promise.all(
+        (baselineStudents.students ?? []).map(async (student) => {
+          const migrated = await this.getSensitiveVault().migrateStudentRecord(
+            student,
+            studentSubject(student.id),
+          );
+          changed ||= migrated.changed;
+          return migrated.record;
+        }),
+      );
+      const migratedRecovery = await Promise.all(
+        baselineRecovery.map(async (snapshot) => {
+          const migrated =
+            await this.getSensitiveVault().migrateRecoverySnapshot(snapshot);
+          changed ||= migrated.changed;
+          return migrated.snapshot;
+        }),
+      );
+      if (!changed) return;
+      try {
+        await this.commitRawCollections(
+          database,
+          ["students"],
+          baselineStudents,
+          { students: migratedStudents },
+          includesRecovery
+            ? { baseline: baselineRecovery, final: migratedRecovery }
+            : undefined,
+        );
+        return;
+      } catch (error) {
+        const retryable =
+          error instanceof Error &&
+          error.message.includes("işlem sırasında değişti");
+        if (!retryable || attempt === 2) throw error;
+      }
+    }
+  }
+
+  private async readRawRecoverySnapshots(
+    database: IDBDatabase,
+  ): Promise<RecoverySnapshotRecord[]> {
+    const nativeTransaction = database.transaction(
+      RECOVERY_SNAPSHOT_STORE_NAME,
+      "readonly",
+    );
+    const completion = transactionResult(nativeTransaction);
+    const records = await requestResult(
+      nativeTransaction
+        .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
+        .getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+    );
+    await completion;
+    return structuredClone(records);
   }
 
   private async queryIndex<Collection extends CollectionName>(
@@ -719,18 +1148,12 @@ export class IndexedDbDataStore
     RecoverySnapshotRecord[]
   > {
     const database = await this.openRecoveryDatabase();
-    const nativeTransaction = database.transaction(
-      RECOVERY_SNAPSHOT_STORE_NAME,
-      "readonly",
+    const records = await this.readRawRecoverySnapshots(database);
+    return Promise.all(
+      records.map((record) =>
+        this.getSensitiveVault().openRecoverySnapshot(record),
+      ),
     );
-    const completion = transactionResult(nativeTransaction);
-    const records = await requestResult(
-      nativeTransaction
-        .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
-        .getAll() as IDBRequest<RecoverySnapshotRecord[]>,
-    );
-    await completion;
-    return structuredClone(records);
   }
 
   private async openRecoveryDatabase(): Promise<IDBDatabase> {
@@ -786,7 +1209,6 @@ export class IndexedDbDataStore
               database.close();
               return;
             }
-            settled = true;
             database.addEventListener("versionchange", (event) => {
               database.close();
               if (this.databasePromise === opening) {
@@ -800,8 +1222,33 @@ export class IndexedDbDataStore
                   "Yeni veri sürümü için eski sekme bağlantısı güvenle kapatıldı.",
               });
             });
-            this.emitStatus({ status: "ready" });
-            resolve(database);
+            void this.migrateLegacySensitiveData(database).then(
+              () => {
+                if (settled) {
+                  database.close();
+                  return;
+                }
+                settled = true;
+                this.emitStatus({ status: "ready" });
+                resolve(database);
+              },
+              (error: unknown) => {
+                if (settled) return;
+                settled = true;
+                database.close();
+                const safeError =
+                  error instanceof Error
+                    ? error
+                    : new Error(
+                        "Hassas öğrenci verisi güvenle hazırlanamadı.",
+                      );
+                this.emitStatus({
+                  status: "error",
+                  message: safeError.message,
+                });
+                reject(safeError);
+              },
+            );
           },
           { once: true },
         );

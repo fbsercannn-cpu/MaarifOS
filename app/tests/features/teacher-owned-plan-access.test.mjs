@@ -104,11 +104,22 @@ test("temel belge üretimi entitlement nesnesi olmadan kalıcı öğretmen başl
       },
     },
     "word",
+    {
+      schoolName: "Kurgu İlkokulu",
+      teacherName: "Emine Akış",
+      classroomName: "Güneş Sınıfı",
+      academicYearName: "2026–2027",
+      ageGroup: "48–60",
+      curriculumProgram: "Türkiye Yüzyılı Maarif Modeli",
+    },
   );
   assert.equal(document.annualPlanTitle, "Emine Öğretmenin Yıllık Omurgası");
   assert.equal(document.title, "Emine Öğretmenin Eylül Planı");
   assert.match(document.fileName, /Ogretmen_Plan_Zinciri_2026-09\.docx$/);
-  assert.match(document.teacherReviewNotice, /entitlement gerektirmez/);
+  assert.equal(document.programLabel, "Türkiye Yüzyılı Maarif Modeli");
+  assert.equal(document.ageLabel, "48–60 ay");
+  assert.equal(document.academicRelease, "2026–2027");
+  assert.match(document.teacherReviewNotice, /kalıcı plan zincirinden/);
 });
 
 test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmadan belge metnine dönüşür", () => {
@@ -127,8 +138,9 @@ test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmad
   const annualId = "00000000-0000-4000-8000-000000000a03";
   const monthlyId = "00000000-0000-4000-8000-000000000a04";
   const weeklyId = "00000000-0000-4000-8000-000000000a05";
-  const paragraphs = buildStandaloneTeacherOwnedPlanParagraphs({
-    annual: {
+  const paragraphs = buildStandaloneTeacherOwnedPlanParagraphs(
+    {
+      annual: {
       ...base,
       id: annualId,
       planType: "annual",
@@ -139,9 +151,9 @@ test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmad
       teacherContent: { narrative: "Her çocuğun katılımını güçlendirmek" },
       monthlySectionIds: [monthlyId],
     },
-    months: [
-      {
-        monthly: {
+      months: [
+        {
+          monthly: {
           ...base,
           id: monthlyId,
           planType: "monthly",
@@ -154,8 +166,8 @@ test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmad
           teacherContent: { narrative: "Uyum ve aidiyet" },
           weeklySectionIds: [weeklyId],
         },
-        weeks: [
-          {
+          weeks: [
+            {
             ...base,
             id: weeklyId,
             planType: "weekly",
@@ -167,16 +179,35 @@ test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmad
             periodStart: "2026-09-07",
             periodEnd: "2026-09-11",
             teacherContent: { narrative: "Karşılama, oyun ve gözlem" },
-          },
-        ],
-      },
-    ],
-  });
+            },
+          ],
+        },
+      ],
+    },
+    [],
+    {
+      schoolName: "Kurgu İlkokulu",
+      teacherName: "Emine Akış",
+      classroomName: "Güneş Sınıfı",
+      academicYearName: "2026–2027",
+      ageGroup: "48–60",
+      curriculumProgram: "Türkiye Yüzyılı Maarif Modeli",
+    },
+    "combined",
+  );
   const text = paragraphs.map((paragraph) => paragraph.text).join("\n");
   assert.match(text, /Kurgu Öğretmen Yıllık Planı/);
   assert.match(text, /Uyum ve aidiyet/);
   assert.match(text, /Karşılama, oyun ve gözlem/);
-  assert.match(text, new RegExp(annualId));
+  assert.match(text, /MaarifOS destek belgesi/);
+  assert.match(text, /Okul: Kurgu İlkokulu/);
+  assert.match(text, /Öğretmen: Emine Akış/);
+  assert.match(text, /Sınıf: Güneş Sınıfı/);
+  assert.match(text, /Yaş grubu: 48–60 ay/);
+  assert.match(text, /Adı soyadı: Emine Akış/);
+  assert.match(text, /İmza: _+/);
+  assert.doesNotMatch(text, new RegExp(annualId));
+  assert.doesNotMatch(text, /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   assert.doesNotMatch(text, /contentPack|entitlement|premiumAnnualPlan/);
 });
 
@@ -190,12 +221,14 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.doesNotMatch(documentSource, /VerifiedPremiumAccess|assertPremiumPackActionAccess|canPerformPremiumPackAction/);
   assert.match(documentSource, /generateTeacherOwnedPlanExportFile/);
   assert.match(documentSource, /generateStandaloneTeacherOwnedPlanExportFile/);
-  assert.match(screenSource, /Plan emeğiniz premium kilidinden bağımsızdır/);
+  assert.match(screenSource, /Planlarınız bu cihazda size aittir/);
   assert.match(screenSource, /onOpenProviderLibrary/);
+  assert.match(screenSource, /showProviderLibrary && onOpenProviderLibrary/);
   assert.match(screenSource, /Yıl → ay → hafta planını oluştur/);
   assert.match(screenSource, /starter\.nextWeekTitle/);
   assert.match(screenSource, /starter\.nextMonthTitle/);
   assert.match(screenSource, /buildTeacherFullYearMonthDrafts/);
+  assert.match(screenSource, /buildNeutralTeacherYearOutline/);
   assert.match(screenSource, /Eylül–Haziran yıllık plan omurgası/);
   assert.match(screenSource, /onAppendPlanMonths/);
   assert.match(screenSource, /onReviewMonthlyCarry/);
@@ -203,6 +236,11 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.match(screenSource, /educationalWritesDisabled/);
   assert.match(screenSource, /Plan omurgası hazırlanabilir/);
   assert.match(screenSource, /teacher-owned-evaluation-write-notice/);
+  assert.match(screenSource, /Tek tıkla çıktı/);
+  assert.match(screenSource, /PDF hazırla/);
+  assert.match(screenSource, /Word hazırla/);
+  assert.doesNotMatch(screenSource, /documentApproved/);
+  assert.doesNotMatch(screenSource, /Belgeyi önizle/);
   assert.match(screenSource, /teacher-owned-plan-week-coverage/);
   assert.match(screenSource, /MEB 2026–2027 çalışma takvimi ve sınıf bitiş saati/);
   assert.match(screenSource, /weeklyReviewRef\.current\?\.scrollIntoView/);

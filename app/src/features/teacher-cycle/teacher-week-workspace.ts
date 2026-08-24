@@ -10,11 +10,15 @@ import {
   localNoSchoolPeriodsFromCalendarEntries,
   resolveTeacherWeekTeachingDays,
 } from "../planning/teacher-week-teaching-days.ts";
-import { resolveTeacherWorkCycle } from "./teacher-work-cycle.ts";
+import {
+  resolveTeacherWorkCycle,
+  type TeacherCycleDailyStatus,
+} from "./teacher-work-cycle.ts";
 
 export type TeacherWeekDayState =
   | "future"
   | "missing-plan"
+  | "plan-link"
   | "plan-conflict"
   | "attendance"
   | "application"
@@ -100,7 +104,7 @@ export function teacherWeekStart(civilDate: string): string {
 function stateForDay(input: {
   civilDate: string;
   currentCivilDate: string;
-  dailyStatus: "missing" | "ready" | "conflict";
+  dailyStatus: TeacherCycleDailyStatus;
   planId: string | null;
   conflictingPlanIds: readonly string[];
   closure: ReturnType<typeof resolveTeacherDayClosureWorkspace>;
@@ -111,6 +115,13 @@ function stateForDay(input: {
       state: "plan-conflict",
       title: "Plan çakışması",
       detail: `${input.conflictingPlanIds.length} günlük plan inceleme bekliyor.`,
+    };
+  }
+  if (dailyStatus === "chain-mismatch") {
+    return {
+      state: "plan-link",
+      title: "Plan bağı bekliyor",
+      detail: "Bu tarihteki günlük plan etkin hafta zincirine bağlı değil.",
     };
   }
   if (civilDate > currentCivilDate) {

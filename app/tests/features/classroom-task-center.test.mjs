@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  classroomStudentProfileMissingFields,
   createClassroomTaskCenterSummary,
   resolveClassroomPriorityTask,
 } from "../../src/features/classroom/classroom-screen-model.ts";
@@ -42,6 +43,23 @@ const completedAttendanceSummary = {
   attendanceMarkedStudentCount: 3,
   attendanceCompleted: true,
 };
+
+test("sınıf kartı kimlik ve veli alanlarını ham değer göstermeden eksik sayar", () => {
+  assert.deepEqual(
+    classroomStudentProfileMissingFields(students[0]),
+    ["doğum tarihi", "öğrenci no", "T.C. kimlik", "veli iletişimi"],
+  );
+  assert.deepEqual(
+    classroomStudentProfileMissingFields({
+      ...students[0],
+      birthDate: "2020-05-10",
+      optionalCode: "27",
+      nationalIdentityNumber: "10000000146",
+      contacts: [{ phone: "+905551112233" }],
+    }),
+    [],
+  );
+});
 
 test("sınıf görev merkezi yoklama açığını ve çocuk bazlı gözlem izini ayrı gösterir", () => {
   const result = createClassroomTaskCenterSummary({
@@ -224,6 +242,13 @@ test("Sınıfım yoklama CTA'sı gerçek attendance sheet handler'ına ve erişi
     new URL("../../src/Prototype.tsx", import.meta.url),
     "utf8",
   );
+  const simpleScreenSource = readFileSync(
+    new URL(
+      "../../src/features/simple-experience/SimpleClassroomScreen.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
 
   assert.match(screenSource, /onOpenAttendance: \(\) => void/);
   assert.match(
@@ -239,5 +264,19 @@ test("Sınıfım yoklama CTA'sı gerçek attendance sheet handler'ına ve erişi
   assert.match(
     prototypeSource,
     /onOpenAttendance=\{\(\) => changeAttendanceOpen\(true\)\}/,
+  );
+  assert.match(screenSource, /Bilgileri düzenle/);
+  assert.match(screenSource, /Veli \/ yakınlar/);
+  assert.match(screenSource, /onOpenProfile\(student\.id, "details"\)/);
+  assert.match(screenSource, /onOpenProfile\(student\.id, "contacts"\)/);
+  assert.match(simpleScreenSource, /Bilgileri düzenle/);
+  assert.match(simpleScreenSource, /Veli \/ yakınlar/);
+  assert.match(
+    simpleScreenSource,
+    /onOpenProfile\(student\.id, "details"\)/,
+  );
+  assert.match(
+    simpleScreenSource,
+    /onOpenProfile\(student\.id, "contacts"\)/,
   );
 });

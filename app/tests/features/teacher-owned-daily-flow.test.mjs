@@ -481,6 +481,7 @@ test("DOCX ve PDF aynı düzenlenmiş 10 akış bloğunu kimlik, tür, sıra ve 
   const paragraphs = buildStandaloneTeacherOwnedPlanParagraphs(
     reloadedGraph,
     dailyExports,
+    { includeAuditAppendix: true },
   );
   const paragraphText = paragraphs.map((paragraph) => paragraph.text).join("\n");
   for (const block of updated.teacherOwnedDailyFlow.blocks) {
@@ -498,6 +499,8 @@ test("DOCX ve PDF aynı düzenlenmiş 10 akış bloğunu kimlik, tür, sıra ve 
     reloadedGraph,
     store,
     "word",
+    { kind: "combined" },
+    { includeAuditAppendix: true },
   );
   assert.equal(new TextDecoder().decode(word.bytes.slice(0, 2)), "PK");
   const wordBytesAsText = new TextDecoder().decode(word.bytes);
@@ -528,6 +531,8 @@ test("DOCX ve PDF aynı düzenlenmiş 10 akış bloğunu kimlik, tür, sıra ve 
       reloadedGraph,
       store,
       "pdf",
+      { kind: "combined" },
+      { includeAuditAppendix: true },
     );
     assert.equal(new TextDecoder().decode(pdf.bytes.slice(0, 4)), "%PDF");
     assert.deepEqual(pdf.paragraphs, word.paragraphs);

@@ -319,17 +319,20 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
       updatedAt: "2026-09-01T06:00:00.000Z",
       civilDate: "2026-09-01",
       deletedAt: null,
-      schemaVersion: 2,
+      schemaVersion: 6,
       displayName: "Kurgu Profil Öğrencisi",
+      firstName: "Kurgu Profil",
+      lastName: "Öğrencisi",
       preferredName: "Kurgu",
       birthDate: "2021-03-14",
       optionalCode: "OKUL-MAVI-42",
-      enrollmentDate: "2025-09-01",
+      nationalIdentityNumber: "10000000146",
+      enrollmentYear: "2025",
       homeLanguages: "Türkçe, Almanca",
       interests: "Doğa incelemeleri ve blok oyunları",
       strengths: "Akranlarıyla iş birliği kuruyor",
       supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
-      profileSchemaVersion: 3,
+      profileSchemaVersion: 6,
     };
     await source.transaction("readwrite", ["students"], (transaction) =>
       transaction.putMany("students", [profile]),
@@ -344,16 +347,28 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
     const verified = await sourceService.parseAndVerifyBackup(
       sourceService.serializeBackup(backup),
     );
-    const invalidEnrollment = structuredClone(backup);
-    invalidEnrollment.payload.students[0].enrollmentDate = "2026-09-02";
-    invalidEnrollment.manifest.payloadChecksum = await core.sha256Hex(
-      core.canonicalJson(invalidEnrollment.payload),
+    const invalidIdentity = structuredClone(backup);
+    invalidIdentity.payload.students[0].nationalIdentityNumber = "10000000145";
+    invalidIdentity.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidIdentity.payload),
     );
-    let invalidEnrollmentError = "";
+    let invalidIdentityError = "";
     try {
-      await sourceService.parseAndVerifyBackup(invalidEnrollment);
+      await sourceService.parseAndVerifyBackup(invalidIdentity);
     } catch (error) {
-      invalidEnrollmentError =
+      invalidIdentityError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidEnrollmentYear = structuredClone(backup);
+    invalidEnrollmentYear.payload.students[0].enrollmentYear = "20255";
+    invalidEnrollmentYear.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidEnrollmentYear.payload),
+    );
+    let invalidEnrollmentYearError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidEnrollmentYear);
+    } catch (error) {
+      invalidEnrollmentYearError =
         error instanceof Error ? error.message : String(error);
     }
     const invalidSupport = structuredClone(backup);
@@ -379,28 +394,33 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
       restoredStudent: restored.students[0],
       studentCount: verified.manifest.entityCounts.students,
       inserted: restoreReport.inserted,
-      invalidEnrollmentError,
+      invalidIdentityError,
+      invalidEnrollmentYearError,
       invalidSupportError,
     };
   });
 
   const expectedProfile = {
     displayName: "Kurgu Profil Öğrencisi",
+    firstName: "Kurgu Profil",
+    lastName: "Öğrencisi",
     preferredName: "Kurgu",
     birthDate: "2021-03-14",
     optionalCode: "OKUL-MAVI-42",
-    enrollmentDate: "2025-09-01",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe, Almanca",
     interests: "Doğa incelemeleri ve blok oyunları",
     strengths: "Akranlarıyla iş birliği kuruyor",
     supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
-    profileSchemaVersion: 3,
+    profileSchemaVersion: 6,
   };
   expect(result.studentCount).toBe(1);
   expect(result.inserted).toBe(1);
   expect(result.backupStudent).toMatchObject(expectedProfile);
   expect(result.restoredStudent).toMatchObject(expectedProfile);
-  expect(result.invalidEnrollmentError).toContain("kayıt tarihi geçersiz");
+  expect(result.invalidIdentityError).toContain("öğrenci sözleşmesine uymuyor");
+  expect(result.invalidEnrollmentYearError).toContain("öğrenci sözleşmesine uymuyor");
   expect(result.invalidSupportError).toContain(
     "öğretmen desteği notu geçersiz",
   );

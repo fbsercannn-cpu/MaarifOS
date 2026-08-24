@@ -329,6 +329,7 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
     workspace,
     attendance,
     pendingObservationCount,
+    teacherCycle: model.teacherCycle,
   });
   const teacherCycle = createTeacherCyclePresentation(model.teacherCycle, {
     educationalWritesDisabled,
@@ -366,8 +367,14 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
     ...dayClosure.resolvedCarryForwardItems,
   ];
   const focusActivity = controlSummary.plan.item;
+  const referencedDailyCivilDate =
+    model.teacherCycle.daily.status === "chain-mismatch" ||
+    model.teacherCycle.daily.status === "future-only"
+      ? model.teacherCycle.daily.referenceCivilDate ?? null
+      : null;
   const planEntryDisabled =
     focusActivity === null &&
+    referencedDailyCivilDate === null &&
     configuredClassroom !== null &&
     (dataBusy || educationalWritesDisabled);
   const flowBlockCount = workspace.planItems.filter(
@@ -664,6 +671,10 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
           onClick={() => {
             if (focusActivity) {
               actions.onOpenPlanItem(focusActivity);
+              return;
+            }
+            if (referencedDailyCivilDate) {
+              void actions.onOpenWeekDay(referencedDailyCivilDate);
               return;
             }
             if (configuredClassroom) {

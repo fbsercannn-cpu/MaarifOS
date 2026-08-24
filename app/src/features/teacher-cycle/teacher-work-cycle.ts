@@ -6,7 +6,12 @@ import {
 } from "../../core/domain/classroom-scope.ts";
 
 export type TeacherCyclePeriodRelation = "current" | "upcoming" | "past";
-export type TeacherCycleDailyStatus = "missing" | "ready" | "conflict";
+export type TeacherCycleDailyStatus =
+  | "missing"
+  | "ready"
+  | "conflict"
+  | "chain-mismatch"
+  | "future-only";
 
 export interface TeacherCyclePlanPeriod {
   id: string;
@@ -37,6 +42,9 @@ export interface TeacherWorkCycleWorkspace {
     status: TeacherCycleDailyStatus;
     planId: string | null;
     conflictingPlanIds: readonly string[];
+    referencePlanId?: string | null;
+    referenceCivilDate?: string | null;
+    referenceTitle?: string | null;
     title: string;
     activityCount: number;
     completedActivityCount: number;
@@ -163,6 +171,9 @@ export function emptyTeacherWorkCycle(
       status: "missing",
       planId: null,
       conflictingPlanIds: [],
+      referencePlanId: null,
+      referenceCivilDate: null,
+      referenceTitle: null,
       title: "Bugün için plan yok",
       activityCount: 0,
       completedActivityCount: 0,
@@ -224,16 +235,43 @@ export function resolveTeacherWorkCycle(
     "weekly",
     options.civilDate,
   );
-  const dailyRecords = plans
+  const sameDayRecords = plans
     .filter(
       (record) =>
         record.planType === "daily" &&
-        record.civilDate === options.civilDate &&
-        (!weeklyRecord || record.sourceWeeklyPlanId === weeklyRecord.id),
+        record.civilDate === options.civilDate,
     )
     .sort((left, right) => left.id.localeCompare(right.id));
-  const dailyHasConflict = dailyRecords.length > 1;
-  const dailyRecord = dailyRecords.length === 1 ? dailyRecords[0] : null;
+  const dailyHasConflict = sameDayRecords.length > 1;
+  const soleSameDayRecord =
+    sameDayRecords.length === 1 ? sameDayRecords[0] : null;
+  const chainMismatchRecord =
+    soleSameDayRecord &&
+    weeklyRecord &&
+    soleSameDayRecord.sourceWeeklyPlanId !== weeklyRecord.id
+      ? soleSameDayRecord
+      : null;
+  const dailyRecord =
+    soleSameDayRecord && !chainMismatchRecord ? soleSameDayRecord : null;
+  const futureRecord =
+    sameDayRecords.length === 0
+      ? plans
+          .filter(
+            (record) =>
+              record.planType === "daily" &&
+              typeof record.civilDate === "string" &&
+              record.civilDate > options.civilDate,
+          )
+          .sort((left, right) => {
+            const dateOrder = String(left.civilDate).localeCompare(
+              String(right.civilDate),
+            );
+            const originOrder =
+              (left.planOrigin === "teacher-authored" ? 0 : 1) -
+              (right.planOrigin === "teacher-authored" ? 0 : 1);
+            return dateOrder || originOrder || left.id.localeCompare(right.id);
+          })[0] ?? null
+      : null;
   const dailyPlanIds = new Set(dailyRecord ? [dailyRecord.id] : []);
   const dailyActivities = activities.filter(
     (record) =>
@@ -325,13 +363,37 @@ export function resolveTeacherWorkCycle(
         }
       : null,
     daily: {
-      status: dailyHasConflict ? "conflict" : dailyRecord ? "ready" : "missing",
+      status: dailyHasConflict
+        ? "conflict"
+        : chainMismatchRecord
+          ? "chain-mismatch"
+          : dailyRecord
+            ? "ready"
+            : futureRecord
+              ? "future-only"
+              : "missing",
       planId: dailyRecord?.id ?? null,
       conflictingPlanIds: dailyHasConflict
-        ? dailyRecords.map((record) => record.id)
+        ? sameDayRecords.map((record) => record.id)
         : [],
+      referencePlanId:
+        chainMismatchRecord?.id ?? futureRecord?.id ?? null,
+      referenceCivilDate:
+        typeof chainMismatchRecord?.civilDate === "string"
+          ? chainMismatchRecord.civilDate
+          : typeof futureRecord?.civilDate === "string"
+            ? futureRecord.civilDate
+            : null,
+      referenceTitle:
+        chainMismatchRecord
+          ? text(chainMismatchRecord.title, "Günlük plan")
+          : futureRecord
+            ? text(futureRecord.title, "Günlük plan")
+            : null,
       title: dailyHasConflict
         ? "Günlük plan çakışması"
+        : chainMismatchRecord
+          ? "Bugün tarihli plan bağlantı bekliyor"
         : dailyRecord
           ? text(dailyRecord.title, "Günlük plan")
           : "Bugün için plan yok",

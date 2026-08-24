@@ -32,6 +32,22 @@ export interface StandaloneTeacherOwnedPlanExportFile {
   paragraphs: readonly PremiumPlanExportParagraph[];
 }
 
+/**
+ * Öğretmenin bir kez girdiği kurum ve sınıf bilgisini bütün plan çıktılarında
+ * yeniden kullanır. Alanlar isteğe bağlıdır; eski kayıtlar belge üretmeye devam
+ * ederken yeni kurulumlar başlığı eksiksiz doldurabilir.
+ */
+export interface TeacherOwnedPlanDocumentContext {
+  readonly schoolName?: string | null;
+  readonly teacherName?: string | null;
+  readonly classroomName?: string | null;
+  readonly academicYearName?: string | null;
+  readonly ageGroup?: string | null;
+  readonly curriculumProgram?: string | null;
+  /** Standart idare belgesinde kapalıdır; yalnız açık denetim eki isteğinde açılır. */
+  readonly includeAuditAppendix?: boolean;
+}
+
 export type TeacherOwnedPlanDocumentScope =
   | { kind: "combined" }
   | { kind: "monthly"; monthlyPlanId: string }
@@ -45,6 +61,7 @@ export interface StandaloneTeacherOwnedDailyActivityExport {
   readonly startTime: string | null;
   readonly endTime: string | null;
   readonly flowBlockId: string | null;
+  readonly curriculumTargetCodes: readonly string[];
 }
 
 export interface StandaloneTeacherOwnedDailyFlowBlockExport {
@@ -82,6 +99,16 @@ export interface StandaloneTeacherOwnedDailyPlanExport {
   readonly templateSource: TeacherOwnedDailyFlowTemplateSource | null;
   readonly observationIds: readonly string[];
   readonly curriculumLinkIds: readonly string[];
+}
+
+export interface StandaloneTeacherOwnedCalendarEntryExport {
+  readonly id: string;
+  readonly title: string;
+  readonly note: string | null;
+  readonly entryType: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly status: string;
 }
 
 function textField(record: StoredRecord, key: string): string | null {
@@ -237,6 +264,17 @@ export async function loadStandaloneTeacherOwnedDailyPlans(
             );
           }
         }
+        const curriculumTargetCodes = Array.isArray(activity.curriculumTargets)
+          ? activity.curriculumTargets.flatMap((target) => {
+              if (!target || typeof target !== "object" || Array.isArray(target)) {
+                return [];
+              }
+              const referenceCode = (target as Record<string, unknown>).referenceCode;
+              return typeof referenceCode === "string" && referenceCode.trim()
+                ? [referenceCode.trim()]
+                : [];
+            })
+          : [];
         return {
           id: activity.id,
           title: textField(activity, "title") ?? "Başlığı eksik etkinlik",
@@ -244,6 +282,7 @@ export async function loadStandaloneTeacherOwnedDailyPlans(
           startTime: textField(activity, "startTime"),
           endTime: textField(activity, "endTime"),
           flowBlockId,
+          curriculumTargetCodes,
         };
       });
     if (activities.length === 0) {
@@ -302,25 +341,92 @@ export async function loadStandaloneTeacherOwnedDailyPlans(
   });
 }
 
+export async function loadStandaloneTeacherOwnedCalendarEntries(
+  store: LocalDataStore,
+  graph: TeacherOwnedPlanGraph,
+): Promise<StandaloneTeacherOwnedCalendarEntryExport[]> {
+  const snapshot = await store.readSnapshot();
+  return snapshot.calendarEntries
+    .filter((record) =>
+      record.academicYearId === graph.annual.academicYearId &&
+      record.classroomId === graph.annual.classroomId &&
+      typeof record.deletedAt !== "string" &&
+      record.status !== "cancelled" &&
+      typeof record.title === "string" &&
+      record.title.trim().length > 0 &&
+      typeof record.startDate === "string" &&
+      typeof record.endDate === "string"
+    )
+    .map((record) => ({
+      id: record.id,
+      title: String(record.title).trim(),
+      note: textField(record, "note"),
+      entryType: textField(record, "entryType") ?? "activity",
+      startDate: String(record.startDate),
+      endDate: String(record.endDate),
+      status: textField(record, "status") ?? "planned",
+    }))
+    .sort((left, right) =>
+      left.startDate.localeCompare(right.startDate) ||
+      left.title.localeCompare(right.title, "tr-TR"),
+    );
+}
+
 function teacherContentLines(record: TeacherOwnedPlanRecord): string[] {
   const labels: Record<string, string> = {
     narrative: "Öğretmen plan notu",
-    draftStatus: "Taslak durumu",
+    teacherPriority: "Yıllık öncelik",
     flow: "Plan akışı",
     goals: "Amaçlar",
     observations: "Gözlem odağı",
+    tymmTargetCodes: "Seçili TYMM hedefleri",
   };
-  return Object.entries(record.teacherContent).map(([key, value]) => {
+  const hiddenTechnicalKeys = new Set([
+    "draftStatus",
+    "sourceOutlineMonthKey",
+  ]);
+  return Object.entries(record.teacherContent)
+    .filter(([key]) => !hiddenTechnicalKeys.has(key))
+    .map(([key, value]) => {
     const rendered = Array.isArray(value)
       ? value.map((entry) => String(entry)).join(" · ")
       : typeof value === "object" && value !== null
         ? JSON.stringify(value)
         : String(value);
-    const localizedValue = key === "draftStatus" && rendered === "pending-teacher-review"
-      ? "Öğretmen incelemesi bekliyor"
-      : rendered;
-    return `${labels[key] ?? "Öğretmen notu"}: ${localizedValue}`;
+    return `${labels[key] ?? "Öğretmen notu"}: ${rendered}`;
   });
+}
+
+function scopedDocumentHeading(
+  graph: TeacherOwnedPlanGraph,
+  dailyPlans: readonly StandaloneTeacherOwnedDailyPlanExport[],
+  scopeKind: TeacherOwnedPlanDocumentScope["kind"],
+): { title: string; period: string } {
+  const month = graph.months[0]?.monthly;
+  const week = graph.months[0]?.weeks[0];
+  const daily = dailyPlans[0];
+  if (scopeKind === "monthly" && month) {
+    return {
+      title: `Aylık Eğitim Planı · ${month.title}`,
+      period: `${month.periodStart} – ${month.periodEnd} · revizyon ${month.revisionNumber}`,
+    };
+  }
+  if (scopeKind === "weekly" && week) {
+    return {
+      title: `Haftalık Çalışma Akışı · ${week.title}`,
+      period: `${week.periodStart} – ${week.periodEnd} · revizyon ${week.revisionNumber}`,
+    };
+  }
+  if (scopeKind === "daily" && daily) {
+    return {
+      title: `Günlük Eğitim Planı · ${daily.title}`,
+      period: daily.civilDate,
+    };
+  }
+  return {
+    title: graph.annual.title,
+    period: `${graph.annual.periodStart} – ${graph.annual.periodEnd} · revizyon ${graph.annual.revisionNumber}`,
+  };
 }
 
 const TEACHER_DECISION_LABELS = {
@@ -349,33 +455,206 @@ const FLOW_KIND_LABELS: Record<string, string> = {
   closing: "Gün sonu kapanışı",
 };
 
+const CALENDAR_ENTRY_TYPE_LABELS: Record<string, string> = {
+  general_note: "Okul notu",
+  parent_meeting: "Veli buluşması",
+  fruit_day: "Meyve günü",
+  activity: "Okul etkinliği",
+  adaptation_day: "Uyum günü",
+  no_school: "Okulun kapalı olduğu gün",
+  official_marker: "Resmî takvim işareti",
+};
+
 const FLOW_STATUS_LABELS: Record<string, string> = {
   planned: "Planlandı",
   optional: "İsteğe bağlı",
   skipped: "Bu gün uygulanmayacak",
 };
 
+const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/giu;
+
+function cleanDocumentContextValue(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function displayAgeGroup(value: string | null | undefined): string | null {
+  const ageGroup = cleanDocumentContextValue(value);
+  if (!ageGroup) return null;
+  return /\bay\b/iu.test(ageGroup) ? ageGroup : `${ageGroup} ay`;
+}
+
+function ageGroupFromPack(
+  pack: PremiumContentPack,
+  context: TeacherOwnedPlanDocumentContext,
+): string {
+  const configured = displayAgeGroup(context.ageGroup);
+  if (configured) return configured;
+  const compactSku = pack.sku.replaceAll(/[^0-9]/gu, "");
+  if (compactSku.includes("3648")) return "36–48 ay";
+  if (compactSku.includes("4860")) return "48–60 ay";
+  if (compactSku.includes("6072")) return "60–72 ay";
+  return "Sınıf yaş grubu";
+}
+
+function curriculumProgramFromContext(
+  context: TeacherOwnedPlanDocumentContext,
+): string {
+  const configured = cleanDocumentContextValue(context.curriculumProgram);
+  if (!configured) return "Türkiye Yüzyılı Maarif Modeli";
+  return configured.toLocaleLowerCase("tr-TR") === "tymm"
+    ? "Türkiye Yüzyılı Maarif Modeli"
+    : configured;
+}
+
+export function teacherOwnedPlanDocumentBasisLabel(
+  scopeKind: TeacherOwnedPlanDocumentScope["kind"],
+  hasVerifiedTymmTargets = scopeKind === "daily",
+): "TYMM resmî plan temeli" | "MaarifOS destek belgesi" {
+  return (scopeKind === "daily" || scopeKind === "monthly") && hasVerifiedTymmTargets
+    ? "TYMM resmî plan temeli"
+    : "MaarifOS destek belgesi";
+}
+
+function documentContextParagraphs(
+  context: TeacherOwnedPlanDocumentContext,
+  scopeKind: TeacherOwnedPlanDocumentScope["kind"],
+  fallback?: {
+    readonly academicYearName?: string | null;
+    readonly ageGroup?: string | null;
+    readonly curriculumProgram?: string | null;
+  },
+  hasVerifiedTymmTargets = false,
+): PremiumPlanExportParagraph[] {
+  const schoolName = cleanDocumentContextValue(context.schoolName);
+  const teacherName = cleanDocumentContextValue(context.teacherName);
+  const classroomName = cleanDocumentContextValue(context.classroomName);
+  const academicYearName = cleanDocumentContextValue(context.academicYearName)
+    ?? cleanDocumentContextValue(fallback?.academicYearName);
+  const ageGroup = displayAgeGroup(context.ageGroup)
+    ?? displayAgeGroup(fallback?.ageGroup);
+  const curriculumProgram = cleanDocumentContextValue(context.curriculumProgram)
+    ?? cleanDocumentContextValue(fallback?.curriculumProgram)
+    ?? "Türkiye Yüzyılı Maarif Modeli";
+  const lines = [
+    schoolName ? `Okul: ${schoolName}` : null,
+    classroomName ? `Sınıf: ${classroomName}` : null,
+    teacherName ? `Öğretmen: ${teacherName}` : null,
+    academicYearName ? `Eğitim yılı: ${academicYearName}` : null,
+    ageGroup ? `Yaş grubu: ${ageGroup}` : null,
+    `Program: ${curriculumProgram}`,
+  ].filter((line): line is string => line !== null);
+  return [
+    {
+      text: teacherOwnedPlanDocumentBasisLabel(
+        scopeKind,
+        hasVerifiedTymmTargets,
+      ),
+      style: "meta",
+    },
+    ...lines.map((text) => ({ text, style: "meta" as const })),
+  ];
+}
+
+function signatureParagraphs(
+  context: TeacherOwnedPlanDocumentContext,
+): PremiumPlanExportParagraph[] {
+  const teacherName = cleanDocumentContextValue(context.teacherName);
+  return [
+    { text: "Öğretmen imzası", style: "heading2", keepWithNext: true },
+    {
+      text: `Adı soyadı: ${teacherName ?? "____________________________"}`,
+      style: "body",
+    },
+    { text: "İmza: ____________________________", style: "body" },
+  ];
+}
+
+function stripTechnicalIdentifiers(
+  paragraphs: readonly PremiumPlanExportParagraph[],
+): PremiumPlanExportParagraph[] {
+  const hiddenTechnicalPrefixes = [
+    "İçerik paketi:",
+    "Haftalık kayıtlar:",
+    "Plan kayıt kimliği:",
+    "Kaynak şablon:",
+  ];
+  return paragraphs
+    .filter((paragraph) =>
+      !hiddenTechnicalPrefixes.some((prefix) => paragraph.text.startsWith(prefix)) &&
+      !paragraph.text.includes("Kayıt zinciri:"),
+    )
+    .map((paragraph) => ({
+      ...paragraph,
+      text: paragraph.text.replaceAll(UUID_PATTERN, "teknik kayıt"),
+    }));
+}
+
 export function buildStandaloneTeacherOwnedPlanParagraphs(
   graph: TeacherOwnedPlanGraph,
   dailyPlans: readonly StandaloneTeacherOwnedDailyPlanExport[] = [],
+  context: TeacherOwnedPlanDocumentContext = {},
+  scopeKind: TeacherOwnedPlanDocumentScope["kind"] = "combined",
+  calendarEntries: readonly StandaloneTeacherOwnedCalendarEntryExport[] = [],
 ): PremiumPlanExportParagraph[] {
   const auditLines: string[] = [`Yıllık plan: ${graph.annual.id}`];
+  const heading = scopedDocumentHeading(graph, dailyPlans, scopeKind);
+  const structuralTargetCodes = Array.from(new Set([
+    ...graph.months.flatMap(({ monthly }) => {
+      const value = monthly.teacherContent.tymmTargetCodes;
+      return Array.isArray(value)
+        ? value.filter((code): code is string => typeof code === "string" && code.trim().length > 0)
+        : [];
+    }),
+    ...dailyPlans.flatMap((daily) =>
+      daily.activities.flatMap((activity) => activity.curriculumTargetCodes),
+    ),
+  ])).sort((left, right) => left.localeCompare(right, "tr-TR"));
   const paragraphs: PremiumPlanExportParagraph[] = [
     { text: "MAARİFOS · ÖĞRETMEN PLAN ZİNCİRİ", style: "meta" },
-    { text: graph.annual.title, style: "title" },
+    { text: heading.title, style: "title" },
     {
-      text: `${graph.annual.periodStart} – ${graph.annual.periodEnd} · revizyon ${graph.annual.revisionNumber}`,
+      text: heading.period,
       style: "meta",
     },
+    ...documentContextParagraphs(
+      context,
+      scopeKind,
+      undefined,
+      structuralTargetCodes.length > 0,
+    ),
     ...teacherContentLines(graph.annual).map((text) => ({
       text,
       style: "body" as const,
     })),
   ];
-  for (const { monthly, weeks } of graph.months) {
+  if (calendarEntries.length > 0) {
+    paragraphs.push(
+      {
+        text: "Okulun ek etkinlikleri",
+        style: "heading1",
+        keepWithNext: true,
+      },
+      ...calendarEntries.map((entry) => {
+        const dateLabel = entry.startDate === entry.endDate
+          ? entry.startDate
+          : `${entry.startDate} – ${entry.endDate}`;
+        const typeLabel = CALENDAR_ENTRY_TYPE_LABELS[entry.entryType]
+          ?? "Okul etkinliği";
+        return {
+          text: `${dateLabel} · ${typeLabel}: ${entry.title}${entry.note ? ` · ${entry.note}` : ""}`,
+          style: "bullet" as const,
+        };
+      }),
+    );
+  }
+  for (const [monthIndex, { monthly, weeks }] of graph.months.entries()) {
     auditLines.push(`Aylık plan: ${monthly.id}`);
     paragraphs.push(
-      { text: monthly.title, style: "heading1", pageBreakBefore: true },
+      {
+        text: monthly.title,
+        style: "heading1",
+        pageBreakBefore: scopeKind === "combined" || monthIndex > 0,
+      },
       {
         text: `${monthly.periodStart} – ${monthly.periodEnd} · revizyon ${monthly.revisionNumber}`,
         style: "meta",
@@ -559,6 +838,15 @@ export function buildStandaloneTeacherOwnedPlanParagraphs(
           },
           { text: `Durum: ${daily.status}`, style: "meta" },
         );
+        const dailyTargetCodes = Array.from(new Set(
+          daily.activities.flatMap((activity) => activity.curriculumTargetCodes),
+        )).sort((left, right) => left.localeCompare(right, "tr-TR"));
+        if (dailyTargetCodes.length > 0) {
+          paragraphs.push({
+            text: `Seçili TYMM hedefleri: ${dailyTargetCodes.join(" · ")}`,
+            style: "meta",
+          });
+        }
         const unlinkedActivities = daily.activities.filter(
           (activity) => activity.flowBlockId === null,
         );
@@ -616,21 +904,25 @@ export function buildStandaloneTeacherOwnedPlanParagraphs(
       }
     }
   }
-  paragraphs.push(
-    {
-      text: "Denetim eki · kayıt ve kanıt kimlikleri",
-      style: "heading1",
-      pageBreakBefore: true,
-      keepWithNext: true,
-    },
-    ...auditLines.map((text) => ({ text, style: "meta" as const })),
-  );
+  if (context.includeAuditAppendix) {
+    paragraphs.push(
+      {
+        text: "Denetim eki · kayıt ve kanıt kimlikleri",
+        style: "heading1",
+        pageBreakBefore: true,
+        keepWithNext: true,
+      },
+      ...auditLines.map((text) => ({ text, style: "meta" as const })),
+    );
+  }
   paragraphs.push({
-    text: "Bu belge öğretmenin cihazındaki premiumdan bağımsız kalıcı kayıt zincirinden hazırlanmıştır. Başlangıç akış önerileri sistem tarafından sunulabilir; belgeye yalnız öğretmenin açıkça gözden geçirip onayladığı revizyon alınır ve sağlayıcı verisiyle sessizce tamamlanmaz.",
+    text: "Bu belge öğretmenin cihazındaki kalıcı plan zincirinden, şema, dönem, kaynak ve plan grafiği bütünlüğü doğrulanarak hazırlanmıştır; eksik plan alanı uydurulmamıştır.",
     style: "meta",
-    pageBreakBefore: true,
   });
-  return paragraphs;
+  paragraphs.push(...signatureParagraphs(context));
+  return context.includeAuditAppendix
+    ? paragraphs
+    : stripTechnicalIdentifiers(paragraphs);
 }
 
 function scopedStandalonePlanSource(
@@ -689,14 +981,47 @@ function scopedStandalonePlanSource(
   };
 }
 
+function calendarEntriesForScope(
+  entries: readonly StandaloneTeacherOwnedCalendarEntryExport[],
+  source: ReturnType<typeof scopedStandalonePlanSource>,
+  scope: TeacherOwnedPlanDocumentScope,
+): StandaloneTeacherOwnedCalendarEntryExport[] {
+  let periodStart = source.graph.annual.periodStart;
+  let periodEnd = source.graph.annual.periodEnd;
+  if (scope.kind === "monthly") {
+    periodStart = source.graph.months[0].monthly.periodStart;
+    periodEnd = source.graph.months[0].monthly.periodEnd;
+  } else if (scope.kind === "weekly") {
+    periodStart = source.graph.months[0].weeks[0].periodStart;
+    periodEnd = source.graph.months[0].weeks[0].periodEnd;
+  } else if (scope.kind === "daily") {
+    const daily = source.dailyPlans[0];
+    periodStart = daily.civilDate;
+    periodEnd = daily.civilDate;
+  }
+  return entries.filter((entry) =>
+    entry.startDate <= periodEnd && entry.endDate >= periodStart,
+  );
+}
+
 export async function buildStandaloneTeacherOwnedPlanPreview(
   graph: TeacherOwnedPlanGraph,
   store: LocalDataStore,
   scope: TeacherOwnedPlanDocumentScope,
+  context: TeacherOwnedPlanDocumentContext = {},
 ): Promise<PremiumPlanExportParagraph[]> {
-  const dailyPlans = await loadStandaloneTeacherOwnedDailyPlans(store, graph);
+  const [dailyPlans, calendarEntries] = await Promise.all([
+    loadStandaloneTeacherOwnedDailyPlans(store, graph),
+    loadStandaloneTeacherOwnedCalendarEntries(store, graph),
+  ]);
   const source = scopedStandalonePlanSource(graph, dailyPlans, scope);
-  return buildStandaloneTeacherOwnedPlanParagraphs(source.graph, source.dailyPlans);
+  return buildStandaloneTeacherOwnedPlanParagraphs(
+    source.graph,
+    source.dailyPlans,
+    { ...context, includeAuditAppendix: context.includeAuditAppendix ?? false },
+    scope.kind,
+    calendarEntriesForScope(calendarEntries, source, scope),
+  );
 }
 
 export async function generateStandaloneTeacherOwnedPlanExportFile(
@@ -704,22 +1029,29 @@ export async function generateStandaloneTeacherOwnedPlanExportFile(
   store: LocalDataStore,
   format: PremiumPlanExportFormat,
   scope: TeacherOwnedPlanDocumentScope = { kind: "combined" },
+  context: TeacherOwnedPlanDocumentContext = {},
 ): Promise<StandaloneTeacherOwnedPlanExportFile> {
   if (format !== "pdf" && format !== "word") {
     throw new Error("Dışa aktarma biçimi PDF veya Word olmalıdır.");
   }
-  const dailyPlans = await loadStandaloneTeacherOwnedDailyPlans(store, graph);
+  const [dailyPlans, calendarEntries] = await Promise.all([
+    loadStandaloneTeacherOwnedDailyPlans(store, graph),
+    loadStandaloneTeacherOwnedCalendarEntries(store, graph),
+  ]);
   const source = scopedStandalonePlanSource(graph, dailyPlans, scope);
   const paragraphs = buildStandaloneTeacherOwnedPlanParagraphs(
     source.graph,
     source.dailyPlans,
+    { ...context, includeAuditAppendix: context.includeAuditAppendix ?? false },
+    scope.kind,
+    calendarEntriesForScope(calendarEntries, source, scope),
   );
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
     : await createPremiumPlanPdf(paragraphs);
   return {
     format,
-    fileName: `MaarifOS_Ogretmen_Plani_${source.fileLabel}_${graph.annual.id.slice(0, 8)}.${format === "pdf" ? "pdf" : "docx"}`,
+    fileName: `MaarifOS_Ogretmen_Plani_${source.fileLabel}.${format === "pdf" ? "pdf" : "docx"}`,
     mimeType:
       format === "pdf"
         ? "application/pdf"
@@ -753,6 +1085,7 @@ export function prepareTeacherOwnedPlanExportDocument(
   pack: PremiumContentPack,
   source: InstalledPremiumPlanExportSource,
   format: PremiumPlanExportFormat,
+  context: TeacherOwnedPlanDocumentContext = {},
 ): PremiumPlanExportDocument {
   if (format !== "pdf" && format !== "word") {
     throw new Error("Dışa aktarma biçimi PDF veya Word olmalıdır.");
@@ -774,9 +1107,10 @@ export function prepareTeacherOwnedPlanExportDocument(
     format,
     fileName: `MaarifOS_Ogretmen_Plan_Zinciri_${source.monthlyPlan.sourceSnapshot.monthKey}.${extension}`,
     title: monthlyPlan.title,
-    programLabel: "TYMM 2024",
-    ageLabel: "60–72 ay",
-    academicRelease: pack.academicRelease,
+    programLabel: curriculumProgramFromContext(context) as "TYMM 2024",
+    ageLabel: ageGroupFromPack(pack, context) as "60–72 ay",
+    academicRelease: cleanDocumentContextValue(context.academicYearName)
+      ?? pack.academicRelease,
     contentPackId: source.contentPackSnapshot.id,
     contentPackVersion: source.contentPackSnapshot.version,
     valuesMappingStatus: source.valuesMappingStatus,
@@ -793,7 +1127,7 @@ export function prepareTeacherOwnedPlanExportDocument(
       structuredClone(week.activitySnapshots),
     ),
     teacherReviewNotice:
-      "Bu temel belge, öğretmenin cihazındaki kalıcı plan zincirinden hazırlanmıştır. Premium sağlayıcı kütüphanesine erişim veya etkin entitlement gerektirmez; yeni sağlayıcı içeriği üretmez.",
+      "Bu belge, öğretmenin cihazındaki kalıcı plan zincirinden hazırlanmıştır; kayıtlı öğretmen içeriği değiştirilmez ve eksik alan üretilmez.",
   };
 }
 
@@ -801,9 +1135,22 @@ export async function generateTeacherOwnedPlanExportFile(
   pack: PremiumContentPack,
   source: InstalledPremiumPlanExportSource,
   format: PremiumPlanExportFormat,
+  context: TeacherOwnedPlanDocumentContext = {},
 ): Promise<PremiumPlanExportFile> {
-  const document = prepareTeacherOwnedPlanExportDocument(pack, source, format);
-  const paragraphs = buildPremiumPlanExportParagraphs(document);
+  const document = prepareTeacherOwnedPlanExportDocument(pack, source, format, context);
+  const generatedParagraphs = buildPremiumPlanExportParagraphs(document);
+  const contextHeader = documentContextParagraphs(context, "combined", {
+    academicYearName: document.academicRelease,
+    ageGroup: document.ageLabel,
+    curriculumProgram: document.programLabel,
+  });
+  const paragraphs = context.includeAuditAppendix
+    ? [...contextHeader, ...generatedParagraphs, ...signatureParagraphs(context)]
+    : stripTechnicalIdentifiers([
+        ...contextHeader,
+        ...generatedParagraphs,
+        ...signatureParagraphs(context),
+      ]);
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
     : await createPremiumPlanPdf(paragraphs);

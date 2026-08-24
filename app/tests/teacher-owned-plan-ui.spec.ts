@@ -5,20 +5,17 @@ test.describe.configure({ timeout: 60_000 });
 test.use({ viewport: { width: 390, height: 844 } });
 
 async function configureActiveClassroom(page: import("@playwright/test").Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Kurgu İlkokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Emine Akış");
   await setup.getByLabel("Sınıf adı").fill("Kurgu Plan Zinciri Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup.locator("details.classroom-calendar-details > summary").click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-08-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
-  await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByLabel("Program katalog kimliği").fill("TEACHER-PLAN-UI");
-  await setup.getByLabel("Kaynak sürümü").fill("2026-test");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("full_day");
-  await setup.getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" }).click();
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
@@ -26,9 +23,8 @@ async function openTeacherPlanWorkspace(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Planlar", exact: true })).toBeVisible();
   await page
-    .getByRole("region", { name: "Yıl → Ay → Hafta → Gün" })
-    .getByRole("button")
-    .first()
+    .getByRole("region", { name: "Neyi hazırlayacaksınız?" })
+    .getByRole("button", { name: /Yıllık planlama panosu/i })
     .click();
   const dialog = page.getByRole("dialog", { name: "Kayıtlı öğretmen planı" });
   await expect(dialog).toBeVisible();
@@ -42,7 +38,8 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   await configureActiveClassroom(page);
   let dialog = await openTeacherPlanWorkspace(page);
 
-  await expect(dialog.getByRole("heading", { name: "Dört kısa kararla başlayın" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "TYMM başlangıç öneriniz hazır" })).toBeVisible();
+  await dialog.getByText("Başlangıç metinlerini düzenle", { exact: true }).click();
   await dialog
     .getByLabel("Bu yıl sınıfınız için en önemli öncelik nedir?")
     .fill("Her çocuğun güvenli katılımını güçlendirmek");
@@ -75,23 +72,35 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   await expect(dialog).toContainText("önceki sürüm korunarak kaydedildi");
   await expect(dialog).toContainText("revizyon 2");
 
-  await dialog.getByLabel("Belge kapsamı").selectOption("combined");
-  await dialog.getByRole("button", { name: "Belgeyi önizle" }).click();
-  await dialog
-    .getByLabel(
-      "Bu önizlemenin seçtiğim kapsamı ve güncel plan revizyonunu yansıttığını onaylıyorum.",
-    )
-    .check();
+  const documentCenter = dialog.locator(
+    'section[aria-labelledby="teacher-plan-export-title"]',
+  );
+  await documentCenter.getByLabel("Belge kapsamı").selectOption("combined");
+  await expect(documentCenter.getByTestId("teacher-owned-document-basis")).toHaveText(
+    "MaarifOS destek belgesi",
+  );
+  await expect(documentCenter.getByRole("checkbox")).toHaveCount(0);
   const downloadPromise = page.waitForEvent("download");
-  await dialog.getByRole("button", { name: "Word indir" }).click();
+  await documentCenter.getByRole("button", { name: "Word hazırla" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(
-    /^MaarifOS_Ogretmen_Plani_Birlesik_[0-9a-f]{8}\.docx$/,
+    /^MaarifOS_Ogretmen_Plani_Birlesik\.docx$/,
   );
   const downloadPath = await download.path();
   expect(downloadPath).not.toBeNull();
   const bytes = await readFile(downloadPath!);
   expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
+
+  const pdfDownloadPromise = page.waitForEvent("download");
+  await documentCenter.getByRole("button", { name: "PDF hazırla" }).click();
+  const pdfDownload = await pdfDownloadPromise;
+  expect(pdfDownload.suggestedFilename()).toBe(
+    "MaarifOS_Ogretmen_Plani_Birlesik.pdf",
+  );
+  const pdfPath = await pdfDownload.path();
+  expect(pdfPath).not.toBeNull();
+  const pdfBytes = await readFile(pdfPath!);
+  expect(pdfBytes.subarray(0, 4).toString("ascii")).toBe("%PDF");
 
   await dialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
   await page.reload({ waitUntil: "networkidle" });

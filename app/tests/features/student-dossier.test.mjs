@@ -115,9 +115,18 @@ function dossierStore() {
         name: "Ayla Kurgu",
         phone: "+905321112233",
         isPrimary: true,
+        isEmergencyContact: true,
+        isAuthorizedPickup: true,
       },
     ],
-    profileSchemaVersion: 5,
+    careDetails: {
+      allergies: "Fındık alerjisi",
+      dietaryNeeds: "Laktozsuz beslenme",
+      medicationNotes: "Veli yazılı talimatı dosyada",
+      emergencyNotes: "Önce anne aranır",
+      homeAddress: "Kurgu Mahallesi 12, Denizli",
+    },
+    profileSchemaVersion: 7,
     academicYearId,
     classroomId,
     active: true,
@@ -136,7 +145,7 @@ function dossierStore() {
     updatedAt: "2026-09-01T06:00:00.000Z",
     civilDate: "2026-09-01",
     deletedAt: null,
-    schemaVersion: 5,
+    schemaVersion: 7,
   });
   snapshot.attendanceRecords.push({
     id: "00000000-0000-4000-8000-000000000737",
@@ -758,6 +767,8 @@ test("haricî AI alias çıktısı seçili çocuk, akran, yakın ve telefon vary
     aiDossier.text,
     /\(0532\) 111-22-33|0532–111–22–33|０５３２‑１１１‑２２‑３３|٠٥٣٢·١١١·٢٢·٣٣|05321112233/u,
   );
+  assert.doesNotMatch(aiDossier.text, /Fındık alerjisi/);
+  assert.doesNotMatch(aiDossier.text, /Kurgu Mahallesi/);
 
   const { dossier: normalFile } = await createStudentDossier(store, {
     studentId,
@@ -777,7 +788,13 @@ test("haricî AI alias çıktısı seçili çocuk, akran, yakın ve telefon vary
   assert.match(normalFile.text, /０５３２‑１１１‑２２‑３３/);
   assert.match(normalFile.text, /٠٥٣٢·١١١·٢٢·٣٣/);
   assert.match(normalFile.text, /05321112233/);
-  assert.match(normalFile.text, /Anne · Ayla Kurgu: 0532 111 22 33/);
+  assert.match(
+    normalFile.text,
+    /Anne · Ayla Kurgu: 0532 111 22 33 \(öncelikli\) \(acil iletişim\) \(teslim yetkili\)/,
+  );
+  assert.match(normalFile.text, /SAĞLIK VE GÜVENLİK BİLGİLERİ/);
+  assert.match(normalFile.text, /Bilinen alerjiler: Fındık alerjisi/);
+  assert.match(normalFile.text, /Ev adresi: Kurgu Mahallesi 12, Denizli/);
 });
 
 test("haricî AI redaksiyon sonrası yasak kimlik kalırsa export paketi yazmadan fail-closed durur", async () => {

@@ -14,6 +14,10 @@ import {
 } from "../../core/domain/classroom.ts";
 import { createEmptySnapshot, type StoredRecord } from "../../core/domain/model.ts";
 import {
+  assertPedagogicalPlanProvenance,
+  type PedagogicalPlanProvenance,
+} from "../../core/domain/pedagogical-plan-provenance.ts";
+import {
   isTeacherOwnedPlanRecord,
   type TeacherOwnedWeeklyPlan,
 } from "../../core/domain/teacher-owned-plan.ts";
@@ -396,6 +400,7 @@ export async function createPlanWithActivity(
     teacherOwnedDailyFlowBlocks?: readonly TeacherOwnedDailyFlowBlockDraft[];
     teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
     teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
+    pedagogicalProvenance?: PedagogicalPlanProvenance;
     premiumAlternativeActivated?: boolean;
     initialActivityStatus?: "planned" | "in_progress";
     now?: Date;
@@ -442,6 +447,12 @@ export async function createPlanWithActivity(
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
   const timestamp = now.toISOString();
+  if (input.pedagogicalProvenance) {
+    assertPedagogicalPlanProvenance(input.pedagogicalProvenance);
+    if (input.pedagogicalProvenance.civilDate !== input.civilDate) {
+      throw new Error("Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor.");
+    }
+  }
   let result: PlanActivityResult | null = null;
 
   await store.transaction(
@@ -822,6 +833,13 @@ export async function createPlanWithActivity(
               teacherOwnedDailyFlow,
             }
           : {}),
+        ...(input.pedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                input.pedagogicalProvenance,
+              ),
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -871,6 +889,13 @@ export async function createPlanWithActivity(
               sourceMonthlyPlanId: teacherOwnedLineage.monthlyPlanId,
               sourceWeeklyPlanId: teacherOwnedLineage.weeklyPlanId,
               teacherOwnedFlowBlockId,
+            }
+          : {}),
+        ...(input.pedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                input.pedagogicalProvenance,
+              ),
             }
           : {}),
         academicYearId: scope.academicYearId,

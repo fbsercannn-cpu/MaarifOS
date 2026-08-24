@@ -1,0 +1,46 @@
+.student-quick-entry-status {
+  margin: 2px 0 0;
+  padding: 9px 11px;
+  color: #315342;
+  background: var(--maarif-green-soft);
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.student-quick-entry-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.roster-add-form .student-profile-form-grid > label:last-child {
+  grid-column: 1 / -1;
+}
+
+.student-quick-entry-close {
+  min-height: 44px;
+  padding: 10px 14px;
+  color: var(--maarif-navy);
+  background: var(--maarif-white);
+  border: 1px solid var(--maarif-line);
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 760;
+}
+
+.student-quick-entry-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.student-quick-entry-close:focus-visible {
+  outline: 3px solid rgba(11, 118, 110, 0.22);
+  outline-offset: 2px;
+}
+
+@media (max-width: 370px) {
+  .roster-add-form .student-profile-form-grid > label:last-child {
+    grid-column: auto;
+  }
+}

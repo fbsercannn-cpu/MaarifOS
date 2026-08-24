@@ -9,6 +9,14 @@ export interface ClassroomStudentViewModel {
   name: string;
   preferredName?: string;
   birthDate?: string;
+  optionalCode?: string;
+  nationalIdentityNumber?: string;
+  contacts?: readonly {
+    phone: string;
+  }[];
+  careDetails?: {
+    allergies?: string;
+  };
   profilePhotoDataUrl?: string;
   status: AttendanceStatus;
   attendanceMarked?: boolean;
@@ -79,6 +87,19 @@ export function classroomRosterStatus(
   student: ClassroomStudentViewModel,
 ): ClassroomRosterStatus {
   return student.attendanceMarked === false ? "unmarked" : student.status;
+}
+
+export function classroomStudentProfileMissingFields(
+  student: ClassroomStudentViewModel,
+): string[] {
+  const missing: string[] = [];
+  if (!student.birthDate) missing.push("doğum tarihi");
+  if (!student.optionalCode?.trim()) missing.push("öğrenci no");
+  if (!student.nationalIdentityNumber?.trim()) missing.push("T.C. kimlik");
+  if (!student.contacts?.some((contact) => contact.phone.trim())) {
+    missing.push("veli iletişimi");
+  }
+  return missing;
 }
 
 export function classroomScreenDescription(

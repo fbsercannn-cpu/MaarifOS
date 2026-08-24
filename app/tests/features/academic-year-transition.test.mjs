@@ -211,6 +211,104 @@ test("yeni eğitim yılı eski kapsamı bozmadan arşivler ve seçili öğrenciy
   assert.equal(snapshot.observations[0].classroomId, oldClassroom);
 });
 
+test("aynı dönemdeki EÇE sınıfını arşivleyip yeni TYMM sınıfı oluşturur", async () => {
+  const store = transitionStore();
+  const currentClassroom = store.snapshot.classrooms[0];
+  currentClassroom.curriculumProgram =
+    "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı";
+  currentClassroom.curriculumProfileSnapshot = {
+    framework: "meb_2024",
+    programLabel: "Millî Eğitim Bakanlığı 2024 Okul Öncesi Eğitim Programı",
+    catalogId: "meb-okul-oncesi-egitim-programi-2024-partial",
+    sourceVersion: "2024",
+    referenceOrigin: "official-catalog",
+    officialCatalogVerified: true,
+  };
+  store.snapshot.plans.push({
+    id: "00000000-0000-4000-8000-000000000718",
+    academicYearId: oldYear,
+    classroomId: oldClassroom,
+    title: "Eski EÇE planı",
+    createdAt: "2026-04-01T08:00:00.000Z",
+    updatedAt: "2026-04-01T08:00:00.000Z",
+    civilDate: "2026-04-01",
+    deletedAt: null,
+    schemaVersion: 1,
+  });
+
+  const context = await transitionAcademicYearConfiguration(store, {
+    academicYear: {
+      id: newYear,
+      name: "2025–2026 Eğitim Yılı",
+      startDate: "2025-09-01",
+      endDate: "2026-08-31",
+    },
+    classroom: {
+      id: newClassroom,
+      name: "Kurgu Sınıfı",
+      ageGroup: "60–72 ay",
+      curriculumProgram: "Türkiye Yüzyılı Maarif Modeli",
+      curriculumProfile: {
+        framework: "tymm",
+        programLabel: "Türkiye Yüzyılı Maarif Modeli",
+        catalogId: "meb-tymm-okul-oncesi-2024",
+        sourceVersion: "2024",
+        referenceOrigin: "official-catalog",
+        officialCatalogVerified: true,
+      },
+    },
+    schedule: {
+      kind: "morning",
+      startTime: "08:30",
+      endTime: "12:30",
+    },
+    carryStudentIds: [carriedStudent],
+    closedOn: "2026-08-21",
+    transitionKind: "same-period-curriculum",
+    now: new Date("2026-08-21T11:00:00.000Z"),
+  });
+
+  assert.equal(context.status, "configured");
+  assert.equal(context.academicYearId, newYear);
+  assert.equal(context.academicYearStart, "2025-09-01");
+  assert.equal(context.curriculumProfile?.framework, "tymm");
+  const snapshot = await store.readSnapshot();
+  assert.equal(
+    snapshot.academicYears.find((record) => record.id === oldYear)?.status,
+    "archived",
+  );
+  assert.equal(
+    snapshot.classrooms.find((record) => record.id === oldClassroom)?.status,
+    "archived",
+  );
+  assert.equal(
+    snapshot.plans.find((record) => record.title === "Eski EÇE planı")
+      ?.academicYearId,
+    oldYear,
+  );
+  assert.equal(snapshot.observations[0].academicYearId, oldYear);
+  const carried = snapshot.students.find(
+    (record) => record.id === carriedStudent,
+  );
+  assert.equal(carried.enrollments[0].endedOn, "2026-08-21");
+  assert.equal(carried.enrollments[1].startedOn, "2026-08-21");
+  assert.equal(
+    snapshot.auditLogs.at(-1)?.action,
+    "curriculum-profile-transitioned",
+  );
+});
+
+test("aynı dönem program geçişi tarih veya TYMM profili değişikse reddedilir", async () => {
+  const store = transitionStore();
+  await assert.rejects(
+    transitionAcademicYearConfiguration(store, {
+      ...transitionInput,
+      transitionKind: "same-period-curriculum",
+    }),
+    /eğitim yılı adı ve tarihleri değiştirilemez/u,
+  );
+});
+
 test("geçiş yazma hatasında eski eğitim yılı ve öğrenciler atomik korunur", async () => {
   const store = transitionStore("students");
   const before = await store.readSnapshot();

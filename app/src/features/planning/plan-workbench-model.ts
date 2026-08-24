@@ -146,6 +146,34 @@ export function createPlanWorkbenchPresentation(
         actionLabel: "Çakışmayı incele",
         tone: "attention",
       }
+    : workspace.daily.status === "chain-mismatch"
+      ? {
+          id: "daily",
+          label: "Gün",
+          title: "Bugün tarihli plan bağlantı bekliyor",
+          detail: "Kayıt korundu; seçili haftalık planla bağı uyuşmadığı için bugünün akışına alınmadı.",
+          meta: `${civilDateLabel(workspace.civilDate)} · Bağ incelemesi`,
+          actionLabel: "Bağı takvimde incele",
+          tone: "attention",
+        }
+    : workspace.daily.status === "future-only"
+      ? {
+          id: "daily",
+          label: "Gün",
+          title: `Bugün plan yok; sıradaki plan ${
+            workspace.daily.referenceCivilDate
+              ? civilDateLabel(workspace.daily.referenceCivilDate)
+              : "yaklaşan tarihte"
+          }`,
+          detail: workspace.daily.referenceTitle
+            ? `Yaklaşan kayıt: ${workspace.daily.referenceTitle}`
+            : "Yaklaşan günlük plan takvimde kayıtlı.",
+          meta: workspace.daily.referenceCivilDate
+            ? civilDateLabel(workspace.daily.referenceCivilDate)
+            : civilDateLabel(workspace.civilDate),
+          actionLabel: "Yaklaşan planı aç",
+          tone: "attention",
+        }
     : workspace.daily.planId
     ? {
         id: "daily",

@@ -311,7 +311,8 @@ test("üretim service worker'ı gelecek planı çevrimdışı reload sonrası In
   await expect(page.getByText("Çevrimdışı Kurgu Sınıfı", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.onLine)).toBe(false);
 
-  await page.getByRole("button", { name: "Sınıf takvimini aç" }).click();
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /^Okul etkinliği ekle/ }).click();
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await calendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
   const planCard = calendar.getByTestId("calendar-scheduled-plan");

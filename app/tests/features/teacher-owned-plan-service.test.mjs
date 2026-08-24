@@ -13,7 +13,10 @@ import {
   loadTeacherOwnedPlanStarterDraft,
   reviseTeacherOwnedPlan,
 } from "../../src/features/planning/teacher-owned-plan-service.ts";
-import { buildTeacherFullYearMonthDrafts } from "../../src/features/planning/teacher-year-outline.ts";
+import {
+  buildNeutralTeacherYearOutline,
+  buildTeacherFullYearMonthDrafts,
+} from "../../src/features/planning/teacher-year-outline.ts";
 
 class MemoryStore {
   constructor(snapshot = createEmptySnapshot()) {
@@ -271,6 +274,30 @@ test("Eylül–Haziran omurgası 10 ayı haftalara böler ve mevcut grafa eksik 
     /ikinci kez eklenemez/,
   );
   assert.deepEqual((await store.readSnapshot()).plans, before);
+});
+
+test("nötr eğitim yılı iskeleti sağlayıcı yaş bandından tema uydurmadan dönem aylarını üretir", () => {
+  const months = buildNeutralTeacherYearOutline({
+    annualPeriodStart: "2026-09-07",
+    annualPeriodEnd: "2027-06-25",
+  });
+  assert.equal(months.length, 10);
+  assert.equal(months[0].monthKey, "2026-09");
+  assert.equal(months.at(-1).monthKey, "2027-06");
+  assert.equal(months.every((month) => month.title === "Aylık eğitim planı"), true);
+  assert.equal(months.every((month) => month.purpose.includes("TYMM yaş bandı")), true);
+  assert.equal(months.some((month) => /60.?72/u.test(month.purpose)), false);
+});
+
+test("resmî veri dönemi ağustos sonunda bitse de öğretmen planı Eylül–Haziran 10 ay kalır", () => {
+  const months = buildNeutralTeacherYearOutline({
+    annualPeriodStart: "2026-09-01",
+    annualPeriodEnd: "2027-08-31",
+  });
+  assert.equal(months.length, 10);
+  assert.equal(months[0].monthKey, "2026-09");
+  assert.equal(months.at(-1).monthKey, "2027-06");
+  assert.equal(months.some((month) => /-(07|08)$/u.test(month.monthKey)), false);
 });
 
 test("aktif eğitim yılından tek dokunuşluk plan başlangıç dönemini UTC ve sivil tarih sınırlarıyla hazırlar", async () => {

@@ -22,7 +22,9 @@ import {
   type QuickObservationType,
 } from "../domain/quick-observation.ts";
 import {
+  isValidStudentNationalIdentityNumber,
   studentProfileFromRecord,
+  type StudentCareDetails,
   type StudentContact,
 } from "../domain/student.ts";
 
@@ -58,13 +60,17 @@ export interface StudentRecord extends StoredRecord {
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
+  nationalIdentityNumber?: string;
+  enrollmentYear?: string;
+  /** @deprecated Yalnız v5 ve daha eski yedekleri okumak içindir. */
   enrollmentDate?: string;
   homeLanguages?: string;
   interests?: string;
   strengths?: string;
   supportPreferences?: string;
   contacts?: StudentContact[];
-  profileSchemaVersion?: 2 | 3 | 4 | 5;
+  careDetails?: StudentCareDetails;
+  profileSchemaVersion?: 2 | 3 | 4 | 5 | 6 | 7 | 8;
   active?: boolean;
   enrollmentStatus?: "active" | "left" | "completed" | "transferred";
 }
@@ -281,18 +287,32 @@ function isStudentRecord(value: unknown): value is StudentRecord {
       (typeof value.classroomId !== "string" ||
         !UUID_PATTERN.test(value.classroomId))) ||
     (value.birthDate !== undefined && !isCivilDate(value.birthDate)) ||
+    (value.nationalIdentityNumber !== undefined &&
+      !isValidStudentNationalIdentityNumber(value.nationalIdentityNumber)) ||
+    (value.enrollmentYear !== undefined &&
+      (typeof value.enrollmentYear !== "string" ||
+        !/^\d{4}$/.test(value.enrollmentYear))) ||
     (value.enrollmentDate !== undefined && !isCivilDate(value.enrollmentDate)) ||
     (value.profileSchemaVersion !== undefined &&
       value.profileSchemaVersion !== 2 &&
       value.profileSchemaVersion !== 3 &&
       value.profileSchemaVersion !== 4 &&
-      value.profileSchemaVersion !== 5) ||
+      value.profileSchemaVersion !== 5 &&
+      value.profileSchemaVersion !== 6 &&
+      value.profileSchemaVersion !== 7 &&
+      value.profileSchemaVersion !== 8) ||
     (value.active !== undefined && typeof value.active !== "boolean") ||
     (value.enrollmentStatus !== undefined &&
       value.enrollmentStatus !== "active" &&
       value.enrollmentStatus !== "left" &&
       value.enrollmentStatus !== "completed" &&
       value.enrollmentStatus !== "transferred")
+  ) {
+    return false;
+  }
+  if (
+    value.careDetails !== undefined &&
+    studentProfileFromRecord(value)?.careDetails === undefined
   ) {
     return false;
   }
@@ -313,7 +333,11 @@ function isStudentRecord(value: unknown): value is StudentRecord {
           (typeof contact.name === "string" && contact.name.trim().length > 0)) &&
         typeof contact.phone === "string" &&
         contact.phone.trim().length > 0 &&
-        typeof contact.isPrimary === "boolean",
+        typeof contact.isPrimary === "boolean" &&
+        (contact.isEmergencyContact === undefined ||
+          typeof contact.isEmergencyContact === "boolean") &&
+        (contact.isAuthorizedPickup === undefined ||
+          typeof contact.isAuthorizedPickup === "boolean"),
     )
   );
 }

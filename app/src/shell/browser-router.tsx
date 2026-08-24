@@ -71,22 +71,42 @@ export function RouteFocusBoundary({
   children: ReactNode;
 }) {
   const boundaryRef = useRef<HTMLDivElement>(null);
+  const focusedHeadingRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const boundary = boundaryRef.current;
     if (!boundary) return;
+    const previousRouteHeading = focusedHeadingRef.current;
     const focusHeading = () => {
       const heading = boundary.querySelector<HTMLElement>("[data-route-heading]");
-      if (!heading) return false;
+      if (!heading || heading === previousRouteHeading) return false;
       heading.focus({ preventScroll: true });
+      if (document.activeElement !== heading) return false;
+      focusedHeadingRef.current = heading;
       return true;
     };
-    if (focusHeading()) return;
+    let retryFrame = 0;
+    const retryDeadline = window.performance.now() + 5_000;
     const observer = new MutationObserver(() => {
-      if (focusHeading()) observer.disconnect();
+      if (!focusHeading()) return;
+      observer.disconnect();
+      window.cancelAnimationFrame(retryFrame);
     });
     observer.observe(boundary, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    const retryFocus = () => {
+      if (focusHeading()) {
+        observer.disconnect();
+        return;
+      }
+      if (window.performance.now() < retryDeadline) {
+        retryFrame = window.requestAnimationFrame(retryFocus);
+      }
+    };
+    retryFrame = window.requestAnimationFrame(retryFocus);
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(retryFrame);
+    };
   }, [routeId]);
 
   return (

@@ -38,6 +38,43 @@ function monthLabel(value: string): string {
   }).format(utcDate(`${value}-01`));
 }
 
+function nextMonthKey(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+  const next = new Date(Date.UTC(year ?? 0, month ?? 1, 1, 12));
+  return next.toISOString().slice(0, 7);
+}
+
+/**
+ * Seçili eğitim yılının öğretim aylarını içerik sağlayıcısından bağımsız üretir.
+ * Veri dönemi yaz tatilini de kapsasa bile yıllık plan omurgası Türkiye'deki
+ * Eylül–Haziran öğretim döneminde kalır. Bu iskelet resmî aylık tema veya
+ * kazanım uydurmaz; ayrıntıları ve TYMM hedeflerini öğretmenin seçmesine bırakır.
+ */
+export function buildNeutralTeacherYearOutline(input: {
+  annualPeriodStart: string;
+  annualPeriodEnd: string;
+}): readonly TeacherYearOutlineMonth[] {
+  const firstMonthKey = input.annualPeriodStart.slice(0, 7);
+  const lastMonthKey = input.annualPeriodEnd.slice(0, 7);
+  const months: TeacherYearOutlineMonth[] = [];
+  let monthKey = firstMonthKey;
+  while (monthKey <= lastMonthKey) {
+    const monthNumber = Number(monthKey.slice(5, 7));
+    if (monthNumber === 7 || monthNumber === 8) {
+      monthKey = nextMonthKey(monthKey);
+      continue;
+    }
+    const label = monthLabel(monthKey);
+    months.push({
+      monthKey,
+      title: "Aylık eğitim planı",
+      purpose: `${label} planı; seçili TYMM yaş bandı, sınıf gözlemleri, çocukların güncel soruları ve öğretmenin belirleyeceği program hedefleri doğrultusunda hazırlanacaktır.`,
+    });
+    monthKey = nextMonthKey(monthKey);
+  }
+  return months;
+}
+
 function weeklyDrafts(
   month: TeacherYearOutlineMonth,
   periodStart: string,

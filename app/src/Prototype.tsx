@@ -64,7 +64,12 @@ import type { BackupEnvelope, RestoreMode } from "./core/backup/schema";
 import { IndexedDbDataStore } from "./core/repository/indexed-db";
 import type { RecoverySnapshotMetadata } from "./core/repository/contracts";
 import { OBSERVATION_TAXONOMY_VERSION_V2 } from "./core/domain/observation-taxonomy";
-import { civilDateInIstanbul, type AttendanceEvent, type AttendanceRecord } from "./core/domain/attendance";
+import {
+  civilDateInIstanbul,
+  isCivilDate,
+  type AttendanceEvent,
+  type AttendanceRecord,
+} from "./core/domain/attendance";
 import type {
   CalendarEntry,
   CalendarEntryStatus,
@@ -74,11 +79,16 @@ import {
   ageInMonthsOn,
   composeStudentDisplayName,
   formatStudentPhone,
+  isValidStudentNationalIdentityNumber,
+  normalizeStudentCareDetails,
+  normalizeStudentPhone,
   normalizeTurkishSearchText,
   splitStudentDisplayName,
   type StudentContact,
 } from "./core/domain/student";
+import type { StudentCareFormState } from "./features/students/StudentProfileSafetyPanels.tsx";
 import type { StoredRecord } from "./core/domain/model";
+import { resolveActiveClassroomScope } from "./core/domain/classroom-scope.ts";
 import {
   isCapabilityEnabled,
   visiblePrimaryNavigation,
@@ -148,6 +158,7 @@ import {
   persistQuickObservationDraft,
   QUICK_OBSERVATION_NEUTRAL_TEMPLATES,
   QUICK_OBSERVATION_CATEGORIES_V2,
+  type QuickObservationBatchDraft,
   type QuickObservationCategory,
   type QuickObservationDraft,
   type QuickObservationType,
@@ -155,17 +166,20 @@ import {
 import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
 import { resolveObservationContext } from "./features/evidence/observation-context";
 import { verifyCommittedObservationRefresh } from "./features/evidence/observation-commit-refresh";
+import {
+  hasNonSeedEvidenceText,
+  mergeEvidenceSeedParagraph,
+} from "./features/evidence/evidence-seed-merge";
 import type { AnecdoteExportFormat } from "./features/anecdote/export-document.ts";
 import type { AnecdoteFormWorkspace } from "./features/anecdote/anecdote-form.ts";
 import type { DocumentWorkspaceItemId } from "./features/documents/document-workspace-model.ts";
+import type {
+  SimpleObservationDocumentAudience,
+  SimpleObservationPeriod,
+} from "./features/reports/simple-observation-document.ts";
 import type { SetupProgressStepId } from "./features/onboarding/setup-progress-model.ts";
 import {
-  CLASSROOM_SETUP_SECTIONS,
   classroomSetupReadiness,
-  classroomSetupSectionAvailable,
-  classroomSetupSectionComplete,
-  nextClassroomSetupSection,
-  previousClassroomSetupSection,
   type ClassroomSetupSectionId,
 } from "./features/onboarding/classroom-setup-model.ts";
 import type {
@@ -177,6 +191,7 @@ import {
   isAcademicYearPlanWriteAllowed,
   resolvePreparationPlanningWindow,
 } from "./features/planning/academic-year-planning-policy.ts";
+import type { TeacherOwnedPlanDocumentScope } from "./features/planning/teacher-owned-plan-document.ts";
 import {
   destinationForPlanDocument,
   destinationForPlanLevel,
@@ -196,10 +211,7 @@ import type {
   PremiumFounderAccessResult,
   PremiumFounderConfiguration,
 } from "./features/premium-access/founder-client.ts";
-import {
-  assertPremiumPackActionAccess,
-  type PremiumPackAccessReference,
-} from "./features/premium-access/entitlement.ts";
+import type { PremiumPackAccessReference } from "./features/premium-access/entitlement.ts";
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
@@ -226,6 +238,14 @@ import {
   type CurriculumTargetSnapshot,
 } from "./features/curriculum/curriculum-catalog";
 import {
+  getTymmAgeGuide,
+  listTymmAgeGuides,
+  type TymmAgeGuideChoice,
+  type TymmAgeGuideChoiceTemplate,
+  type TymmAgeGuideReadModel,
+} from "./features/curriculum/tymm-age-guide.ts";
+import { TYMM_2024_LEARNING_OUTCOMES } from "./features/curriculum/tymm-2024-catalog.ts";
+import {
   activateAcademicYearNow,
   academicYearOperationalNotice,
   academicYearOperationalStatus,
@@ -242,13 +262,13 @@ import {
   buildStudentObservationExport,
   classroomObservationExportFileName,
   contactActionLinks,
-  contactDisplayLabel,
   formatObservationDateTime,
   prepareStudentProfilePhoto,
   studentObservationExportFileName,
 } from "./features/students/student-profile-tools";
 import {
   OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+  academicYearMatchesCalendarProfile,
   loadAcademicCalendar,
   officialEventsOnDate,
   removeCalendarEntry,
@@ -275,16 +295,26 @@ import {
   PWA_UPDATE_READY_EVENT,
 } from "./release";
 import { COLLECTION_NAMES } from "./core/domain/model";
+import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-provenance.ts";
+import { InviteAccessScreen } from "./features/access/InviteAccessScreen.tsx";
+import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
+import { createActivityStudioObservationSeed } from "./features/activity-studio/activity-observation-seed.ts";
+import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
+import {
+  PARTICIPATION_ROUTES,
+  PEDAGOGICAL_SCENARIOS,
+} from "./features/pedagogical-os/pedagogical-orchestrator.ts";
+import { openHtmlPrintWindow } from "./features/printing/open-html-print-window.ts";
 
 const ClassroomScreen = lazy(() =>
-  import("./features/classroom/ClassroomScreen").then((module) => ({
-    default: module.ClassroomScreen,
+  import("./features/simple-experience/SimpleClassroomScreen.tsx").then((module) => ({
+    default: module.SimpleClassroomScreen,
   })),
 );
 
 const TodayScreen = lazy(() =>
-  import("./features/today/TodayScreen.tsx").then((module) => ({
-    default: module.TodayScreen,
+  import("./features/simple-experience/SimpleTodayScreen.tsx").then((module) => ({
+    default: module.SimpleTodayScreen,
   })),
 );
 
@@ -306,9 +336,27 @@ const StudentAttendanceHistoryPanel = lazy(() =>
   })),
 );
 
+const StudentProfileSafetyPanels = lazy(() =>
+  import("./features/students/StudentProfileSafetyPanels.tsx").then((module) => ({
+    default: module.StudentProfileSafetyPanels,
+  })),
+);
+
+const StudentProfileOverviewPanel = lazy(() =>
+  import("./features/students/StudentProfileOverviewPanels.tsx").then((module) => ({
+    default: module.StudentProfileOverviewPanel,
+  })),
+);
+
+const StudentProfileTabs = lazy(() =>
+  import("./features/students/StudentProfileOverviewPanels.tsx").then((module) => ({
+    default: module.StudentProfileTabs,
+  })),
+);
+
 const PlanWorkspaceScreen = lazy(() =>
-  import("./features/planning/PlanWorkspaceScreen.tsx").then((module) => ({
-    default: module.PlanWorkspaceScreen,
+  import("./features/simple-experience/SimplePlanWorkspaceScreen.tsx").then((module) => ({
+    default: module.SimplePlanWorkspaceScreen,
   })),
 );
 
@@ -325,8 +373,20 @@ const TeacherOwnedPlanScreen = lazy(() =>
 );
 
 const DocumentWorkspaceScreen = lazy(() =>
-  import("./features/documents/DocumentWorkspaceScreen.tsx").then((module) => ({
-    default: module.DocumentWorkspaceScreen,
+  import("./features/simple-experience/SimpleDocumentWorkspaceScreen.tsx").then((module) => ({
+    default: module.SimpleDocumentWorkspaceScreen,
+  })),
+);
+
+const ActivityStudio = lazy(() =>
+  import("./features/activity-studio/index.ts").then((module) => ({
+    default: module.ActivityStudio,
+  })),
+);
+
+const SimpleObservationOutputSheet = lazy(() =>
+  import("./features/simple-experience/SimpleObservationOutputSheet.tsx").then((module) => ({
+    default: module.SimpleObservationOutputSheet,
   })),
 );
 
@@ -349,6 +409,19 @@ const AnecdoteCenterPanel = lazy(() =>
 );
 
 const initialStudents: Student[] = [];
+
+function sharedInviteAccessIsRequired(): boolean {
+  const parameters = new URLSearchParams(window.location.search);
+  if (parameters.get("accessGate") === "1") return true;
+
+  const hostname = window.location.hostname;
+  return ![
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "terminal.local",
+  ].includes(hostname);
+}
 
 const statusLabels: Record<AttendanceStatus, string> = {
   present: "Geldi",
@@ -388,6 +461,8 @@ const emptyEvidenceWorkspace: EvidenceWorkspace = {
 };
 
 type ClassroomFormState = {
+  schoolName: string;
+  teacherName: string;
   classroomName: string;
   academicYearName: string;
   academicYearStart: string;
@@ -550,13 +625,33 @@ type StudentProfileFormState = {
   preferredName: string;
   birthDate: string;
   optionalCode: string;
-  enrollmentDate: string;
+  nationalIdentityNumber: string;
+  enrollmentYear: string;
   homeLanguages: string;
   interests: string;
   strengths: string;
   supportPreferences: string;
   contacts: StudentContact[];
+  careDetails: StudentCareFormState;
   profilePhotoDataUrl: string;
+};
+
+const emptyStudentCareForm: StudentCareFormState = {
+  homeAddress: "",
+  allergies: "",
+  dietaryNeeds: "",
+  medicationNotes: "",
+  emergencyNotes: "",
+  physicianName: "",
+  physicianPhone: "",
+  medicalDevices: "",
+  guardianEmail: "",
+  familyEducationNeeds: "",
+  familyParticipationPreferences: "",
+  photoVideoPermissionOnFile: false,
+  fieldTripPermissionOnFile: false,
+  digitalCommunicationPermissionOnFile: false,
+  permissionFormDate: "",
 };
 
 type StudentObservationMonth = string;
@@ -603,18 +698,20 @@ type ExternalFeedbackFormState = {
 };
 
 const initialClassroomForm: ClassroomFormState = {
+  schoolName: "",
+  teacherName: "",
   classroomName: "",
   academicYearName: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
   academicYearStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
   academicYearEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
   ageGroup: "",
-  curriculumProgram: "",
+  curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
   curriculumCatalogLabel: "",
-  curriculumCatalogId: "",
-  curriculumSourceVersion: "",
-  scheduleKind: "",
-  startTime: "",
-  endTime: "",
+  curriculumCatalogId: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.catalogId,
+  curriculumSourceVersion: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.sourceVersion,
+  scheduleKind: "full_day",
+  startTime: "08:30",
+  endTime: "16:30",
 };
 
 const emptyAcademicCalendar: AcademicCalendarWorkspace = {
@@ -623,6 +720,14 @@ const emptyAcademicCalendar: AcademicCalendarWorkspace = {
   officialEvents: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events,
   entries: [],
 };
+
+type StudentProfileTab =
+  | "flow"
+  | "portfolio"
+  | "details"
+  | "contacts"
+  | "care"
+  | "family";
 
 const emptyScheduledPlanWorkspace: ScheduledPlanWorkspace = { plans: [] };
 
@@ -837,13 +942,18 @@ type EvidenceFlowRequest = {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
   initialStudentId?: string;
+  initialDraft?: EvidenceCaptureSeed;
 };
+
+type EvidenceActivityStartPolicy = "start-if-planned" | "preserve";
 
 type ObservationContextChoice = {
   activities: EvidenceActivitySummary[];
   civilDate: string;
   spontaneousStudentId: string;
   initialStudentId?: string;
+  initialDraft?: EvidenceCaptureSeed;
+  activityStartPolicy: EvidenceActivityStartPolicy;
 };
 
 type ObservationRefreshNotice = {
@@ -869,6 +979,8 @@ type AppSurface =
   | "teacher-plan-records"
   | "premium-gate"
   | "premium-plans"
+  | "tymm-guide"
+  | "tymm-child"
   | "evidence-flow";
 
 const APP_HISTORY_MARKER = "__maarifOSSurface";
@@ -876,6 +988,8 @@ const APP_HISTORY_MARKER = "__maarifOSSurface";
 function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
   if (!state || typeof state !== "object") return null;
   const candidate = (state as Record<string, unknown>)[APP_HISTORY_MARKER];
+  if (candidate === "premium-gate") return null;
+  if (candidate === "premium-plans") return "teacher-plan-records";
   return candidate === "capture-menu" ||
     candidate === "attendance" ||
     candidate === "student-profile" ||
@@ -891,6 +1005,8 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
     candidate === "teacher-plan-records" ||
     candidate === "premium-gate" ||
     candidate === "premium-plans" ||
+    candidate === "tymm-guide" ||
+    candidate === "tymm-child" ||
     candidate === "evidence-flow"
     ? candidate
     : null;
@@ -922,7 +1038,7 @@ function downloadJson(fileName: string, contents: string) {
   anchor.href = url;
   anchor.download = fileName;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function downloadText(fileName: string, contents: string) {
@@ -933,7 +1049,7 @@ function downloadText(fileName: string, contents: string) {
   anchor.href = url;
   anchor.download = fileName;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function downloadBytes(fileName: string, mimeType: string, bytes: Uint8Array) {
@@ -946,7 +1062,7 @@ function downloadBytes(fileName: string, mimeType: string, bytes: Uint8Array) {
   anchor.href = url;
   anchor.download = fileName;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function formatTurkishCivilDate(civilDate: string) {
@@ -1041,6 +1157,9 @@ type EvidenceFlowActions = {
     activity: EvidenceActivitySummary,
     studentId: string,
   ) => Promise<QuickObservationDraft | null>;
+  loadDraftBatch: (
+    activity: EvidenceActivitySummary,
+  ) => Promise<{ drafts: QuickObservationBatchDraft[]; batchId: string } | null>;
   saveDraft: (
     activity: EvidenceActivitySummary,
     input: {
@@ -1104,6 +1223,11 @@ type EvidenceCaptureDraft = {
   categoryIds: QuickObservationCategory[];
   taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
 };
+
+type EvidenceCaptureSeed = Pick<
+  EvidenceCaptureDraft,
+  "rawText" | "context" | "childQuote" | "observationType" | "categoryIds"
+>;
 
 function hasEvidenceDraftContent(
   value: Pick<
@@ -1287,11 +1411,13 @@ function StudentAvatar({
 function EvidenceCaptureScreen({
   activity,
   initialStudentId,
+  initialDraft,
   students,
   actions,
 }: {
   activity: EvidenceActivitySummary;
   initialStudentId?: string;
+  initialDraft?: EvidenceCaptureSeed;
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
@@ -1299,7 +1425,7 @@ function EvidenceCaptureScreen({
     ? students.filter((student) => activity.assignedStudentIds.includes(student.id))
     : students;
   const [observationId] = useState(() => crypto.randomUUID());
-  const [batchId] = useState(() => crypto.randomUUID());
+  const [batchId, setBatchId] = useState<string>(() => crypto.randomUUID());
   const [selectionMode, setSelectionMode] =
     useState<"single" | "selected-children">("single");
   const [studentId, setStudentId] = useState("");
@@ -1323,6 +1449,9 @@ function EvidenceCaptureScreen({
   const draftLoadSequenceRef = useRef(0);
   const finalizedRef = useRef(false);
   const initialSelectionAppliedRef = useRef(false);
+  const initialSeedAppliedRef = useRef(false);
+  const batchRestoreAppliedRef = useRef(false);
+  const batchRestoreSequenceRef = useRef(0);
   const actionsRef = useRef(actions);
   const draftSnapshotRef = useRef<EvidenceCaptureDraft>({
     selectionMode,
@@ -1488,34 +1617,60 @@ function EvidenceCaptureScreen({
     setObservationType("quick-note");
     setCategories([]);
     setDraftStatus("loading");
+    const seed =
+      initialDraft &&
+      (initialStudentId === undefined || initialStudentId === nextStudentId) &&
+      !initialSeedAppliedRef.current
+        ? initialDraft
+        : null;
     try {
       const draft = await actions.loadDraft(activity, nextStudentId);
       if (draftLoadSequenceRef.current !== loadSequence) return;
-      if (draft) {
-        setRawText(draft.rawText);
-        setContext(draft.context);
-        setChildQuote(draft.childQuote);
-        setLegacyDetailsReviewRequired(
-          Boolean(draft.context.trim() || draft.childQuote.trim()),
-        );
-        setObservationType(draft.observationType);
-        setCategories(
-          draft.observationTaxonomyVersion ===
-            OBSERVATION_TAXONOMY_VERSION_V2
+      if (draft || seed) {
+        const loadedCategories =
+          draft?.observationTaxonomyVersion === OBSERVATION_TAXONOMY_VERSION_V2
             ? draft.categoryIds.filter((category) =>
                 QUICK_OBSERVATION_CATEGORIES_V2.includes(
                   category as (typeof QUICK_OBSERVATION_CATEGORIES_V2)[number],
                 ),
               )
-            : [],
+            : [];
+        setRawText(mergeEvidenceSeedParagraph(draft?.rawText, seed?.rawText));
+        setContext(mergeEvidenceSeedParagraph(draft?.context, seed?.context));
+        setChildQuote(
+          mergeEvidenceSeedParagraph(draft?.childQuote, seed?.childQuote),
         );
-        setDraftStatus("saved");
+        setLegacyDetailsReviewRequired(
+          Boolean(
+            draft &&
+              (hasNonSeedEvidenceText(draft.context, seed?.context) ||
+                hasNonSeedEvidenceText(draft.childQuote, seed?.childQuote)),
+          ),
+        );
+        setObservationType(
+          draft?.observationType ?? seed?.observationType ?? "quick-note",
+        );
+        setCategories(
+          Array.from(new Set([...loadedCategories, ...(seed?.categoryIds ?? [])])),
+        );
+        if (seed) initialSeedAppliedRef.current = true;
+        setDraftStatus(draft ? "saved" : "ready");
       } else {
         setLegacyDetailsReviewRequired(false);
         setDraftStatus("ready");
       }
     } catch {
-      if (draftLoadSequenceRef.current === loadSequence) setDraftStatus("error");
+      if (draftLoadSequenceRef.current === loadSequence) {
+        if (seed) {
+          setRawText(seed.rawText);
+          setContext(seed.context);
+          setChildQuote(seed.childQuote);
+          setObservationType(seed.observationType);
+          setCategories([...seed.categoryIds]);
+          initialSeedAppliedRef.current = true;
+        }
+        setDraftStatus("error");
+      }
     }
   };
 
@@ -1599,7 +1754,50 @@ function EvidenceCaptureScreen({
       initialSelectionAppliedRef.current = true;
       void chooseStudent(initialStudentId);
     }
-  }, [initialStudentId]);
+  }, [initialDraft, initialStudentId]);
+
+  useEffect(() => {
+    if (initialStudentId || batchRestoreAppliedRef.current) return;
+    const loadSequence = batchRestoreSequenceRef.current + 1;
+    batchRestoreSequenceRef.current = loadSequence;
+    setDraftStatus("loading");
+    void actionsRef.current
+      .loadDraftBatch(activity)
+      .then((result) => {
+        if (batchRestoreSequenceRef.current !== loadSequence) return;
+        batchRestoreAppliedRef.current = true;
+        const draft = result?.drafts[0];
+        if (!draft) {
+          setDraftStatus("ready");
+          return;
+        }
+        setBatchId(result.batchId);
+        setSelectionMode("selected-children");
+        setGroupStudentIds(result.drafts.map((item) => item.studentId));
+        setGroupConfirmed(false);
+        setRawText(draft.rawText);
+        setContext(draft.context);
+        setChildQuote(draft.childQuote);
+        setObservationType(draft.observationType);
+        setCategories([...draft.categoryIds]);
+        setDraftStatus("saved");
+      })
+      .catch((reason) => {
+        if (batchRestoreSequenceRef.current !== loadSequence) return;
+        batchRestoreAppliedRef.current = true;
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Gözlem notu kaydedilemedi.",
+        );
+        setDraftStatus("error");
+      });
+    return () => {
+      if (batchRestoreSequenceRef.current === loadSequence) {
+        batchRestoreSequenceRef.current += 1;
+      }
+    };
+  }, [activity.id, activity.planId, initialStudentId]);
 
   const toggleCategory = (category: QuickObservationCategory) => {
     setCategories((current) =>
@@ -1711,7 +1909,11 @@ function EvidenceCaptureScreen({
   };
 
   return (
-    <div className="quick-observation-page">
+    <div
+      className="quick-observation-page"
+      data-initial-draft={initialDraft ? "true" : "false"}
+      data-initial-draft-length={initialDraft?.rawText.length ?? 0}
+    >
       <MobileScroll className="d1-flow-scroll quick-observation-scroll">
         <div className="quick-observation-content">
           <section
@@ -2354,12 +2556,14 @@ function EvidenceCaptureFlow({
   activity,
   pendingObservation,
   initialStudentId,
+  initialDraft,
   students,
   actions,
 }: {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
   initialStudentId?: string;
+  initialDraft?: EvidenceCaptureSeed;
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
@@ -2379,15 +2583,298 @@ function EvidenceCaptureFlow({
               <EvidenceCaptureScreen
                 activity={activity}
                 initialStudentId={initialStudentId}
+                initialDraft={initialDraft}
                 students={students}
                 actions={actions}
               />
             ),
           },
-    [actions, activity, initialStudentId, pendingObservation, students],
+    [actions, activity, initialDraft, initialStudentId, pendingObservation, students],
   );
 
   return <FlowStack initial={initial} />;
+}
+
+type TymmChildParticipationSession = {
+  guide: TymmAgeGuideReadModel;
+  template: TymmAgeGuideChoiceTemplate;
+  student: Student;
+};
+
+function TymmChildParticipationDialog({
+  session,
+  onAdultExit,
+  onHandoff,
+}: {
+  session: TymmChildParticipationSession;
+  onAdultExit: () => void;
+  onHandoff: (choice: TymmAgeGuideChoice | null) => void;
+}) {
+  type TymmAdultAction = "exit" | "handoff";
+  const TYMM_ADULT_HOLD_MS = 1_400;
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
+  const [adultHoldingAction, setAdultHoldingAction] =
+    useState<TymmAdultAction | null>(null);
+  const [adultConfirmationAction, setAdultConfirmationAction] =
+    useState<TymmAdultAction | null>(null);
+  const adultHoldTimerRef = useRef<number | null>(null);
+  const childName =
+    session.student.preferredName?.trim() ||
+    session.student.name.trim().split(/\s+/u)[0] ||
+    "Arkadaşım";
+  const selectedChoice =
+    session.template.choices.find((choice) => choice.id === selectedChoiceId) ?? null;
+  const skipped = selectedChoiceId === "skip";
+  const readyForHandoff = Boolean(selectedChoice || skipped);
+  const choiceIcons = [StarIcon, MagicWandIcon, ChatBubbleIcon] as const;
+
+  const completeAdultAction = (action: TymmAdultAction) => {
+    setAdultConfirmationAction(null);
+    if (action === "exit") {
+      onAdultExit();
+      return;
+    }
+    if (readyForHandoff) onHandoff(selectedChoice);
+  };
+
+  const cancelAdultHold = () => {
+    if (adultHoldTimerRef.current !== null) {
+      window.clearTimeout(adultHoldTimerRef.current);
+      adultHoldTimerRef.current = null;
+    }
+    setAdultHoldingAction(null);
+  };
+
+  const beginAdultHold = (action: TymmAdultAction) => {
+    if (action === "handoff" && !readyForHandoff) return;
+    if (adultHoldTimerRef.current !== null) return;
+    setAdultConfirmationAction(null);
+    setAdultHoldingAction(action);
+    adultHoldTimerRef.current = window.setTimeout(() => {
+      adultHoldTimerRef.current = null;
+      setAdultHoldingAction(null);
+      completeAdultAction(action);
+    }, TYMM_ADULT_HOLD_MS);
+  };
+
+  useEffect(
+    () => () => {
+      if (adultHoldTimerRef.current !== null) {
+        window.clearTimeout(adultHoldTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const selectChildChoice = (choiceId: string) => {
+    cancelAdultHold();
+    setAdultConfirmationAction(null);
+    setSelectedChoiceId(choiceId);
+  };
+
+  return (
+    <Dialog.Root open modal onOpenChange={() => undefined}>
+      <Dialog.Overlay className="tymm-child-overlay" />
+      <Dialog.Content
+        className="tymm-child-layer"
+        data-testid="tymm-child-participation"
+        aria-modal="true"
+        onEscapeKeyDown={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
+        <header
+          className="tymm-child-header"
+          inert={Boolean(adultConfirmationAction)}
+          aria-hidden={adultConfirmationAction ? true : undefined}
+        >
+          <span>
+            <small>{session.guide.ageLabel} · birlikte seçim</small>
+            <Dialog.Title>{childName}, sıra sende</Dialog.Title>
+          </span>
+          <button
+            type="button"
+            className={adultHoldingAction === "exit" ? "is-holding" : ""}
+            data-testid="tymm-child-adult-exit"
+            aria-label="Yetişkin çıkışı için basılı tut veya doğrulama adımını aç"
+            aria-describedby="tymm-adult-exit-help"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              beginAdultHold("exit");
+            }}
+            onPointerUp={cancelAdultHold}
+            onPointerCancel={cancelAdultHold}
+            onKeyDown={(event) => {
+              if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+                event.preventDefault();
+                beginAdultHold("exit");
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                const awaitingConfirmation = adultHoldTimerRef.current !== null;
+                cancelAdultHold();
+                if (awaitingConfirmation) setAdultConfirmationAction("exit");
+              }
+            }}
+            onClick={() => setAdultConfirmationAction("exit")}
+          >
+            <LockClosedIcon aria-hidden="true" />
+            <span>
+              {adultHoldingAction === "exit" ? "Biraz daha tut" : "Yetişkin çıkışı"}
+            </span>
+          </button>
+        </header>
+
+        <main
+          className="tymm-child-main"
+          inert={Boolean(adultConfirmationAction)}
+          aria-hidden={adultConfirmationAction ? true : undefined}
+        >
+          <div className="tymm-child-intro">
+            <span className="tymm-child-step">1 / 1</span>
+            <p>{session.template.title}</p>
+            <Dialog.Description>{session.template.childPrompt}</Dialog.Description>
+          </div>
+
+          <div className="tymm-child-choice-grid" role="group" aria-label="Seçenekler">
+            {session.template.choices.map((choice, index) => {
+              const Icon = choiceIcons[index];
+              const selected = selectedChoiceId === choice.id;
+              return (
+                <button
+                  type="button"
+                  key={choice.id}
+                  data-testid={`tymm-child-choice-${choice.id}`}
+                  aria-pressed={selected}
+                  onClick={() => selectChildChoice(choice.id)}
+                >
+                  <span aria-hidden="true"><Icon /></span>
+                  <strong>{choice.label}</strong>
+                  {selected ? <CheckCircledIcon aria-hidden="true" /> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            className="tymm-child-skip"
+            data-testid="tymm-child-skip"
+            aria-pressed={skipped}
+            onClick={() => selectChildChoice("skip")}
+          >
+            Şimdi seçmek istemiyorum
+          </button>
+
+          <section className="tymm-child-handoff" aria-live="polite">
+            <div>
+              <strong>
+                {selectedChoice
+                  ? `Seçimin: ${selectedChoice.label}`
+                  : skipped
+                    ? "Seçmemek de olur"
+                    : "Bir seçeneğe dokunabilirsin"}
+              </strong>
+              <small>
+                {readyForHandoff
+                  ? "İstersen değiştirebilirsin. Yetişkin, öğretmene geçiş için düğmeyi basılı tutar."
+                  : "Burada doğru veya yanlış yok; seçim puanlanmaz."}
+              </small>
+            </div>
+            <button
+              type="button"
+              className={adultHoldingAction === "handoff" ? "is-holding" : ""}
+              data-testid="tymm-child-handoff"
+              disabled={!readyForHandoff}
+              aria-label="Öğretmene geçmek için basılı tut veya doğrulama adımını aç"
+              aria-describedby="tymm-adult-exit-help"
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                beginAdultHold("handoff");
+              }}
+              onPointerUp={cancelAdultHold}
+              onPointerCancel={cancelAdultHold}
+              onKeyDown={(event) => {
+                if ((event.key === "Enter" || event.key === " ") && !event.repeat) {
+                  event.preventDefault();
+                  beginAdultHold("handoff");
+                }
+              }}
+              onKeyUp={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  const awaitingConfirmation = adultHoldTimerRef.current !== null;
+                  cancelAdultHold();
+                  if (awaitingConfirmation) setAdultConfirmationAction("handoff");
+                }
+              }}
+              onClick={() => setAdultConfirmationAction("handoff")}
+            >
+              {adultHoldingAction === "handoff" ? "Biraz daha tut" : "Öğretmenime göster"}
+              <ChevronRightIcon aria-hidden="true" />
+            </button>
+          </section>
+        </main>
+
+        <p
+          id="tymm-adult-exit-help"
+          className="tymm-child-privacy-note"
+          inert={Boolean(adultConfirmationAction)}
+          aria-hidden={adultConfirmationAction ? true : undefined}
+        >
+          Bu ekran öğretmen bilgilerini ve sınıf kayıtlarını gizler. Yetişkin
+          düğmesini 1,4 saniye basılı tutun veya erişilebilir doğrulama adımını onaylayın.
+        </p>
+
+        {adultConfirmationAction ? (
+          <Dialog.Root
+            open
+            modal
+            onOpenChange={(open) => {
+              if (!open) setAdultConfirmationAction(null);
+            }}
+          >
+            <Dialog.Overlay className="tymm-adult-confirm-overlay" />
+            <Dialog.Content
+              className="tymm-adult-confirm-dialog"
+              data-testid="tymm-adult-confirmation"
+              aria-modal="true"
+              onPointerDownOutside={(event) => event.preventDefault()}
+            >
+              <LockClosedIcon aria-hidden="true" />
+              <Dialog.Title>Yetişkin doğrulaması</Dialog.Title>
+              <Dialog.Description>
+                {adultConfirmationAction === "exit"
+                  ? "Çocuk ekranını kapatıp öğretmen rehberine dönmek üzeresiniz."
+                  : skipped
+                    ? "Çocuğun pas seçimini kaydetmeden öğretmen rehberine döneceksiniz."
+                    : "Çocuğun seçimini yalnız düzenlenebilir öğretmen taslağına aktaracaksınız."}
+              </Dialog.Description>
+              <div>
+                <button
+                  type="button"
+                  data-testid="tymm-adult-confirm-cancel"
+                  onClick={() => setAdultConfirmationAction(null)}
+                >
+                  Çocuk ekranına dön
+                </button>
+                <button
+                  type="button"
+                  data-testid="tymm-adult-confirm-action"
+                  onClick={() => completeAdultAction(adultConfirmationAction)}
+                >
+                  {adultConfirmationAction === "exit"
+                    ? "Evet, rehbere dön"
+                    : "Evet, öğretmene geç"}
+                </button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Root>
+        ) : null}
+      </Dialog.Content>
+    </Dialog.Root>
+  );
 }
 
 export default function Prototype() {
@@ -2395,10 +2882,14 @@ export default function Prototype() {
   const { device, native } = useMobileDevice();
   const { bottomInset } = useKeyboardInsets();
   const { route, navigate } = useBrowserRouter();
-  const premiumPilotPreviewEnabled =
-    isCapabilityEnabled("premiumPlanCenter") ||
-    (import.meta.env.DEV &&
-      new URLSearchParams(window.location.search).get("premiumPilot") === "1");
+  const sharedInviteRequired = useMemo(sharedInviteAccessIsRequired, []);
+  const [sharedInviteGranted, setSharedInviteGranted] = useState(
+    () => !sharedInviteRequired || hasLocalSharedAccess(),
+  );
+  // The 2026-2027 release has one shared, local access gate. Historical
+  // premium query parameters intentionally have no runtime effect.
+  const premiumLegacyRequested = false;
+  const premiumPilotPreviewEnabled = false;
   const [premiumFounderConfigurationState, setPremiumFounderConfigurationState] =
     useState<{
     configuration: PremiumFounderConfiguration | null;
@@ -2407,11 +2898,9 @@ export default function Prototype() {
   }>({
     configuration: null,
     error: "",
-    ready: false,
+    ready: !premiumLegacyRequested,
   });
-  const internalStaffExportEnabled =
-    import.meta.env.DEV &&
-    new URLSearchParams(window.location.search).get("premiumPilot") === "1";
+  const internalStaffExportEnabled = false;
   const store = useMemo(() => new IndexedDbDataStore(), []);
   const backupServicePromiseRef = useRef<
     Promise<import("./core/backup/backup-service").BackupService> | null
@@ -2447,6 +2936,7 @@ export default function Prototype() {
   const surfaceTransitionRef = useRef<AppSurface | null>(null);
   const activeSurfaceRef = useRef<AppSurface | null>(null);
   const lastEvidenceFlowRequestRef = useRef<EvidenceFlowRequest | null>(null);
+  const lastTymmChildSessionRef = useRef<TymmChildParticipationSession | null>(null);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [archivedStudents, setArchivedStudents] = useState<Student[]>([]);
   const [attendanceCompleted, setAttendanceCompleted] = useState(false);
@@ -2472,19 +2962,21 @@ export default function Prototype() {
       preferredName: "",
       birthDate: "",
       optionalCode: "",
-      enrollmentDate: "",
+      nationalIdentityNumber: "",
+      enrollmentYear: "",
       homeLanguages: "",
       interests: "",
       strengths: "",
       supportPreferences: "",
       contacts: [],
+      careDetails: { ...emptyStudentCareForm },
       profilePhotoDataUrl: "",
     });
   const [studentProfileError, setStudentProfileError] = useState("");
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [studentObservationLimit, setStudentObservationLimit] = useState(20);
   const [studentProfileTab, setStudentProfileTab] =
-    useState<"flow" | "portfolio" | "details" | "contacts">("flow");
+    useState<StudentProfileTab>("flow");
   const [studentObservationFilter, setStudentObservationFilter] =
     useState<"all" | "pending">("all");
   const [studentObservationMonth, setStudentObservationMonth] =
@@ -2508,7 +3000,17 @@ export default function Prototype() {
     useState<"overview" | "backup">("overview");
   const [classroomOpen, setClassroomOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [tymmGuideOpen, setTymmGuideOpen] = useState(false);
+  const [tymmGuideAgeBand, setTymmGuideAgeBand] =
+    useState<TymmAgeGuideReadModel["ageBand"]>("60-72");
+  const [tymmGuideDomain, setTymmGuideDomain] =
+    useState<TymmAgeGuideReadModel["domainOutcomeCounts"][number]["domain"]>("Türkçe");
+  const [tymmGuideStudentId, setTymmGuideStudentId] = useState("");
+  const [tymmGuideTemplateId, setTymmGuideTemplateId] = useState("");
+  const [tymmChildSession, setTymmChildSession] =
+    useState<TymmChildParticipationSession | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarEntryTitleRef = useRef<HTMLInputElement>(null);
   const [academicCalendar, setAcademicCalendar] =
     useState<AcademicCalendarWorkspace>(emptyAcademicCalendar);
   const [scheduledPlanWorkspace, setScheduledPlanWorkspace] =
@@ -2522,6 +3024,8 @@ export default function Prototype() {
   const [academicYearTransitionConfirmed, setAcademicYearTransitionConfirmed] =
     useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [simpleObservationOutputOpen, setSimpleObservationOutputOpen] =
+    useState(false);
   const [documentsInitialSection, setDocumentsInitialSection] =
     useState<"overview" | "anecdotes" | "students">("overview");
   const [anecdoteWorkspace, setAnecdoteWorkspace] =
@@ -2535,6 +3039,13 @@ export default function Prototype() {
   const [observationContextChoice, setObservationContextChoice] =
     useState<ObservationContextChoice | null>(null);
   const [newStudentName, setNewStudentName] = useState("");
+  const [newStudentNumber, setNewStudentNumber] = useState("");
+  const [newStudentBirthDate, setNewStudentBirthDate] = useState("");
+  const [newStudentNationalIdentityNumber, setNewStudentNationalIdentityNumber] =
+    useState("");
+  const [newStudentGuardianName, setNewStudentGuardianName] = useState("");
+  const [newStudentGuardianPhone, setNewStudentGuardianPhone] = useState("");
+  const [newStudentError, setNewStudentError] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentAddOpen, setStudentAddOpen] = useState(false);
   const [studentActionsOpenId, setStudentActionsOpenId] =
@@ -2572,6 +3083,10 @@ export default function Prototype() {
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [studioActivityTitle, setStudioActivityTitle] = useState<string | null>(null);
+  const studioOpenOptionsRef = useRef<ActivityStudioOpenOptions>({});
+  const [studioPedagogicalProvenance, setStudioPedagogicalProvenance] =
+    useState<PedagogicalPlanProvenance | null>(null);
   const [teacherPlanRecordsOpen, setTeacherPlanRecordsOpen] = useState(false);
   const [teacherPlanRecordsInitialLevel, setTeacherPlanRecordsInitialLevel] =
     useState<Exclude<PlanWorkbenchLevelId, "daily">>("annual");
@@ -2597,7 +3112,9 @@ export default function Prototype() {
   const [premiumGateMounted, setPremiumGateMounted] = useState(false);
   const [premiumFounderAccess, setPremiumFounderAccess] =
     useState<PremiumFounderAccessResult | null>(null);
-  const [premiumFounderBusy, setPremiumFounderBusy] = useState(true);
+  const [premiumFounderBusy, setPremiumFounderBusy] = useState(
+    premiumLegacyRequested,
+  );
   const [premiumFounderError, setPremiumFounderError] = useState(
     premiumFounderConfigurationState.error,
   );
@@ -2609,7 +3126,7 @@ export default function Prototype() {
   const [evidenceFlowRequest, setEvidenceFlowRequest] =
     useState<EvidenceFlowRequest | null>(null);
   const [classroomForm, setClassroomForm] = useState<ClassroomFormState>(initialClassroomForm);
-  const [classroomSetupSection, setClassroomSetupSection] =
+  const [, setClassroomSetupSection] =
     useState<ClassroomSetupSectionId>("period");
   const [classroomError, setClassroomError] = useState("");
   const [studentDeletionCandidate, setStudentDeletionCandidate] =
@@ -2717,6 +3234,31 @@ export default function Prototype() {
   const configuredClassroom = todayWorkspace.classroom.status === "configured"
     ? todayWorkspace.classroom
     : null;
+  const tymmAgeGuides = listTymmAgeGuides();
+  const selectedTymmGuide =
+    getTymmAgeGuide(tymmGuideAgeBand) ?? tymmAgeGuides[0];
+  const currentClassTymmAgeBand = curriculumAgeBandFromLabel(
+    configuredClassroom?.ageGroup,
+  );
+  const selectedTymmTemplate =
+    selectedTymmGuide.choiceTemplates.find(
+      (template) => template.id === tymmGuideTemplateId,
+    ) ?? selectedTymmGuide.choiceTemplates[0];
+  const selectedTymmStudent =
+    students.find((student) => student.id === tymmGuideStudentId) ?? students[0];
+  const selectedTymmOutcomes = TYMM_2024_LEARNING_OUTCOMES.filter(
+    (outcome) =>
+      outcome.ageBand === selectedTymmGuide.ageBand &&
+      outcome.domain === tymmGuideDomain,
+  );
+  const childParticipationBlockedReason =
+    configuredClassroom?.curriculumProfile?.framework !== "tymm"
+      ? "Çocuk ekranı yalnız TYMM profili seçili sınıfta açılır."
+      : currentClassTymmAgeBand !== selectedTymmGuide.ageBand
+        ? `Çocuk ekranı sınıfın seçili ${currentClassTymmAgeBand ?? "belirsiz"} ay bandında açılır; diğer yaşlar yalnız rehber olarak görüntülenir.`
+        : !selectedTymmStudent
+          ? "Çocuk ekranı için önce Sınıfım bölümünden bir çocuk ekleyin."
+          : "";
   const educationalWriteNotice = configuredClassroom
     ? academicYearOperationalNotice({
         status: configuredClassroom.operationalStatus,
@@ -2743,37 +3285,14 @@ export default function Prototype() {
     todayWorkspace.civilDate;
   const planWritesDisabled =
     educationalWritesDisabled && !preparationPlanningAllowed;
-  const premiumMutationAllowed =
-    premiumPilotPreviewEnabled ||
-    internalStaffExportEnabled ||
-    isCapabilityEnabled("premiumPlanCenter") ||
-    (premiumFounderAccess?.access.status === "active" &&
-      premiumFounderAccess.access.canUsePremiumContent === true);
+  // Historical plans keep their provenance for backup compatibility, but no
+  // longer require a commercial entitlement to be edited by an admitted user.
+  const premiumMutationAllowed = true;
   const assertPremiumMutationAccessNow = (
     targetPack: PremiumPackAccessReference | null =
       premiumFounderAccess?.pack ?? null,
   ) => {
-    if (!targetPack) {
-      throw new Error(
-        "Premium kaynağın içerik paketi doğrulanamadı; değişiklik güvenlik için uygulanmadı.",
-      );
-    }
-    if (
-      premiumPilotPreviewEnabled ||
-      internalStaffExportEnabled ||
-      isCapabilityEnabled("premiumPlanCenter")
-    ) {
-      return;
-    }
-    if (!premiumFounderAccess) {
-      throw new Error("Premium işlem için etkin erişim gerekiyor.");
-    }
-    assertPremiumPackActionAccess(
-      premiumFounderAccess.access,
-      targetPack,
-      "content",
-      new Date(),
-    );
+    void targetPack;
   };
   const premiumPackForEvidence = (
     provenance: EvidencePremiumProvenance | undefined,
@@ -2877,7 +3396,10 @@ export default function Prototype() {
         configuredClassroom?.academicYearStart) &&
     classroomForm.academicYearEnd ===
       OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate;
-  const academicYearTransitionRequired =
+  const legacyCurriculumTransitionRequired =
+    configuredClassroom !== null &&
+    configuredClassroom.curriculumProfile?.framework !== "tymm";
+  const academicPeriodChanged =
     configuredClassroom !== null &&
     (classroomForm.academicYearName.trim() !==
       configuredClassroom.academicYearName ||
@@ -2885,7 +3407,14 @@ export default function Prototype() {
         configuredClassroom.academicYearStart ||
       classroomForm.academicYearEnd !==
         configuredClassroom.academicYearEnd);
+  const academicYearTransitionRequired =
+    configuredClassroom !== null &&
+    (legacyCurriculumTransitionRequired || academicPeriodChanged);
+  const samePeriodCurriculumTransitionRequired =
+    legacyCurriculumTransitionRequired && !academicPeriodChanged;
   const classroomSetupReadinessState = classroomSetupReadiness({
+    schoolName: classroomForm.schoolName,
+    teacherName: classroomForm.teacherName,
     classroomName: classroomForm.classroomName,
     academicYearName: classroomForm.academicYearName,
     academicYearStart: classroomForm.academicYearStart,
@@ -3040,8 +3569,10 @@ export default function Prototype() {
         observation.civilDate >= classExportStartDate) &&
       (!classExportEndDate || observation.civilDate <= classExportEndDate),
   );
-  const activeSurface: AppSurface | null = evidenceFlowRequest
-    ? "evidence-flow"
+  const activeSurface: AppSurface | null = tymmChildSession
+    ? "tymm-child"
+    : evidenceFlowRequest
+      ? "evidence-flow"
     : planFlowOpen
       ? "plan-flow"
       : teacherPlanRecordsOpen
@@ -3060,6 +3591,8 @@ export default function Prototype() {
           ? "attendance"
           : captureMenuOpen
             ? "capture-menu"
+          : tymmGuideOpen
+            ? "tymm-guide"
           : classroomOpen
               ? "classroom"
               : plansOpen
@@ -3076,6 +3609,9 @@ export default function Prototype() {
   activeSurfaceRef.current = activeSurface;
   if (evidenceFlowRequest) {
     lastEvidenceFlowRequestRef.current = evidenceFlowRequest;
+  }
+  if (tymmChildSession) {
+    lastTymmChildSessionRef.current = tymmChildSession;
   }
 
   const shellStyle = {
@@ -3317,8 +3853,10 @@ export default function Prototype() {
   }, [captureMenuOpen, evidenceFlowRequest]);
 
   useEffect(() => {
-    if (premiumGateOpen) setPremiumGateMounted(true);
-  }, [premiumGateOpen]);
+    if (premiumLegacyRequested && premiumGateOpen) {
+      setPremiumGateMounted(true);
+    }
+  }, [premiumGateOpen, premiumLegacyRequested]);
 
   useEffect(() => {
     if (persistenceState.phase !== "ready") return undefined;
@@ -3341,6 +3879,7 @@ export default function Prototype() {
   }, [documentsOpen, persistenceState.phase, store]);
 
   useEffect(() => {
+    if (import.meta.env.MODE !== "founder-production") return undefined;
     let cancelled = false;
     void import("./features/premium-access/founder-client.ts")
       .then(({ premiumFounderConfigurationFromEnvironment }) => {
@@ -3368,9 +3907,10 @@ export default function Prototype() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [premiumLegacyRequested]);
 
   useEffect(() => {
+    if (!premiumLegacyRequested) return undefined;
     if (!premiumFounderConfigurationState.ready) return undefined;
     const configuration = premiumFounderConfigurationState.configuration;
     if (!configuration) return undefined;
@@ -3407,6 +3947,7 @@ export default function Prototype() {
   }, [
     premiumFounderConfigurationState.configuration,
     premiumFounderConfigurationState.ready,
+    premiumLegacyRequested,
   ]);
 
   useEffect(() => {
@@ -3482,20 +4023,28 @@ export default function Prototype() {
         }
         if (workspace.classroom.status === "configured") {
           const classroom = workspace.classroom;
+          const legacyCurriculumProfile =
+            classroom.curriculumProfile?.framework !== "tymm";
+          const tymmStarterProfile = OFFICIAL_STARTER_CATALOG_PROFILES.tymm;
           setClassroomForm((current) => ({
             ...current,
+            schoolName: classroom.schoolName ?? "",
+            teacherName: classroom.teacherName ?? "",
             classroomName: classroom.classroomName,
             academicYearName: classroom.academicYearName,
             academicYearStart: classroom.academicYearStart,
             academicYearEnd: classroom.academicYearEnd,
             ageGroup: classroom.ageGroup ?? "",
-            curriculumProgram: classroom.curriculumProgram ?? "",
-            curriculumCatalogLabel:
-              classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
-            curriculumCatalogId:
-              classroom.curriculumProfile?.catalogId ?? "",
-            curriculumSourceVersion:
-              classroom.curriculumProfile?.sourceVersion ?? "",
+            curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
+            curriculumCatalogLabel: legacyCurriculumProfile
+              ? `${tymmStarterProfile.catalogId} · ${tymmStarterProfile.sourceVersion}`
+              : classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
+            curriculumCatalogId: legacyCurriculumProfile
+              ? tymmStarterProfile.catalogId
+              : classroom.curriculumProfile?.catalogId ?? "",
+            curriculumSourceVersion: legacyCurriculumProfile
+              ? tymmStarterProfile.sourceVersion
+              : classroom.curriculumProfile?.sourceVersion ?? "",
             scheduleKind: classroom.schedule.kind,
             startTime: classroom.schedule.startTime,
             endTime: classroom.schedule.endTime,
@@ -3510,9 +4059,10 @@ export default function Prototype() {
           releaseState.kind === "first_install" && isExistingInstallation;
         if (releaseState.shouldPresent || isLegacyUpdate) {
           setReleasePreviousVersion(releaseState.previousVersion);
-          setReleaseNotesOpen(true);
+          acknowledgeCurrentRelease();
+          setReleaseNotesOpen(false);
           setAnnouncement(
-            `MaarifOS ${CURRENT_RELEASE.version} sürümüne güncellendi.`,
+            `MaarifOS ${CURRENT_RELEASE.version} sade Maarif Modeli sürümü kullanıma hazır.`,
           );
         } else if (releaseState.kind === "first_install") {
           acknowledgeCurrentRelease();
@@ -4263,18 +4813,28 @@ export default function Prototype() {
       }
       if (restoredWorkspace.classroom.status === "configured") {
         const classroom = restoredWorkspace.classroom;
+        const legacyCurriculumProfile =
+          classroom.curriculumProfile?.framework !== "tymm";
+        const tymmStarterProfile = OFFICIAL_STARTER_CATALOG_PROFILES.tymm;
         setClassroomForm((current) => ({
           ...current,
+          schoolName: classroom.schoolName ?? "",
+          teacherName: classroom.teacherName ?? "",
           classroomName: classroom.classroomName,
           academicYearName: classroom.academicYearName,
           academicYearStart: classroom.academicYearStart,
           academicYearEnd: classroom.academicYearEnd,
           ageGroup: classroom.ageGroup ?? "",
-          curriculumProgram: classroom.curriculumProgram ?? "",
-          curriculumCatalogLabel:
-            classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
-          curriculumCatalogId: classroom.curriculumProfile?.catalogId ?? "",
-          curriculumSourceVersion: classroom.curriculumProfile?.sourceVersion ?? "",
+          curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
+          curriculumCatalogLabel: legacyCurriculumProfile
+            ? `${tymmStarterProfile.catalogId} · ${tymmStarterProfile.sourceVersion}`
+            : classroom.curriculumCatalogLabel ?? current.curriculumCatalogLabel,
+          curriculumCatalogId: legacyCurriculumProfile
+            ? tymmStarterProfile.catalogId
+            : classroom.curriculumProfile?.catalogId ?? "",
+          curriculumSourceVersion: legacyCurriculumProfile
+            ? tymmStarterProfile.sourceVersion
+            : classroom.curriculumProfile?.sourceVersion ?? "",
           scheduleKind: classroom.schedule.kind,
           startTime: classroom.schedule.startTime,
           endTime: classroom.schedule.endTime,
@@ -4575,28 +5135,99 @@ export default function Prototype() {
     }
   };
 
-  const addStudent = async () => {
+  const addStudent = async (
+    guardianRelationshipInput: string,
+    guardianKind: StudentContact["kind"],
+  ): Promise<boolean> => {
     const name = newStudentName.trim();
-    if (!name) return;
+    if (!name) return false;
     const nameParts = splitStudentDisplayName(name);
+    if (!nameParts.lastName) {
+      setNewStudentError("Ad ve soyadı yazın.");
+      return false;
+    }
+    const optionalCode = newStudentNumber.trim();
+    const birthDate = newStudentBirthDate.trim();
+    if (
+      birthDate &&
+      (!isCivilDate(birthDate) || birthDate > attendanceCivilDate)
+    ) {
+      setNewStudentError("Doğum tarihi geçersiz.");
+      return false;
+    }
+    const nationalIdentityNumber = newStudentNationalIdentityNumber.trim();
+    if (
+      nationalIdentityNumber &&
+      !isValidStudentNationalIdentityNumber(nationalIdentityNumber)
+    ) {
+      setNewStudentError("T.C. kimlik geçerli değil.");
+      return false;
+    }
+    const guardianName = newStudentGuardianName.trim();
+    const guardianPhone = newStudentGuardianPhone.trim();
+    if ((guardianName && !guardianPhone) || (!guardianName && guardianPhone)) {
+      setNewStudentError("Veli adı/telefonu eksik.");
+      return false;
+    }
+    let normalizedGuardianPhone = "";
+    if (guardianPhone) {
+      try {
+        normalizedGuardianPhone = normalizeStudentPhone(guardianPhone);
+      } catch (reason) {
+        setNewStudentError(
+          reason instanceof Error
+            ? reason.message
+            : "Veli telefonu geçersiz.",
+        );
+        return false;
+      }
+    }
     const student: Student = {
       id: crypto.randomUUID(),
       name: composeStudentDisplayName(nameParts.firstName, nameParts.lastName),
       firstName: nameParts.firstName,
       ...(nameParts.lastName ? { lastName: nameParts.lastName } : {}),
+      ...(birthDate ? { birthDate } : {}),
+      ...(optionalCode ? { optionalCode } : {}),
+      ...(nationalIdentityNumber ? { nationalIdentityNumber } : {}),
+      ...(guardianName && normalizedGuardianPhone
+        ? {
+            contacts: [
+              {
+                id: crypto.randomUUID(),
+                kind: guardianKind,
+                relationship: guardianRelationshipInput,
+                name: guardianName,
+                phone: normalizedGuardianPhone,
+                isPrimary: true,
+                isEmergencyContact: true,
+              },
+            ],
+          }
+        : {}),
       status: "present",
       attendanceMarked: false,
     };
+    setNewStudentError("");
     setDataBusy(true);
     try {
       await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: false }));
       setStudents((current) => [...current, student]);
       setNewStudentName("");
+      setNewStudentNumber("");
+      setNewStudentBirthDate("");
+      setNewStudentNationalIdentityNumber("");
+      setNewStudentGuardianName("");
+      setNewStudentGuardianPhone("");
       setStudentAddOpen(false);
       setStudentSearch("");
       setAnnouncement(`${name} sınıfa eklendi.`);
+      return true;
     } catch {
-      setAnnouncement("Çocuk eklenemedi; mevcut kayıtlar korundu.");
+      const message = "Çocuk eklenemedi; kayıtlar korundu.";
+      setNewStudentError(message);
+      setAnnouncement(message);
+      return false;
     } finally {
       setDataBusy(false);
     }
@@ -4632,7 +5263,10 @@ export default function Prototype() {
     }
   };
 
-  const openStudentProfile = (studentId: string) => {
+  const openStudentProfile = (
+    studentId: string,
+    initialTab: Exclude<StudentProfileTab, "portfolio"> = "flow",
+  ) => {
     const student =
       students.find((item) => item.id === studentId) ??
       archivedStudents.find((item) => item.id === studentId);
@@ -4654,17 +5288,22 @@ export default function Prototype() {
       preferredName: student.preferredName ?? "",
       birthDate: student.birthDate ?? "",
       optionalCode: student.optionalCode ?? "",
-      enrollmentDate: student.enrollmentDate ?? "",
+      nationalIdentityNumber: student.nationalIdentityNumber ?? "",
+      enrollmentYear: student.enrollmentYear ?? "",
       homeLanguages: student.homeLanguages ?? "",
       interests: student.interests ?? "",
       strengths: student.strengths ?? "",
       supportPreferences: student.supportPreferences ?? "",
       contacts: studentContactsForForm(student),
+      careDetails: {
+        ...emptyStudentCareForm,
+        ...student.careDetails,
+      },
       profilePhotoDataUrl: student.profilePhotoDataUrl ?? "",
     });
     setStudentProfileError("");
     setStudentObservationLimit(20);
-    setStudentProfileTab("flow");
+    setStudentProfileTab(initialTab);
     setStudentObservationFilter("all");
     setStudentObservationMonth("all");
     setStudentPortfolioWorkspace(emptyStudentPortfolioWorkspace);
@@ -4788,6 +5427,8 @@ export default function Prototype() {
       (contact) =>
         contact.phone.trim() ||
         contact.name?.trim() ||
+        contact.isEmergencyContact ||
+        contact.isAuthorizedPickup ||
         (contact.kind === "other" && contact.relationship.trim()),
     );
     const incompleteContact = contactsWithDetails.find(
@@ -4808,6 +5449,9 @@ export default function Prototype() {
             ? "Baba"
             : contact.relationship,
     }));
+    const careDetails = normalizeStudentCareDetails(
+      studentProfileForm.careDetails,
+    );
     const updatedStudent: Student = {
       ...selectedProfileStudent,
       name: composeStudentDisplayName(
@@ -4825,8 +5469,11 @@ export default function Prototype() {
       ...(studentProfileForm.optionalCode.trim()
         ? { optionalCode: studentProfileForm.optionalCode }
         : {}),
-      ...(studentProfileForm.enrollmentDate
-        ? { enrollmentDate: studentProfileForm.enrollmentDate }
+      ...(studentProfileForm.nationalIdentityNumber
+        ? { nationalIdentityNumber: studentProfileForm.nationalIdentityNumber }
+        : {}),
+      ...(studentProfileForm.enrollmentYear
+        ? { enrollmentYear: studentProfileForm.enrollmentYear }
         : {}),
       ...(studentProfileForm.homeLanguages.trim()
         ? { homeLanguages: studentProfileForm.homeLanguages }
@@ -4841,6 +5488,7 @@ export default function Prototype() {
         ? { supportPreferences: studentProfileForm.supportPreferences }
         : {}),
       ...(contacts.length > 0 ? { contacts } : {}),
+      ...(careDetails ? { careDetails } : {}),
       ...(studentProfileForm.profilePhotoDataUrl
         ? { profilePhotoDataUrl: studentProfileForm.profilePhotoDataUrl }
         : {}),
@@ -4850,7 +5498,10 @@ export default function Prototype() {
     }
     if (!studentProfileForm.birthDate) delete updatedStudent.birthDate;
     if (!studentProfileForm.optionalCode.trim()) delete updatedStudent.optionalCode;
-    if (!studentProfileForm.enrollmentDate) delete updatedStudent.enrollmentDate;
+    if (!studentProfileForm.nationalIdentityNumber) {
+      delete updatedStudent.nationalIdentityNumber;
+    }
+    if (!studentProfileForm.enrollmentYear) delete updatedStudent.enrollmentYear;
     if (!studentProfileForm.homeLanguages.trim()) delete updatedStudent.homeLanguages;
     if (!studentProfileForm.interests.trim()) delete updatedStudent.interests;
     if (!studentProfileForm.strengths.trim()) delete updatedStudent.strengths;
@@ -4858,6 +5509,7 @@ export default function Prototype() {
       delete updatedStudent.supportPreferences;
     }
     if (contacts.length === 0) delete updatedStudent.contacts;
+    if (!careDetails) delete updatedStudent.careDetails;
     if (!studentProfileForm.profilePhotoDataUrl) {
       delete updatedStudent.profilePhotoDataUrl;
     }
@@ -5123,10 +5775,13 @@ export default function Prototype() {
     }
   };
 
-  const openAcademicCalendar = async (requestedDate?: string) => {
+  const openAcademicCalendar = async (
+    requestedDate?: string,
+    focusEntryForm = false,
+  ) => {
     if (!configuredClassroom) {
       setClassroomOpen(true);
-      setAnnouncement("Takvimi açmadan önce sınıfınızı kurun.");
+      setAnnouncement("Önce sınıfınızı kurun.");
       return;
     }
     surfaceTransitionRef.current = "calendar";
@@ -5152,13 +5807,15 @@ export default function Prototype() {
       setCalendarMonth(preferredDate.slice(0, 7));
       setPlansOpen(false);
       setCalendarOpen(true);
-      setAnnouncement("Eğitim takvimi açıldı.");
+      if (focusEntryForm) {
+        setTimeout(() => calendarEntryTitleRef.current?.focus(), 250);
+      }
     } catch (reason) {
       surfaceTransitionRef.current = null;
       setAnnouncement(
         reason instanceof Error
           ? reason.message
-          : "Eğitim takvimi açılamadı.",
+          : "Takvim açılamadı.",
       );
     } finally {
       setDataBusy(false);
@@ -5201,10 +5858,13 @@ export default function Prototype() {
       return;
     }
     if (plan.premium && !premiumMutationAllowed) {
-      setPremiumGateOpen(true);
-      setCalendarError(
-        "Bu premium plan salt okunur. Düzenlemek için Premium erişimini yenileyin.",
+      setCalendarError("");
+      setCalendarOpen(false);
+      setTeacherPlanRecordsOpen(false);
+      setAnnouncement(
+        "Eski hazır plan salt okunur korundu. Düzenlemek yerine yeni bir Maarif Modeli günlük planı açıldı.",
       );
+      void openPlanFlow();
       return;
     }
     if (!plan.editable) {
@@ -5654,9 +6314,11 @@ export default function Prototype() {
       );
       return;
     }
-    const selectedProgram = classroomForm.curriculumProgram;
+    const selectedProgram = CURRICULUM_PROGRAM_LABELS.tymm;
     const selectedScheduleKind = classroomForm.scheduleKind;
     if (
+      !classroomForm.schoolName.trim() ||
+      !classroomForm.teacherName.trim() ||
       !classroomForm.classroomName.trim() ||
       !classroomForm.academicYearName.trim() ||
       !classroomForm.academicYearStart ||
@@ -5670,13 +6332,15 @@ export default function Prototype() {
       !classroomForm.curriculumSourceVersion.trim()
     ) {
       setClassroomError(
-        "Sınıf, yaş grubu, program, çalışma düzeni ve saatleri açıkça seçin.",
+        "Okul, öğretmen, sınıf, yaş grubu, çalışma düzeni ve saatleri eksiksiz olmalıdır.",
       );
       return;
     }
     if (academicYearTransitionRequired && !academicYearTransitionConfirmed) {
       setClassroomError(
-        "Yeni eğitim yılına geçmek için önce arşivleme ve öğrenci taşıma onayını işaretleyin.",
+        samePeriodCurriculumTransitionRequired
+          ? "Maarif Modeli sınıfını oluşturmak için önce eski EÇE kayıtlarının arşivleneceğini ve etkin öğrencilerin taşınacağını onaylayın."
+          : "Yeni eğitim yılına geçmek için önce arşivleme ve öğrenci taşıma onayını işaretleyin.",
       );
       return;
     }
@@ -5707,6 +6371,8 @@ export default function Prototype() {
           endDate: classroomForm.academicYearEnd,
         },
         classroom: {
+          schoolName: classroomForm.schoolName,
+          teacherName: classroomForm.teacherName,
           name: classroomForm.classroomName,
           ageGroup: classroomForm.ageGroup,
           curriculumProgram: selectedProgram,
@@ -5742,6 +6408,9 @@ export default function Prototype() {
               },
               carryStudentIds: students.map((student) => student.id),
               closedOn,
+              transitionKind: samePeriodCurriculumTransitionRequired
+                ? "same-period-curriculum"
+                : "academic-year",
             });
           }
           return saveClassroomConfiguration(store, {
@@ -5758,8 +6427,12 @@ export default function Prototype() {
         },
         {
           failureDetail:
-            "Sınıf ayarları bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
-          successDetail: "Sınıf ve çalışma düzeni bu cihaza kaydedildi.",
+            samePeriodCurriculumTransitionRequired
+              ? "Maarif Modeli sınıfı bu cihaza oluşturulamadı. Eski EÇE sınıfı değiştirilmedi."
+              : "Sınıf ayarları bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
+          successDetail: samePeriodCurriculumTransitionRequired
+            ? "Eski EÇE sınıfı arşivlendi; yeni Maarif Modeli sınıfı oluşturuldu."
+            : "Sınıf ve çalışma düzeni bu cihaza kaydedildi.",
         },
       );
       const [refreshed, dashboard] = await Promise.all([
@@ -5775,7 +6448,9 @@ export default function Prototype() {
       setPlanFlowOpen(false);
       setClassroomOpen(false);
       setAnnouncement(
-        refreshed.today.classroom.status === "configured"
+        samePeriodCurriculumTransitionRequired
+          ? "Eski EÇE sınıfı salt okunur arşivlendi; öğrenciler yeni Maarif Modeli sınıfına taşındı."
+          : refreshed.today.classroom.status === "configured"
           ? `${refreshed.today.classroom.classroomName} çalışma düzeni kaydedildi.`
           : context.status === "configured"
             ? `${context.classroomName} çalışma düzeni kaydedildi.`
@@ -5824,12 +6499,9 @@ export default function Prototype() {
     if (currentActivity.kind === "premium-flow-block") {
       try {
         assertPremiumMutationAccessNow(targetPremiumPack ?? null);
-      } catch (reason) {
-        setPremiumGateOpen(true);
+      } catch {
         setAnnouncement(
-          reason instanceof Error
-            ? reason.message
-            : "Bu premium plan salt okunur. Etkinliği değiştirmek için Premium erişimini yenileyin.",
+          "Eski hazır etkinlik salt okunur korunuyor. Yeni etkinliği Etkinlikler alanından başlatın.",
         );
         return;
       }
@@ -5884,12 +6556,31 @@ export default function Prototype() {
   };
 
   const restoreAppSurface = useCallback((surface: AppSurface | null) => {
+    const normalizedSurface =
+      surface === "premium-gate"
+        ? null
+        : surface === "premium-plans"
+          ? "teacher-plan-records"
+          : surface;
     const evidenceRequest =
-      surface === "evidence-flow" ? lastEvidenceFlowRequestRef.current : null;
+      normalizedSurface === "evidence-flow"
+        ? lastEvidenceFlowRequestRef.current
+        : null;
+    const childSession =
+      normalizedSurface === "tymm-child"
+        ? lastTymmChildSessionRef.current
+        : null;
     const restorableSurface =
-      surface === "evidence-flow" && !evidenceRequest ? null : surface;
+      (normalizedSurface === "evidence-flow" && !evidenceRequest) ||
+      (normalizedSurface === "tymm-child" && !childSession)
+        ? null
+        : normalizedSurface;
 
     setCaptureMenuOpen(restorableSurface === "capture-menu");
+    setTymmGuideOpen(restorableSurface === "tymm-guide");
+    setTymmChildSession(
+      restorableSurface === "tymm-child" ? childSession : null,
+    );
     setAttendanceOpen(restorableSurface === "attendance");
     setStudentProfileOpen(restorableSurface === "student-profile");
     setStudentShareOpen(restorableSurface === "student-share");
@@ -5906,8 +6597,8 @@ export default function Prototype() {
     setReleaseNotesOpen(restorableSurface === "release-notes");
     setPlanFlowOpen(restorableSurface === "plan-flow");
     setTeacherPlanRecordsOpen(restorableSurface === "teacher-plan-records");
-    setPremiumGateOpen(restorableSurface === "premium-gate");
-    setPremiumPlanOpen(restorableSurface === "premium-plans");
+    setPremiumGateOpen(false);
+    setPremiumPlanOpen(false);
     setEvidenceFlowRequest(evidenceRequest);
     setStudentActionsOpenId(null);
   }, []);
@@ -5937,6 +6628,19 @@ export default function Prototype() {
     const handlePopState = (event: PopStateEvent) => {
       const targetSurface = appSurfaceFromHistoryState(event.state);
       const currentSurface = activeSurfaceRef.current;
+      if (currentSurface === "tymm-child") {
+        window.history.pushState(
+          appHistoryState(currentSurface),
+          "",
+          window.location.href,
+        );
+        historySurfaceRef.current = currentSurface;
+        historyRestoringRef.current = false;
+        setAnnouncement(
+          "Çocuk ekranında geri işlemi kapalıdır; öğretmene geçmek için yetişkin doğrulaması gerekir.",
+        );
+        return;
+      }
       if (
         currentSurface !== "plan-flow" &&
         currentSurface !== "evidence-flow"
@@ -6010,7 +6714,8 @@ export default function Prototype() {
     const replaceCurrentEntry =
       previousSurface === "plan-flow" ||
       previousSurface === "evidence-flow" ||
-      previousSurface === "premium-gate";
+      previousSurface === "premium-gate" ||
+      previousSurface === "tymm-child";
     const method = replaceCurrentEntry ? "replaceState" : "pushState";
     window.history[method](
       appHistoryState(activeSurface),
@@ -6021,7 +6726,11 @@ export default function Prototype() {
     surfaceTransitionRef.current = null;
   }, [activeSurface, native]);
 
-  const openPlanFlow = async (initialTemplate?: PremiumDailyTemplateSelection) => {
+  const openPlanFlow = async (
+    initialTemplate?: PremiumDailyTemplateSelection,
+    initialActivityTitle?: string,
+    initialPedagogicalProvenance?: PedagogicalPlanProvenance,
+  ) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Plan oluşturma güvenlik için kapalı.",
@@ -6031,6 +6740,14 @@ export default function Prototype() {
     if (!configuredClassroom) {
       setClassroomOpen(true);
       setAnnouncement("Plan oluşturmadan önce sınıfınızı kurun.");
+      return;
+    }
+    if (configuredClassroom.curriculumProfile?.framework !== "tymm") {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      setAnnouncement(
+        "Eski EÇE kayıtları salt okunur korunuyor. Yeni plan için Maarif Modeli sınıfını oluşturun.",
+      );
       return;
     }
     if (initialTemplate && !premiumMutationAllowed) {
@@ -6073,21 +6790,25 @@ export default function Prototype() {
     setTeacherPlanRecordsOpen(false);
     setPremiumPlanOpen(false);
     setPremiumDailyTemplate(initialTemplate ?? null);
+    setStudioActivityTitle(initialActivityTitle?.trim() || null);
+    setStudioPedagogicalProvenance(initialPedagogicalProvenance ?? null);
     setScheduledPlanEditDraft(null);
     setTeacherOwnedDailyFlowCopySources(copySources);
     setPlanFlowOpen(true);
   };
 
-  const premiumPlanEntryEnabled =
-    premiumPilotPreviewEnabled ||
-    internalStaffExportEnabled ||
-    isCapabilityEnabled("premiumPlanCenter") ||
-    premiumFounderConfigurationState.configuration !== null ||
-    premiumFounderAccess !== null;
+  const premiumPlanEntryEnabled = false;
 
   const openPremiumPlans = (
     initialSection: "overview" | "weekly" | "monthly" = "overview",
   ) => {
+    if (!premiumLegacyRequested) {
+      setPremiumGateOpen(false);
+      setPremiumPlanOpen(false);
+      navigate("plans");
+      setAnnouncement("Maarif Modeli planları açıldı.");
+      return;
+    }
     setTeacherPlanRecordsOpen(false);
     setPremiumPlanInitialSection(initialSection);
     const verifiedAccess = premiumFounderAccess?.access;
@@ -6202,6 +6923,8 @@ export default function Prototype() {
     activityId: string,
     initialStudentId?: string,
     selectedActivity?: EvidenceActivitySummary,
+    initialDraft?: EvidenceCaptureSeed,
+    activityStartPolicy: EvidenceActivityStartPolicy = "start-if-planned",
   ) => {
     if (educationalWriteNotice) {
       setClassroomOpen(true);
@@ -6220,12 +6943,9 @@ export default function Prototype() {
     if (targetPremiumPack !== undefined) {
       try {
         assertPremiumMutationAccessNow(targetPremiumPack);
-      } catch (reason) {
-        setPremiumGateOpen(true);
+      } catch {
         setAnnouncement(
-          reason instanceof Error
-            ? reason.message
-            : "Bu premium plan salt okunur. Yeni gözlem eklemek için Premium erişimini yenileyin.",
+          "Eski hazır plan salt okunur korunuyor. Yeni gözlemi Sınıfım alanından ekleyin.",
         );
         return;
       }
@@ -6237,7 +6957,10 @@ export default function Prototype() {
     setDataBusy(true);
     surfaceTransitionRef.current = "evidence-flow";
     try {
-      if (selected.status === "planned") {
+      if (
+        selected.status === "planned" &&
+        activityStartPolicy === "start-if-planned"
+      ) {
         await enqueuePersistence(
           () => setTodayActivityStatus(store, selected.id, "in_progress"),
           {
@@ -6261,6 +6984,7 @@ export default function Prototype() {
       setEvidenceFlowRequest({
         activity,
         ...(initialStudentId ? { initialStudentId } : {}),
+        ...(initialDraft ? { initialDraft } : {}),
       });
       setAnnouncement(`${activity.title} için gözlem notu açıldı.`);
     } catch (reason) {
@@ -6277,6 +7001,7 @@ export default function Prototype() {
     student: Student,
     civilDate: string,
     initialStudentId?: string,
+    initialDraft?: EvidenceCaptureSeed,
   ) => {
     if (writesBlocked) {
       setAnnouncement(
@@ -6320,6 +7045,7 @@ export default function Prototype() {
       setEvidenceFlowRequest({
         activity,
         ...(initialStudentId ? { initialStudentId } : {}),
+        ...(initialDraft ? { initialDraft } : {}),
       });
       setAnnouncement(
         initialStudentId
@@ -6338,7 +7064,11 @@ export default function Prototype() {
     }
   };
 
-  const openStudentObservation = async (initialStudentId?: string) => {
+  const openStudentObservation = async (
+    initialStudentId?: string,
+    initialDraft?: EvidenceCaptureSeed,
+    activityStartPolicy: EvidenceActivityStartPolicy = "start-if-planned",
+  ) => {
     if (writesBlocked) {
       setAnnouncement(
         "Cihaz verileri yazmaya hazır değil. Hızlı gözlem güvenlik için kapalı.",
@@ -6359,6 +7089,14 @@ export default function Prototype() {
     if (!configuredClassroom?.curriculumProfile) {
       setClassroomOpen(true);
       setAnnouncement("Hızlı gözlem için önce sınıf ve program kurulumunu tamamlayın.");
+      return;
+    }
+    if (configuredClassroom.curriculumProfile.framework !== "tymm") {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      setAnnouncement(
+        "Eski EÇE kayıtları salt okunur korunuyor. Yeni gözlem için Maarif Modeli sınıfını oluşturun.",
+      );
       return;
     }
     if (educationalWriteNotice) {
@@ -6384,6 +7122,8 @@ export default function Prototype() {
           resolution.activity.id,
           initialStudentId,
           resolution.activity,
+          initialDraft,
+          activityStartPolicy,
         );
         return;
       }
@@ -6396,6 +7136,8 @@ export default function Prototype() {
           civilDate: liveEvidence.civilDate,
           spontaneousStudentId: student.id,
           ...(initialStudentId ? { initialStudentId } : {}),
+          ...(initialDraft ? { initialDraft } : {}),
+          activityStartPolicy,
         });
         setCaptureMenuOpen(true);
         setAnnouncement(
@@ -6409,6 +7151,7 @@ export default function Prototype() {
         student,
         liveEvidence.civilDate,
         initialStudentId,
+        initialDraft,
       );
     } catch (reason) {
       surfaceTransitionRef.current = null;
@@ -6422,11 +7165,102 @@ export default function Prototype() {
     }
   };
 
-  const openCaptureEntry = () => {
-    surfaceTransitionRef.current = "capture-menu";
+  const openTymmAgeGuide = () => {
+    const nextAgeBand = currentClassTymmAgeBand ?? "36-48";
+    const nextGuide = getTymmAgeGuide(nextAgeBand) ?? tymmAgeGuides[0];
+    setTymmGuideAgeBand(nextGuide.ageBand);
+    setTymmGuideDomain(nextGuide.domainOutcomeCounts[0].domain);
+    setTymmGuideTemplateId(nextGuide.choiceTemplates[0].id);
+    setTymmGuideStudentId((current) =>
+      students.some((student) => student.id === current)
+        ? current
+        : students[0]?.id ?? "",
+    );
+    surfaceTransitionRef.current = "tymm-guide";
+    setTymmGuideOpen(true);
+    setAnnouncement(
+      "TYMM 2024 yaş rehberi açıldı. Üç resmî yaş bandı ve gözetimli çocuk seçimleri hazır.",
+    );
+  };
+
+  const selectTymmGuideAge = (ageBand: TymmAgeGuideReadModel["ageBand"]) => {
+    const guide = getTymmAgeGuide(ageBand);
+    if (!guide) return;
+    setTymmGuideAgeBand(guide.ageBand);
+    setTymmGuideDomain(guide.domainOutcomeCounts[0].domain);
+    setTymmGuideTemplateId(guide.choiceTemplates[0].id);
+  };
+
+  const startTymmChildParticipation = () => {
+    if (childParticipationBlockedReason || !selectedTymmStudent) {
+      setAnnouncement(childParticipationBlockedReason);
+      return;
+    }
+    keyboard.hide();
+    surfaceTransitionRef.current = "tymm-child";
+    setTymmGuideOpen(false);
+    setTymmChildSession({
+      guide: selectedTymmGuide,
+      template: selectedTymmTemplate,
+      student: selectedTymmStudent,
+    });
+    setAnnouncement(
+      `${selectedTymmStudent.preferredName ?? selectedTymmStudent.name} için gözetimli çocuk ekranı açıldı.`,
+    );
+  };
+
+  const handoffTymmChildParticipation = (choice: TymmAgeGuideChoice | null) => {
+    const session = tymmChildSession;
+    if (!session) return;
+    setTymmChildSession(null);
+    if (!choice) {
+      surfaceTransitionRef.current = "tymm-guide";
+      setTymmGuideOpen(true);
+      setAnnouncement(
+        "Çocuk seçim yapmamayı tercih etti; hiçbir kayıt veya değerlendirme oluşturulmadı.",
+      );
+      return;
+    }
+    if (educationalWriteNotice) {
+      surfaceTransitionRef.current = "tymm-guide";
+      setTymmGuideOpen(true);
+      setAnnouncement(
+        `${educationalWriteNotice} Çocuğun seçimi kaydedilmedi.`,
+      );
+      return;
+    }
+    const initialDraft: EvidenceCaptureSeed = {
+      rawText: `Gözetimli çocuk katılımı sırasında “${choice.label}” seçeneğine dokundu. Bu cümle yalnız gözlenen dokunuşu belirtir; öğretmen gözlemini ekleyip doğrulamalıdır.`,
+      context: `MaarifOS özgün katılım şablonu · TYMM ${session.guide.ageLabel} · ${session.template.title} · ${choice.id}`,
+      childQuote: "",
+      observationType: "quick-note",
+      categoryIds: ["play-participation"],
+    };
+    setAnnouncement(
+      "Çocuk seçimi değerlendirmeye dönüşmedi; öğretmen incelemesi için düzenlenebilir gözlem taslağı açılıyor.",
+    );
+    void openStudentObservation(session.student.id, initialDraft, "preserve");
+  };
+
+  const openCaptureEntry = (options: ActivityStudioOpenOptions = {}) => {
+    if (
+      configuredClassroom &&
+      configuredClassroom.curriculumProfile?.framework !== "tymm"
+    ) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      setAnnouncement("Maarif Modeli sınıfını oluşturun.");
+      return;
+    }
+    keyboard.hide();
+    setDocumentsOpen(false);
+    setPlansOpen(false);
+    setPlanFlowOpen(false);
+    setCalendarOpen(false);
+    setCaptureMenuOpen(false);
     setObservationContextChoice(null);
-    setCaptureMenuOpen(true);
-    setAnnouncement("Ne eklemek istediğinizi seçin.");
+    studioOpenOptionsRef.current = options;
+    navigatePrimaryRoute("activities");
   };
 
   const openPendingObservation = (
@@ -6818,6 +7652,16 @@ export default function Prototype() {
         activityId: activity.id,
         taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
       }),
+    loadDraftBatch: async (activity) => {
+      const { loadQuickObservationDraftBatch } = await import(
+        "./features/evidence/quick-observation-batch-recovery.ts"
+      );
+      return loadQuickObservationDraftBatch(store, {
+        planId: activity.planId,
+        activityId: activity.id,
+        taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+      });
+    },
     saveDraft: (activity, input) => {
       if (educationalWriteNotice) {
         return Promise.reject(new Error(educationalWriteNotice));
@@ -7027,12 +7871,33 @@ export default function Prototype() {
     },
   };
 
+  const navigatePrimaryRoute = (routeId: Parameters<typeof navigate>[0]) => {
+    const replacesOpenSurface = native && activeSurfaceRef.current !== null;
+    if (replacesOpenSurface) {
+      historyRestoringRef.current = true;
+      historySurfaceRef.current = null;
+      surfaceTransitionRef.current = null;
+      window.history.replaceState(
+        appHistoryState(null),
+        "",
+        window.location.href,
+      );
+    }
+    navigate(routeId, replacesOpenSurface ? { replace: true } : undefined);
+  };
+
   const handleNav = (id: AlphaPrimaryNavigationId, label: string) => {
     if (id === "capture") {
+      keyboard.hide();
+      setCaptureMenuOpen(false);
       setDocumentsOpen(false);
       setPlansOpen(false);
       setPremiumGateOpen(false);
-      openCaptureEntry();
+      setPremiumPlanOpen(false);
+      setPlanFlowOpen(false);
+      setCalendarOpen(false);
+      navigatePrimaryRoute("activities");
+      setAnnouncement("Etkinlik ve Materyal Stüdyosu açıldı.");
       return;
     }
     if (id === "classroom") {
@@ -7041,7 +7906,7 @@ export default function Prototype() {
       setDocumentsOpen(false);
       setPlansOpen(false);
       setPremiumGateOpen(false);
-      navigate("classroom");
+      navigatePrimaryRoute("classroom");
       setAnnouncement("Sınıfım bölümü açıldı.");
       return;
     }
@@ -7054,7 +7919,7 @@ export default function Prototype() {
       setPremiumPlanOpen(false);
       setPlanFlowOpen(false);
       setCalendarOpen(false);
-      navigate("plans");
+      navigatePrimaryRoute("plans");
       setAnnouncement("Plan çalışma alanı açıldı.");
       return;
     }
@@ -7067,7 +7932,7 @@ export default function Prototype() {
       setPlanFlowOpen(false);
       setCalendarOpen(false);
       setDocumentsOpen(false);
-      navigate("documents");
+      navigatePrimaryRoute("documents");
       setAnnouncement("Belge ve kayıt çalışma alanı açıldı.");
       return;
     }
@@ -7075,7 +7940,7 @@ export default function Prototype() {
     setDocumentsOpen(false);
     setPlansOpen(false);
     setPremiumGateOpen(false);
-    navigate("today");
+    navigatePrimaryRoute("today");
     setAnnouncement(`${label} bölümü seçildi.`);
   };
 
@@ -7092,9 +7957,7 @@ export default function Prototype() {
     setPremiumPlanOpen(false);
     surfaceTransitionRef.current = "teacher-plan-records";
     setTeacherPlanRecordsOpen(true);
-    setAnnouncement(
-      "Bu cihazdaki kalıcı öğretmen planı premium erişimden bağımsız açıldı.",
-    );
+    setAnnouncement("Bu cihazdaki öğretmen planları açıldı.");
   };
 
   const openPlanWorkbenchLevel = (levelId: PlanWorkbenchLevelId) => {
@@ -7104,13 +7967,11 @@ export default function Prototype() {
       return;
     }
     if (destination === "premium-library") {
-      openPremiumPlans(
-        levelId === "monthly"
-          ? "monthly"
-          : levelId === "weekly"
-            ? "weekly"
-            : "overview",
-      );
+      if (levelId === "daily") {
+        void openPlanFlow();
+      } else {
+        openTeacherPlanRecords(levelId);
+      }
       return;
     }
     const dailyState = teacherWorkCycle.daily;
@@ -7118,6 +7979,20 @@ export default function Prototype() {
       void openAcademicCalendar(attendanceCivilDate).then(() => {
         setAnnouncement(
           `${dailyState.conflictingPlanIds.length} günlük plan aynı tarihte bulundu. Yeni plan oluşturulmadı; kayıtları inceleyip çakışmayı çözün.`,
+        );
+      });
+      return;
+    }
+    if (
+      (dailyState.status === "chain-mismatch" ||
+        dailyState.status === "future-only") &&
+      dailyState.referenceCivilDate
+    ) {
+      void openAcademicCalendar(dailyState.referenceCivilDate).then(() => {
+        setAnnouncement(
+          dailyState.status === "chain-mismatch"
+            ? "Bugün tarihli plan korundu; haftalık plan bağı takvimde incelemeye açıldı."
+            : `Yaklaşan plan ${dailyState.referenceCivilDate} tarihinde takvimde açıldı.`,
         );
       });
       return;
@@ -7144,7 +8019,7 @@ export default function Prototype() {
       return;
     }
     if (planDestination === "premium-library") {
-      openPremiumPlans(itemId === "monthly" ? "monthly" : "overview");
+      openTeacherPlanRecords(itemId === "monthly" ? "monthly" : "annual");
       return;
     }
     if (itemId === "students" && students.length + archivedStudents.length === 0) {
@@ -7160,6 +8035,160 @@ export default function Prototype() {
         ? "Anekdot belge hazırlama alanı açıldı."
         : "Öğrenci dosyası hazırlama alanı açıldı.",
     );
+  };
+
+  const downloadSimpleClassRoster = async () => {
+    const snapshot = await store.readSnapshot();
+    const scope = resolveActiveClassroomScope(snapshot);
+    if (!scope || !configuredClassroom) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Sınıf listesi için önce okul ve sınıf kurulumunu tamamlayın.");
+    }
+    const schoolName = configuredClassroom.schoolName?.trim();
+    const teacherName = configuredClassroom.teacherName?.trim();
+    if (!schoolName || !teacherName) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Belge için okul adı ve öğretmen adı soyadını bir kez yazın.");
+    }
+    if (students.length === 0) {
+      navigatePrimaryRoute("classroom");
+      setStudentAddOpen(true);
+      throw new Error("Sınıf listesi için önce ilk çocuğu ekleyin.");
+    }
+    const [{ createSimpleClassRosterDocument }, { downloadBrowserFile }] =
+      await Promise.all([
+        import("./features/students/simple-class-roster-document.ts"),
+        import("./features/documents/browser-file-download.ts"),
+      ]);
+    const file = createSimpleClassRosterDocument({
+      scope,
+      snapshot,
+      schoolName,
+      teacherName,
+      generatedAt: new Date().toISOString(),
+    });
+    downloadBrowserFile(file);
+    setAnnouncement(`${file.rowCount} öğrencilik imzalı sınıf listesi hazırlandı.`);
+  };
+
+  const downloadSimpleObservation = async (request: {
+    studentId: string;
+    audience: SimpleObservationDocumentAudience;
+    period: SimpleObservationPeriod;
+  }) => {
+    const snapshot = await store.readSnapshot();
+    const scope = resolveActiveClassroomScope(snapshot);
+    if (!scope || !configuredClassroom) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Gözlem belgesi için önce okul ve sınıf kurulumunu tamamlayın.");
+    }
+    const schoolName = configuredClassroom.schoolName?.trim();
+    const teacherName = configuredClassroom.teacherName?.trim();
+    if (!schoolName || !teacherName) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Belge için okul adı ve öğretmen adı soyadını bir kez yazın.");
+    }
+    const { createSimpleObservationDocument, simpleObservationDocumentBlob } =
+      await import("./features/reports/simple-observation-document.ts");
+    const file = createSimpleObservationDocument({
+      audience: request.audience,
+      scope,
+      snapshot,
+      studentId: request.studentId,
+      schoolName,
+      teacherName,
+      classroomName: configuredClassroom.classroomName,
+      academicYearName: configuredClassroom.academicYearName,
+      period: request.period,
+      generatedAt: new Date().toISOString(),
+    });
+    const blob = simpleObservationDocumentBlob(file);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = file.fileName;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setAnnouncement(
+      `${file.observationCount} kayıt içeren ${request.audience === "parent" ? "veli" : "idare"} gözlem özeti hazırlandı.`,
+    );
+  };
+
+  const downloadSimplePlan = async (
+    kind: "annual" | "monthly" | "weekly" | "daily",
+  ) => {
+    if (!configuredClassroom) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Plan belgesi için önce sınıf kurulumunu tamamlayın.");
+    }
+    if (
+      !configuredClassroom.schoolName?.trim() ||
+      !configuredClassroom.teacherName?.trim()
+    ) {
+      setClassroomSetupSection("period");
+      setClassroomOpen(true);
+      throw new Error("Plan belgesi için okul ve öğretmen adını bir kez yazın.");
+    }
+    const [{ loadTeacherOwnedPlanGraph }, { generateStandaloneTeacherOwnedPlanExportFile }] =
+      await Promise.all([
+        import("./features/planning/teacher-owned-plan-service.ts"),
+        import("./features/planning/teacher-owned-plan-document.ts"),
+      ]);
+    const graph = await loadTeacherOwnedPlanGraph(store);
+    if (!graph) {
+      openTeacherPlanRecords(kind === "daily" ? "annual" : kind);
+      throw new Error("Henüz kaydedilmiş plan zinciri yok. Plan alanı açıldı.");
+    }
+
+    if (kind === "annual" && !teacherWorkCycle.documents.planDocumentReady) {
+      openTeacherPlanRecords("annual");
+      throw new Error(
+        "Yıllık çıktı için yıllık planı ve en az bir aylık planı tamamlayın.",
+      );
+    }
+
+    let scope: TeacherOwnedPlanDocumentScope = { kind: "combined" };
+    if (kind === "monthly") {
+      if (!teacherWorkCycle.monthly?.id) {
+        openTeacherPlanRecords("monthly");
+        throw new Error("Aylık planı kaydedin; ardından belge tek dokunuşla hazırlanır.");
+      }
+      scope = { kind: "monthly", monthlyPlanId: teacherWorkCycle.monthly.id };
+    } else if (kind === "weekly") {
+      if (!teacherWorkCycle.weekly?.id) {
+        openTeacherPlanRecords("weekly");
+        throw new Error("Haftalık akışı kaydedin; ardından belge tek dokunuşla hazırlanır.");
+      }
+      scope = { kind: "weekly", weeklyPlanId: teacherWorkCycle.weekly.id };
+    } else if (kind === "daily") {
+      if (!teacherWorkCycle.daily.planId) {
+        openPlanWorkbenchLevel("daily");
+        throw new Error("Bugünün planını kaydedin; ardından belge tek dokunuşla hazırlanır.");
+      }
+      scope = { kind: "daily", dailyPlanId: teacherWorkCycle.daily.planId };
+    }
+
+    const file = await generateStandaloneTeacherOwnedPlanExportFile(
+      graph,
+      store,
+      "pdf",
+      scope,
+      {
+        schoolName: configuredClassroom.schoolName,
+        teacherName: configuredClassroom.teacherName,
+        classroomName: configuredClassroom.classroomName,
+        academicYearName: configuredClassroom.academicYearName,
+        ageGroup: configuredClassroom.ageGroup,
+        curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
+      },
+    );
+    downloadBytes(file.fileName, file.mimeType, file.bytes);
+    setAnnouncement(`${kind === "annual" ? "Yıllık" : kind === "monthly" ? "Aylık" : kind === "weekly" ? "Haftalık" : "Günlük"} plan PDF belgesi hazırlandı.`);
   };
 
   const openSetupProgressStep = (stepId: SetupProgressStepId) => {
@@ -7384,6 +8413,41 @@ export default function Prototype() {
     window.dispatchEvent(new CustomEvent("maarifos:check-update"));
   };
 
+  useEffect(() => {
+    if (
+      !updateReady ||
+      dataBusy ||
+      persistenceState.phase !== "ready" ||
+      persistenceState.pendingWrites > 0 ||
+      activeSurface !== null ||
+      route.id !== "today" ||
+      document.visibilityState !== "visible"
+    ) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      const focused = document.activeElement;
+      if (
+        focused instanceof HTMLInputElement ||
+        focused instanceof HTMLTextAreaElement ||
+        focused instanceof HTMLSelectElement ||
+        (focused instanceof HTMLElement && focused.isContentEditable)
+      ) {
+        return;
+      }
+      void applyReadyUpdate();
+    }, 6_000);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSurface,
+    applyReadyUpdate,
+    dataBusy,
+    persistenceState.pendingWrites,
+    persistenceState.phase,
+    route.id,
+    updateReady,
+  ]);
+
   const retryPersistence = () => {
     if (persistenceState.phase !== "error") return;
     setAnnouncement("Cihaz verilerine yeniden bağlanılıyor.");
@@ -7449,10 +8513,123 @@ export default function Prototype() {
           : pwaStatus?.activeVersion
             ? "Eşitleme bekliyor"
             : "Hazırlanıyor";
+  const documentIdentityReady = Boolean(
+    configuredClassroom?.schoolName?.trim() &&
+      configuredClassroom.teacherName?.trim(),
+  );
+  const simpleDocumentOutputStates = {
+    roster: !documentIdentityReady
+      ? "needs-setup"
+      : students.length > 0
+        ? "ready"
+        : "needs-content",
+    observations: !documentIdentityReady || students.length === 0
+      ? "needs-setup"
+      : allEvidenceObservations.length > 0
+        ? "ready"
+        : "needs-content",
+    monthly: !documentIdentityReady
+      ? "needs-setup"
+      : teacherWorkCycle.monthly
+        ? "ready"
+        : "needs-content",
+    daily: !documentIdentityReady
+      ? "needs-setup"
+      : teacherWorkCycle.daily.planId
+        ? "ready"
+        : "needs-content",
+    weekly: !documentIdentityReady
+      ? "needs-setup"
+      : teacherWorkCycle.weekly
+        ? "ready"
+        : "needs-content",
+    annual: !documentIdentityReady
+      ? "needs-setup"
+      : !teacherWorkCycle.annual
+        ? "needs-content"
+        : teacherWorkCycle.documents.planDocumentReady
+          ? "ready"
+          : "incomplete",
+  } as const;
+  const renderActivityStudio = () => (
+    <ActivityStudio
+      initialAgeBand={currentClassTymmAgeBand ?? "48-60"}
+      initialActivityId={studioOpenOptionsRef.current.activityId}
+      initialScenarioId={studioOpenOptionsRef.current.scenarioId ?? "balanced"}
+      initialCollection={studioOpenOptionsRef.current.collection ?? "tumu"}
+      onAddToPlan={async (activity, context) => {
+        const scenario = PEDAGOGICAL_SCENARIOS.find(
+          (item) => item.id === context.scenarioId,
+        );
+        const participationRoute = PARTICIPATION_ROUTES.find(
+          (item) => item.id === context.participationRouteId,
+        );
+        const contextualTitle = [
+          activity.title,
+          scenario?.shortLabel,
+          participationRoute?.label,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        setCaptureMenuOpen(false);
+        setAnnouncement(
+          `${activity.title}, ${scenario?.shortLabel ?? "seçili sınıf koşulu"} ve ${participationRoute?.label ?? "seçili katılım yolu"} ile plan taslağına taşındı.`,
+        );
+        const { createPedagogicalPlanBridge } = await import(
+          "./features/pedagogical-os/pedagogical-plan-bridge.ts"
+        );
+        const provenance = createPedagogicalPlanBridge({
+          activity,
+          civilDate: attendanceCivilDate,
+          ageBand: context.ageBand,
+          scenarioId: context.scenarioId,
+          participationRouteId: context.participationRouteId,
+        });
+        void openPlanFlow(undefined, contextualTitle, provenance);
+      }}
+      onApply={(activity) => {
+        setAnnouncement(`${activity.title} için gözetimli Çocuk Modu açıldı.`);
+      }}
+      onPrint={(request) => {
+        const result = openHtmlPrintWindow({
+          html: request.printable.html,
+          title: `${request.activity.title} · MaarifOS`,
+        });
+        if (!result.opened) {
+          throw new Error(
+            "Yazdırma penceresi açılamadı. Tarayıcıda açılır pencerelere izin verip yeniden deneyin.",
+          );
+        }
+        setAnnouncement(`${request.activity.title} yazdırma görünümü açıldı.`);
+      }}
+      onChildChoice={(request) => {
+        setAnnouncement(
+          request.choice
+            ? "Çocuğun dokunuşu puanlanmadı; öğretmen gözlemine dönüştürülmeden ekranda kaldı."
+            : "Çocuk seçim yapmadan geri döndü; kayıt oluşturulmadı.",
+        );
+      }}
+      onWriteObservation={(request) =>
+        openStudentObservation(
+          students.length === 1 ? students[0]?.id : undefined,
+          createActivityStudioObservationSeed(request),
+          "preserve",
+        )
+      }
+    />
+  );
   const securityGateOpen =
     appLocked ||
     persistenceState.phase === "hydrating" ||
     persistenceState.phase === "error";
+
+  if (sharedInviteRequired && !sharedInviteGranted) {
+    return (
+      <div className="maarif-app-shell" style={shellStyle}>
+        <InviteAccessScreen onAccessGranted={() => setSharedInviteGranted(true)} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -7465,8 +8642,8 @@ export default function Prototype() {
     >
       <div
         className="maarif-app-content"
-        inert={securityGateOpen}
-        aria-hidden={securityGateOpen ? true : undefined}
+        inert={securityGateOpen || Boolean(tymmChildSession)}
+        aria-hidden={securityGateOpen || tymmChildSession ? true : undefined}
       >
       <RouteFocusBoundary routeId={route.id}>
         <MobileScroll className="maarif-scroll">
@@ -7513,14 +8690,16 @@ export default function Prototype() {
                 }}
                 onOpenAttendance={() => changeAttendanceOpen(true)}
                 onOpenExport={() => {
-                  if (classExportStudentIds.length === 0) {
-                    setClassExportStudentIds(
-                      [...students, ...archivedStudents].map((student) => student.id),
+                  void downloadSimpleClassRoster().catch((reason) => {
+                    setAnnouncement(
+                      reason instanceof Error ? reason.message : "Sınıf listesi hazırlanamadı.",
                     );
-                  }
-                  setClassExportPreviewOpen(true);
+                  });
                 }}
-                onOpenProfile={openStudentProfile}
+                onOpenProfile={(studentId, section) => {
+                  setStudentActionsOpenId(null);
+                  openStudentProfile(studentId, section);
+                }}
                 onOpenObservation={openStudentObservation}
                 onToggleStudentActions={(studentId) =>
                   setStudentActionsOpenId((current) =>
@@ -7537,6 +8716,16 @@ export default function Prototype() {
                 }}
               />
             </Suspense>
+          ) : route.id === "activities" ? (
+            <Suspense
+              fallback={
+                <div className="route-loading" role="status" data-testid="activities-route-loading">
+                  Etkinlikler hazırlanıyor…
+                </div>
+              }
+            >
+              {renderActivityStudio()}
+            </Suspense>
           ) : route.id === "plans" ? (
             <Suspense
               fallback={
@@ -7545,27 +8734,74 @@ export default function Prototype() {
                 </div>
               }
             >
-              <PlanWorkspaceScreen
-                workspace={{
-                  ...teacherWorkCycle,
-                  documents: {
-                    ...teacherWorkCycle.documents,
-                    anecdoteIncompleteCount: anecdoteWorkspace.incompleteCount,
-                    anecdoteReviewRequiredCount:
-                      anecdoteWorkspace.reviewRequiredCount,
-                    anecdoteReadyCount: anecdoteWorkspace.readyCount,
-                  },
-                }}
-                educationalWritesDisabled={educationalWritesDisabled}
-                preparationPlanningAllowed={preparationPlanningAllowed}
-                preparationPlanningCivilDate={preparationPlanningWindow.defaultCivilDate}
-                upcomingPlanningCivilDate={upcomingPlanningCivilDate}
-                dataBusy={dataBusy}
-                onOpenLevel={openPlanWorkbenchLevel}
-                onOpenCalendar={() => void openAcademicCalendar(attendanceCivilDate)}
-                onOpenPlanLibrary={() => openPremiumPlans("overview")}
-                onOpenDocuments={() => navigate("documents")}
-              />
+              <>
+                <PlanWorkspaceScreen
+                  workspace={{
+                    ...teacherWorkCycle,
+                    documents: {
+                      ...teacherWorkCycle.documents,
+                      anecdoteIncompleteCount: anecdoteWorkspace.incompleteCount,
+                      anecdoteReviewRequiredCount:
+                        anecdoteWorkspace.reviewRequiredCount,
+                      anecdoteReadyCount: anecdoteWorkspace.readyCount,
+                    },
+                  }}
+                  educationalWritesDisabled={educationalWritesDisabled}
+                  preparationPlanningAllowed={preparationPlanningAllowed}
+                  preparationPlanningCivilDate={preparationPlanningWindow.defaultCivilDate}
+                  upcomingPlanningCivilDate={upcomingPlanningCivilDate}
+                  ageBand={currentClassTymmAgeBand ?? "48-60"}
+                  civilDate={attendanceCivilDate}
+                  dataBusy={dataBusy}
+                  onOpenLevel={openPlanWorkbenchLevel}
+                  onOpenCalendar={() =>
+                    void openAcademicCalendar(attendanceCivilDate, true)
+                  }
+                  onOpenDocuments={() => {
+                    navigate("documents");
+                    setAnnouncement("Çıktılar.");
+                  }}
+                  onOpenActivityStudio={openCaptureEntry}
+                />
+                <section
+                  className="tymm-guide-entry"
+                  aria-labelledby="tymm-guide-entry-heading"
+                  data-testid="tymm-age-guide-entry"
+                >
+                  <div className="tymm-guide-entry-heading">
+                    <span className="tymm-guide-entry-icon" aria-hidden="true">
+                      <ReaderIcon />
+                    </span>
+                    <span>
+                      <small>Resmî program · tam yaş matrisi</small>
+                      <h2 id="tymm-guide-entry-heading">TYMM 2024 Yaş Rehberi</h2>
+                      <p>
+                        Üç resmî yaş bandı, yedi alan ve çocukla gözetimli büyük
+                        seçimler tek yerde.
+                      </p>
+                    </span>
+                  </div>
+                  <div className="tymm-guide-entry-ages" aria-label="Resmî TYMM yaş bantları">
+                    {tymmAgeGuides.map((guide) => (
+                      <span
+                        key={guide.ageBand}
+                        data-current={currentClassTymmAgeBand === guide.ageBand || undefined}
+                      >
+                        <strong>{guide.ageLabel}</strong>
+                        <small>{guide.totalLearningOutcomeCount} çıktı</small>
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="tymm-guide-open"
+                    onClick={openTymmAgeGuide}
+                  >
+                    Tüm yaşları ve çocuk ekranını aç
+                    <ChevronRightIcon aria-hidden="true" />
+                  </button>
+                </section>
+              </>
             </Suspense>
           ) : route.id === "documents" ? (
             <Suspense
@@ -7586,8 +8822,9 @@ export default function Prototype() {
                     anecdoteReadyCount: anecdoteWorkspace.readyCount,
                   },
                 }}
-                studentCount={students.length + archivedStudents.length}
+                studentCount={students.length}
                 observationCount={allEvidenceObservations.length}
+                outputStates={simpleDocumentOutputStates}
                 dataBusy={dataBusy}
                 onOpenItem={openDocumentWorkspaceItem}
                 onOpenPreparationCenter={() => {
@@ -7595,6 +8832,44 @@ export default function Prototype() {
                   surfaceTransitionRef.current = "documents";
                   setDocumentsOpen(true);
                   setAnnouncement("Belge hazırlama alanı açıldı.");
+                }}
+                onDownloadClassRoster={downloadSimpleClassRoster}
+                onDownloadPlan={downloadSimplePlan}
+                onOpenObservationOutput={() => {
+                  if (!documentIdentityReady) {
+                    setClassroomSetupSection("period");
+                    setClassroomOpen(true);
+                    setAnnouncement(
+                      "Gözlem çıktısı için okul ve öğretmen adını bir kez yazın.",
+                    );
+                    throw new Error(
+                      "Gözlem çıktısı için okul ve öğretmen adını tamamlayın.",
+                    );
+                  }
+                  if (students.length === 0) {
+                    navigatePrimaryRoute("classroom");
+                    setStudentAddOpen(true);
+                    setAnnouncement("Gözlem için önce ilk çocuğu ekleyin.");
+                    throw new Error("Gözlem için önce ilk çocuğu ekleyin.");
+                  }
+                  if (allEvidenceObservations.length === 0) {
+                    void openStudentObservation();
+                    setAnnouncement(
+                      "İlk gözlemi yazın; ardından veli veya idare özetini alın.",
+                    );
+                    throw new Error(
+                      "İlk gözlem alanı açıldı; kaydettikten sonra çıktıyı alın.",
+                    );
+                  }
+                  setSimpleObservationOutputOpen(true);
+                  setAnnouncement("Veli veya idare gözlem özeti alanı açıldı.");
+                }}
+                onOpenSetup={() => {
+                  setClassroomSetupSection("period");
+                  setClassroomOpen(true);
+                  setAnnouncement(
+                    "Çıktı için eksik okul ve öğretmen bilgileri alanı açıldı.",
+                  );
                 }}
               />
             </Suspense>
@@ -7633,12 +8908,10 @@ export default function Prototype() {
                   classroomConfigured: configuredClassroom !== null,
                   planningAcademicYearReady:
                     configuredClassroom !== null &&
-                    configuredClassroom.academicYearName ===
-                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName &&
-                    configuredClassroom.academicYearStart ===
-                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
-                    configuredClassroom.academicYearEnd ===
-                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+                    academicYearMatchesCalendarProfile(
+                      configuredClassroom,
+                      OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+                    ),
                   activeStudentCount: students.length,
                   planReady:
                     teacherWorkCycle.annual !== null ||
@@ -7654,23 +8927,23 @@ export default function Prototype() {
                   setProfileOpen(true);
                 },
                 onApplyReadyUpdate: applyReadyUpdate,
-                onOpenClassroom: () => setClassroomOpen(true),
-                onActivateAcademicYear: startAcademicYearWorkToday,
                 onOpenAttendance: () => changeAttendanceOpen(true),
-                onOpenDayClosure: () => void openDayClosure(),
-                onOpenCalendar: openAcademicCalendar,
-                onOpenWeekDay: openAcademicCalendar,
-                onOpenStudentSearch: () => {
-                  setStudentSearch("");
-                  navigate("classroom");
-                  setAnnouncement("Öğrenci arama açıldı.");
+                onOpenCalendar: () => openAcademicCalendar(attendanceCivilDate),
+                onOpenWeekDay: (civilDate) => openAcademicCalendar(civilDate),
+                onOpenDayClosure: () => {
+                  void openDayClosure();
                 },
-                onOpenStudentProfile: openStudentProfile,
-                onOpenStudentObservation: openStudentObservation,
-                onOpenActivityEvidence: openActivityEvidence,
-                onCompleteCurrentActivity: completeCurrentActivity,
+                onOpenPendingObservation: () => {
+                  openPendingObservation();
+                },
+                onOpenQuickObservation: () => {
+                  void openStudentObservation();
+                },
+                onOpenStudentObservation: (studentId) => {
+                  void openStudentObservation(studentId);
+                },
                 onOpenPlanFlow: () => openPlanFlow(),
-                onOpenPremiumPlans: () => openPremiumPlans("overview"),
+                onOpenActivityStudio: openCaptureEntry,
                 onOpenTeacherCycleStage: (stage) => {
                   if (stage === "daily") {
                     if (todayWorkspace.planItems.length > 0) {
@@ -7689,13 +8962,7 @@ export default function Prototype() {
                   navigate("documents");
                   setAnnouncement("Belge ve kayıt çalışma alanı açıldı.");
                 },
-                onOpenPlanItem: (item) => {
-                  openTodayPlans();
-                  setAnnouncement(`${item.title} plan kaydı açıldı.`);
-                },
-                onOpenPendingObservation: () => openPendingObservation(),
                 onOpenSetupStep: openSetupProgressStep,
-                onTransitionCarryForward: transitionDayCarryForward,
               }}
               slots={{ formatStudentAge: formatChildAge }}
             />
@@ -7708,7 +8975,7 @@ export default function Prototype() {
         {visiblePrimaryNavigation().map((item) => {
           const active =
             item.id === "capture"
-              ? captureMenuOpen
+              ? route.id === "activities" || captureMenuOpen
               : item.id === "plans"
                 ? !documentsOpen &&
                   (route.id === "plans" ||
@@ -7720,18 +8987,14 @@ export default function Prototype() {
                 : item.id === "documents"
                   ? route.id === "documents" || documentsOpen
                   : route.id === item.id;
-          const controlsDialog =
-            item.id === "capture";
           return (
             <button
               type="button"
               key={item.id}
               className={`${item.id === "capture" ? "nav-add" : ""}${active ? " is-active" : ""}`.trim()}
               onClick={() => handleNav(item.id, item.label)}
-              aria-label={item.id === "capture" ? "Kayıt ekle" : undefined}
+              aria-label={item.id === "capture" ? "Etkinlikler" : undefined}
               aria-current={active ? "page" : undefined}
-              aria-haspopup={controlsDialog ? "dialog" : undefined}
-              aria-expanded={controlsDialog ? active : undefined}
             >
               {item.id === "today" ? (
                 <HomeIcon aria-hidden="true" />
@@ -7742,7 +9005,7 @@ export default function Prototype() {
               ) : item.id === "documents" ? (
                 <ArchiveIcon aria-hidden="true" />
               ) : (
-                <PlusIcon aria-hidden="true" />
+                <MagicWandIcon aria-hidden="true" />
               )}
               <span>{item.label}</span>
             </button>
@@ -8058,6 +9321,179 @@ export default function Prototype() {
       </BottomSheet>
 
       <BottomSheet
+        open={tymmGuideOpen}
+        onOpenChange={setTymmGuideOpen}
+        title="TYMM 2024 Yaş Rehberi"
+        description="36–48, 48–60 ve 60–72 ay resmî program matrisi ile gözetimli çocuk katılımı."
+        snap={0.94}
+      >
+        <div className="tymm-guide-sheet" data-testid="tymm-age-guide-sheet">
+          <section className="tymm-official-notice" aria-label="Kaynak durumu">
+            <CheckCircledIcon aria-hidden="true" />
+            <span>
+              <strong>T.C. Millî Eğitim Bakanlığı · resmî program</strong>
+              <small>
+                2024 programının üç resmî yaş bandı. Karma yaş ayrı bir resmî
+                bant değildir; 0–36 ay ise TYMM kapsamında değildir.
+              </small>
+            </span>
+          </section>
+
+          <div className="tymm-age-tabs" role="tablist" aria-label="TYMM yaş bandı">
+            {tymmAgeGuides.map((guide) => (
+              <button
+                type="button"
+                role="tab"
+                key={guide.ageBand}
+                aria-selected={selectedTymmGuide.ageBand === guide.ageBand}
+                onClick={() => selectTymmGuideAge(guide.ageBand)}
+              >
+                <strong>{guide.ageLabel}</strong>
+                <small>{guide.totalLearningOutcomeCount} çıktı</small>
+              </button>
+            ))}
+          </div>
+
+          <section className="tymm-guide-summary" aria-labelledby="tymm-guide-summary-heading">
+            <div>
+              <span className="d1-kicker">Seçili resmî bant</span>
+              <h3 id="tymm-guide-summary-heading">{selectedTymmGuide.ageLabel}</h3>
+              <p>{selectedTymmGuide.developmentalUseNote}</p>
+            </div>
+            <strong aria-label={`${selectedTymmGuide.totalLearningOutcomeCount} öğrenme çıktısı`}>
+              {selectedTymmGuide.totalLearningOutcomeCount}
+              <small>öğrenme çıktısı</small>
+            </strong>
+          </section>
+
+          <section className="tymm-domain-section" aria-labelledby="tymm-domain-heading">
+            <div className="tymm-section-heading">
+              <span>
+                <small>Eksiksiz katalog sayımı</small>
+                <h3 id="tymm-domain-heading">Yedi öğrenme alanı</h3>
+              </span>
+              <TargetIcon aria-hidden="true" />
+            </div>
+            <div className="tymm-domain-tabs" role="tablist" aria-label="Öğrenme alanları">
+              {selectedTymmGuide.domainOutcomeCounts.map((item) => (
+                <button
+                  type="button"
+                  role="tab"
+                  key={item.domain}
+                  aria-selected={tymmGuideDomain === item.domain}
+                  onClick={() => setTymmGuideDomain(item.domain)}
+                >
+                  <span>{item.domain}</span>
+                  <strong>{item.learningOutcomeCount}</strong>
+                </button>
+              ))}
+            </div>
+            <div className="tymm-outcome-list" role="tabpanel">
+              <p>
+                <strong>{tymmGuideDomain}</strong>
+                <span>{selectedTymmOutcomes.length} resmî öğrenme çıktısı</span>
+              </p>
+              <ol>
+                {selectedTymmOutcomes.map((outcome) => (
+                  <li key={`${outcome.ageBand}-${outcome.code}`}>
+                    <span>{outcome.code}</span>
+                    <p>{outcome.title}</p>
+                    <small>Program s. {outcome.sourcePage}</small>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <a
+              className="tymm-source-link"
+              href={selectedTymmGuide.officialProvenance.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Link2Icon aria-hidden="true" />
+              <span>
+                <strong>Resmî program PDF’sini aç</strong>
+                <small>
+                  Kontrol: {formatTurkishCivilDate(selectedTymmGuide.officialProvenance.sourceCheckedOn)}
+                  {" · "}yaşa ait sayfalar {selectedTymmGuide.officialProvenance.ageBandSourcePages.join(", ")}
+                </small>
+              </span>
+              <ChevronRightIcon aria-hidden="true" />
+            </a>
+          </section>
+
+          <section className="tymm-participation-section" aria-labelledby="tymm-participation-heading">
+            <div className="tymm-section-heading">
+              <span>
+                <small>MaarifOS özgün · yetişkin gözetimli</small>
+                <h3 id="tymm-participation-heading">Çocuk dokunma alanı</h3>
+              </span>
+              <MagicWandIcon aria-hidden="true" />
+            </div>
+            <p className="tymm-participation-policy">
+              {selectedTymmGuide.interactionPolicy.notice} Dokunuş önce yalnız
+              düzenlenebilir taslak olur; öğretmen incelemeden kanıta dönüşmez.
+            </p>
+            <div className="tymm-template-grid" role="group" aria-label="Çocuk seçim şablonu">
+              {selectedTymmGuide.choiceTemplates.map((template, index) => {
+                const Icon = [StarIcon, MagicWandIcon, ChatBubbleIcon][index];
+                return (
+                  <button
+                    type="button"
+                    key={template.id}
+                    aria-pressed={selectedTymmTemplate.id === template.id}
+                    onClick={() => setTymmGuideTemplateId(template.id)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>
+                      <strong>{template.title}</strong>
+                      <small>{template.childPrompt}</small>
+                    </span>
+                    <CheckCircledIcon aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+            <label className="tymm-student-select" htmlFor="tymm-guide-student">
+              <span>
+                <strong>Çocuk ekranını kiminle açacaksınız?</strong>
+                <small>Çocuk ekranında yalnız ilk adı veya tercih ettiği adı görünür.</small>
+              </span>
+              <select
+                id="tymm-guide-student"
+                value={selectedTymmStudent?.id ?? ""}
+                onChange={(event) => setTymmGuideStudentId(event.target.value)}
+                disabled={students.length === 0}
+              >
+                {students.length === 0 ? <option value="">Sınıfta çocuk yok</option> : null}
+                {students.map((student) => (
+                  <option value={student.id} key={student.id}>
+                    {student.preferredName ?? student.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {childParticipationBlockedReason ? (
+              <p className="tymm-participation-blocked" role="status">
+                <LockClosedIcon aria-hidden="true" />
+                {childParticipationBlockedReason}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="tymm-child-launch"
+              data-testid="tymm-child-launch"
+              disabled={Boolean(childParticipationBlockedReason)}
+              onClick={startTymmChildParticipation}
+            >
+              <PersonIcon aria-hidden="true" />
+              Çocuk ekranını aç
+              <ChevronRightIcon aria-hidden="true" />
+            </button>
+          </section>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
         open={captureMenuOpen}
         onOpenChange={(open) => {
           setCaptureMenuOpen(open);
@@ -8066,14 +9502,14 @@ export default function Prototype() {
         title={
           observationContextChoice
             ? "Gözlem hangi etkinliğe ait?"
-            : "Ne ekleyelim?"
+            : "Etkinlik ve Materyal Stüdyosu"
         }
         description={
           observationContextChoice
             ? "Gerçek plan bağını korumak için etkinliği seçin. Olay plan dışıysa bunu ayrıca belirtin."
-            : "Bir işlem seçin; yalnız gerekli alanlar açılır."
+            : "Yaş grubunu ve aracı seçin; planlayın, uygulayın veya yazdırın."
         }
-        snap={observationContextChoice ? 0.72 : 0.58}
+        snap={observationContextChoice ? 0.82 : 0.96}
       >
         {observationContextChoice ? (
           <div className="observation-context-chooser" data-testid="observation-context-chooser">
@@ -8091,6 +9527,9 @@ export default function Prototype() {
                   key={activity.id}
                   onClick={() => {
                     const initialStudentId = observationContextChoice.initialStudentId;
+                    const initialDraft = observationContextChoice.initialDraft;
+                    const activityStartPolicy =
+                      observationContextChoice.activityStartPolicy;
                     surfaceTransitionRef.current = "evidence-flow";
                     setCaptureMenuOpen(false);
                     setObservationContextChoice(null);
@@ -8098,6 +9537,8 @@ export default function Prototype() {
                       activity.id,
                       initialStudentId,
                       activity,
+                      initialDraft,
+                      activityStartPolicy,
                     );
                   }}
                 >
@@ -8133,6 +9574,7 @@ export default function Prototype() {
                     student,
                     choice.civilDate,
                     choice.initialStudentId,
+                    choice.initialDraft,
                   );
                 }}
               >
@@ -8145,7 +9587,11 @@ export default function Prototype() {
             </div>
           </div>
         ) : (
-        <div className="capture-choice-grid">
+        <>
+        <Suspense fallback={<div className="route-loading" role="status">Etkinlikler hazırlanıyor…</div>}>
+          {renderActivityStudio()}
+        </Suspense>
+        <div className="capture-choice-grid" hidden aria-hidden="true">
           <button
             id="capture-observation-action"
             type="button"
@@ -8264,7 +9710,7 @@ export default function Prototype() {
               onClick={() => {
                 setCaptureMenuOpen(false);
                 if (students.length === 0) {
-                  navigate("classroom");
+                  navigatePrimaryRoute("classroom");
                   setAnnouncement(
                     "Sınıf listesini oluşturmak için ilk çocuğu ekleyin.",
                   );
@@ -8300,6 +9746,7 @@ export default function Prototype() {
             </button>
           ) : null}
         </div>
+        </>
         )}
       </BottomSheet>
 
@@ -8309,8 +9756,8 @@ export default function Prototype() {
           setClassroomOpen(open);
           if (!open) setClassroomSetupSection("period");
         }}
-        title="Sınıf kurulumu"
-        description="Bu bilgiler eğitim yılı boyunca kalır. Çalışma düzeni günlük olarak değiştirilmez."
+        title="Sınıfını hazırla"
+        description="Dört temel bilgiyi bir kez yazın; Maarif Modeli ve resmî takvim kendiliğinden hazırlansın."
         snap={0.9}
       >
         <form
@@ -8320,75 +9767,40 @@ export default function Prototype() {
             void saveClassroom();
           }}
         >
-          <section className="classroom-setup-sequence" aria-label="İlk kurulum sırası">
-            <strong>Başlangıç planı · 1. adım</strong>
-            <ol>
-              <li>Sınıf</li>
-              <li>Çocuk</li>
-              <li>Plan</li>
-              <li>Yedek</li>
-            </ol>
-          </section>
+          <div className="classroom-form-simple-intro" role="status">
+            <CheckCircledIcon aria-hidden="true" />
+            <span>
+              <strong>Türkiye Yüzyılı Maarif Modeli hazır</strong>
+              Resmî program profili, 2026–2027 takvimi ve tam gün çalışma düzeni otomatik seçildi.
+            </span>
+          </div>
 
-          <section
-            className="classroom-form-stepper"
-            aria-label="Sınıf ayarı bölümleri"
-          >
-            <div>
-              <span className="d1-kicker">Sınıf ayarı</span>
-              <strong>
-                {CLASSROOM_SETUP_SECTIONS.find(
-                  (section) => section.id === classroomSetupSection,
-                )?.title}
-              </strong>
-            </div>
-            <ol>
-              {CLASSROOM_SETUP_SECTIONS.map((section, index) => {
-                const available = classroomSetupSectionAvailable(
-                  section.id,
-                  classroomSetupReadinessState,
-                );
-                const complete = classroomSetupSectionComplete(
-                  section.id,
-                  classroomSetupReadinessState,
-                );
-                return (
-                  <li
-                    key={section.id}
-                    data-current={
-                      classroomSetupSection === section.id ? "true" : "false"
-                    }
-                    data-complete={complete ? "true" : "false"}
-                  >
-                    <button
-                      type="button"
-                      disabled={!available}
-                      aria-current={
-                        classroomSetupSection === section.id ? "step" : undefined
-                      }
-                      aria-controls={`classroom-setup-${section.id}`}
-                      onClick={() => setClassroomSetupSection(section.id)}
-                    >
-                      <span>{complete ? <CheckCircledIcon aria-hidden="true" /> : index + 1}</span>
-                      {section.shortLabel}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-
-          {classroomSetupSection === "period" ? (
             <section
               id="classroom-setup-period"
               className="classroom-form-section"
               aria-labelledby="classroom-setup-period-title"
             >
               <div className="classroom-form-section-heading">
-                <span className="d1-kicker">1 / 3</span>
-                <h3 id="classroom-setup-period-title">Dönem ve sınıf</h3>
-                <p>Mevcut sınıfı koruyun veya yeni resmî dönemi açık geçişle hazırlayın.</p>
+                <span className="d1-kicker">TEMEL BİLGİLER</span>
+                <h3 id="classroom-setup-period-title">Okul, öğretmen ve sınıf</h3>
+                <p>Bu bilgileri bir kez yazın; plan ve idare çıktılarında otomatik kullanılsın.</p>
               </div>
+              <label htmlFor="school-name">Okul adı</label>
+              <KeyboardInput
+                id="school-name"
+                value={classroomForm.schoolName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, schoolName: event.target.value }))}
+                placeholder="Örn. Cumhuriyet Anaokulu"
+                autoComplete="organization"
+              />
+              <label htmlFor="teacher-name">Öğretmen adı soyadı</label>
+              <KeyboardInput
+                id="teacher-name"
+                value={classroomForm.teacherName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, teacherName: event.target.value }))}
+                placeholder="Örn. Emine Akın"
+                autoComplete="name"
+              />
               <label htmlFor="classroom-name">Sınıf adı</label>
               <KeyboardInput
                 id="classroom-name"
@@ -8397,161 +9809,138 @@ export default function Prototype() {
                 placeholder="Örn. Güneş Sınıfı"
                 autoComplete="off"
               />
-              <section className="official-calendar-preset">
-                <div>
-                  <span className="d1-kicker">MEB resmî takvimi</span>
-                  <strong>2026–2027 eğitim öğretim yılı</strong>
-                  <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
-                </div>
-                {officialAcademicCalendarApplied ? (
-                  <span className="official-calendar-applied" role="status">
-                    <CheckCircledIcon aria-hidden="true" /> Resmî tarihler uygulandı
-                  </span>
-                ) : (
-                  <button type="button" onClick={applyOfficialAcademicCalendar}>
-                    2026–2027 dönemini hazırla
-                  </button>
-                )}
-                <a
-                  href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  MEB duyurusunu aç
-                </a>
-              </section>
-              {configuredClassroom && !officialAcademicCalendarApplied ? (
-                <div className="classroom-current-period" role="status">
-                  <CalendarIcon aria-hidden="true" />
-                  <span>
-                    <strong>Bu sınıf {configuredClassroom.academicYearName} dönemine bağlı</strong>
-                    Yeni dönemi hazırlamak eski yılı sessizce değiştirmez; kaydederken arşivleme ve öğrenci taşıma onayı istenir.
-                  </span>
-                </div>
-              ) : null}
-              <label htmlFor="academic-year-name">Eğitim yılı</label>
-              <KeyboardInput
-                id="academic-year-name"
-                value={classroomForm.academicYearName}
-                onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }))}
-                autoComplete="off"
-              />
-              <div className="settings-grid">
-                <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
-                  <KeyboardInput
-                    id="academic-year-start"
-                    type="date"
-                    value={classroomForm.academicYearStart}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearStart: event.target.value }))}
-                  />
-                </label>
-                <label htmlFor="academic-year-end">Eğitim yılı bitişi
-                  <KeyboardInput
-                    id="academic-year-end"
-                    type="date"
-                    value={classroomForm.academicYearEnd}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearEnd: event.target.value }))}
-                  />
-                </label>
-              </div>
-              {classroomFormOperationalNotice ? (
-                <div className="academic-year-form-warning" role="alert">
-                  <CalendarIcon aria-hidden="true" />
-                  <span>
-                    <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazır" : "Seçili tarihler bugün etkin değil"}</strong>
-                    {classroomForm.academicYearStart > attendanceCivilDate
-                      ? `Sınıf, çocuk listesi ve plan omurgası hazır. Resmî başlangıcı bekleyebilir veya bu sınıfı bugün gerçek kayıt kullanımına açabilirsiniz.`
-                      : classroomFormOperationalNotice}
-                  </span>
-                  {configuredClassroom?.operationalStatus === "preparation" ? (
-                    <button
-                      type="button"
-                      disabled={dataBusy}
-                      onClick={() => void startAcademicYearWorkToday()}
-                    >
-                      Çalışmayı bugün başlat
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-          ) : null}
-
-          {classroomSetupSection === "program" ? (
-            <section
-              id="classroom-setup-program"
-              className="classroom-form-section"
-              aria-labelledby="classroom-setup-program-title"
-            >
-              <div className="classroom-form-section-heading">
-                <span className="d1-kicker">2 / 3</span>
-                <h3 id="classroom-setup-program-title">Program ve yaş grubu</h3>
-                <p>Çocuk grubunu ve planların bağlanacağı doğrulanmış program kaynağını seçin.</p>
-              </div>
-              <label htmlFor="age-group">Yaş grubu</label>
-              <select id="age-group" value={classroomForm.ageGroup} onChange={(event) => setClassroomForm((current) => ({ ...current, ageGroup: event.target.value }))}>
+              <label htmlFor="age-group">Maarif Modeli yaş grubu</label>
+              <select
+                id="age-group"
+                value={classroomForm.ageGroup}
+                onChange={(event) =>
+                  setClassroomForm((current) => ({
+                    ...current,
+                    ageGroup: event.target.value,
+                  }))
+                }
+              >
                 <option value="">Yaş grubunu seçin</option>
                 <option>36–48 ay</option>
                 <option>48–60 ay</option>
                 <option>60–72 ay</option>
               </select>
-              <label htmlFor="curriculum-program">Uygulanan program</label>
-              <select
-                id="curriculum-program"
-                value={classroomForm.curriculumProgram}
-                onChange={(event) => {
-                  const curriculumProgram = event.target.value;
-                  if (!isSupportedCurriculumProgram(curriculumProgram)) {
-                    setClassroomForm((current) => ({ ...current, curriculumProgram: "", curriculumCatalogId: "", curriculumSourceVersion: "" }));
-                    return;
-                  }
-                  const framework = curriculumFrameworkForProgram(curriculumProgram);
-                  const starter = OFFICIAL_STARTER_CATALOG_PROFILES[framework];
-                  setClassroomForm((current) => ({ ...current, curriculumProgram, curriculumCatalogId: starter.catalogId, curriculumSourceVersion: starter.sourceVersion }));
-                }}
-              >
-                <option value="">Emin değilim / henüz seçmedim</option>
-                <option>Türkiye Yüzyılı Maarif Modeli</option>
-                <option>Okul Öncesi Eğitim Programı — EÇE/2024</option>
-              </select>
-              <div className="settings-grid settings-grid--program">
-                <label htmlFor="curriculum-catalog-id">Program katalog kimliği
-                  <KeyboardInput
-                    id="curriculum-catalog-id"
-                    value={classroomForm.curriculumCatalogId}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, curriculumCatalogId: event.target.value }))}
-                    placeholder="Kullandığınız kaynaktaki kimlik"
-                    autoComplete="off"
-                    disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
-                  />
-                </label>
-                <label htmlFor="curriculum-source-version">Kaynak sürümü
-                  <KeyboardInput
-                    id="curriculum-source-version"
-                    value={classroomForm.curriculumSourceVersion}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, curriculumSourceVersion: event.target.value }))}
-                    placeholder="Baskı / sürüm tarihi"
-                    autoComplete="off"
-                    disabled={!isSupportedCurriculumProgram(classroomForm.curriculumProgram)}
-                  />
-                </label>
-              </div>
-              <p className="classroom-provenance-note">
-                TYMM seçiminde resmî okul öncesi alan matrislerindeki tam öğrenme çıktıları; EÇE/2024 seçiminde başlangıç kataloğu önerilir. Kimlik veya sürümü değiştirirseniz kayıt öğretmen beyanı olarak işaretlenir.
-              </p>
             </section>
-          ) : null}
 
-          {classroomSetupSection === "schedule" ? (
+          <section className="official-calendar-preset">
+            <div>
+              <span className="d1-kicker">OTOMATİK HAZIR</span>
+              <strong>2026–2027 MEB resmî takvimi</strong>
+              <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
+            </div>
+            {officialAcademicCalendarApplied ? (
+              <span className="official-calendar-applied" role="status">
+                <CheckCircledIcon aria-hidden="true" /> Uygulandı
+              </span>
+            ) : (
+              <button type="button" onClick={applyOfficialAcademicCalendar}>
+                2026–2027 dönemini hazırla
+              </button>
+            )}
+            <a
+              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              MEB duyurusunu aç
+            </a>
+          </section>
+
+          <details className="classroom-calendar-details">
+            <summary>
+              <span>
+                <strong>Takvim ayrıntıları</strong>
+                <small>{classroomForm.academicYearName}</small>
+              </span>
+            </summary>
+            {configuredClassroom && !officialAcademicCalendarApplied ? (
+              <div className="classroom-current-period" role="status">
+                <CalendarIcon aria-hidden="true" />
+                <span>
+                  <strong>Bu sınıf {configuredClassroom.academicYearName} dönemine bağlı</strong>
+                  Yeni dönemi hazırlamak eski yılı sessizce değiştirmez; kaydederken arşivleme ve öğrenci taşıma onayı istenir.
+                </span>
+              </div>
+            ) : null}
+            <label htmlFor="academic-year-name">Eğitim yılı</label>
+            <KeyboardInput
+              id="academic-year-name"
+              value={classroomForm.academicYearName}
+              onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }))}
+              autoComplete="off"
+            />
+            <div className="settings-grid">
+              <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
+                <KeyboardInput
+                  id="academic-year-start"
+                  type="date"
+                  value={classroomForm.academicYearStart}
+                  onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearStart: event.target.value }))}
+                />
+              </label>
+              <label htmlFor="academic-year-end">Eğitim yılı bitişi
+                <KeyboardInput
+                  id="academic-year-end"
+                  type="date"
+                  value={classroomForm.academicYearEnd}
+                  onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearEnd: event.target.value }))}
+                />
+              </label>
+            </div>
+            {classroomFormOperationalNotice ? (
+              <div className="academic-year-form-warning" role="alert">
+                <CalendarIcon aria-hidden="true" />
+                <span>
+                  <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazır" : "Seçili tarihler bugün etkin değil"}</strong>
+                  {classroomForm.academicYearStart > attendanceCivilDate
+                    ? `Sınıf, çocuk listesi ve plan omurgası hazır. Resmî başlangıcı bekleyebilir veya bu sınıfı bugün gerçek kayıt kullanımına açabilirsiniz.`
+                    : classroomFormOperationalNotice}
+                </span>
+                {configuredClassroom?.operationalStatus === "preparation" ? (
+                  <button
+                    type="button"
+                    disabled={dataBusy}
+                    onClick={() => void startAcademicYearWorkToday()}
+                  >
+                    Çalışmayı bugün başlat
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </details>
+
+          <details
+            className="classroom-advanced-settings"
+            open={academicYearTransitionRequired || undefined}
+          >
+            <summary>
+              <span>
+                <strong>İleri ayarlar</strong>
+                <small>
+                  {classroomForm.scheduleKind === "morning"
+                    ? "Sabahçı"
+                    : classroomForm.scheduleKind === "afternoon"
+                      ? "Öğleci"
+                      : classroomForm.scheduleKind === "custom"
+                        ? "Özel saatler"
+                        : "Tam gün · 08:30–16:30"}
+                </small>
+              </span>
+              <ChevronRightIcon aria-hidden="true" />
+            </summary>
             <section
               id="classroom-setup-schedule"
               className="classroom-form-section"
               aria-labelledby="classroom-setup-schedule-title"
             >
               <div className="classroom-form-section-heading">
-                <span className="d1-kicker">3 / 3</span>
                 <h3 id="classroom-setup-schedule-title">Günlük çalışma düzeni</h3>
-                <p>Grup düzenini ve öğretmenin günlük çalışma saatlerini doğrulayın.</p>
+                <p>Yalnız okulunuzun düzeni farklıysa değiştirin.</p>
               </div>
               <label htmlFor="schedule-kind">Çalışma düzeni</label>
               <select
@@ -8594,51 +9983,38 @@ export default function Prototype() {
                     onChange={(event) => setAcademicYearTransitionConfirmed(event.target.checked)}
                   />
                   <span>
-                    <strong>Yeni eğitim yılına güvenli geçiş yap</strong>
-                    Mevcut yıl ve sınıf arşivlensin; {students.length} etkin öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve değerlendirmeler kendi yılı içinde korunsun.
+                    <strong>
+                      {samePeriodCurriculumTransitionRequired
+                        ? "Yeni Maarif Modeli sınıfını oluştur"
+                        : "Yeni eğitim yılına güvenli geçiş yap"}
+                    </strong>
+                    {samePeriodCurriculumTransitionRequired
+                      ? ` Mevcut EÇE sınıfı salt okunur arşivlensin; ${students.length} etkin öğrenci aynı dönemdeki yeni TYMM sınıfına taşınsın. Eski plan, gözlem ve portfolyolar EÇE kapsamında korunsun.`
+                      : ` Mevcut yıl ve sınıf arşivlensin; ${students.length} etkin öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve değerlendirmeler kendi yılı içinde korunsun.`}
                   </span>
                 </label>
               ) : null}
             </section>
-          ) : null}
+          </details>
 
           {classroomError ? <p role="alert">{classroomError}</p> : null}
           <div className="classroom-form-navigation">
-            {previousClassroomSetupSection(classroomSetupSection) ? (
-              <button
-                type="button"
-                className="sheet-secondary"
-                onClick={() => setClassroomSetupSection(previousClassroomSetupSection(classroomSetupSection) ?? "period")}
-              >
-                Geri
-              </button>
-            ) : <span />}
-            {nextClassroomSetupSection(classroomSetupSection) ? (
-              <button
-                type="button"
-                className="sheet-primary"
-                disabled={!classroomSetupSectionComplete(classroomSetupSection, classroomSetupReadinessState)}
-                onClick={() => {
-                  const next = nextClassroomSetupSection(classroomSetupSection);
-                  if (next) setClassroomSetupSection(next);
-                }}
-              >
-                Devam et
-              </button>
-            ) : (
-              <button
-                className="sheet-primary"
-                type="submit"
-                disabled={
-                  dataBusy ||
-                  writesBlocked ||
-                  !classroomSetupReadinessState.schedule ||
-                  (academicYearTransitionRequired && !academicYearTransitionConfirmed)
-                }
-              >
-                {academicYearTransitionRequired ? "Yeni eğitim yılına geç" : "Sınıfı ve çalışma düzenini kaydet"}
-              </button>
-            )}
+            <button
+              className="sheet-primary"
+              type="submit"
+              disabled={
+                dataBusy ||
+                writesBlocked ||
+                !classroomSetupReadinessState.schedule ||
+                (academicYearTransitionRequired && !academicYearTransitionConfirmed)
+              }
+            >
+              {samePeriodCurriculumTransitionRequired
+                ? "Maarif Modeli sınıfını oluştur"
+                : academicYearTransitionRequired
+                  ? "Yeni eğitim yılına geç"
+                  : "Sınıfımı hazırla"}
+            </button>
           </div>
         </form>
       </BottomSheet>
@@ -8653,18 +10029,6 @@ export default function Prototype() {
         description={`${displayedPlanIsToday ? "Bugün · " : ""}${formatTurkishCivilDate(displayedPlanWorkspace.civilDate)} · ${displayedPlanWorkspace.planItems.some((item) => item.kind === "premium-flow-block") ? "Kayıtlı günlük akış" : "Kayıtlı etkinlikler"}`}
         snap={0.78}
       >
-        <button
-          className="plans-calendar-button plans-library-button"
-          type="button"
-          onClick={() => openPremiumPlans("overview")}
-        >
-          <StarIcon aria-hidden="true" />
-          <span>
-            <strong>Plan Kütüphanesi</strong>
-            <small>Yıllık · aylık · haftalık · günlük planlar ve değerlendirmeler</small>
-          </span>
-          <ChevronRightIcon aria-hidden="true" />
-        </button>
         <button
           className="plans-calendar-button"
           type="button"
@@ -8802,39 +10166,41 @@ export default function Prototype() {
         )}
       </BottomSheet>
 
-      <BottomSheet
-        open={premiumGateOpen}
-        onOpenChange={setPremiumGateOpen}
-        title="Plan Kütüphanesi erişimi"
-        description="Premium üyelik sistemi korunur; bu telefon yalnız doğrulanmış erişimle plan paketlerini açar."
-        snap={0.72}
-      >
-        <div className="premium-gate-summary" role="status">
-          <StarIcon aria-hidden="true" />
-          <span>
-            <strong>Planlar ayrı, güvenlik ayarları ayrı</strong>
-            <small>
-              Etkinleştirme yalnız Plan Kütüphanesi için istenir; cihaz yedeği ve
-              uygulama kilidi ayarlarına yönlendirilmezsiniz.
-            </small>
-          </span>
-        </div>
-        {premiumGateMounted || premiumGateOpen ? (
-          <Suspense fallback={<div className="premium-loading" role="status">Premium erişim alanı açılıyor…</div>}>
-            <FounderPremiumActivationPanel
-              access={premiumFounderAccess?.access ?? null}
-              busy={premiumFounderBusy}
-              configured={premiumFounderConfigurationState.configuration !== null}
-              error={premiumFounderError}
-              errorPresentation={premiumFounderErrorPresentation}
-              resetBusy={premiumFounderResetBusy}
-              onActivate={activateFounderPremium}
-              onOpenPlans={openPremiumPlans}
-              onResetLocalLicense={resetFounderPremiumLocalLicense}
-            />
-          </Suspense>
-        ) : null}
-      </BottomSheet>
+      {premiumLegacyRequested ? (
+        <BottomSheet
+          open={premiumGateOpen}
+          onOpenChange={setPremiumGateOpen}
+          title="Plan Kütüphanesi erişimi"
+          description="Premium üyelik sistemi korunur; bu telefon yalnız doğrulanmış erişimle plan paketlerini açar."
+          snap={0.72}
+        >
+          <div className="premium-gate-summary" role="status">
+            <StarIcon aria-hidden="true" />
+            <span>
+              <strong>Planlar ayrı, güvenlik ayarları ayrı</strong>
+              <small>
+                Etkinleştirme yalnız Plan Kütüphanesi için istenir; cihaz yedeği ve
+                uygulama kilidi ayarlarına yönlendirilmezsiniz.
+              </small>
+            </span>
+          </div>
+          {premiumGateMounted || premiumGateOpen ? (
+            <Suspense fallback={<div className="premium-loading" role="status">Premium erişim alanı açılıyor…</div>}>
+              <FounderPremiumActivationPanel
+                access={premiumFounderAccess?.access ?? null}
+                busy={premiumFounderBusy}
+                configured={premiumFounderConfigurationState.configuration !== null}
+                error={premiumFounderError}
+                errorPresentation={premiumFounderErrorPresentation}
+                resetBusy={premiumFounderResetBusy}
+                onActivate={activateFounderPremium}
+                onOpenPlans={openPremiumPlans}
+                onResetLocalLicense={resetFounderPremiumLocalLicense}
+              />
+            </Suspense>
+          ) : null}
+        </BottomSheet>
+      ) : null}
 
       <BottomSheet
         open={calendarOpen}
@@ -9083,6 +10449,7 @@ export default function Prototype() {
             <label>
               Başlık
               <KeyboardInput
+                ref={calendarEntryTitleRef}
                 value={calendarEntryForm.title}
                 maxLength={160}
                 onChange={(event) =>
@@ -9172,7 +10539,7 @@ export default function Prototype() {
               type="button"
               onClick={() => {
                 setDocumentsOpen(false);
-                openPremiumPlans("overview");
+                openTeacherPlanRecords("annual");
               }}
             >
               <ReaderIcon aria-hidden="true" /> Plan belgelerini aç
@@ -9181,7 +10548,7 @@ export default function Prototype() {
               type="button"
               onClick={() => {
                 setDocumentsOpen(false);
-                openPremiumPlans("monthly");
+                openTeacherPlanRecords("monthly");
               }}
             >
               <ArchiveIcon aria-hidden="true" /> Aylık değerlendirme ve Ek 18
@@ -9265,6 +10632,12 @@ export default function Prototype() {
             exportOpen={classExportPreviewOpen}
             busy={dataBusy}
             newStudentName={newStudentName}
+            newStudentNumber={newStudentNumber}
+            newStudentBirthDate={newStudentBirthDate}
+            newStudentNationalIdentityNumber={newStudentNationalIdentityNumber}
+            newStudentGuardianName={newStudentGuardianName}
+            newStudentGuardianPhone={newStudentGuardianPhone}
+            newStudentError={newStudentError}
             civilDate={attendanceCivilDate}
             exportStartDate={classExportStartDate}
             exportEndDate={classExportEndDate}
@@ -9273,7 +10646,10 @@ export default function Prototype() {
             students={[...students, ...archivedStudents]}
             observationCount={classExportObservations.length}
             onAddOpenChange={(open) => {
-              if (!open) keyboard.hide();
+              if (!open) {
+                keyboard.hide();
+                setNewStudentError("");
+              }
               setStudentAddOpen(open);
             }}
             onExportOpenChange={(open) => {
@@ -9281,12 +10657,49 @@ export default function Prototype() {
               setClassExportPreviewOpen(open);
             }}
             onNewStudentNameChange={setNewStudentName}
+            onNewStudentNumberChange={setNewStudentNumber}
+            onNewStudentBirthDateChange={setNewStudentBirthDate}
+            onNewStudentNationalIdentityNumberChange={setNewStudentNationalIdentityNumber}
+            onNewStudentGuardianNameChange={setNewStudentGuardianName}
+            onNewStudentGuardianPhoneChange={setNewStudentGuardianPhone}
             onAddStudent={addStudent}
             onExportStartDateChange={setClassExportStartDate}
             onExportEndDateChange={setClassExportEndDate}
             onExportNameModeChange={setClassExportNameMode}
             onExportStudentIdsChange={setClassExportStudentIds}
             onDownload={downloadClassObservations}
+          />
+        </Suspense>
+      ) : null}
+
+      {simpleObservationOutputOpen ? (
+        <Suspense fallback={null}>
+          <SimpleObservationOutputSheet
+            open={simpleObservationOutputOpen}
+            students={students.map((student) => ({
+              id: student.id,
+              displayName: student.preferredName ?? student.name,
+              observationCount: observationCountByStudent.get(student.id) ?? 0,
+            }))}
+            initialStudentId={selectedProfileStudent?.id ?? students[0]?.id ?? null}
+            initialStartCivilDate={
+              configuredClassroom?.academicYearStart ?? attendanceCivilDate
+            }
+            initialEndCivilDate={
+              configuredClassroom
+                ? attendanceCivilDate < configuredClassroom.academicYearStart
+                  ? configuredClassroom.academicYearStart
+                  : attendanceCivilDate > configuredClassroom.academicYearEnd
+                    ? configuredClassroom.academicYearEnd
+                    : attendanceCivilDate
+                : attendanceCivilDate
+            }
+            maximumCivilDate={
+              configuredClassroom?.academicYearEnd ?? attendanceCivilDate
+            }
+            disabled={dataBusy || writesBlocked}
+            onOpenChange={setSimpleObservationOutputOpen}
+            onGenerate={downloadSimpleObservation}
           />
         </Suspense>
       ) : null}
@@ -9377,114 +10790,49 @@ export default function Prototype() {
       >
         {selectedProfileStudent ? (
           <div className="student-profile-sheet">
-            <section className="student-profile-hero" aria-label="Çocuk profil özeti">
-              <StudentAvatar
-                student={selectedProfileStudent}
-                className="student-profile-avatar"
-                photoDataUrl={studentProfileForm.profilePhotoDataUrl}
-              />
-              <div>
-                <span className="section-eyebrow">Bireysel gelişim izi</span>
-                <h3>
-                  {selectedProfileStudent.preferredName ??
-                    selectedProfileStudent.name}
-                </h3>
-                {selectedProfileStudent.preferredName ? (
-                  <p>{selectedProfileStudent.name}</p>
-                ) : null}
-                <strong>
-                  {formatChildAge(
-                    selectedProfileStudent.birthDate,
-                    attendanceCivilDate,
-                  )}
-                </strong>
-              </div>
-            </section>
-
-            <section className="student-photo-actions" aria-label="Profil fotoğrafı işlemleri">
-              <label>
-                <CameraIcon aria-hidden="true" />
-                <span>{profilePhotoBusy ? "Hazırlanıyor…" : "Fotoğraf çek"}</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
-                  disabled={profilePhotoBusy || dataBusy}
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    event.currentTarget.value = "";
-                    void selectStudentProfilePhoto(file);
-                  }}
-                />
-              </label>
-              <label>
-                <UploadIcon aria-hidden="true" />
-                <span>Galeriden seç</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={profilePhotoBusy || dataBusy}
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    event.currentTarget.value = "";
-                    void selectStudentProfilePhoto(file);
-                  }}
-                />
-              </label>
-              {studentProfileForm.profilePhotoDataUrl ? (
-                <button
-                  type="button"
-                  onClick={removeStudentProfilePhoto}
-                  disabled={profilePhotoBusy || dataBusy}
-                >
-                  <TrashIcon aria-hidden="true" />
-                  Kaldır
-                </button>
-              ) : null}
-            </section>
-            {removedProfilePhoto ? (
-              <div className="student-profile-undo" role="status">
-                <span>Fotoğraf kaldırıldı; profil kaydedilene kadar geri alınabilir.</span>
-                <button type="button" onClick={undoRemoveStudentProfilePhoto}>
-                  Geri al
-                </button>
-              </div>
-            ) : null}
-
-            <section className="student-profile-metrics" aria-label="Profil göstergeleri">
-              <div>
-                <small>Bugünkü devam</small>
-                <strong>
-                  {selectedProfileStudent.attendanceMarked === false
+            <Suspense fallback={null}>
+              <StudentProfileOverviewPanel
+                avatar={
+                  <StudentAvatar
+                    student={selectedProfileStudent}
+                    className="student-profile-avatar"
+                    photoDataUrl={studentProfileForm.profilePhotoDataUrl}
+                  />
+                }
+                preferredName={selectedProfileStudent.preferredName}
+                fullName={selectedProfileStudent.name}
+                ageLabel={formatChildAge(
+                  selectedProfileStudent.birthDate,
+                  attendanceCivilDate,
+                )}
+                profilePhotoBusy={profilePhotoBusy}
+                dataBusy={dataBusy}
+                hasProfilePhoto={Boolean(studentProfileForm.profilePhotoDataUrl)}
+                removedProfilePhoto={Boolean(removedProfilePhoto)}
+                attendanceLabel={
+                  selectedProfileStudent.attendanceMarked === false
                     ? "İşaretlenmedi"
-                    : statusLabels[selectedProfileStudent.status]}
-                </strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
+                    : statusLabels[selectedProfileStudent.status]
+                }
+                observationCount={selectedStudentObservations.length}
+                pendingLinkCount={selectedStudentPendingLinks}
+                onSelectPhoto={(file) => void selectStudentProfilePhoto(file)}
+                onRemovePhoto={removeStudentProfilePhoto}
+                onUndoRemovePhoto={undoRemoveStudentProfilePhoto}
+                onShowAllObservations={() => {
                   setStudentProfileTab("flow");
                   setStudentObservationFilter("all");
                   setStudentObservationMonth("all");
                   setStudentObservationLimit(20);
                 }}
-              >
-                <small>Toplam gözlem</small>
-                <strong>{selectedStudentObservations.length}</strong>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+                onShowPendingLinks={() => {
                   setStudentProfileTab("flow");
                   setStudentObservationFilter("pending");
                   setStudentObservationMonth("all");
                   setStudentObservationLimit(20);
                 }}
-              >
-                <small>Bağlantı bekleyen</small>
-                <strong>{selectedStudentPendingLinks}</strong>
-              </button>
-            </section>
+              />
+            </Suspense>
 
             <StudentAttendanceHistoryPanel
               records={studentAttendanceHistory}
@@ -9508,44 +10856,20 @@ export default function Prototype() {
               </button>
             ) : null}
 
-            <nav className="student-profile-tabs" aria-label="Çocuk profili bölümleri">
-              <button
-                type="button"
-                aria-current={studentProfileTab === "flow" ? "page" : undefined}
-                onClick={() => setStudentProfileTab("flow")}
-              >
-                Akış
-              </button>
-              {isCapabilityEnabled("portfolio") ? (
-                <button
-                  type="button"
-                  aria-current={studentProfileTab === "portfolio" ? "page" : undefined}
-                  onClick={() => {
-                    setStudentProfileTab("portfolio");
-                    setStudentObservationFilter("all");
-                    setStudentObservationMonth("all");
-                    setStudentObservationLimit(20);
-                    void refreshStudentPortfolio(selectedProfileStudent.id);
-                  }}
-                >
-                  Portfolyo
-                </button>
-              ) : null}
-              <button
-                type="button"
-                aria-current={studentProfileTab === "details" ? "page" : undefined}
-                onClick={() => setStudentProfileTab("details")}
-              >
-                Bilgiler
-              </button>
-              <button
-                type="button"
-                aria-current={studentProfileTab === "contacts" ? "page" : undefined}
-                onClick={() => setStudentProfileTab("contacts")}
-              >
-                Yakınlar
-              </button>
-            </nav>
+            <Suspense fallback={null}>
+              <StudentProfileTabs
+                activeTab={studentProfileTab}
+                portfolioEnabled={isCapabilityEnabled("portfolio")}
+                onSelect={setStudentProfileTab}
+                onSelectPortfolio={() => {
+                  setStudentProfileTab("portfolio");
+                  setStudentObservationFilter("all");
+                  setStudentObservationMonth("all");
+                  setStudentObservationLimit(20);
+                  void refreshStudentPortfolio(selectedProfileStudent.id);
+                }}
+              />
+            </Suspense>
 
             {studentProfileTab === "flow" ? (
               <>
@@ -10028,7 +11352,9 @@ export default function Prototype() {
             ) : null}
 
             {studentProfileTab === "details" ||
-            studentProfileTab === "contacts" ? (
+            studentProfileTab === "contacts" ||
+            studentProfileTab === "care" ||
+            studentProfileTab === "family" ? (
             <form
               className="student-profile-form"
               onSubmit={(event) => {
@@ -10118,7 +11444,7 @@ export default function Prototype() {
                   />
                 </label>
                 <label htmlFor="student-profile-code">
-                  İsteğe bağlı kod
+                  Öğrenci numarası
                   <KeyboardInput
                     id="student-profile-code"
                     value={studentProfileForm.optionalCode}
@@ -10128,7 +11454,7 @@ export default function Prototype() {
                         optionalCode: event.target.value,
                       }))
                     }
-                    placeholder="T.C. kimlik no değil"
+                    placeholder="Örn. 27"
                     autoComplete="off"
                   />
                 </label>
@@ -10142,29 +11468,48 @@ export default function Prototype() {
                 <StarIcon aria-hidden="true" />
               </div>
 
-              <label htmlFor="student-profile-enrollment-date">
-                Sınıfa kayıt tarihi
-                <KeyboardInput
-                  id="student-profile-enrollment-date"
-                  type="date"
-                  min={studentProfileForm.birthDate || undefined}
-                  max={attendanceCivilDate}
-                  value={studentProfileForm.enrollmentDate}
-                  onChange={(event) =>
-                    setStudentProfileForm((current) => ({
-                      ...current,
-                      enrollmentDate: event.target.value,
-                    }))
-                  }
-                  onInput={(event) => {
-                    const enrollmentDate = event.currentTarget.value;
-                    setStudentProfileForm((current) => ({
-                      ...current,
-                      enrollmentDate,
-                    }));
-                  }}
-                />
-              </label>
+              <div className="student-profile-form-grid">
+                <label htmlFor="student-profile-national-identity-number">
+                  T.C. kimlik numarası (isteğe bağlı)
+                  <KeyboardInput
+                    id="student-profile-national-identity-number"
+                    inputMode="numeric"
+                    maxLength={11}
+                    value={studentProfileForm.nationalIdentityNumber}
+                    onChange={(event) => {
+                      const nationalIdentityNumber = event.target.value
+                        .replace(/\D/g, "")
+                        .slice(0, 11);
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        nationalIdentityNumber,
+                      }));
+                    }}
+                    placeholder="11 hane"
+                    autoComplete="off"
+                  />
+                </label>
+                <label htmlFor="student-profile-enrollment-year">
+                  Okula kayıt yılı
+                  <KeyboardInput
+                    id="student-profile-enrollment-year"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={studentProfileForm.enrollmentYear}
+                    onChange={(event) => {
+                      const enrollmentYear = event.target.value
+                        .replace(/\D/g, "")
+                        .slice(0, 4);
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        enrollmentYear,
+                      }));
+                    }}
+                    placeholder="Örn. 2025"
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
 
               <label htmlFor="student-profile-languages">
                 Evde kullanılan diller
@@ -10249,157 +11594,54 @@ export default function Prototype() {
               ) : null}
 
               {studentProfileTab === "contacts" ? (
-                <>
-              <div className="student-profile-section-heading student-profile-section-heading--secondary">
-                <div>
-                  <span className="d1-kicker">Aile ve yakınlar</span>
-                  <h3>İletişim merkezi</h3>
-                </div>
-                <ChatBubbleIcon aria-hidden="true" />
-              </div>
-
-              <p className="student-contact-intro">
-                Anne, baba, dede, amca, bakıcı veya başka bir yakını ekleyin.
-                Arama ve WhatsApp işlemleri doğrudan telefon uygulamalarına geçer.
-              </p>
-
-              <div className="student-contact-editor">
-                {studentProfileForm.contacts.map((contact) => {
-                  const contactLinks = contactActionLinks(contact.phone);
-                  return (
-                  <section className="student-contact-card" key={contact.id}>
-                    <div className="student-contact-card-heading">
-                      <strong>
-                        {contact.kind === "mother"
-                          ? "Anne"
-                          : contact.kind === "father"
-                            ? "Baba"
-                            : contact.relationship || "Diğer yakın"}
-                      </strong>
-                      {contact.isPrimary ? <span>Öncelikli</span> : null}
-                      {contact.kind === "other" ? (
-                        <button
-                          type="button"
-                          onClick={() => removeStudentContact(contact.id)}
-                          aria-label={`${contact.relationship || "Yakın"} iletişim kaydını kaldır`}
-                        >
-                          <TrashIcon aria-hidden="true" />
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {contact.kind === "other" ? (
-                      <label htmlFor={`student-contact-relationship-${contact.id}`}>
-                        Yakınlığı
-                        <KeyboardInput
-                          id={`student-contact-relationship-${contact.id}`}
-                          value={contact.relationship}
-                          onChange={(event) =>
-                            updateStudentContact(contact.id, {
-                              relationship: event.target.value.slice(0, 60),
-                            })
-                          }
-                          placeholder="Örn. Dede, amca, bakıcı"
-                          autoComplete="off"
-                        />
-                      </label>
-                    ) : null}
-
-                    <label htmlFor={`student-contact-name-${contact.id}`}>
-                      Adı ve soyadı
-                      <KeyboardInput
-                        id={`student-contact-name-${contact.id}`}
-                        value={contact.name ?? ""}
-                        onChange={(event) =>
-                          updateStudentContact(contact.id, {
-                            name: event.target.value.slice(0, 120),
-                          })
-                        }
-                        placeholder="İsteğe bağlı"
-                        autoComplete="name"
-                      />
-                    </label>
-
-                    <label htmlFor={`student-contact-phone-${contact.id}`}>
-                      Cep telefonu
-                      <KeyboardInput
-                        id={`student-contact-phone-${contact.id}`}
-                        type="tel"
-                        inputMode="tel"
-                        value={contact.phone}
-                        onChange={(event) =>
-                          updateStudentContact(contact.id, {
-                            phone: formatStudentPhone(event.target.value),
-                          })
-                        }
-                        placeholder="05"
-                        autoComplete="tel"
-                      />
-                    </label>
-
-                    <label className="student-contact-primary">
-                      <input
-                        type="checkbox"
-                        checked={contact.isPrimary}
-                        onChange={(event) =>
-                          setPrimaryStudentContact(
-                            contact.id,
-                            event.target.checked,
-                          )
-                        }
-                      />
-                      Öncelikli iletişim kişisi
-                    </label>
-
-                    {contactLinks ? (
-                      <div className="student-contact-actions">
-                        <a
-                          href={contactLinks.tel}
-                          aria-label={`${contactDisplayLabel(contact)} kişisini ara`}
-                        >
-                          <PersonIcon aria-hidden="true" />
-                          Ara
-                        </a>
-                        <a
-                          href={contactLinks.whatsapp}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`${contactDisplayLabel(contact)} kişisine WhatsApp mesajı gönder`}
-                        >
-                          <ChatBubbleIcon aria-hidden="true" />
-                          WhatsApp
-                        </a>
-                      </div>
-                    ) : contact.phone.trim() ? (
-                      <p className="student-contact-invalid" role="status">
-                        Arama ve WhatsApp için geçerli bir cep telefonu girin.
-                      </p>
-                    ) : null}
-                  </section>
-                  );
-                })}
-              </div>
-
-              <button
-                className="student-contact-add"
-                type="button"
-                onClick={addStudentContact}
-              >
-                <PlusIcon aria-hidden="true" />
-                Başka bir yakın ekle
-              </button>
-              {removedStudentContact ? (
-                <div className="student-profile-undo" role="status">
-                  <span>
-                    {removedStudentContact.relationship} iletişim kaydı kaldırıldı;
-                    profil kaydedilene kadar geri alınabilir.
-                  </span>
-                  <button type="button" onClick={undoRemoveStudentContact}>
-                    Geri al
-                  </button>
-                </div>
+                <Suspense fallback={null}>
+                  <StudentProfileSafetyPanels
+                    mode="contacts"
+                    contacts={studentProfileForm.contacts}
+                    removedContact={removedStudentContact}
+                    onUpdateContact={updateStudentContact}
+                    onSetPrimary={setPrimaryStudentContact}
+                    onAddContact={addStudentContact}
+                    onRemoveContact={removeStudentContact}
+                    onUndoRemove={undoRemoveStudentContact}
+                  />
+                </Suspense>
               ) : null}
-                </>
+
+              {studentProfileTab === "care" ? (
+                <Suspense fallback={null}>
+                  <StudentProfileSafetyPanels
+                    mode="care"
+                    careDetails={studentProfileForm.careDetails}
+                    onCareDetailsChange={(field, value) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        careDetails: {
+                          ...current.careDetails,
+                          [field]: value,
+                        },
+                      }))
+                    }
+                  />
+                </Suspense>
+              ) : null}
+
+              {studentProfileTab === "family" ? (
+                <Suspense fallback={null}>
+                  <StudentProfileSafetyPanels
+                    mode="family"
+                    careDetails={studentProfileForm.careDetails}
+                    onCareDetailsChange={(field, value) =>
+                      setStudentProfileForm((current) => ({
+                        ...current,
+                        careDetails: {
+                          ...current.careDetails,
+                          [field]: value,
+                        },
+                      }))
+                    }
+                  />
+                </Suspense>
               ) : null}
 
               <section className="student-profile-context" aria-label="Sınıf ve program bağlamı">
@@ -11557,7 +12799,7 @@ export default function Prototype() {
             <Dialog.Title className="sr-only">Kayıtlı öğretmen planı</Dialog.Title>
             <Dialog.Description className="sr-only">
               Bu cihazdaki yıllık, aylık, haftalık ve günlük öğretmen planlarını
-              premium erişimden bağımsız inceleyin ve temel belge olarak alın.
+              inceleyin, düzenleyin ve belge olarak alın.
             </Dialog.Description>
             <Suspense
               fallback={(
@@ -11575,17 +12817,15 @@ export default function Prototype() {
                 contentPack={premiumFounderAccess?.pack ?? null}
                 educationalWritesDisabled={planWritesDisabled}
                 educationalWriteNotice={educationalWriteNotice}
-                onClose={() => setTeacherPlanRecordsOpen(false)}
-                onOpenProviderLibrary={() => {
-                  setTeacherPlanRecordsOpen(false);
-                  openPremiumPlans(
-                    teacherPlanRecordsInitialLevel === "monthly"
-                      ? "monthly"
-                      : teacherPlanRecordsInitialLevel === "weekly"
-                        ? "weekly"
-                        : "overview",
-                  );
+                documentContext={{
+                  schoolName: configuredClassroom?.schoolName,
+                  teacherName: configuredClassroom?.teacherName,
+                  classroomName: configuredClassroom?.classroomName,
+                  academicYearName: configuredClassroom?.academicYearName,
+                  ageGroup: configuredClassroom?.ageGroup,
+                  curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
                 }}
+                onClose={() => setTeacherPlanRecordsOpen(false)}
                 onViewDailyPlan={(plan) => {
                   setTeacherPlanRecordsOpen(false);
                   void viewScheduledPlanFlow(plan);
@@ -11801,6 +13041,10 @@ export default function Prototype() {
                 onUpdate={updateFuturePlan}
                 initialTemplate={premiumDailyTemplate ?? undefined}
                 initialEdit={scheduledPlanEditDraft ?? undefined}
+                initialActivityTitle={studioActivityTitle ?? undefined}
+                initialPedagogicalProvenance={
+                  studioPedagogicalProvenance ?? undefined
+                }
                 teacherOwnedDailyFlowContext={
                   !premiumDailyTemplate &&
                   !scheduledPlanEditDraft?.premium &&
@@ -11823,7 +13067,8 @@ export default function Prototype() {
         </Dialog.Root>
       ) : null}
 
-      {premiumPlanOpen &&
+      {premiumLegacyRequested &&
+      premiumPlanOpen &&
       premiumPlanEntryEnabled &&
       configuredClassroom?.curriculumProfile ? (
         <Dialog.Root
@@ -11886,7 +13131,17 @@ export default function Prototype() {
           <Dialog.Overlay className="d1-flow-overlay" />
           <Dialog.Content
             className="d1-flow-layer"
-            key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}-${evidenceFlowRequest.initialStudentId ?? "none"}`}
+            key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}-${evidenceFlowRequest.initialStudentId ?? "none"}-${evidenceFlowRequest.initialDraft ? "seeded" : "plain"}`}
+            onCloseAutoFocus={(event) => {
+              const activityReturnTarget = document.querySelector<HTMLElement>(
+                '[data-activity-observation-return="true"]',
+              );
+              if (!activityReturnTarget) return;
+              event.preventDefault();
+              window.requestAnimationFrame(() => {
+                activityReturnTarget.focus({ preventScroll: true });
+              });
+            }}
           >
             <Dialog.Title className="sr-only">
               Gözlem ve değerlendirme akışı
@@ -11899,6 +13154,7 @@ export default function Prototype() {
               activity={evidenceFlowRequest.activity}
               pendingObservation={evidenceFlowRequest.pendingObservation}
               initialStudentId={evidenceFlowRequest.initialStudentId}
+              initialDraft={evidenceFlowRequest.initialDraft}
               students={students}
               actions={evidenceFlowActions}
             />
@@ -11906,6 +13162,22 @@ export default function Prototype() {
         </Dialog.Root>
       ) : null}
       </div>
+
+      {tymmChildSession ? (
+        <TymmChildParticipationDialog
+          key={`${tymmChildSession.student.id}-${tymmChildSession.template.id}`}
+          session={tymmChildSession}
+          onAdultExit={() => {
+            setTymmChildSession(null);
+            surfaceTransitionRef.current = "tymm-guide";
+            setTymmGuideOpen(true);
+            setAnnouncement(
+              "Gözetimli çocuk ekranı yetişkin tarafından kapatıldı; hiçbir seçim kaydedilmedi.",
+            );
+          }}
+          onHandoff={handoffTymmChildParticipation}
+        />
+      ) : null}
 
       {appLocked ? (
         <Dialog.Root open>

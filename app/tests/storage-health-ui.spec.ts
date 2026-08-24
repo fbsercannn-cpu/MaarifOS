@@ -3,20 +3,20 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe.configure({ timeout: 60_000 });
 
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Kasa Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Kasa Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Kasa Kurgu Sınıfı");
-  await setup.getByRole("button", { name: "Devam et" }).click();
   await setup
-    .getByLabel("Yaş grubu", { exact: true })
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
     .selectOption({ label: "60–72 ay" });
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .locator("details")
+    .filter({ hasText: "İleri ayarlar" })
+    .locator("summary")
     .click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 

@@ -8,6 +8,7 @@ import {
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
   OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+  academicYearMatchesCalendarProfile,
   loadAcademicCalendar,
   officialEventsOnDate,
   removeCalendarEntry,
@@ -167,6 +168,38 @@ test("takvim kaydı etkin eğitim yılı dışına taşamaz", async () => {
     /aktif eğitim yılının tarih aralığında/,
   );
   assert.equal(store.snapshot.calendarEntries.length, 0);
+});
+
+test("planlama hazırlığı özel eğitim yılı adını değil kapsam kimliği ile resmî tarih profilini doğrular", () => {
+  const scope = {
+    academicYearId,
+    classroomId,
+    academicYearName: "Denizli Anaokulu 2026–27 Çalışma Yılı",
+    academicYearStart: "2026-09-01",
+    academicYearEnd: "2027-08-31",
+  };
+
+  assert.equal(
+    academicYearMatchesCalendarProfile(
+      scope,
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+    ),
+    true,
+  );
+  assert.equal(
+    academicYearMatchesCalendarProfile(
+      { ...scope, academicYearEnd: "2027-06-25" },
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+    ),
+    false,
+  );
+  assert.equal(
+    academicYearMatchesCalendarProfile(
+      { ...scope, academicYearId: "" },
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+    ),
+    false,
+  );
 });
 
 test("öğretmenin okulda eğitim yok kaydı takvim CRUD zincirinde ayrı tür olarak korunur", async () => {

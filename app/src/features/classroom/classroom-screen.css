@@ -364,8 +364,57 @@
 }
 
 .classroom-screen .roster-card-actions {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 9px 10px 10px;
+}
+
+.classroom-screen .roster-profile-completeness {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.classroom-screen .roster-profile-completeness.is-missing {
+  color: #744a13;
+  background: #fff1d8;
+}
+
+.classroom-screen .roster-profile-completeness.is-complete {
+  color: var(--maarif-teal-dark);
+  background: var(--maarif-teal-soft);
+}
+
+.classroom-screen .roster-card-actions .roster-card-actions__note,
+.classroom-screen .roster-card-actions .roster-card-archive-link {
+  grid-column: 1 / -1;
+}
+
+.classroom-screen .roster-card-actions .roster-card-profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--maarif-teal-dark);
+  background: #fff;
+  border-color: #bcded7;
+  white-space: normal;
+}
+
+.classroom-screen .roster-card-actions .roster-card-profile-link svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.classroom-screen .roster-card-actions .roster-card-archive-link {
+  color: var(--maarif-coral);
+  border-color: #e9c4bb;
 }
 
 .classroom-screen .roster-empty {

@@ -1,9 +1,10 @@
 import type { StoredRecord } from "./model.ts";
 
-export const STUDENT_PROFILE_SCHEMA_VERSION = 5 as const;
+export const STUDENT_PROFILE_SCHEMA_VERSION = 8 as const;
 
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NATIONAL_IDENTIFIER_PATTERN = /^\d{10,11}$/;
+const ENROLLMENT_YEAR_PATTERN = /^\d{4}$/;
 const CONTACT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_PHOTO_PATTERN =
@@ -19,6 +20,8 @@ export type StudentContactInput = {
   name?: string;
   phone: string;
   isPrimary?: boolean;
+  isEmergencyContact?: boolean;
+  isAuthorizedPickup?: boolean;
 };
 
 export type StudentContact = {
@@ -28,6 +31,44 @@ export type StudentContact = {
   name?: string;
   phone: string;
   isPrimary: boolean;
+  isEmergencyContact?: boolean;
+  isAuthorizedPickup?: boolean;
+};
+
+export type StudentCareDetailsInput = {
+  homeAddress?: string;
+  allergies?: string;
+  dietaryNeeds?: string;
+  medicationNotes?: string;
+  emergencyNotes?: string;
+  physicianName?: string;
+  physicianPhone?: string;
+  medicalDevices?: string;
+  guardianEmail?: string;
+  familyEducationNeeds?: string;
+  familyParticipationPreferences?: string;
+  photoVideoPermissionOnFile?: boolean;
+  fieldTripPermissionOnFile?: boolean;
+  digitalCommunicationPermissionOnFile?: boolean;
+  permissionFormDate?: string;
+};
+
+export type StudentCareDetails = {
+  homeAddress?: string;
+  allergies?: string;
+  dietaryNeeds?: string;
+  medicationNotes?: string;
+  emergencyNotes?: string;
+  physicianName?: string;
+  physicianPhone?: string;
+  medicalDevices?: string;
+  guardianEmail?: string;
+  familyEducationNeeds?: string;
+  familyParticipationPreferences?: string;
+  photoVideoPermissionOnFile?: boolean;
+  fieldTripPermissionOnFile?: boolean;
+  digitalCommunicationPermissionOnFile?: boolean;
+  permissionFormDate?: string;
 };
 
 export type StudentProfileInput = {
@@ -37,6 +78,9 @@ export type StudentProfileInput = {
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
+  nationalIdentityNumber?: string;
+  enrollmentYear?: string;
+  /** @deprecated Yalnız eski kayıtları v6 kayıt yılına taşımak içindir. */
   enrollmentDate?: string;
   homeLanguages?: string;
   interests?: string;
@@ -44,6 +88,7 @@ export type StudentProfileInput = {
   /** Öğretmenin sunduğu desteği betimler; tanı veya gelişim hükmü değildir. */
   supportPreferences?: string;
   contacts?: readonly StudentContactInput[];
+  careDetails?: StudentCareDetailsInput;
   profilePhotoDataUrl?: string;
 };
 
@@ -54,12 +99,14 @@ export type StudentProfile = {
   preferredName?: string;
   birthDate?: string;
   optionalCode?: string;
-  enrollmentDate?: string;
+  nationalIdentityNumber?: string;
+  enrollmentYear?: string;
   homeLanguages?: string;
   interests?: string;
   strengths?: string;
   supportPreferences?: string;
   contacts?: StudentContact[];
+  careDetails?: StudentCareDetails;
   profilePhotoDataUrl?: string;
   profileSchemaVersion: typeof STUDENT_PROFILE_SCHEMA_VERSION;
 };
@@ -67,6 +114,18 @@ export type StudentProfile = {
 function optionalTrimmed(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+export function isValidStudentNationalIdentityNumber(
+  value: unknown,
+): value is string {
+  if (typeof value !== "string" || !/^[1-9]\d{10}$/.test(value)) return false;
+  const digits = [...value].map(Number);
+  const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+  const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
+  const tenthDigit = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
+  const eleventhDigit = digits.slice(0, 10).reduce((sum, digit) => sum + digit, 0) % 10;
+  return digits[9] === tenthDigit && digits[10] === eleventhDigit;
 }
 
 export function splitStudentDisplayName(displayName: string): {
@@ -185,6 +244,8 @@ export function normalizeStudentContacts(
       ...(name ? { name } : {}),
       phone: normalizeStudentPhone(contact.phone),
       isPrimary: contact.isPrimary === true,
+      ...(contact.isEmergencyContact === true ? { isEmergencyContact: true } : {}),
+      ...(contact.isAuthorizedPickup === true ? { isAuthorizedPickup: true } : {}),
     };
   });
   if (normalized.filter((contact) => contact.isPrimary).length > 1) {
@@ -228,6 +289,8 @@ export function studentContactsFromRecord(value: unknown): StudentContact[] {
         : {}),
       phone: source.phone,
       isPrimary,
+      ...(source.isEmergencyContact === true ? { isEmergencyContact: true } : {}),
+      ...(source.isAuthorizedPickup === true ? { isAuthorizedPickup: true } : {}),
     };
     try {
       contacts.push(normalizeStudentContacts([base])[0]);
@@ -238,10 +301,172 @@ export function studentContactsFromRecord(value: unknown): StudentContact[] {
         ...(base.name ? { name: base.name.trim() } : {}),
         phone: source.phone.trim(),
         isPrimary,
+        ...(source.isEmergencyContact === true ? { isEmergencyContact: true } : {}),
+        ...(source.isAuthorizedPickup === true ? { isAuthorizedPickup: true } : {}),
       });
     }
   }
   return contacts;
+}
+
+function optionalEmail(value: string | undefined): string | undefined {
+  const email = optionalLimitedText(value, "Veli e-posta adresi", 254);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Veli e-posta adresi geçerli değil.");
+  }
+  return email;
+}
+
+function optionalGeneralPhone(value: string | undefined): string | undefined {
+  const phone = optionalLimitedText(value, "Hekim telefonu", 30);
+  if (phone && !/^[+()\d\s.-]+$/.test(phone)) {
+    throw new Error("Hekim telefonu yalnız rakam ve telefon ayırıcıları içerebilir.");
+  }
+  return phone;
+}
+
+export function normalizeStudentCareDetails(
+  input: StudentCareDetailsInput | undefined,
+): StudentCareDetails | undefined {
+  if (!input) return undefined;
+  const homeAddress = optionalLimitedText(input.homeAddress, "Ev adresi", 500);
+  const allergies = optionalLimitedText(input.allergies, "Alerji bilgisi", 500);
+  const dietaryNeeds = optionalLimitedText(
+    input.dietaryNeeds,
+    "Beslenme gereksinimi",
+    500,
+  );
+  const medicationNotes = optionalLimitedText(
+    input.medicationNotes,
+    "İlaç notu",
+    500,
+  );
+  const emergencyNotes = optionalLimitedText(
+    input.emergencyNotes,
+    "Acil durum notu",
+    1_000,
+  );
+  const physicianName = optionalLimitedText(input.physicianName, "Hekim adı", 120);
+  const physicianPhone = optionalGeneralPhone(input.physicianPhone);
+  const medicalDevices = optionalLimitedText(
+    input.medicalDevices,
+    "Sağlık cihazı veya desteği",
+    500,
+  );
+  const guardianEmail = optionalEmail(input.guardianEmail);
+  const familyEducationNeeds = optionalLimitedText(
+    input.familyEducationNeeds,
+    "Aile eğitimi ihtiyacı",
+    1_000,
+  );
+  const familyParticipationPreferences = optionalLimitedText(
+    input.familyParticipationPreferences,
+    "Aile katılım tercihi",
+    1_000,
+  );
+  const photoVideoPermissionOnFile = input.photoVideoPermissionOnFile === true;
+  const fieldTripPermissionOnFile = input.fieldTripPermissionOnFile === true;
+  const digitalCommunicationPermissionOnFile =
+    input.digitalCommunicationPermissionOnFile === true;
+  const permissionFormDate = input.permissionFormDate
+    ? requireCivilDate(input.permissionFormDate, "İzin formu tarihi")
+    : undefined;
+  if (
+    !homeAddress &&
+    !allergies &&
+    !dietaryNeeds &&
+    !medicationNotes &&
+    !emergencyNotes &&
+    !physicianName &&
+    !physicianPhone &&
+    !medicalDevices &&
+    !guardianEmail &&
+    !familyEducationNeeds &&
+    !familyParticipationPreferences &&
+    !photoVideoPermissionOnFile &&
+    !fieldTripPermissionOnFile &&
+    !digitalCommunicationPermissionOnFile &&
+    !permissionFormDate
+  ) {
+    return undefined;
+  }
+  return {
+    ...(homeAddress ? { homeAddress } : {}),
+    ...(allergies ? { allergies } : {}),
+    ...(dietaryNeeds ? { dietaryNeeds } : {}),
+    ...(medicationNotes ? { medicationNotes } : {}),
+    ...(emergencyNotes ? { emergencyNotes } : {}),
+    ...(physicianName ? { physicianName } : {}),
+    ...(physicianPhone ? { physicianPhone } : {}),
+    ...(medicalDevices ? { medicalDevices } : {}),
+    ...(guardianEmail ? { guardianEmail } : {}),
+    ...(familyEducationNeeds ? { familyEducationNeeds } : {}),
+    ...(familyParticipationPreferences
+      ? { familyParticipationPreferences }
+      : {}),
+    ...(photoVideoPermissionOnFile ? { photoVideoPermissionOnFile: true } : {}),
+    ...(fieldTripPermissionOnFile ? { fieldTripPermissionOnFile: true } : {}),
+    ...(digitalCommunicationPermissionOnFile
+      ? { digitalCommunicationPermissionOnFile: true }
+      : {}),
+    ...(permissionFormDate ? { permissionFormDate } : {}),
+  };
+}
+
+export function studentCareDetailsFromRecord(
+  value: unknown,
+): StudentCareDetails | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as StudentCareDetailsInput;
+  try {
+    return normalizeStudentCareDetails({
+      ...(typeof source.homeAddress === "string"
+        ? { homeAddress: source.homeAddress }
+        : {}),
+      ...(typeof source.allergies === "string" ? { allergies: source.allergies } : {}),
+      ...(typeof source.dietaryNeeds === "string"
+        ? { dietaryNeeds: source.dietaryNeeds }
+        : {}),
+      ...(typeof source.medicationNotes === "string"
+        ? { medicationNotes: source.medicationNotes }
+        : {}),
+      ...(typeof source.emergencyNotes === "string"
+        ? { emergencyNotes: source.emergencyNotes }
+        : {}),
+      ...(typeof source.physicianName === "string"
+        ? { physicianName: source.physicianName }
+        : {}),
+      ...(typeof source.physicianPhone === "string"
+        ? { physicianPhone: source.physicianPhone }
+        : {}),
+      ...(typeof source.medicalDevices === "string"
+        ? { medicalDevices: source.medicalDevices }
+        : {}),
+      ...(typeof source.guardianEmail === "string"
+        ? { guardianEmail: source.guardianEmail }
+        : {}),
+      ...(typeof source.familyEducationNeeds === "string"
+        ? { familyEducationNeeds: source.familyEducationNeeds }
+        : {}),
+      ...(typeof source.familyParticipationPreferences === "string"
+        ? { familyParticipationPreferences: source.familyParticipationPreferences }
+        : {}),
+      ...(source.photoVideoPermissionOnFile === true
+        ? { photoVideoPermissionOnFile: true }
+        : {}),
+      ...(source.fieldTripPermissionOnFile === true
+        ? { fieldTripPermissionOnFile: true }
+        : {}),
+      ...(source.digitalCommunicationPermissionOnFile === true
+        ? { digitalCommunicationPermissionOnFile: true }
+        : {}),
+      ...(typeof source.permissionFormDate === "string"
+        ? { permissionFormDate: source.permissionFormDate }
+        : {}),
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 export function isStudentProfilePhotoDataUrl(
@@ -312,15 +537,34 @@ export function normalizeStudentProfile(
     throw new Error("Okul içi kod alanına kimlik numarası yazmayın.");
   }
 
-  const enrollmentDateValue = optionalTrimmed(input.enrollmentDate);
-  const enrollmentDate = enrollmentDateValue
-    ? requireCivilDate(enrollmentDateValue, "Kayıt tarihi")
+  const nationalIdentityNumber = optionalTrimmed(input.nationalIdentityNumber);
+  if (
+    nationalIdentityNumber &&
+    !isValidStudentNationalIdentityNumber(nationalIdentityNumber)
+  ) {
+    throw new Error("T.C. kimlik numarası 11 haneli ve geçerli olmalıdır.");
+  }
+
+  const legacyEnrollmentDateValue = optionalTrimmed(input.enrollmentDate);
+  const legacyEnrollmentDate = legacyEnrollmentDateValue
+    ? requireCivilDate(legacyEnrollmentDateValue, "Kayıt tarihi")
     : undefined;
-  if (enrollmentDate && enrollmentDate > today) {
+  if (legacyEnrollmentDate && legacyEnrollmentDate > today) {
     throw new Error("Kayıt tarihi gelecekte olamaz.");
   }
-  if (enrollmentDate && birthDate && enrollmentDate < birthDate) {
+  if (legacyEnrollmentDate && birthDate && legacyEnrollmentDate < birthDate) {
     throw new Error("Kayıt tarihi doğum tarihinden önce olamaz.");
+  }
+  const enrollmentYear =
+    optionalTrimmed(input.enrollmentYear) ?? legacyEnrollmentDate?.slice(0, 4);
+  if (enrollmentYear && !ENROLLMENT_YEAR_PATTERN.test(enrollmentYear)) {
+    throw new Error("Okula kayıt yılı 4 haneli olmalıdır.");
+  }
+  if (enrollmentYear && enrollmentYear > today.slice(0, 4)) {
+    throw new Error("Okula kayıt yılı gelecekte olamaz.");
+  }
+  if (enrollmentYear && birthDate && enrollmentYear < birthDate.slice(0, 4)) {
+    throw new Error("Okula kayıt yılı doğum yılından önce olamaz.");
   }
 
   const homeLanguages = optionalLimitedText(
@@ -344,6 +588,7 @@ export function normalizeStudentProfile(
     1_000,
   );
   const contacts = normalizeStudentContacts(input.contacts);
+  const careDetails = normalizeStudentCareDetails(input.careDetails);
   const profilePhotoDataUrl = optionalTrimmed(input.profilePhotoDataUrl);
   if (
     profilePhotoDataUrl !== undefined &&
@@ -359,12 +604,14 @@ export function normalizeStudentProfile(
     ...(preferredName ? { preferredName } : {}),
     ...(birthDate ? { birthDate } : {}),
     ...(optionalCode ? { optionalCode } : {}),
-    ...(enrollmentDate ? { enrollmentDate } : {}),
+    ...(nationalIdentityNumber ? { nationalIdentityNumber } : {}),
+    ...(enrollmentYear ? { enrollmentYear } : {}),
     ...(homeLanguages ? { homeLanguages } : {}),
     ...(interests ? { interests } : {}),
     ...(strengths ? { strengths } : {}),
     ...(supportPreferences ? { supportPreferences } : {}),
     ...(contacts.length > 0 ? { contacts } : {}),
+    ...(careDetails ? { careDetails } : {}),
     ...(profilePhotoDataUrl ? { profilePhotoDataUrl } : {}),
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   };
@@ -381,13 +628,25 @@ export function studentProfileFromRecord(
     isCivilDateValue(record.birthDate)
       ? record.birthDate
       : undefined;
-  const enrollmentDate =
+  const legacyEnrollmentYear =
     typeof record.enrollmentDate === "string" &&
     isCivilDateValue(record.enrollmentDate) &&
     (!birthDate || record.enrollmentDate >= birthDate)
-      ? record.enrollmentDate
+      ? record.enrollmentDate.slice(0, 4)
       : undefined;
+  const enrollmentYear =
+    typeof record.enrollmentYear === "string" &&
+    ENROLLMENT_YEAR_PATTERN.test(record.enrollmentYear) &&
+    (!birthDate || record.enrollmentYear >= birthDate.slice(0, 4))
+      ? record.enrollmentYear
+      : legacyEnrollmentYear;
+  const nationalIdentityNumber = isValidStudentNationalIdentityNumber(
+    record.nationalIdentityNumber,
+  )
+    ? record.nationalIdentityNumber
+    : undefined;
   const contacts = studentContactsFromRecord(record.contacts);
+  const careDetails = studentCareDetailsFromRecord(record.careDetails);
   const profilePhotoDataUrl = isStudentProfilePhotoDataUrl(
     record.profilePhotoDataUrl,
   )
@@ -413,7 +672,8 @@ export function studentProfileFromRecord(
     ...(typeof record.optionalCode === "string" && record.optionalCode.trim()
       ? { optionalCode: record.optionalCode.trim() }
       : {}),
-    ...(enrollmentDate ? { enrollmentDate } : {}),
+    ...(nationalIdentityNumber ? { nationalIdentityNumber } : {}),
+    ...(enrollmentYear ? { enrollmentYear } : {}),
     ...(typeof record.homeLanguages === "string" &&
     record.homeLanguages.trim()
       ? { homeLanguages: record.homeLanguages.trim() }
@@ -429,6 +689,7 @@ export function studentProfileFromRecord(
       ? { supportPreferences: record.supportPreferences.trim() }
       : {}),
     ...(contacts.length > 0 ? { contacts } : {}),
+    ...(careDetails ? { careDetails } : {}),
     ...(profilePhotoDataUrl ? { profilePhotoDataUrl } : {}),
     profileSchemaVersion: STUDENT_PROFILE_SCHEMA_VERSION,
   };

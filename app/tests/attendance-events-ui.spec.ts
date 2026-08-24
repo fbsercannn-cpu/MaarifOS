@@ -3,33 +3,42 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe.configure({ timeout: 60_000 });
 
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Yoklama 2 Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Yoklama 2 Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Yoklama 2 Kurgu Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup
+    .locator("details")
+    .filter({ hasText: "Takvim ayrıntıları" })
+    .locator("summary")
+    .click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .locator("details")
+    .filter({ hasText: "İleri ayarlar" })
+    .locator("summary")
     .click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "İlk çocuğu ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill(name);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true }).click();
+  const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addStudent.getByLabel("Çocuğun adı").fill(name);
+  await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
 async function openAttendanceDetail(page: Page, childName: string) {
-  await page.getByRole("button", { name: /Bugünkü devam/ }).click();
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
   const attendance = page.getByRole("dialog", { name: "Bugünün devam durumu" });
   const detailTrigger = attendance.getByRole("button", {
     name: `${childName} için yoklama ayrıntısını aç`,
@@ -79,7 +88,6 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
   await expect(page.locator(".sr-live")).toHaveText(
     `${childName} için Erken ayrılma olayı geri alındı.`,
   );
-  await expect(page.getByTestId("persistence-status")).toContainText("Kaydedildi");
   await attendance.getByRole("button", { name: `${childName} için yoklama ayrıntısını aç` }).click();
   detail = page.getByRole("dialog", { name: new RegExp(`${childName}.*yoklama ayrıntısı`) });
   const remainingEvents = detail.getByRole("region", { name: "Bugünün ayrıntıları" });
@@ -90,7 +98,8 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
   await page.keyboard.press("Escape");
   await page.reload({ waitUntil: "networkidle" });
   await page
-    .getByRole("button", { name: new RegExp(`${childName}.*profil`, "i") })
+    .locator("button.simple-student-list__profile")
+    .filter({ hasText: childName })
     .click();
   const history = page.getByRole("region", { name: "Yoklama geçmişi" });
   await expect(history).toContainText("Geldi · Giriş");

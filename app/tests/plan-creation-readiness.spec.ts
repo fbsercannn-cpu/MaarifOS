@@ -1,29 +1,28 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function configureClassroomWithStudent(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Plan Kullanılabilirlik Okulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Plan Kullanılabilirlik Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Plan kullanılabilirlik sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup.getByText("Takvim ayrıntıları", { exact: true }).click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
-  await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByLabel("Program katalog kimliği").fill("PLAN-UX-TEST");
-  await setup.getByLabel("Kaynak sürümü").fill("2026-test");
-  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.getByText("İleri ayarlar", { exact: true }).click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
-    .click();
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: /^(İlk çocuğu ekle|Çocuk ekle)$/ }).click();
+  await page
+    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
+    .last()
+    .click();
   await page.getByLabel("Çocuğun adı").fill("Plan Dock Çocuğu");
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
@@ -35,8 +34,10 @@ test("plan CTA'sı görünür kalır ve eksik adımları çözülene kadar açı
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroomWithStudent(page);
 
-  await page.getByRole("button", { name: "Kayıt ekle", exact: true }).click();
-  await page.getByRole("button", { name: /Etkinlik planla/ }).click();
+  await page
+    .getByRole("region", { name: "Ben hazırladım" })
+    .getByRole("button", { name: /TYMM günlük plan/ })
+    .click();
 
   const dialog = page.getByRole("dialog", { name: "Günlük plan oluşturma" });
   const dock = dialog.locator(".plan-save-dock");
@@ -44,7 +45,7 @@ test("plan CTA'sı görünür kalır ve eksik adımları çözülene kadar açı
   const saveButton = dialog.getByRole("button", { name: "Planı kaydet" });
 
   await expect(dialog).toBeVisible();
-  await expect(dock).toHaveCSS("position", "sticky");
+  await expect(dock).toHaveCSS("position", "fixed");
   await expect(readiness).toHaveAttribute("role", "status");
   await expect(readiness).toHaveAttribute("aria-live", "polite");
   await expect(readiness).toContainText("2 adım kaldı");

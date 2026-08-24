@@ -2,20 +2,19 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
+  await setup.getByLabel("Okul adı").fill("Erişilebilirlik Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Kurgu Öğretmen");
   await setup.getByLabel("Sınıf adı").fill("Erişilebilirlik Kurgu Sınıfı");
+  await setup
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
+  await setup.locator("details.classroom-calendar-details > summary").click();
   await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
   await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
-  await setup.getByRole("button", { name: "Devam et" }).click();
-  await setup.getByLabel("Yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
-  await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", { name: "Devam et" }).click();
+  await setup.locator("details.classroom-advanced-settings > summary").click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
-  await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
-    .click();
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
@@ -40,6 +39,6 @@ test("Hediye Alpha Günüm ve boş Sınıf yüzeyleri ciddi axe ihlali taşımaz
   await expectNoSeriousAxeViolation(page);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await expect(page.getByText("Henüz çocuk eklenmedi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Henüz öğrenci eklenmedi", { exact: true })).toBeVisible();
   await expectNoSeriousAxeViolation(page);
 });

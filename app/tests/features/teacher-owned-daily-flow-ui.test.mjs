@@ -50,14 +50,13 @@ test("öğretmen planı gerçek haftada 10 bölümlü düzenleme yüzeyini açar
   assert.match(prototypeSource, /weeklyPlanId: teacherWorkCycle\.weekly\.id/);
 });
 
-test("varsayılan akış öğretmen incelemesi olmadan teacher-authored olarak kaydedilemez", () => {
-  assert.match(planFlowSource, /10 bölümlü günlük akışı gözden geçirdiğinizi onaylayın/);
-  assert.match(planFlowSource, /teacherOwnedDailyFlowReviewed/);
-  assert.match(
-    planFlowSource,
-    /teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed/,
-  );
-  assert.match(planFlowSource, /Bir alan değişirse yeniden onay gerekir/);
+test("varsayılan akış ayrı onay kutusu olmadan güncel revizyonu kaydeder", () => {
+  assert.doesNotMatch(planFlowSource, /10 bölümlü günlük akışı gözden geçirdiğinizi onaylayın/);
+  assert.doesNotMatch(planFlowSource, /teacherOwnedDailyFlowEnabled && !teacherOwnedDailyFlowReviewed/);
+  assert.doesNotMatch(planFlowSource, /Bir alan değişirse yeniden onay gerekir/);
+  assert.match(planFlowSource, /Günün 10 bölümlük akışı hazırdır/);
+  assert.match(planFlowSource, /Günün akışı hazır/);
+  assert.match(planFlowSource, /İsterseniz düzenleyin/);
   assert.match(planFlowSource, /Süreleri sınıf gününe eşit dağıt/);
   assert.match(planFlowSource, /block\.status === "planned"/);
   assert.match(planFlowSource, /\{index \+ 1\}\. \{block\.title\} — bölümü düzenle/);
@@ -81,7 +80,7 @@ test("gerçek etkinlik exact öğretmen akış bölümüne bağlanır ve Today a
   assert.match(todaySource, /record\.teacherOwnedFlowBlockId === block\.id/);
 });
 
-test("önceki gün taslağı yalnız fark önizlemesiyle taşınır ve öğretmen yeniden onaylar", () => {
+test("önceki gün taslağı yalnız fark önizlemesiyle taşınır ve güncel revizyona kaydedilir", () => {
   assert.match(planFlowSource, /data-testid="teacher-owned-flow-copy"/);
   assert.match(planFlowSource, /Dünden getir/);
   assert.match(planFlowSource, /gözlem ve kayıt kimlikleri kopyalanmaz/);
@@ -99,11 +98,14 @@ test("süre farkı tek esnek bölümle kapatılır ve skipped zaman uygulanmış
   assert.match(planFlowSource, /Gün takvimi sınıfın çalışma süresiyle tam eşleşiyor/);
 });
 
-test("belge kapsamı önizleme ve exact revizyon onayı olmadan indirilemez", () => {
-  assert.match(teacherPlanScreenSource, /Önizlemeli belge merkezi/);
-  assert.match(teacherPlanScreenSource, /Belgeyi önizle/);
-  assert.match(teacherPlanScreenSource, /güncel plan revizyonunu yansıttığını onaylıyorum/);
-  assert.match(teacherPlanScreenSource, /documentApproved/);
+test("belge kapsamı tek tıkla indirilir; bütünlük denetimi içeride ve onay kutusuz kalır", () => {
+  assert.match(teacherPlanScreenSource, /Tek tıkla çıktı/);
+  assert.match(teacherPlanScreenSource, /PDF hazırla/);
+  assert.match(teacherPlanScreenSource, /Word hazırla/);
+  assert.match(teacherPlanScreenSource, /şema, tarih, kaynak/);
+  assert.doesNotMatch(teacherPlanScreenSource, /Belgeyi önizle/);
+  assert.doesNotMatch(teacherPlanScreenSource, /documentApproved/);
   assert.match(teacherPlanDocumentSource, /buildStandaloneTeacherOwnedPlanPreview/);
   assert.match(teacherPlanDocumentSource, /Denetim eki · kayıt ve kanıt kimlikleri/);
+  assert.match(teacherPlanDocumentSource, /includeAuditAppendix/);
 });

@@ -305,6 +305,7 @@ async function runWave16TeacherWeekJourneyProbe() {
     const documentText = buildStandaloneTeacherOwnedPlanParagraphs(
       loaded,
       dailyExports,
+      { includeAuditAppendix: true },
     ).map((paragraph) => paragraph.text).join("\n");
     const [pdfFile, wordFile] = await Promise.all([
       generateStandaloneTeacherOwnedPlanExportFile(loaded, source, "pdf"),

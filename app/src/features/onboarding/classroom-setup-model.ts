@@ -1,6 +1,8 @@
 export type ClassroomSetupSectionId = "period" | "program" | "schedule";
 
 export interface ClassroomSetupReadinessInput {
+  readonly schoolName: string;
+  readonly teacherName: string;
   readonly classroomName: string;
   readonly academicYearName: string;
   readonly academicYearStart: string;
@@ -37,6 +39,8 @@ export function classroomSetupReadiness(
   input: ClassroomSetupReadinessInput,
 ): ClassroomSetupReadiness {
   const period =
+    input.schoolName.trim().length > 0 &&
+    input.teacherName.trim().length > 0 &&
     input.classroomName.trim().length > 0 &&
     input.academicYearName.trim().length > 0 &&
     civilDatePattern.test(input.academicYearStart) &&

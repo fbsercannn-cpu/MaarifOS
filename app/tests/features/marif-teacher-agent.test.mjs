@@ -129,6 +129,58 @@ test("MARİF eksik kurulumu tüm günlük işlerden önce gerekçeli olarak öne
   assert.ok(brief.evidence.includes("Yoklama öğretmen başlatınca açılacak"));
 });
 
+test("MARİF kullanılabilir sınıfta bugünkü plan eksiğini yedek bakımından önce seçer", () => {
+  const brief = createMarifTeacherAgentBrief({
+    educationalWritesDisabled: false,
+    setup: setup({
+      completedCount: 3,
+      remainingCount: 1,
+      percent: 75,
+      isComplete: false,
+      currentStepId: "backup",
+      currentStep: {
+        id: "backup",
+        order: 4,
+        label: "Güvenli yedek",
+        title: "İlk şifreli yedeği alın",
+        detail: "Başlangıç kayıtlarını koruyun.",
+        actionLabel: "Şifreli yedek oluştur",
+        status: "current",
+      },
+    }),
+    control: control({
+      attendance: {
+        inClass: 3,
+        expected: 3,
+        absent: 0,
+        late: 0,
+        unmarked: 0,
+        stateLabel: "Yoklama tamam",
+        detailLabel: "0 yok · 0 geç",
+      },
+    }),
+    cycle: cycle({
+      currentStep: "plan",
+      stages: [
+        {
+          id: "daily",
+          label: "Günlük",
+          title: "Bugün plan yok; sıradaki plan 1 Eyl",
+          detail: "Yaklaşan plan korunuyor.",
+          actionLabel: "Yaklaşan planı aç",
+          tone: "attention",
+        },
+        ...cycle().stages.slice(1),
+      ],
+    }),
+    dayClosure: dayClosure(),
+  });
+
+  assert.deepEqual(brief.action, { kind: "teacher-cycle", stageId: "daily" });
+  assert.equal(brief.title, "Bugün plan yok; sıradaki plan 1 Eyl");
+  assert.ok(brief.critiques.some((item) => item.id === "setup-backup"));
+});
+
 test("MARİF tamamlanmamış yoklamayı gözlem ve değerlendirmeden önce seçer", () => {
   const brief = createMarifTeacherAgentBrief({
     educationalWritesDisabled: false,
