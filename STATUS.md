@@ -94,6 +94,13 @@ adımlarındaki erişilebilirlik/reflow engellerini giderir.
 - production build içindeki `47` JavaScript parçasının her biri için kanonik
   gzip/chunk bütçesi `≤180 KiB`.
 
+Public Sites sürüm `30` başarıyla yayımlandı. Canlı service worker `0.19.0`
+sürümünü bildirdi; üretim önbellek manifestindeki `77/77` varlık boyut ve
+SHA-256 düzeyinde yerel founder build ile eşleşti. Canlı günlük plan akışı
+seçili 27 Ağustos tarihini koruyarak `Kaydetmeye hazır` durumuna ulaştı; sınıf
+kurulumu devre dışı eylem nedenini görünür metin ve `aria-describedby` ile
+doğruladı.
+
 Bu sonuç, yukarıdaki otomatik sözleşmelerin ve regresyon kapılarının geçtiğini
 kanıtlar; ürünün bütünsel veya mutlak `10/10` olduğu iddiası değildir. Fiziksel
 iOS/Android paylaşma ve yazdırma sayfaları, VoiceOver/TalkBack, gerçek cihazda

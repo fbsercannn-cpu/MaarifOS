@@ -52,6 +52,10 @@ private lisans Worker'ı bağımsız sürümlenir.
 - Coverage satır `91.40%`, dal `77.66%`, fonksiyon `93.26%` olarak ölçüldü.
   Production build içindeki `47` JavaScript parçasının her biri kanonik
   `≤180 KiB` gzip/chunk bütçesi içinde kaldı.
+- Public Sites sürüm `30` başarıyla yayımlandı. Canlı service worker `0.19.0`
+  sürümünü bildirdi; üretim önbellek manifestindeki `77/77` varlık boyut ve
+  SHA-256 düzeyinde yerel founder build ile eşleşti. Canlı günlük plan ve
+  sınıf kurulumu kabul akışları yeniden doğrulandı.
 - Bu sayılar yalnız otomatik doğrulanan kapsamın kanıtıdır; mutlak ürün puanı
   değildir. Fiziksel cihaz paylaşma/yazdırma, VoiceOver/TalkBack, gerçek sınıf
   pilotu ve bağımsız okul öncesi/TYMM uzman kabulü ayrı kapılar olarak açıktır.
