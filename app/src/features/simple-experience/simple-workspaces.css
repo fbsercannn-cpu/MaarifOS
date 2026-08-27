@@ -11,6 +11,40 @@
   background: linear-gradient(180deg, #fffaf3 0%, #fff 42%);
 }
 
+.simple-workspace__advanced-toggle {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  color: var(--maarif-teal-dark);
+  background: #ffffff;
+  border: 1px solid var(--maarif-line-soft);
+  border-radius: 16px;
+  font: inherit;
+  text-align: left;
+}
+
+.simple-workspace__advanced-toggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.simple-workspace__advanced-toggle strong {
+  font-size: 14px;
+}
+
+.simple-workspace__advanced-toggle small {
+  color: var(--maarif-muted);
+  font-size: 11px;
+}
+
+.simple-workspace__advanced-toggle[aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+
 .simple-workspace__hero {
   position: relative;
   padding: 6px 4px 12px;
@@ -70,6 +104,59 @@
   border: 1px solid #e7ded2;
   border-radius: 22px;
   box-shadow: 0 8px 24px rgba(64, 45, 26, 0.055);
+}
+
+.simple-workspace__setup-banner {
+  display: grid;
+  width: 100%;
+  min-height: 96px;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  color: var(--maarif-navy);
+  background: linear-gradient(145deg, #fff4dc, #fffaf0);
+  border: 1px solid #e7c88e;
+  border-radius: 18px;
+  text-align: left;
+}
+
+.simple-workspace__setup-banner > span,
+.simple-workspace__setup-banner small,
+.simple-workspace__setup-banner strong,
+.simple-workspace__setup-banner em {
+  display: block;
+  min-width: 0;
+}
+
+.simple-workspace__setup-banner small {
+  color: #86561c;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.simple-workspace__setup-banner strong {
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.simple-workspace__setup-banner em {
+  margin-top: 4px;
+  color: #6f604c;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.simple-workspace__setup-banner b {
+  padding: 6px 8px;
+  color: #7b4b12;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .simple-workspace__heading {
@@ -1005,6 +1092,16 @@
   }
 
   .simple-state {
+    justify-self: start;
+  }
+
+  .simple-workspace__setup-banner {
+    grid-template-columns: minmax(0, 1fr) 16px;
+  }
+
+  .simple-workspace__setup-banner b {
+    grid-column: 1 / -1;
+    grid-row: 2;
     justify-self: start;
   }
 

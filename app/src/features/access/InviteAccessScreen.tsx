@@ -108,7 +108,7 @@ export function InviteAccessScreen({
             <ArrowRightIcon aria-hidden="true" />
           </button>
           <small id="maarifos-invite-note">
-            Kod kaydedilmez. Yalnız erişim onayı bu telefonda saklanır.
+            Bu kod pilot davet kapısıdır; öğretmen hesabı veya çocuk verisi kilidi değildir.
           </small>
           <p
             id="maarifos-invite-error"
@@ -121,8 +121,10 @@ export function InviteAccessScreen({
         </form>
 
         <p className="invite-access-privacy">
-          Sınıf ve öğrenci kayıtları davet kodundan ayrı, cihazınızdaki yerel veri
-          alanında tutulur.
+          Kod kaydedilmez; yalnız erişim onayı bu telefonda saklanır. Sınıf ve
+          öğrenci kayıtları davet kodundan ayrı yerel veri alanında tutulur.
+          Ortak cihazda Ayarlar’dan uygulama kilidini açın; hassas alanlar cihazda
+          şifreli tutulur.
         </p>
       </section>
     </main>

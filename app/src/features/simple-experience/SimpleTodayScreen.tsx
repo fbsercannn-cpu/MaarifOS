@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ArchiveIcon,
   CalendarIcon,
   CheckCircledIcon,
   ChevronRightIcon,
@@ -17,12 +16,10 @@ import type {
 } from "../today/TodayScreen.tsx";
 import {
   ACTIVITY_STUDIO_CATEGORY_LABELS,
-  ACTIVITY_STUDIO_ITEMS,
   filterActivityStudioItems,
   type ActivityStudioAgeBand,
 } from "../activity-studio/activity-studio-model.ts";
 import {
-  ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT,
   resolveActivityYearMonthLens,
   selectDailyActivitySuggestions,
 } from "../activity-studio/activity-year-program.ts";
@@ -99,6 +96,7 @@ function AssistantActionIcon({ action }: { action: MarifTeacherAgentAction }) {
 export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
   const [scenarioId, setScenarioId] =
     useState<PedagogicalScenarioId>("balanced");
+  const [advancedSupportOpen, setAdvancedSupportOpen] = useState(false);
   const classroom = configuredClassroomFromToday(model.workspace);
   const control = createTodayControlCenterSummary({
     workspace: model.workspace,
@@ -124,20 +122,16 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     .filter((reason, index, reasons) => reason && reasons.indexOf(reason) === index)
     .slice(0, 2);
   const dailyPlanReady = model.teacherCycle.daily.planId !== null;
-  const documentSourceReady =
-    model.teacherCycle.documents.planDocumentReady ||
-    model.teacherCycle.documents.monthlyEvaluationCount > 0 ||
-    model.teacherCycle.documents.anecdoteIncompleteCount > 0 ||
-    model.teacherCycle.documents.anecdoteReviewRequiredCount > 0 ||
-    model.teacherCycle.documents.anecdoteReadyCount > 0;
   const suggestedAgeBand = resolveActivityAgeBand(classroom?.ageGroup);
-  const dailySuggestions = selectDailyActivitySuggestions(
-    filterActivityStudioItems({
-      ageBand: suggestedAgeBand,
-      collection: "hemen",
-    }),
-    model.workspace.civilDate,
-  );
+  const dailySuggestions = suggestedAgeBand
+    ? selectDailyActivitySuggestions(
+        filterActivityStudioItems({
+          ageBand: suggestedAgeBand,
+          collection: "hemen",
+        }),
+        model.workspace.civilDate,
+      )
+    : [];
   const monthLens = resolveActivityYearMonthLens(model.workspace.civilDate);
   const attendanceDetail =
     model.attendance.total === 0
@@ -150,11 +144,13 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     observationCoverage,
   });
   const pedagogicalLoop = createPedagogicalLoop(model.teacherCycle);
-  const pedagogicalDay = createPedagogicalDayFlow({
-    ageBand: suggestedAgeBand,
-    civilDate: model.workspace.civilDate,
-    scenarioId,
-  });
+  const pedagogicalDay = suggestedAgeBand
+    ? createPedagogicalDayFlow({
+        ageBand: suggestedAgeBand,
+        civilDate: model.workspace.civilDate,
+        scenarioId,
+      })
+    : null;
 
   const openOrchestraPhase = (phase: PedagogicalDayPhase) => {
     if (phase.activity) {
@@ -344,10 +340,21 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
               <p><strong>Günün planı</strong><small>{model.teacherCycle.daily.title}</small></p>
               <b>{dailyPlanReady ? "Hazır" : "Hazırla"}</b>
             </button>
-            <button type="button" onClick={() => actions.onOpenActivityStudio()} disabled={model.dataBusy}>
+            <button
+              type="button"
+              onClick={suggestedAgeBand
+                ? () => actions.onOpenActivityStudio()
+                : () => actions.onOpenSetupStep("classroom")}
+              disabled={model.dataBusy}
+            >
               <span className="is-activity" aria-hidden="true"><MagnifyingGlassIcon /></span>
-              <p><strong>Etkinlik bankası</strong><small>{ACTIVITY_STUDIO_ITEMS.length} özgün etkinlik · {ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT} yıllık öneri yuvası</small></p>
-              <b>Aç</b>
+              <p>
+                <strong>Etkinlik bankası</strong>
+                <small>{suggestedAgeBand
+                  ? "Yaşa ve tarihe göre çevrimdışı öneriler"
+                  : "Önce resmî yaş bandını seçin"}</small>
+              </p>
+              <b>{suggestedAgeBand ? "Aç" : "Tamamla"}</b>
             </button>
             <button type="button" onClick={actions.onOpenQuickObservation} disabled={model.dataBusy}>
               <span className="is-observation" aria-hidden="true"><Pencil1Icon /></span>
@@ -359,6 +366,24 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
       ) : null}
 
       {classroom ? (
+        <button
+          type="button"
+          className="simple-today__advanced-toggle"
+          aria-expanded={advancedSupportOpen}
+          onClick={() => setAdvancedSupportOpen((current) => !current)}
+        >
+          <span>
+            <strong>{advancedSupportOpen ? "Gelişmiş gün desteğini kapat" : "Bugünün akışını ve haftayı aç"}</strong>
+            <small>Etkinlik önerileri, pedagojik akış ve haftalık görünüm</small>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {advancedSupportOpen ? (
+        <>
+
+      {classroom ? (
         <section className="simple-today__suggestions" aria-labelledby="simple-today-suggestions-title">
           <header>
             <div>
@@ -366,10 +391,13 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
               <h2 id="simple-today-suggestions-title">Hazır etkinlik önerileri</h2>
               {monthLens ? <p>{monthLens.label}</p> : null}
             </div>
-            <button type="button" onClick={() => actions.onOpenActivityStudio()}>Tümünü gör</button>
+            {suggestedAgeBand ? (
+              <button type="button" onClick={() => actions.onOpenActivityStudio()}>Tümünü gör</button>
+            ) : null}
           </header>
-          <div className="simple-today__suggestion-list">
-            {dailySuggestions.map((activity) => (
+          {suggestedAgeBand ? (
+            <div className="simple-today__suggestion-list">
+              {dailySuggestions.map((activity) => (
               <button
                 type="button"
                 key={activity.id}
@@ -383,8 +411,24 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
                 <b>{activity.preparationMinutes} dk hazırlık</b>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="simple-today__suggestion-list" role="status" aria-live="polite">
+              <button type="button" onClick={() => actions.onOpenSetupStep("classroom")}>
+                <span>
+                  <small>YAŞ BANDI GEREKLİ</small>
+                  <strong>Yaş bandı seçilmeden etkinlik önerisi gösterilmez.</strong>
+                  <em>
+                    Yanlış yaşa ait içerik açılmaması için 36–48, 48–60
+                    veya 60–72 ay resmî bandını seçin.
+                  </em>
+                </span>
+                <b>Tamamla</b>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </section>
       ) : null}
 
@@ -409,7 +453,7 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
             ))}
           </div>
 
-          <div className="simple-today__scenario-picker">
+          {pedagogicalDay ? <div className="simple-today__scenario-picker">
             <strong>Bugünkü koşul</strong>
             <div>
               {PEDAGOGICAL_SCENARIOS.map((scenario) => (
@@ -424,9 +468,9 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
               ))}
             </div>
             <p>{pedagogicalDay.scenario.description}</p>
-          </div>
+          </div> : null}
 
-          <div className="simple-today__day-map">
+          {pedagogicalDay ? <div className="simple-today__day-map">
             <header>
               <div><span>7 BÖLÜMLÜ CANLI AKIŞ</span><strong>{pedagogicalDay.totalMinutes} dk çekirdek akış</strong></div>
               <small>{pedagogicalDay.learningDomains.length} öğrenme alanı</small>
@@ -456,7 +500,27 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
                 </li>
               ))}
             </ol>
-          </div>
+          </div> : (
+            <div className="simple-today__evidence-balance" role="status" aria-live="polite">
+              <header>
+                <div>
+                  <span>YAŞ BANDI GEREKLİ</span>
+                  <strong>Pedagojik akış henüz açılmadı</strong>
+                </div>
+              </header>
+              <p>
+                Akış, etkinlik ve gözlem odağı yaşa göre kurulur; sistem eksik
+                bilgiyi 48–60 ay olarak tahmin etmez.
+              </p>
+              <button type="button" onClick={() => actions.onOpenSetupStep("classroom")}>
+                <span>
+                  <strong>Sınıf profilini tamamla</strong>
+                  <small>36–48, 48–60 veya 60–72 ay bandını seç</small>
+                </span>
+                <b>Aç</b>
+              </button>
+            </div>
+          )}
 
           <div className="simple-today__evidence-balance">
             <header>
@@ -525,68 +589,9 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         </section>
       ) : null}
 
-      {classroom ? (
-        <section className="simple-today__prepared" aria-labelledby="simple-prepared-title">
-          <header>
-            <span aria-hidden="true"><ReaderIcon /></span>
-            <h2 id="simple-prepared-title">Ben hazırladım</h2>
-          </header>
-          <div className="simple-today__prepared-list">
-            <button
-              type="button"
-              onClick={
-                dailyPlanReady
-                  ? () => actions.onOpenTeacherCycleStage("daily")
-                  : actions.onOpenPlanFlow
-              }
-              disabled={model.dataBusy}
-            >
-              <span className="simple-prepared__icon is-plan" aria-hidden="true">
-                <ReaderIcon />
-              </span>
-              <span>
-                <strong>
-                  {dailyPlanReady ? "TYMM günlük planı" : "TYMM günlük plan başlangıcı"}
-                </strong>
-                <small>
-                  {dailyPlanReady
-                    ? model.teacherCycle.daily.title
-                    : "Sınıf ve yaş grubu hazır; siz açınca düzenlenir"}
-                </small>
-              </span>
-              <ChevronRightIcon aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              onClick={
-                documentSourceReady
-                  ? () => actions.onOpenTeacherCycleStage("documents")
-                  : () => actions.onOpenActivityStudio()
-              }
-              disabled={model.dataBusy}
-            >
-              <span
-                className={`simple-prepared__icon ${documentSourceReady ? "is-document" : "is-activity"}`}
-                aria-hidden="true"
-              >
-                {documentSourceReady ? <ArchiveIcon /> : <MagnifyingGlassIcon />}
-              </span>
-              <span>
-                <strong>
-                  {documentSourceReady ? "Veli ve idare çıktıları" : "Oyun ve materyal fikirleri"}
-                </strong>
-                <small>
-                  {documentSourceReady
-                    ? "Kayıtlı plan ve gözlem kaynaklarını aç"
-                    : "Yaş grubuna uygun oyun, çizim ve boyama"}
-                </small>
-              </span>
-              <ChevronRightIcon aria-hidden="true" />
-            </button>
-          </div>
-        </section>
+        </>
       ) : null}
+
     </main>
   );
 }

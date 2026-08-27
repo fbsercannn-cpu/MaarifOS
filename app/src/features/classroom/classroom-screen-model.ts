@@ -94,6 +94,19 @@ export function classroomStudentProfileMissingFields(
 ): string[] {
   const missing: string[] = [];
   if (!student.birthDate) missing.push("doğum tarihi");
+  missing.push(...classroomRosterDocumentMissingFields(student));
+  return missing;
+}
+
+/**
+ * Sınıf listesinde gerçekten basılan öğrenci alanlarının hazır olma sözleşmesi.
+ * Doğum tarihi profil bütünlüğü için değerlidir; ancak belgede sütunu olmadığı
+ * için sınıf listesi indirmesini engellemez.
+ */
+export function classroomRosterDocumentMissingFields(
+  student: ClassroomStudentViewModel,
+): string[] {
+  const missing: string[] = [];
   if (!student.optionalCode?.trim()) missing.push("öğrenci no");
   if (!student.nationalIdentityNumber?.trim()) missing.push("T.C. kimlik");
   if (!student.contacts?.some((contact) => contact.phone.trim())) {

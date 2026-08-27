@@ -180,11 +180,22 @@ export function createActivityContextAdaptation(input: {
   });
 }
 
-export function resolveActivityAgeBand(value?: string): ActivityStudioAgeBand {
-  const normalized = value?.replace(/\s/gu, "") ?? "";
-  if (normalized.includes("36") && normalized.includes("48")) return "36-48";
-  if (normalized.includes("60") && normalized.includes("72")) return "60-72";
-  return "48-60";
+export function resolveActivityAgeBand(
+  value?: string | null,
+): ActivityStudioAgeBand | null {
+  if (!value) return null;
+  const normalized = value
+    .replaceAll("–", "-")
+    .replaceAll("—", "-")
+    .replace(/\s+/gu, "")
+    .toLocaleLowerCase("tr-TR");
+  return (
+    ACTIVITY_STUDIO_AGE_BANDS.find(
+      (ageBand) =>
+        normalized === ageBand ||
+        normalized === `${ageBand}ay`,
+    ) ?? null
+  );
 }
 
 const LIVED_VALUES = [
@@ -481,14 +492,17 @@ export function createPedagogicalLoop(
   const planDone = workspace.daily.planId !== null;
   const applyDone = workspace.daily.activityCount > 0 && workspace.daily.completedActivityCount >= workspace.daily.activityCount;
   const observeDone = workspace.daily.observationCount > 0;
-  const reflectDone = workspace.monthly?.evaluationCount ? workspace.monthly.evaluationCount > 0 : false;
-  const familyReady = workspace.documents.planDocumentReady || workspace.documents.anecdoteReadyCount > 0;
-  const done = [planDone, applyDone, observeDone, reflectDone, observeDone, familyReady, workspace.weekly !== null];
+  const weeklyEvaluationDone = (workspace.weekly?.evaluationCount ?? 0) > 0;
+  const reflectDone = weeklyEvaluationDone || (workspace.monthly?.evaluationCount ?? 0) > 0;
+  const adaptDone = weeklyEvaluationDone;
+  const familyReady = workspace.documents.anecdoteReadyCount > 0;
+  const nextPlanDone = weeklyEvaluationDone && (workspace.weekly?.dailyPlanCount ?? 0) > 1;
+  const done = [planDone, applyDone, observeDone, reflectDone, adaptDone, familyReady, nextPlanDone];
   const currentIndex = done.findIndex((value) => !value);
   const labels = ["Planla", "Uygula", "Gözle", "Yansıt", "Uyarla", "Aileye bağla", "Sonraki plan"] as const;
   const ids: readonly PedagogicalLoopStage["id"][] = ["plan", "apply", "observe", "reflect", "adapt", "family", "next-plan"];
   return Object.freeze(ids.map((id, index): PedagogicalLoopStage => {
-    const state: PedagogicalLoopStage["state"] = done[index]
+    const state: PedagogicalLoopStage["state"] = currentIndex === -1 || index < currentIndex
       ? "done"
       : index === currentIndex
         ? "current"

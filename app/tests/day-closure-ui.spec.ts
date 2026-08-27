@@ -48,8 +48,8 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
   await expect(page.getByTestId("teacher-day-close")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Günü kapat/ })).toHaveCount(0);
   const planTrigger = page
-    .getByRole("region", { name: "Ben hazırladım" })
-    .getByRole("button", { name: /TYMM günlük plan/ });
+    .getByRole("region", { name: "Bugünün işi tek yerde" })
+    .getByRole("button", { name: /Günün planı/ });
   await expect(planTrigger).toBeVisible();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
@@ -79,8 +79,8 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
 
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await page
-    .getByRole("region", { name: "Ben hazırladım" })
-    .getByRole("button", { name: /TYMM günlük plan/ })
+    .getByRole("region", { name: "Bugünün işi tek yerde" })
+    .getByRole("button", { name: /Günün planı/ })
     .click();
   await expect(page.getByRole("dialog", { name: "Günlük plan oluşturma" })).toBeVisible();
 });

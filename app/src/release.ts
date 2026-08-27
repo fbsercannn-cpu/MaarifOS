@@ -63,15 +63,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.16.0",
-  releasedOn: "2026-08-22",
-  title: "Bir yıllık öğretmen asistanı ve telefon güvenilirliği",
+  version: "0.19.0",
+  releasedOn: "2026-08-27",
+  title: "Takvimle hizalı plan ve güvenli telefon paylaşımı",
   notes: Object.freeze([
-    "Etkinlik bankası 120 özgün çekirdek etkinliğe, 180 okul günlük rotasyona ve 540 tarihe bağlı öneri yuvasına çıkarıldı.",
-    "Her etkinlik uygulama adımları, katılım uyarlaması, gözlem odağı, aile köprüsü ve üç resmî yaş bandı desteğiyle sunulur.",
-    "Çocuk Modu'nun son düğmeleri 320 piksel telefonda alt gezinmenin üstüne taşınır ve dokunulabilir kalır.",
-    "Sınıf listesi şablonu A4 ve 320 piksel için yenilendi; sürümlü dosya adı eski Android indirmeleriyle karışmayı önler.",
-    "PWA kabuk sürümü yenilendi; kurulu telefonlar yeni etkinlik, belge ve mobil düzeltmeleri güvenli güncelleme akışından alır.",
+    "Geçmiş bir kaynak hafta artık bugünün hızlı planına bağlanmaz; plan tarihi öğretmenin seçtiği günde kalır.",
+    "Resmî MEB takvimi yıllık etkinlik rotasyonunu ve günlük plan tarihini öğretim günleriyle sınırlar; tatil günü en yakın geçerli güne tek dokunuşla alınabilir.",
+    "Eksik veya geçersiz yaş bandı yanlış etkinlik ve hedef üretmez; öğretmeni sınıf kurulumuna yönlendirir.",
+    "Veli ve idare gözlem belgeleri açık kişisel veri uyarısından sonra telefon paylaşım ekranına gönderilir; destek yoksa güvenli indirilir.",
+    "Öğrenci numarası ve veli adı hassas veri kasasına taşındı; eski kayıtlar geriye uyumlu ve atomik biçimde yeniden mühürlenir.",
+    "Kurulum engelleri görünür ve ekran okuyucuya bağlı kesin gerekçe taşır; 256 piksele kadar içerik ve eylemler üst üste binmez.",
   ]),
 });
 

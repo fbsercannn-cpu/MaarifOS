@@ -15,6 +15,7 @@ import {
 import { createEmptySnapshot, type StoredRecord } from "../../core/domain/model.ts";
 import {
   assertPedagogicalPlanProvenance,
+  bindPedagogicalPlanProvenanceToCivilDate,
   type PedagogicalPlanProvenance,
 } from "../../core/domain/pedagogical-plan-provenance.ts";
 import {
@@ -1149,6 +1150,34 @@ export async function updateScheduledPlanWithActivity(
         );
       }
 
+      let reboundPedagogicalProvenance: PedagogicalPlanProvenance | undefined;
+      if (
+        plan.pedagogicalProvenance !== undefined ||
+        activity.pedagogicalProvenance !== undefined
+      ) {
+        assertPedagogicalPlanProvenance(
+          plan.pedagogicalProvenance,
+          "Planın pedagojik etkinlik kaynağı",
+        );
+        assertPedagogicalPlanProvenance(
+          activity.pedagogicalProvenance,
+          "Etkinliğin pedagojik kaynağı",
+        );
+        if (
+          canonicalJson(plan.pedagogicalProvenance) !==
+            canonicalJson(activity.pedagogicalProvenance)
+        ) {
+          throw new Error(
+            "Plan ile etkinliğin pedagojik kaynak zinciri uyuşmuyor.",
+          );
+        }
+        reboundPedagogicalProvenance =
+          bindPedagogicalPlanProvenanceToCivilDate(
+            plan.pedagogicalProvenance,
+            input.civilDate,
+          );
+      }
+
       const updatedPlan: StoredRecord = {
         ...plan,
         title: planTitle,
@@ -1160,6 +1189,13 @@ export async function updateScheduledPlanWithActivity(
         ...(teacherOwnedDailyFlow !== undefined
           ? { teacherOwnedDailyFlow }
           : {}),
+        ...(reboundPedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                reboundPedagogicalProvenance,
+              ),
+            }
+          : {}),
       };
       const updatedActivity: StoredRecord = {
         ...activity,
@@ -1169,6 +1205,13 @@ export async function updateScheduledPlanWithActivity(
         updatedAt: timestamp,
         ...(teacherOwnedDailyFlow !== undefined
           ? { teacherOwnedFlowBlockId }
+          : {}),
+        ...(reboundPedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                reboundPedagogicalProvenance,
+              ),
+            }
           : {}),
       };
       if (input.endTime) updatedActivity.endTime = input.endTime;

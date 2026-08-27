@@ -14,6 +14,10 @@ const plansSource = readFileSync(
   new URL("../../src/features/simple-experience/SimplePlanWorkspaceScreen.tsx", import.meta.url),
   "utf8",
 );
+const planCreationSource = readFileSync(
+  new URL("../../src/features/planning/PlanCreationFlow.tsx", import.meta.url),
+  "utf8",
+);
 const documentsSource = readFileSync(
   new URL("../../src/features/simple-experience/SimpleDocumentWorkspaceScreen.tsx", import.meta.url),
   "utf8",
@@ -27,16 +31,12 @@ const prototypeSource = readFileSync(
   "utf8",
 );
 
-test("kişisel asistan ana ekranı tek gerekçeli eylem ve iki bağlamsal hazırlıkla ilerletir", () => {
+test("kişisel asistan ana ekranı tek gerekçeli eylem ve yinelenmeyen öğretmen masasıyla ilerletir", () => {
   assert.match(todaySource, /createMarifTeacherAgentBrief/);
   assert.match(todaySource, /Bugün için kısa özet/);
   assert.match(todaySource, /Sıradaki en iyi adım/);
-  assert.match(todaySource, /Ben hazırladım/);
   assert.match(todaySource, /assistantBrief\.rationale, \.\.\.assistantBrief\.evidence/);
   assert.match(todaySource, /\.slice\(0, 2\)/);
-  assert.match(todaySource, /TYMM günlük planı/);
-  assert.match(todaySource, /Veli ve idare çıktıları/);
-  assert.match(todaySource, /Oyun ve materyal fikirleri/);
   assert.match(todaySource, /actions\.onOpenAttendance\(\)/);
   assert.match(todaySource, /actions\.onOpenDayClosure\(\)/);
   assert.match(todaySource, /actions\.onOpenPendingObservation\(\)/);
@@ -46,15 +46,26 @@ test("kişisel asistan ana ekranı tek gerekçeli eylem ve iki bağlamsal hazır
   assert.match(todaySource, /simple-today__brief-action/);
   assert.match(todaySource, /ÖĞRETMEN MASASI/);
   assert.match(todaySource, /Bugünün işi tek yerde/);
-  assert.match(
-    todaySource,
-    /ACTIVITY_STUDIO_ITEMS\.length\} özgün etkinlik · \{ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT\} yıllık öneri yuvası/,
-  );
+  assert.match(todaySource, /Yaşa ve tarihe göre çevrimdışı öneriler/);
+  assert.match(todaySource, /Bugünün akışını ve haftayı aç/);
+  assert.match(todaySource, /advancedSupportOpen/);
   assert.match(todaySource, /Hazır etkinlik önerileri/);
   assert.match(todaySource, /Öğretmen akışı/);
   assert.match(todaySource, /actions\.onOpenWeekDay\(day\.civilDate\)/);
   assert.doesNotMatch(todaySource, /simple-today__steps/);
+  assert.doesNotMatch(todaySource, /simple-today__prepared|Ben hazırladım/);
   assert.doesNotMatch(todaySource, /premium|demo|alpha|kurucu|EÇE/iu);
+});
+
+test("eksik yaş bandı etkinlik, pedagojik akış ve TYMM hedeflerini fail-closed tutar", () => {
+  assert.match(todaySource, /const dailySuggestions = suggestedAgeBand\s*\?/u);
+  assert.match(todaySource, /const pedagogicalDay = suggestedAgeBand\s*\?/u);
+  assert.match(todaySource, /Yaş bandı seçilmeden etkinlik önerisi gösterilmez/u);
+  assert.match(todaySource, /sistem eksik\s*bilgiyi 48–60 ay olarak tahmin etmez/u);
+  assert.match(todaySource, /actions\.onOpenSetupStep\("classroom"\)/u);
+  assert.match(planCreationSource, /curriculumTargetsForResolvedAgeBand\(curriculumProfile, curriculumAgeBand\)/u);
+  assert.match(planCreationSource, /Resmî yaş bandı seçilmeden hedef gösterilmez/u);
+  assert.match(planCreationSource, /code: "plan\.program-profile"/u);
 });
 
 test("kişisel asistan 320 piksel telefonda dokunma ve yoğunluk sözleşmesini korur", () => {
@@ -62,7 +73,7 @@ test("kişisel asistan 320 piksel telefonda dokunma ve yoğunluk sözleşmesini 
   assert.match(todayStyleSource, /\.simple-icon-button \{[^}]*width: 48px;[^}]*height: 48px;/su);
   assert.match(todayStyleSource, /\.simple-today__brief-action \{[^}]*min-height: 44px;/su);
   assert.match(todayStyleSource, /\.simple-focus__action \{[^}]*min-height: 44px;/su);
-  assert.match(todayStyleSource, /\.simple-today__prepared-list > button \{[^}]*min-height: 78px;/su);
+  assert.match(todayStyleSource, /\.simple-today__desk-grid > button \{[^}]*min-height: 106px;/su);
   assert.match(todayStyleSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(116px, 132px\)/u);
   assert.match(todayStyleSource, /\.simple-today__context-item strong \{[^}]*white-space: normal;/su);
   assert.doesNotMatch(todayStyleSource, /linear-gradient|radial-gradient/iu);
@@ -76,13 +87,20 @@ test("planlar yalnız Maarif Modelini ve okulun manuel etkinliklerini öne çık
   assert.match(plansSource, /Oyun ve materyaller/);
   assert.match(plansSource, /Hazır etkinlik koleksiyonları/);
   assert.match(plansSource, /Planı kaydetmeden önce/);
-  assert.match(plansSource, /ACTIVITY_STUDIO_ITEMS\.length/);
+  assert.match(plansSource, /Gelişmiş plan desteğini aç/);
+  assert.match(plansSource, /advancedSupportOpen/);
   assert.match(plansSource, /collectionItemCount/);
   assert.doesNotMatch(plansSource, /premium|EÇE|onay kutusu/iu);
 });
 
 test("tek-tık çıktılar sınıf, plan ve tek çocuk gözlem belgelerini birlikte sunar", () => {
   assert.match(documentsSource, /Sınıf listesi/);
+  assert.match(documentsSource, /gerçek A4 PDF/u);
+  assert.match(documentsSource, /PDF indir/u);
+  assert.match(documentsSource, /Sınıf listesi PDF paylaş/u);
+  assert.match(documentsSource, /önce açık uyarı gösterilir/u);
+  assert.match(documentsSource, /Dosya paylaşımı yoksa PDF indirilir/u);
+  assert.doesNotMatch(documentsSource, /A4 HTML dosyası/u);
   assert.match(documentsSource, /Aylık eğitim planı/);
   assert.match(documentsSource, /Haftalık çalışma akışı/);
   assert.match(documentsSource, /Yıllık planlama panosu/);
@@ -146,6 +164,9 @@ test("sınıf listesi indirme düğmesi yaptığı işi dürüstçe adlandırır
   );
   assert.match(classroomSource, /Sınıf listesini indir/u);
   assert.doesNotMatch(classroomSource, /Sınıf listesini yazdır/u);
+  assert.match(prototypeSource, /downloadSimpleClassRosterPdf/u);
+  assert.match(prototypeSource, /shareSimpleClassRosterPdf/u);
+  assert.match(prototypeSource, /onShareClassRoster=\{shareSimpleClassRoster\}/u);
 });
 
 test("eski EÇE sınıfı aynı dönemde arşivlenerek yeni TYMM kapsamına taşınır", () => {
@@ -161,7 +182,7 @@ test("eski EÇE sınıfı aynı dönemde arşivlenerek yeni TYMM kapsamına taş
 test("Emine ana akışı ortak davet erişimini kullanır ve geçmiş ücretli yüzeyi açmaz", () => {
   assert.match(
     prototypeSource,
-    /import \{ InviteAccessScreen \} from "\.\/features\/access\/InviteAccessScreen\.tsx";/u,
+    /import\("\.\/features\/access\/InviteAccessScreen\.tsx"\)/u,
   );
   assert.match(
     prototypeSource,

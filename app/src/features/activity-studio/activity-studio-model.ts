@@ -670,26 +670,51 @@ const CATEGORY_BY_SOURCE_ID: Readonly<Record<string, ActivityStudioCategory>> =
     "our-tree-friend": "acik-hava",
   });
 
+function createActivitySpecificSupport(
+  source: PreschoolActivitySuggestion,
+  profile: ActivityStudioAreaProfile,
+): Required<
+  Pick<
+    ActivityStudioDefinition,
+    "teacherSteps" | "inclusionNote" | "observationPrompt" | "familyExtension"
+  >
+> {
+  const materialsLabel = profile.materials.slice(0, 2).join(" ve ");
+  return {
+    teacherSteps: [
+      `“${source.title}” için ${materialsLabel} malzemelerini erişilebilir küçük seçenekler hâlinde hazırlayın.`,
+      `${source.teacherPrompt} Yöntem, sıra veya rol seçimini çocuklara bırakın ve farklı deneme yollarına alan açın.`,
+      `Kapanışta “${source.title}” sırasında çocuğun yaptığı veya söylediği tek bir somut şeyi değiştirmeden kaydedin.`,
+    ],
+    inclusionNote: `“${source.title}” sırasında ${profile.inclusionNote}`,
+    observationPrompt: `“${source.title}” sırasında ${profile.observationPrompt}`,
+    familyExtension: `Aileye “${source.title}” deneyimini evdeki güvenli malzemelerle, çocuğun seçtiği kısa bir yoldan yeniden kurmasını önerin; sonucu puanlamadan çocuğun sözünü dinlemelerini hatırlatın.`,
+  };
+}
+
 function fallbackDefinition(
   source: PreschoolActivitySuggestion,
 ): ActivityStudioDefinition {
   const profile = AREA_PROFILES[source.area];
   const category = CATEGORY_BY_SOURCE_ID[source.id] ?? profile.category;
+  const ageAdaptations = Object.fromEntries(
+    TYMM_2024_AGE_BANDS.map((ageBand) => [
+      ageBand,
+      `${source.title}: ${profile.ageAdaptations[ageBand]}`,
+    ]),
+  ) as Readonly<Record<ActivityStudioAgeBand, string>>;
   return {
     id: `${category}-${source.id}`,
     sourceSuggestionId: source.id,
     category,
-    ageAdaptations: profile.ageAdaptations,
+    ageAdaptations,
     durationMinutes: profile.durationMinutes,
     environment: profile.environment,
     materials: profile.materials,
     tymmDomains: profile.tymmDomains,
     printableKind: profile.printableKind,
     preparationMinutes: profile.preparationMinutes,
-    teacherSteps: profile.teacherSteps,
-    inclusionNote: profile.inclusionNote,
-    observationPrompt: profile.observationPrompt,
-    familyExtension: profile.familyExtension,
+    ...createActivitySpecificSupport(source, profile),
   };
 }
 
@@ -713,6 +738,10 @@ function buildActivity(definition: ActivityStudioDefinition): ActivityStudioItem
   }
 
   const assistantProfile = AREA_PROFILES[source.area];
+  const activitySpecificSupport = createActivitySpecificSupport(
+    source,
+    assistantProfile,
+  );
 
   return Object.freeze({
     ...definition,
@@ -727,14 +756,14 @@ function buildActivity(definition: ActivityStudioDefinition): ActivityStudioItem
     preparationMinutes:
       definition.preparationMinutes ?? assistantProfile.preparationMinutes,
     teacherSteps: Object.freeze(
-      definition.teacherSteps ?? assistantProfile.teacherSteps,
+      definition.teacherSteps ?? activitySpecificSupport.teacherSteps,
     ),
     inclusionNote:
-      definition.inclusionNote ?? assistantProfile.inclusionNote,
+      definition.inclusionNote ?? activitySpecificSupport.inclusionNote,
     observationPrompt:
-      definition.observationPrompt ?? assistantProfile.observationPrompt,
+      definition.observationPrompt ?? activitySpecificSupport.observationPrompt,
     familyExtension:
-      definition.familyExtension ?? assistantProfile.familyExtension,
+      definition.familyExtension ?? activitySpecificSupport.familyExtension,
   });
 }
 
@@ -854,6 +883,18 @@ function childTemplateIndexFor(
   return 0;
 }
 
+const CHILD_CHOICE_BY_CATEGORY: Readonly<
+  Record<ActivityStudioCategory, readonly [string, string]>
+> = Object.freeze({
+  oyun: ["Rolümü ben seçeyim", "Oyunun başlangıcını ben seçeyim"],
+  cizim: ["Çizgi veya kalemi ben seçeyim", "Nereden başlayacağımı ben seçeyim"],
+  boyama: ["Renk veya aracı ben seçeyim", "Boyama yolumu ben seçeyim"],
+  "kes-yapistir": ["Parçaları ben seçeyim", "Yerleştirme sırasını ben seçeyim"],
+  hareket: ["Hareket yolunu ben seçeyim", "Hızımı ben seçeyim"],
+  "acik-hava": ["Bakacağımız yeri ben seçeyim", "Kayıt yolumu ben seçeyim"],
+  materyal: ["Malzemeyi ben seçeyim", "Nasıl deneyeceğimi ben seçeyim"],
+});
+
 /**
  * Çocuk Modu yalnız denetimli, puansız bir seçim yüzü üretir. Dönüş değeri
  * kalıcı kayda veya gelişim değerlendirmesine dönüştürülmez.
@@ -871,6 +912,7 @@ export function createActivityStudioChildSession(
   const template = guide.choiceTemplates[
     childTemplateIndexFor(activity.category, ageBand)
   ];
+  const categoryChoices = CHILD_CHOICE_BY_CATEGORY[activity.category];
 
   return Object.freeze({
     activityId: activity.id,
@@ -878,13 +920,20 @@ export function createActivityStudioChildSession(
     ageBand,
     ageLabel: guide.ageLabel,
     sourceTemplateId: template.id,
-    title: template.title,
-    childPrompt: template.childPrompt,
+    title: activity.title,
+    childPrompt: `“${activity.title}” için nasıl başlamak istersin? İstersen önce izleyebilir, sonra seçimini değiştirebilirsin.`,
     choices: Object.freeze(
-      template.choices.map((choice) => Object.freeze({ ...choice })),
+      [
+        Object.freeze({ id: `${activity.id}-choice-1`, label: categoryChoices[0] }),
+        Object.freeze({ id: `${activity.id}-choice-2`, label: categoryChoices[1] }),
+        Object.freeze({
+          id: `${activity.id}-choice-3`,
+          label: "Önce izleyip sonra karar vereyim",
+        }),
+      ],
     ) as unknown as ActivityStudioChildSession["choices"],
-    adultFacilitation: template.adultFacilitation,
-    reflectionPrompt: template.reflectionPrompt,
+    adultFacilitation: `“${activity.title}” sırasında ${template.adultFacilitation}`,
+    reflectionPrompt: `“${activity.title}” sırasında neyi seçtin, denedin veya değiştirdin?`,
     minimumTouchTargetPx: guide.interactionPolicy.minimumTouchTargetPx,
     allowSkip: true,
     allowChange: true,

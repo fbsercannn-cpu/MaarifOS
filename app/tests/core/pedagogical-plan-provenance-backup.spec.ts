@@ -16,6 +16,9 @@ test("pedagojik plan kaynağı yedekten exact döner ve zincir tahrifi fail-clos
     const bridge = await import(
       "/src/features/pedagogical-os/pedagogical-plan-bridge.ts"
     );
+    const provenanceDomain = await import(
+      "/src/core/domain/pedagogical-plan-provenance.ts"
+    );
     const source = new core.IndexedDbDataStore({
       databaseName: `maarifos-pedagogy-source-${crypto.randomUUID()}`,
     });
@@ -87,7 +90,7 @@ test("pedagojik plan kaynağı yedekten exact döner ve zincir tahrifi fail-clos
         }]);
       },
     );
-    const provenance = bridge.createPedagogicalPlanBridge({
+    const activityStudioProvenance = bridge.createPedagogicalPlanBridge({
       activity: sourceActivity,
       civilDate: "2026-09-07",
       ageBand: "48-60",
@@ -95,8 +98,12 @@ test("pedagojik plan kaynağı yedekten exact döner ve zincir tahrifi fail-clos
       participationRouteId: "visual",
       now: new Date("2026-09-07T06:00:00.000Z"),
     });
+    const provenance = provenanceDomain.bindPedagogicalPlanProvenanceToCivilDate(
+      activityStudioProvenance,
+      "2026-09-10",
+    );
     const created = await evidence.createPlanWithActivity(source, {
-      civilDate: "2026-09-07",
+      civilDate: "2026-09-10",
       planTitle: `${sourceActivity.title} planı`,
       activityTitle: sourceActivity.title,
       startTime: "09:00",
@@ -109,13 +116,13 @@ test("pedagojik plan kaynağı yedekten exact döner ve zincir tahrifi fail-clos
       now: new Date("2026-09-07T06:05:00.000Z"),
     });
     const service = new core.BackupService(source, {
-      appVersion: "0.16.0-test",
-      clock: () => new Date("2026-09-07T07:00:00.000Z"),
-      civilDateProvider: () => "2026-09-07",
+      appVersion: "0.17.0-test",
+      clock: () => new Date("2026-09-10T07:00:00.000Z"),
+      civilDateProvider: () => "2026-09-10",
     });
     const backup = await service.exportBackup();
     await new core.BackupService(target, {
-      appVersion: "0.16.0-test",
+      appVersion: "0.17.0-test",
     }).restoreBackup(backup, {
       mode: "replace",
       createRecoverySnapshot: false,
@@ -150,8 +157,21 @@ test("pedagojik plan kaynağı yedekten exact döner ve zincir tahrifi fail-clos
     }
     source.close();
     target.close();
-    return { exact, rejected };
+    return {
+      exact,
+      rejected,
+      activityStudioDate: activityStudioProvenance.civilDate,
+      savedPlanDate: restoredPlan?.pedagogicalProvenance?.civilDate ?? null,
+      savedActivityDate:
+        restoredActivity?.pedagogicalProvenance?.civilDate ?? null,
+    };
   });
 
-  expect(result).toEqual({ exact: true, rejected: true });
+  expect(result).toEqual({
+    exact: true,
+    rejected: true,
+    activityStudioDate: "2026-09-07",
+    savedPlanDate: "2026-09-10",
+    savedActivityDate: "2026-09-10",
+  });
 });

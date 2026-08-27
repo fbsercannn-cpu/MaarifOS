@@ -1,9 +1,17 @@
 import {
   CLASS_ROSTER_DOCUMENT_FORMAT,
   CLASS_ROSTER_DOCUMENT_MIME_TYPE,
+  classRosterDocumentOutputContract,
+  classRosterPdfDocumentBlob,
+  classRosterPdfDocumentOutputContract,
   createClassRosterDocument,
+  createClassRosterPdfDocument,
+  type ClassRosterDocumentOutputContract,
   type ClassRosterDocumentFile,
   type ClassRosterDocumentInput,
+  type ClassRosterPdfDocumentFile,
+  type ClassRosterPdfDocumentOutputContract,
+  type ClassRosterPdfRuntime,
 } from "../classroom/class-roster-document.ts";
 
 export const SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION = "2.0" as const;
@@ -14,6 +22,23 @@ export type SimpleClassRosterDocumentInput = ClassRosterDocumentInput;
 export interface SimpleClassRosterDocumentFile
   extends ClassRosterDocumentFile {
   readonly templateVersion: typeof SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION;
+}
+
+export interface SimpleClassRosterDocumentOutputContract
+  extends ClassRosterDocumentOutputContract {
+  readonly metadata: ClassRosterDocumentOutputContract["metadata"] &
+    Readonly<{ templateVersion: typeof SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION }>;
+}
+
+export interface SimpleClassRosterPdfDocumentFile
+  extends ClassRosterPdfDocumentFile {
+  readonly templateVersion: typeof SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION;
+}
+
+export interface SimpleClassRosterPdfDocumentOutputContract
+  extends ClassRosterPdfDocumentOutputContract {
+  readonly metadata: ClassRosterPdfDocumentOutputContract["metadata"] &
+    Readonly<{ templateVersion: typeof SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION }>;
 }
 
 const encoder = new TextEncoder();
@@ -35,7 +60,7 @@ function addTemplateVersion(html: string): string {
   return html
     .replace(
       civilDateMeta,
-      `$1\n  <meta name="maarifos-document-kind" content="class-roster">\n  <meta name="maarifos-template-version" content="${SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION}">`,
+      `$1\n  <meta name="maarifos-template-version" content="${SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION}">`,
     )
     .replaceAll(
       '<p class="student-count">',
@@ -60,6 +85,20 @@ function addTemplateVersion(html: string): string {
     );
 }
 
+/** Basit öğretmen deneyiminin aynı HTML'i önizleme ve indirmede kullanması. */
+export function simpleClassRosterDocumentOutputContract(
+  file: SimpleClassRosterDocumentFile,
+): SimpleClassRosterDocumentOutputContract {
+  const contract = classRosterDocumentOutputContract(file);
+  return {
+    ...contract,
+    metadata: {
+      ...contract.metadata,
+      templateVersion: file.templateVersion,
+    },
+  };
+}
+
 /**
  * Profesyonel A4 sınıf listesi şablonunu sürüm üstverisi ve Android'de eski
  * indirmelerle çakışmayan dosya adıyla üretir.
@@ -78,6 +117,43 @@ export function createSimpleClassRosterDocument(
     html,
     templateVersion: SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION,
   };
+}
+
+/**
+ * Basit öğretmen deneyiminde resmî tek-tık eylem için gerçek PDF; ayrıntılı
+ * önizleme için aynı doğrulanmış satırların sürümlü HTML temsilini üretir.
+ */
+export async function createSimpleClassRosterPdfDocument(
+  input: SimpleClassRosterDocumentInput,
+  options: { readonly runtime?: ClassRosterPdfRuntime } = {},
+): Promise<SimpleClassRosterPdfDocumentFile> {
+  const base = await createClassRosterPdfDocument(input, options);
+  return {
+    ...base,
+    fileName: versionedFileName(base.fileName),
+    htmlFileName: versionedFileName(base.htmlFileName),
+    html: addTemplateVersion(base.html),
+    templateVersion: SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION,
+  };
+}
+
+export function simpleClassRosterPdfDocumentOutputContract(
+  file: SimpleClassRosterPdfDocumentFile,
+): SimpleClassRosterPdfDocumentOutputContract {
+  const contract = classRosterPdfDocumentOutputContract(file);
+  return {
+    ...contract,
+    metadata: {
+      ...contract.metadata,
+      templateVersion: file.templateVersion,
+    },
+  };
+}
+
+export function simpleClassRosterPdfDocumentBlob(
+  file: SimpleClassRosterPdfDocumentFile,
+): Blob {
+  return classRosterPdfDocumentBlob(file);
 }
 
 export function simpleClassRosterDocumentBlob(

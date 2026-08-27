@@ -13,21 +13,14 @@ import { createPlanWorkbenchPresentation } from "../planning/plan-workbench-mode
 import {
   ACTIVITY_STUDIO_AGE_BANDS,
   ACTIVITY_STUDIO_COLLECTIONS,
-  ACTIVITY_STUDIO_ITEMS,
   filterActivityStudioItems,
   type ActivityStudioAgeBand,
   type ActivityStudioCollectionId,
 } from "../activity-studio/activity-studio-model.ts";
 import {
-  ACTIVITY_YEAR_MONTH_LENSES,
-  ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT,
-  ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY,
-} from "../activity-studio/activity-year-program.ts";
-import {
   PEDAGOGICAL_SCENARIOS,
   createPedagogicalCoverageMatrix,
   createPedagogicalDayFlow,
-  pedagogicalVariantCountForAge,
   type PedagogicalScenarioId,
 } from "../pedagogical-os/pedagogical-orchestrator.ts";
 import "./simple-workspaces.css";
@@ -51,9 +44,10 @@ export interface SimplePlanWorkspaceScreenProps
     | "onOpenCalendar"
     | "onOpenDocuments"
   > {
-  ageBand: ActivityStudioAgeBand;
+  ageBand: ActivityStudioAgeBand | null;
   civilDate: string;
   onOpenActivityStudio(options?: ActivityStudioOpenOptions): void;
+  onOpenAgeBandSetup(): void;
 }
 
 const PLAN_COPY = {
@@ -116,24 +110,25 @@ export function SimplePlanWorkspaceScreen({
   onOpenCalendar,
   onOpenDocuments,
   onOpenActivityStudio,
+  onOpenAgeBandSetup,
   ageBand,
   civilDate,
 }: SimplePlanWorkspaceScreenProps) {
   const [scenarioId, setScenarioId] =
     useState<PedagogicalScenarioId>("balanced");
+  const [advancedSupportOpen, setAdvancedSupportOpen] = useState(false);
   const presentation = createPlanWorkbenchPresentation(workspace, {
     educationalWritesDisabled,
     preparationPlanningAllowed,
     preparationPlanningCivilDate,
     upcomingPlanningCivilDate,
   });
-  const orchestratedDay = createPedagogicalDayFlow({
-    ageBand,
-    civilDate,
-    scenarioId,
-  });
-  const coverageMatrix = createPedagogicalCoverageMatrix(ageBand);
-  const ageVariantCount = pedagogicalVariantCountForAge(ageBand);
+  const orchestratedDay = ageBand
+    ? createPedagogicalDayFlow({ ageBand, civilDate, scenarioId })
+    : null;
+  const coverageMatrix = ageBand
+    ? createPedagogicalCoverageMatrix(ageBand)
+    : [];
 
   return (
     <main className="simple-workspace" aria-labelledby="simple-plans-title">
@@ -141,14 +136,6 @@ export function SimplePlanWorkspaceScreen({
         <span>Yalnız Türkiye Yüzyılı Maarif Modeli</span>
         <h1 id="simple-plans-title" data-route-heading tabIndex={-1}>Planlar</h1>
         <p>Plan türünü seçin; kaydedin veya tek dokunuşla çıktı alın.</p>
-        <div className="simple-workspace__facts" aria-label="Plan içerik envanteri">
-          <span><strong>{ACTIVITY_STUDIO_ITEMS.length}</strong> çekirdek etkinlik</span>
-          <span><strong>{ageVariantCount.toLocaleString("tr-TR")}</strong> sınıf yolu</span>
-          <span><strong>{ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY}</strong> günlük rotasyon</span>
-          <span><strong>{ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT}</strong> yıllık öneri yuvası</span>
-          <span><strong>{ACTIVITY_YEAR_MONTH_LENSES.length}</strong> aylık odak</span>
-          <span><strong>7</strong> aşamalı öğrenme döngüsü</span>
-        </div>
       </header>
 
       <section className="simple-workspace__section" aria-labelledby="simple-plan-types">
@@ -167,7 +154,9 @@ export function SimplePlanWorkspaceScreen({
               <button
                 type="button"
                 key={level.id}
-                onClick={() => onOpenLevel(level.id)}
+                onClick={level.id === "daily" && !ageBand
+                  ? onOpenAgeBandSetup
+                  : () => onOpenLevel(level.id)}
                 disabled={dataBusy}
               >
                 <span className="simple-action-list__icon" aria-hidden="true"><Icon /></span>
@@ -177,7 +166,9 @@ export function SimplePlanWorkspaceScreen({
                   <em>{copy.detail}</em>
                 </span>
                 <span className={`simple-state is-${level.tone}`}>
-                  {level.tone === "ready" ? "Hazır" : "Aç"}
+                  {level.id === "daily" && !ageBand
+                    ? "Tamamla"
+                    : level.tone === "ready" ? "Hazır" : "Aç"}
                 </span>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
@@ -185,6 +176,30 @@ export function SimplePlanWorkspaceScreen({
           })}
         </div>
       </section>
+
+      <button
+        type="button"
+        className="simple-workspace__advanced-toggle"
+        aria-expanded={ageBand ? advancedSupportOpen : false}
+        onClick={ageBand
+          ? () => setAdvancedSupportOpen((current) => !current)
+          : onOpenAgeBandSetup}
+      >
+        <span>
+          <strong>{!ageBand
+            ? "Plan için yaş bandını tamamla"
+            : advancedSupportOpen
+              ? "Gelişmiş plan desteğini kapat"
+              : "Gelişmiş plan desteğini aç"}</strong>
+          <small>{ageBand
+            ? "Koşula göre tam gün akışı, kapsam dengesi ve hazır koleksiyonlar"
+            : "Yanlış yaşa ait etkinlik ve hedef gösterilmez"}</small>
+        </span>
+        <ChevronRightIcon aria-hidden="true" />
+      </button>
+
+      {advancedSupportOpen && orchestratedDay && ageBand ? (
+        <>
 
       <section
         className="simple-workspace__section simple-plan-orchestra"
@@ -335,6 +350,9 @@ export function SimplePlanWorkspaceScreen({
         </ul>
       </section>
 
+        </>
+      ) : null}
+
       <section className="simple-workspace__section simple-workspace__tools" aria-labelledby="simple-plan-tools">
         <div className="simple-workspace__heading">
           <div>
@@ -343,7 +361,11 @@ export function SimplePlanWorkspaceScreen({
           </div>
         </div>
         <div className="simple-tool-grid">
-          <button type="button" onClick={() => onOpenActivityStudio()} disabled={dataBusy}>
+          <button
+            type="button"
+            onClick={ageBand ? () => onOpenActivityStudio() : onOpenAgeBandSetup}
+            disabled={dataBusy}
+          >
             <TargetIcon aria-hidden="true" />
             <span><strong>Oyun ve materyaller</strong><small>Boyama, çizim, eşleştirme, hareket</small></span>
             <ChevronRightIcon aria-hidden="true" />

@@ -1,58 +1,54 @@
-# Hızlı Gözlem 2.0 — Tasarım Kalite Kapısı
+# Design QA — MaarifOS Kişisel Öğretmen Asistanı 0.15.0
 
-## Karşılaştırma bağlamı
+- Source visual truth: `artifacts/product-design-audit-2026-08-22-personal-assistant/05-concept-quiet-assistant-selected.png`
+- Final implementation: `C:/Users/Asus/Desktop/Maarif/artifacts/design-qa-comparison-0.15.0/12-implementation-0.15.0-final-390x844.png`
+- Combined comparison: `C:/Users/Asus/Desktop/Maarif/artifacts/design-qa-comparison-0.15.0/13-source-vs-implementation-final.png`
+- Comparison state: Emine Akın, Deneme Sınıfı, 60–72 ay TYMM, 22 Ağustos 2026
+- Viewport: implementation 390 × 844 CSS px at DPR 1; source 853 × 1844 px scaled to the same visible phone frame
 
-- Kaynak görsel: `app/design/targets/quick-observation-2-selected-option-1.png`
-- Uygulama ekranı: `app/design/targets/quick-observation-2-implementation-final.png`
-- Birleşik karşılaştırma: `app/design/targets/quick-observation-2-comparison-final.png`
-- Kaynak piksel boyutu: `853 × 1844`
-- Uygulama piksel boyutu: `390 × 844`
-- CSS görünüm alanı: `390 × 844`
-- `deviceScaleFactor`: `1`
-- Normalizasyon: kaynak yüksek kaliteli bikübik örneklemeyle `390 × 844` boyutuna indirildi; iki ekran `800 × 844` karşılaştırma tuvaline yan yana yerleştirildi.
-- Durum: “Renkleri keşfediyorum” etkinliğinde Deniz Yılmaz seçili, boş yeni gözlem.
+## Result
 
-## Bulgular
+The final implementation preserves the selected quiet-assistant direction: warm ivory canvas, navy display type, teal action hierarchy, restrained borders, rounded cards, line icons and a persistent five-item phone navigation. The first screen answers one question — “What should I do next?” — and keeps only two prepared shortcuts below it.
 
-P0, P1 veya P2 düzeyinde açık bulgu kalmadı.
+The live product is not a literal poster clone. Its primary action is derived from stored classroom readiness, and the globally available `Hızlı gözlem` action is intentionally added because one-tap observation is a core teacher requirement. The source image has a prepared child and therefore proposes attendance; the implementation capture has zero children and truthfully proposes adding the first child. This is valid dynamic-state variation, not visual drift.
 
-- Yazı ve tipografi: Kaynağın insanî sans-serif hiyerarşisi Windows’ta Segoe UI, diğer platformlarda sistem sans-serif yığınıyla karşılandı. Başlık, alan etiketi, yardımcı metin ve düğme ağırlıkları aynı tarama sırasını koruyor. Türkçe karakterlerde bozulma veya taşma görülmedi.
-- Aralık ve yerleşim: Üst marka alanı, çocuk şeridi, baskın not kartı, tür/alan şeritleri ve klavyeye bağlı kayıt yüzeyi aynı dikey hiyerarşide. Gerçek veri ve hazır cümle şeridi nedeniyle kaynakta bulunmayan küçük yoğunluk artışı, ana görevi veya dokunma alanlarını bozmuyor.
-- Renkler ve görsel belirteçler: Lacivert, sıcak krem, beyaz, petrol yeşili, amber, erik ve yaprak tonları kaynakla eşleşen semantik tokenlara bağlandı. Arayüz gri baskın değil; seçili, devre dışı ve taslak durumları yalnız renkle anlatılmıyor.
-- Görsel varlıklar: Sağlanan MaarifOS logosu kullanıldı. Kaynaktaki örnek çocuk fotoğrafı gerçek üründe mevcut olmayan ve çocuk verisi sayılan bir alan olduğundan uydurma fotoğraf üretilmedi; gerçek öğrenci adlarından Türkçe yerel ayarla türetilen baş harfler kullanıldı.
-- Metin ve içerik: “Hızlı Gözlem”, “Çocuk seç”, “Ne oldu?”, tarafsız cümle başlangıçları, gözlem türleri, kategoriler, ayrıntılar, taslak durumu ve “Gözlemi kaydet” bağımsız uygulama bağlamında tutarlı. Program bağlantısının daha sonra tamamlanacağı açık.
-- Erişilebilirlik: Çocuk, tür ve kategori seçimleri gerçek düğme ve `aria-pressed` durumlarıdır. Metin alanlarının etiketleri tekildir. Dokunma hedefleri en az 42–52 px, form metni 16 px eşdeğerindedir.
+## Visual checks
 
-## Karşılaştırma geçmişi
+- Typography: the final 390 px greeting is 26 px and remains on one line; Turkish glyphs are not clipped.
+- Layout: 20 px phone margins, card padding, dividers, fixed navigation and vertical rhythm align with the selected source. No card, button or footer item is cropped.
+- Touch targets: `Hızlı gözlem` is 44 px high; primary cards and bottom navigation exceed the same minimum.
+- Colors and elevation: ivory, navy, teal, pale-teal and violet support accents remain within the existing MaarifOS token system.
+- Assets: the existing brand mark, bundled Roboto family and Radix line icons are used; there are no emoji, placeholder images, CSS drawings or ad-hoc SVG substitutes.
+- Content: the screen is action-led and contains no demo, premium, activation, device-slot or EÇE copy.
 
-### Geçiş 1
+## Interaction and browser checks
 
-- Kanıt: `app/design/targets/quick-observation-2-implementation-pass-1.png`
-- [P1] İki satırlı gözlem türü alanı ilk görünümde kategorileri kayıt yüzeyinin altında bırakıyordu.
-- [P2] 82 px üst başlık ve numaralı bölüm rozetleri kaynak görsele göre dikey alanı gereksiz büyütüyordu.
-- Düzeltme: Tür seçenekleri mobil `Carousel` içinde tek satıra alındı; tür şeridi not kartına taşındı; üst başlık 68 px’e indirildi; numaralı rozetler kaldırıldı.
+- The final founder-production build was opened in the selected in-app browser at 320 × 568, 390 × 844 and 430 × 932.
+- At 390 × 844 the final screenshot shows the complete greeting, quick observation control, contextual next task, two prepared shortcuts and all five navigation items.
+- At 320 px, `Etkinlikler`, `Planlar` and `Çıktılar` were tapped in sequence and each real route opened.
+- A realistic school, teacher, class and 60–72 month profile was saved; a test student was added through the phone form.
+- The quick-observation action correctly enforced the academic-year readiness rule on the actual date. Its full student flow is also covered in the passing Chromium/WebKit smoke and 20-cycle persistence tests.
+- The browser error log was empty after setup, student entry and route traversal.
+- Automated responsive tests separately assert no horizontal overflow, visible 320 px assistant cards, stable bottom navigation and reachable final actions.
 
-### Geçiş 2
+## Iteration history
 
-- Kanıt: `app/design/targets/quick-observation-2-implementation-pass-2.png`
-- [P2] Ayrı “Gözlem türü” başlığı ve kart dışı tür alanı kaynak anatomiye göre hâlâ fazla yer kaplıyordu.
-- Düzeltme: Tür şeridi not kartının içine alındı ve kaynakta olduğu gibi ilk iki seçenek öncelikli görünür hâle getirildi; diğer türler yatay kaydırmayla korunmaya devam etti.
+1. The first implementation truncated the class context and lacked a global one-tap observation action.
+2. The second implementation wrapped class metadata, added global `Hızlı gözlem`, carried child choice/drawing into an editable teacher draft and changed misleading download-as-print actions into real print flows.
+3. The final comparison found only a two-line greeting mismatch. The 390 px heading was reduced to 26 px, re-built and re-captured; it now matches the single-line source hierarchy without reducing touch geometry.
 
-### Son geçiş
+## Findings
 
-- Görsel kanıt: `app/design/targets/quick-observation-2-comparison-final.png`
-- Ana hiyerarşi, alan oranları, marka rengi, not alanı, seçim durumları ve kayıt eylemi kaynakla uyumlu.
-- Tarayıcı etkileşimleri: sınıf kurulumu, dört kurgu öğrenci, plan/etkinlik, açık öğrenci seçimi, tür/kategori, otomatik taslak, öğrenci değiştirip taslağı geri çağırma, ayrıntı açma, kaydetme ve tamamlanma kuyruğuna dönme test edildi.
-- Klavye/alan görünürlüğü: alt bağlam alanı odaklandığında kendi kaydırma yüzeyinde kayıt yüzeyinin üstüne taşındı (`field bottom 540.7 px`, `dock top 709.6 px`).
-- Konsol: hata veya uyarı yok.
+No actionable P0, P1 or P2 issue remains. The central activity icon's pale-teal emphasis and the global observation button are intentional product affordances, not selected-route indicators.
 
-## Açık sorular
+## Checklist
 
-Yok.
-
-## Takip cilası
-
-- [P3] Öğrenci fotoğrafı veri modeli ve açık öğretmen onayıyla ileride eklenirse, baş harf bileşeni aynı ölçüde gerçek fotoğraf önizlemesine dönüşebilir.
-- [P3] Daha uzun sınıf adları ve 200% metin ölçeği ayrıca gerçek cihaz erişilebilirlik turunda gözlemlenebilir.
+- [x] Reference and implementation inspected in one combined comparison input
+- [x] Same phone viewport and comparable teacher/class/age state
+- [x] Typography, spacing, colors, borders, radii and icon family reviewed
+- [x] Primary CTA and all five navigation routes are functional
+- [x] 320, 390 and 430 px phone checks completed
+- [x] Browser console checked after interaction
+- [x] Final screenshot re-captured after the last CSS change
 
 final result: passed

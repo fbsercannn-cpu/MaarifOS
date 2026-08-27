@@ -19,7 +19,7 @@ async function configureEmptyOriginClassroom(page: Page): Promise<void> {
   await expect(setup).toBeHidden();
 }
 
-test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünmez; public API, restart ve yedek round-trip kayıpsızdır", async ({
+test("öğrenci no, TCKN, veli adı/telefonu ve sağlık bilgileri raw IndexedDB kaydında görünmez; public API, restart ve yedek round-trip kayıpsızdır", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -34,7 +34,9 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
     const classroomId = "00000000-0000-4000-8000-00000000e102";
     const studentId = "00000000-0000-4000-8000-00000000e103";
     const contactId = "00000000-0000-4000-8000-00000000e104";
+    const optionalCode = "OGR-KASA-9X7Q";
     const identity = "10000000146";
+    const guardianName = "Veli Kasa Kurgu 9X7Q";
     const phone = "+905551112233";
     const allergy = "Kurgu fındık alerjisi";
     const homeAddress = "Kurgu Mahallesi 12, Denizli";
@@ -110,13 +112,14 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
             displayName: "Kurgu Öğrenci",
             firstName: "Kurgu",
             lastName: "Öğrenci",
+            optionalCode,
             nationalIdentityNumber: identity,
             contacts: [
               {
                 id: contactId,
                 kind: "mother",
                 relationship: "Anne",
-                name: "Kurgu Veli",
+                name: guardianName,
                 phone,
                 isPrimary: true,
                 isEmergencyContact: true,
@@ -200,6 +203,10 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
       rawContactPhone:
         (rawStudents[0]?.contacts as Array<Record<string, unknown>> | undefined)?.[0]
           ?.phone,
+      rawContactName:
+        (rawStudents[0]?.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+          ?.name,
+      rawOptionalCode: rawStudents[0]?.optionalCode,
       cipherAlgorithm: (
         rawStudents[0]?.[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD] as
           | { algorithm?: string }
@@ -217,7 +224,9 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
     result.recoveryStudent,
     result.restoredStudent,
   ]) {
+    expect(student?.optionalCode).toBe("OGR-KASA-9X7Q");
     expect(student?.nationalIdentityNumber).toBe("10000000146");
+    expect(student?.contacts?.[0]?.name).toBe("Veli Kasa Kurgu 9X7Q");
     expect(student?.contacts?.[0]?.phone).toBe("+905551112233");
     expect(student?.contacts?.[0]?.isEmergencyContact).toBe(true);
     expect(student?.contacts?.[0]?.isAuthorizedPickup).toBe(true);
@@ -230,7 +239,9 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
     );
     expect(student?.careDetails?.photoVideoPermissionOnFile).toBe(true);
   }
+  expect(result.rawStudentText).not.toContain("OGR-KASA-9X7Q");
   expect(result.rawStudentText).not.toContain("10000000146");
+  expect(result.rawStudentText).not.toContain("Veli Kasa Kurgu 9X7Q");
   expect(result.rawStudentText).not.toContain("+905551112233");
   expect(result.rawStudentText).not.toContain("Kurgu fındık alerjisi");
   expect(result.rawStudentText).not.toContain("kurgu.veli@example.com");
@@ -239,14 +250,20 @@ test("TCKN, veli telefonu ve sağlık bilgileri raw IndexedDB kaydında görünm
   expect(result.rawStudentText).not.toContain("Kurgu Mahallesi 12, Denizli");
   expect(result.rawStudentText).not.toContain('"careDetails"');
   expect(result.rawRecoveryText).not.toContain("10000000146");
+  expect(result.rawRecoveryText).not.toContain("OGR-KASA-9X7Q");
+  expect(result.rawRecoveryText).not.toContain("Veli Kasa Kurgu 9X7Q");
   expect(result.rawRecoveryText).not.toContain("+905551112233");
   expect(result.rawRecoveryText).not.toContain("Kurgu fındık alerjisi");
   expect(result.rawRecoveryText).not.toContain("Kurgu Mahallesi 12, Denizli");
   expect(result.targetRawStudentText).not.toContain("10000000146");
+  expect(result.targetRawStudentText).not.toContain("OGR-KASA-9X7Q");
+  expect(result.targetRawStudentText).not.toContain("Veli Kasa Kurgu 9X7Q");
   expect(result.targetRawStudentText).not.toContain("+905551112233");
   expect(result.targetRawStudentText).not.toContain("Kurgu fındık alerjisi");
   expect(result.targetRawStudentText).not.toContain("Kurgu Mahallesi 12, Denizli");
   expect(result.rawContactPhone).toBeUndefined();
+  expect(result.rawContactName).toBeUndefined();
+  expect(result.rawOptionalCode).toBeUndefined();
   expect(result.cipherAlgorithm).toBe("AES-GCM");
   expect(result.keyExtractable).toBe(false);
   expect(result.keyType).toBe("secret");
@@ -263,6 +280,8 @@ test("legacy plaintext ilk güvenli açılışta atomik ve idempotent biçimde t
     );
     const databaseName = `maarifos-sensitive-legacy-${crypto.randomUUID()}`;
     const identity = "10000000146";
+    const optionalCode = "LEGACY-OGR-4M2K";
+    const guardianName = "Legacy Veli 4M2K";
     const phone = "+905559998877";
     const student = {
       id: "00000000-0000-4000-8000-00000000e201",
@@ -272,12 +291,14 @@ test("legacy plaintext ilk güvenli açılışta atomik ve idempotent biçimde t
       deletedAt: null,
       schemaVersion: 6,
       displayName: "Legacy Kurgu",
+      optionalCode,
       nationalIdentityNumber: identity,
       contacts: [
         {
           id: "00000000-0000-4000-8000-00000000e202",
           kind: "father",
           relationship: "Baba",
+          name: guardianName,
           phone,
           isPrimary: true,
         },
@@ -348,13 +369,216 @@ test("legacy plaintext ilk güvenli açılışta atomik ve idempotent biçimde t
   });
 
   expect(result.firstPublic.nationalIdentityNumber).toBe("10000000146");
+  expect(result.firstPublic.optionalCode).toBe("LEGACY-OGR-4M2K");
+  expect(result.firstPublic.contacts?.[0]?.name).toBe("Legacy Veli 4M2K");
   expect(result.firstPublic.contacts?.[0]?.phone).toBe("+905559998877");
   expect(result.secondPublic).toEqual(result.firstPublic);
   expect(result.firstRawText).not.toContain("10000000146");
+  expect(result.firstRawText).not.toContain("LEGACY-OGR-4M2K");
+  expect(result.firstRawText).not.toContain("Legacy Veli 4M2K");
   expect(result.firstRawText).not.toContain("+905559998877");
   expect(result.secondRawText).not.toContain("10000000146");
+  expect(result.secondRawText).not.toContain("LEGACY-OGR-4M2K");
+  expect(result.secondRawText).not.toContain("Legacy Veli 4M2K");
   expect(result.secondRawText).not.toContain("+905559998877");
   expect(result.envelopeStable).toBe(true);
+});
+
+test("önceki v1 zarfındaki public öğrenci no ve veli adı ilk açılışta kayıpsız yeniden mühürlenir", async ({
+  page,
+}) => {
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const vault = await import(
+      "/src/core/security/student-sensitive-vault.ts"
+    );
+    const databaseName = `maarifos-sensitive-expanded-legacy-${crypto.randomUUID()}`;
+    const studentId = "00000000-0000-4000-8000-00000000e221";
+    const contactId = "00000000-0000-4000-8000-00000000e222";
+    const optionalCode = "V1-OGR-7P3D";
+    const guardianName = "V1 Veli 7P3D";
+    const student = {
+      id: studentId,
+      createdAt: "2026-08-21T08:00:00.000Z",
+      updatedAt: "2026-08-21T08:00:00.000Z",
+      civilDate: "2026-08-21",
+      deletedAt: null,
+      schemaVersion: 6,
+      displayName: "V1 Kurgu",
+      nationalIdentityNumber: "10000000146",
+      contacts: [
+        {
+          id: contactId,
+          kind: "mother",
+          relationship: "Anne",
+          phone: "+905557778899",
+          isPrimary: true,
+        },
+      ],
+    };
+    const readRaw = (): Promise<Record<string, unknown>> =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open(databaseName);
+        request.addEventListener("success", () => {
+          const database = request.result;
+          const transaction = database.transaction("students", "readonly");
+          const get = transaction.objectStore("students").get(studentId);
+          get.addEventListener("success", () => {
+            const record = structuredClone(get.result);
+            transaction.addEventListener("complete", () => {
+              database.close();
+              resolve(record);
+            });
+          });
+          get.addEventListener("error", () => reject(get.error));
+        });
+        request.addEventListener("error", () => reject(request.error));
+      });
+
+    const initializer = new core.IndexedDbDataStore({ databaseName });
+    await initializer.transaction("readwrite", ["students"], (transaction) =>
+      transaction.putMany("students", [student]),
+    );
+    initializer.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const originalRaw = await readRaw();
+    const key = await new Promise<CryptoKey>((resolve, reject) => {
+      const request = indexedDB.open(
+        vault.studentSensitiveKeyDatabaseName(databaseName),
+      );
+      request.addEventListener("success", () => {
+        const database = request.result;
+        const transaction = database.transaction(
+          vault.STUDENT_SENSITIVE_KEY_STORE_NAME,
+          "readonly",
+        );
+        const get = transaction
+          .objectStore(vault.STUDENT_SENSITIVE_KEY_STORE_NAME)
+          .get(vault.STUDENT_SENSITIVE_KEY_ID);
+        get.addEventListener("success", () => {
+          const storedKey = (get.result as { key?: CryptoKey } | undefined)?.key;
+          transaction.addEventListener("complete", () => {
+            database.close();
+            if (storedKey) resolve(storedKey);
+            else reject(new Error("Kurgu eski zarf anahtarı bulunamadı."));
+          });
+        });
+        get.addEventListener("error", () => reject(get.error));
+      });
+      request.addEventListener("error", () => reject(request.error));
+    });
+    const decodeBase64 = (value: string): Uint8Array =>
+      Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+    const encodeBase64 = (value: Uint8Array): string => {
+      let binary = "";
+      for (const byte of value) binary += String.fromCharCode(byte);
+      return btoa(binary);
+    };
+    const generatedEnvelope = originalRaw[
+      vault.STUDENT_SENSITIVE_ENVELOPE_FIELD
+    ] as { version: 1; algorithm: "AES-GCM"; iv: string; ciphertext: string };
+    const additionalData = new TextEncoder().encode(
+      `maarifos/student-sensitive/v1\n${databaseName}\nstudent:${studentId}`,
+    );
+    const generatedPlaintext = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: decodeBase64(generatedEnvelope.iv),
+        additionalData,
+        tagLength: 128,
+      },
+      key,
+      decodeBase64(generatedEnvelope.ciphertext),
+    );
+    const oldPayload = JSON.parse(
+      new TextDecoder().decode(generatedPlaintext),
+    ) as Record<string, unknown>;
+    delete oldPayload.contactNames;
+    delete oldPayload.optionalCode;
+    const oldIv = crypto.getRandomValues(new Uint8Array(12));
+    const oldCiphertext = await crypto.subtle.encrypt(
+      {
+        name: "AES-GCM",
+        iv: oldIv,
+        additionalData,
+        tagLength: 128,
+      },
+      key,
+      new TextEncoder().encode(JSON.stringify(oldPayload)),
+    );
+    originalRaw[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD] = {
+      version: 1,
+      algorithm: "AES-GCM",
+      iv: encodeBase64(oldIv),
+      ciphertext: encodeBase64(new Uint8Array(oldCiphertext)),
+    };
+    const originalEnvelope = structuredClone(
+      originalRaw[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD],
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(databaseName);
+      request.addEventListener("success", () => {
+        const database = request.result;
+        const transaction = database.transaction("students", "readwrite");
+        const legacyRecord = structuredClone(originalRaw);
+        legacyRecord.optionalCode = optionalCode;
+        const contacts = legacyRecord.contacts as Array<Record<string, unknown>>;
+        contacts[0].name = guardianName;
+        transaction.objectStore("students").put(legacyRecord);
+        transaction.addEventListener("complete", () => {
+          database.close();
+          resolve();
+        });
+        transaction.addEventListener("abort", () => reject(transaction.error));
+      });
+      request.addEventListener("error", () => reject(request.error));
+    });
+
+    const firstOpen = new core.IndexedDbDataStore({ databaseName });
+    const firstPublic = await firstOpen.readSnapshot();
+    firstOpen.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const firstRaw = await readRaw();
+
+    const secondOpen = new core.IndexedDbDataStore({ databaseName });
+    const secondPublic = await secondOpen.readSnapshot();
+    secondOpen.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const secondRaw = await readRaw();
+
+    return {
+      firstPublic: firstPublic.students[0],
+      secondPublic: secondPublic.students[0],
+      firstRawText: JSON.stringify(firstRaw),
+      secondRawText: JSON.stringify(secondRaw),
+      oldEnvelopeReplaced:
+        JSON.stringify(originalEnvelope) !==
+        JSON.stringify(firstRaw[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD]),
+      migratedEnvelopeStable:
+        JSON.stringify(firstRaw[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD]) ===
+        JSON.stringify(secondRaw[vault.STUDENT_SENSITIVE_ENVELOPE_FIELD]),
+      rawOptionalCode: firstRaw.optionalCode,
+      rawContactName:
+        (firstRaw.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+          ?.name,
+    };
+  });
+
+  expect(result.firstPublic.optionalCode).toBe("V1-OGR-7P3D");
+  expect(result.firstPublic.contacts?.[0]?.name).toBe("V1 Veli 7P3D");
+  expect(result.firstPublic.nationalIdentityNumber).toBe("10000000146");
+  expect(result.firstPublic.contacts?.[0]?.phone).toBe("+905557778899");
+  expect(result.secondPublic).toEqual(result.firstPublic);
+  expect(result.firstRawText).not.toContain("V1-OGR-7P3D");
+  expect(result.firstRawText).not.toContain("V1 Veli 7P3D");
+  expect(result.secondRawText).not.toContain("V1-OGR-7P3D");
+  expect(result.secondRawText).not.toContain("V1 Veli 7P3D");
+  expect(result.rawOptionalCode).toBeUndefined();
+  expect(result.rawContactName).toBeUndefined();
+  expect(result.oldEnvelopeReplaced).toBe(true);
+  expect(result.migratedEnvelopeStable).toBe(true);
 });
 
 test("tam sayfa reload ve paralel readSnapshot çağrıları aynı origin-local anahtarla hydrate olur", async ({
@@ -431,6 +655,8 @@ test("ciphertext değişikliği fail-closed kalır; kaynak ve loglar hassas değ
     );
     const databaseName = `maarifos-sensitive-tamper-${crypto.randomUUID()}`;
     const identity = "10000000146";
+    const optionalCode = "TAMPER-OGR-6H5N";
+    const guardianName = "Tamper Veli 6H5N";
     const phone = "+905553334455";
     const student = {
       id: "00000000-0000-4000-8000-00000000e301",
@@ -439,12 +665,14 @@ test("ciphertext değişikliği fail-closed kalır; kaynak ve loglar hassas değ
       civilDate: "2026-08-21",
       schemaVersion: 6,
       displayName: "Tamper Kurgu",
+      optionalCode,
       nationalIdentityNumber: identity,
       contacts: [
         {
           id: "00000000-0000-4000-8000-00000000e302",
           kind: "other",
           relationship: "Vasi",
+          name: guardianName,
           phone,
           isPrimary: true,
         },
@@ -536,8 +764,12 @@ test("ciphertext değişikliği fail-closed kalır; kaynak ve loglar hassas değ
   expect(result.errorMessage).toContain("güvenlik nedeniyle durduruldu");
   expect(result.sourceUnchanged).toBe(true);
   expect(result.logText).not.toContain("10000000146");
+  expect(result.logText).not.toContain("TAMPER-OGR-6H5N");
+  expect(result.logText).not.toContain("Tamper Veli 6H5N");
   expect(result.logText).not.toContain("+905553334455");
   expect(result.rawText).not.toContain("10000000146");
+  expect(result.rawText).not.toContain("TAMPER-OGR-6H5N");
+  expect(result.rawText).not.toContain("Tamper Veli 6H5N");
   expect(result.rawText).not.toContain("+905553334455");
 });
 
@@ -793,7 +1025,7 @@ test("gerçek boş origin sınıf kurulumu, hassas hızlı kayıt ve reload zinc
   await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await sheet.getByLabel("Çocuğun adı").fill("Kurgu Reload Öğrencisi");
-  await sheet.getByLabel("Öğrenci numarası").fill("38");
+  await sheet.getByLabel("Öğrenci numarası").fill("UI-OGR-8R4W");
   await sheet.getByLabel("T.C. kimlik numarası").fill("10000000146");
   await sheet.getByLabel("Yakının adı ve soyadı").fill("Kurgu Reload Veli");
   await sheet.getByLabel("Yakının cep telefonu").fill("0555 000 11 22");
@@ -838,6 +1070,8 @@ test("gerçek boş origin sınıf kurulumu, hassas hızlı kayıt ve reload zinc
       }),
   );
   expect(rawText).not.toContain("10000000146");
+  expect(rawText).not.toContain("UI-OGR-8R4W");
+  expect(rawText).not.toContain("Kurgu Reload Veli");
   expect(rawText).not.toContain("05550001122");
   expect(rawText).not.toContain("+905550001122");
 });

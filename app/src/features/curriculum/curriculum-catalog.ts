@@ -460,6 +460,17 @@ export function curriculumTargetsForProfile(
   });
 }
 
+/**
+ * Yaşa göre öneri sunan ekranlar için fail-closed katalog kapısı.
+ * Eksik veya tanınmayan bir yaş bandında tüm katalog asla açılmaz.
+ */
+export function curriculumTargetsForResolvedAgeBand(
+  profile: CurriculumProfileSnapshot,
+  ageBand: CurriculumAgeBand | null | undefined,
+): CurriculumTargetSnapshot[] {
+  return ageBand ? curriculumTargetsForProfile(profile, ageBand) : [];
+}
+
 export function isCurriculumAssessmentLevel(
   value: unknown,
 ): value is CurriculumAssessmentLevel {

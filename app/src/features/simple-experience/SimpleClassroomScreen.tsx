@@ -121,7 +121,7 @@ export function SimpleClassroomScreen({
                         }
                       >
                         {missingProfileFields.length > 0
-                          ? `${missingProfileFields.length} bilgi tamamlanacak`
+                          ? `Eksik: ${missingProfileFields.slice(0, 2).join(" + ")}${missingProfileFields.length > 2 ? ` +${missingProfileFields.length - 2}` : ""}`
                           : "Temel bilgiler tamam"}
                       </em>
                       {student.careDetails?.allergies?.trim() ? (

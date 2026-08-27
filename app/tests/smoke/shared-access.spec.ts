@@ -4,8 +4,14 @@ const ACCESS_CODE = ["43", "85", "79"].join("");
 
 test("davet ekranı yanlış kodu reddeder, doğru kodu cihazda korur", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  if (testInfo.project.name.startsWith("live-")) {
+    await page.goto("/?native=1", { waitUntil: "domcontentloaded" });
+    await page.evaluate(() =>
+      localStorage.removeItem("maarifos.shared-invite-access.v1"),
+    );
+  }
   await page.goto("/?native=1&accessGate=1");
 
   await expect(
@@ -32,7 +38,7 @@ test("davet ekranı yanlış kodu reddeder, doğru kodu cihazda korur", async ({
 test("aynı davet kodu üç bağımsız cihaz profilinde kotasız ve lisans ağı olmadan çalışır", async ({
   browser,
   baseURL,
-}) => {
+}, testInfo) => {
   expect(baseURL).toBeTruthy();
 
   for (let index = 0; index < 3; index += 1) {
@@ -46,6 +52,12 @@ test("aynı davet kodu üç bağımsız cihaz profilinde kotasız ve lisans ağ�
       if (url.origin !== new URL(baseURL!).origin) remoteRequests.push(url.href);
     });
 
+    if (testInfo.project.name.startsWith("live-")) {
+      await page.goto(`${baseURL}/?native=1`, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() =>
+        localStorage.removeItem("maarifos.shared-invite-access.v1"),
+      );
+    }
     await page.goto(`${baseURL}/?native=1&accessGate=1&premiumPilot=1`);
     await page.getByLabel("6 haneli davet kodu").fill(ACCESS_CODE);
     await page.getByRole("button", { name: "MaarifOS’a gir" }).click();

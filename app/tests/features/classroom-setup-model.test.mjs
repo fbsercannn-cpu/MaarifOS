@@ -87,9 +87,10 @@ test("ileri ve geri sınıf ayarı sırası deterministiktir", () => {
 });
 
 test("arayüz dört temel bilgiyi tek formda toplar ve tehlikeli işlemleri başlangıçtan ayırır", async () => {
-  const [prototypeSource, prototypeCss] = await Promise.all([
+  const [prototypeSource, prototypeCss, globalCss] = await Promise.all([
     readFile(new URL("../../src/Prototype.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../src/prototype.css", import.meta.url), "utf8"),
+    readFile(new URL("../../src/styles.css", import.meta.url), "utf8"),
   ]);
 
   assert.doesNotMatch(prototypeSource, /classroom-form-stepper/);
@@ -104,4 +105,34 @@ test("arayüz dört temel bilgiyi tek formda toplar ve tehlikeli işlemleri baş
   assert.match(prototypeSource, /Gelişmiş cihaz işlemleri/);
   assert.match(prototypeCss, /classroom-form-navigation/);
   assert.match(prototypeCss, /security-advanced-zone/);
+  assert.match(
+    prototypeSource,
+    /aria-describedby="classroom-setup-submit-hint"/,
+  );
+  assert.match(
+    prototypeSource,
+    /<small id="classroom-setup-submit-hint" aria-live="polite">/,
+  );
+  assert.match(
+    prototypeSource,
+    /Okul adı, öğretmen adı soyadı, sınıf adı ve eğitim yılı bilgilerini tamamlayın\./,
+  );
+  assert.match(
+    prototypeSource,
+    /36–48, 48–60 veya 60–72 ay yaş bandını seçin\./,
+  );
+  assert.match(
+    prototypeSource,
+    /Bütün zorunlu bilgiler tamamlandı; sınıfı kaydedebilirsiniz\./,
+  );
+  assert.match(
+    prototypeCss,
+    /\.classroom-form-navigation\s*\{[\s\S]*?position:\s*static;/u,
+  );
+  assert.match(
+    prototypeCss,
+    /@media \(max-width: 359px\)[\s\S]*?\.settings-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/u,
+  );
+  assert.match(globalCss, /body\s*\{[\s\S]*?min-width:\s*0;/u);
+  assert.doesNotMatch(globalCss, /body\s*\{[\s\S]*?min-width:\s*320px;/u);
 });

@@ -80,6 +80,42 @@ test("kart verileri yerel önerilere bağlı, tam ve resmî etkinlikten ayrıdı
   }
 });
 
+test("120 çekirdek etkinliğin öğretmen ve çocuk katmanları etkinliğe özgüdür", () => {
+  const supportSignatures = new Set(
+    ACTIVITY_STUDIO_ITEMS.map((item) =>
+      [
+        ...item.teacherSteps,
+        item.inclusionNote,
+        item.observationPrompt,
+        item.familyExtension,
+      ].join("|"),
+    ),
+  );
+  assert.equal(supportSignatures.size, ACTIVITY_STUDIO_ITEMS.length);
+
+  const childPrompts = new Set();
+  const reflectionPrompts = new Set();
+  const choiceIds = new Set();
+  for (const item of ACTIVITY_STUDIO_ITEMS) {
+    const session = createActivityStudioChildSession(item.id, "60-72");
+    assert.ok(session, `${item.id} için 60–72 ay çocuk oturumu bulunmalı`);
+    assert.equal(session.title, item.title);
+    assert.match(session.childPrompt, new RegExp(item.title, "u"));
+    assert.match(session.reflectionPrompt, new RegExp(item.title, "u"));
+    childPrompts.add(session.childPrompt);
+    reflectionPrompts.add(session.reflectionPrompt);
+    for (const choice of session.choices) {
+      assert.equal(choiceIds.has(choice.id), false, `${choice.id} mükerrer olmamalı`);
+      choiceIds.add(choice.id);
+      assert.ok(choice.label.length >= 18);
+    }
+  }
+
+  assert.equal(childPrompts.size, ACTIVITY_STUDIO_ITEMS.length);
+  assert.equal(reflectionPrompts.size, ACTIVITY_STUDIO_ITEMS.length);
+  assert.equal(choiceIds.size, ACTIVITY_STUDIO_ITEMS.length * 3);
+});
+
 test("hazır koleksiyonlar gerçek envanteri öğretmen ihtiyacına göre daraltır", () => {
   assert.equal(ACTIVITY_STUDIO_COLLECTIONS.length, 6);
   for (const collection of ACTIVITY_STUDIO_COLLECTIONS) {
@@ -231,7 +267,10 @@ test("telefon CSS'i 320 pikselde sayfa taşmasını önler ve dokunma hedeflerin
   }
   assert.match(component, /onWriteObservation\?\(/u);
   assert.match(component, /Etkinlik, malzeme veya TYMM alanı ara/u);
-  assert.match(component, /Öğretmen uygulama rehberi/u);
+  assert.match(component, /Ayrıntıları ve öğretmen rehberini aç/u);
+  assert.match(component, /visibleCount, setVisibleCount/u);
+  assert.match(component, /6 öneri daha göster/u);
+  assert.match(component, /Tüm filtreler/u);
   assert.match(component, /Katılım uyarlaması/u);
   assert.match(component, /Aileye uzatma/u);
   assert.match(component, /leaveChildMode\(true\)/u);
@@ -252,9 +291,9 @@ test("plan koleksiyonları ve orkestra adımları stüdyoyu doğru bağlamla aç
   assert.doesNotMatch(source, /onClick=\{onOpenActivityStudio\}/u);
 });
 
-test("180 günlük rotasyon tam yılı kapsar, her gün üç farklı tür verir ve bütün bankayı kullanır", () => {
-  assert.equal(ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY, 180);
-  assert.equal(ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT, 540);
+test("resmî MEB rotasyonu uyumdan yıl sonuna yalnız öğretim günlerini kapsar", () => {
+  assert.equal(ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY, 186);
+  assert.equal(ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT, 558);
   assert.equal(ACTIVITY_YEAR_MONTH_LENSES.length, 10);
 
   const items = filterActivityStudioItems({ ageBand: "60-72" });
@@ -262,8 +301,78 @@ test("180 günlük rotasyon tam yılı kapsar, her gün üç farklı tür verir 
     items,
     startCivilDate: "2026-09-01",
   });
-  assert.equal(rotation.length, 180);
-  assert.equal(new Set(rotation.map((day) => day.civilDate)).size, 180);
+  assert.equal(rotation.length, ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY);
+  assert.equal(
+    new Set(rotation.map((day) => day.civilDate)).size,
+    ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY,
+  );
+  assert.equal(rotation[0]?.civilDate, "2026-09-07");
+  assert.equal(rotation.at(-1)?.civilDate, "2027-06-25");
+
+  const rotationDates = new Set(rotation.map((day) => day.civilDate));
+  const excludedPeriods = [
+    ["2026-09-01", "2026-09-06"],
+    ["2026-11-16", "2026-11-20"],
+    ["2027-01-25", "2027-02-05"],
+    ["2027-03-08", "2027-03-12"],
+    ["2027-05-16", "2027-05-19"],
+    ["2027-06-26", "2027-08-31"],
+  ];
+  assert.equal(
+    rotation.every((day) =>
+      excludedPeriods.every(
+        ([startDate, endDate]) =>
+          day.civilDate < startDate || day.civilDate > endDate,
+      ),
+    ),
+    true,
+  );
+  for (const excludedDate of [
+    "2026-09-01",
+    "2026-09-04",
+    "2026-11-16",
+    "2026-11-20",
+    "2027-01-01",
+    "2027-01-25",
+    "2027-02-05",
+    "2027-03-08",
+    "2027-03-12",
+    "2027-05-17",
+    "2027-05-19",
+    "2027-06-26",
+  ]) {
+    assert.equal(
+      rotationDates.has(excludedDate),
+      false,
+      `${excludedDate} öğretim günü olarak planlanmamalı`,
+    );
+  }
+  for (const includedDate of [
+    "2026-09-07",
+    "2026-09-11",
+    "2026-09-14",
+    "2027-01-22",
+    "2027-02-08",
+    "2027-06-25",
+  ]) {
+    assert.equal(
+      rotationDates.has(includedDate),
+      true,
+      `${includedDate} resmî öğretim kümesinde bulunmalı`,
+    );
+  }
+
+  assert.equal(
+    rotation.every((day) => {
+      const weekday = new Date(`${day.civilDate}T12:00:00.000Z`).getUTCDay();
+      const inInstructionalPhase =
+        (day.civilDate >= "2026-09-07" && day.civilDate <= "2026-09-11") ||
+        (day.civilDate >= "2026-09-14" && day.civilDate <= "2027-01-22") ||
+        (day.civilDate >= "2027-02-08" && day.civilDate <= "2027-06-25");
+      return weekday >= 1 && weekday <= 5 && inInstructionalPhase;
+    }),
+    true,
+  );
 
   const usedIds = new Set();
   for (const day of rotation) {
@@ -286,6 +395,21 @@ test("180 günlük rotasyon tam yılı kapsar, her gün üç farklı tür verir 
     () => selectDailyActivitySuggestions(items, "05.09.2026"),
     /YYYY-MM-DD/u,
   );
+
+  assert.deepEqual(
+    createActivityYearRotation({
+      items,
+      startCivilDate: "2027-06-26",
+    }),
+    [],
+  );
+  const overRequestedRotation = createActivityYearRotation({
+    items,
+    startCivilDate: "2026-09-01",
+    schoolDayCount: 366,
+  });
+  assert.equal(overRequestedRotation.length, ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY);
+  assert.equal(overRequestedRotation.at(-1)?.civilDate, "2027-06-25");
 });
 
 test("yazdırılabilir etkinlik telefon önizlemesinde tek sütuna döner", async () => {

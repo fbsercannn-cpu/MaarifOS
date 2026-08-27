@@ -41,11 +41,6 @@ import {
   type ActivityStudioItem,
 } from "./activity-studio-model.ts";
 import {
-  ACTIVITY_YEAR_MONTH_LENSES,
-  ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT,
-  ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY,
-} from "./activity-year-program.ts";
-import {
   renderActivityStudioPrintable,
   type ActivityStudioPrintable,
 } from "./printable-templates.ts";
@@ -57,7 +52,6 @@ import {
 import {
   PARTICIPATION_ROUTES,
   PEDAGOGICAL_SCENARIOS,
-  PEDAGOGICAL_VARIANT_COUNT,
   createActivityContextAdaptation,
   type ParticipationRouteId,
   type PedagogicalScenarioId,
@@ -95,7 +89,7 @@ export interface ActivityStudioObservationRequest
 }
 
 export interface ActivityStudioProps {
-  initialAgeBand?: ActivityStudioAgeBand;
+  initialAgeBand: ActivityStudioAgeBand | null;
   initialActivityId?: string;
   initialScenarioId?: PedagogicalScenarioId;
   initialCollection?: ActivityStudioCollectionFilter;
@@ -110,6 +104,7 @@ export interface ActivityStudioProps {
   onPrint(request: ActivityStudioPrintRequest): ControllerResult;
   onChildChoice?(request: ActivityStudioChildChoiceRequest): ControllerResult;
   onWriteObservation?(request: ActivityStudioObservationRequest): ControllerResult;
+  onChildModeChange?(open: boolean): void;
   emptyStateAction?: ReactNode;
 }
 
@@ -129,7 +124,7 @@ function messageFromError(error: unknown): string {
 }
 
 export function ActivityStudio({
-  initialAgeBand = "48-60",
+  initialAgeBand,
   initialActivityId,
   initialScenarioId = "balanced",
   initialCollection = "tumu",
@@ -138,13 +133,14 @@ export function ActivityStudio({
   onPrint,
   onChildChoice,
   onWriteObservation,
+  onChildModeChange,
   emptyStateAction,
 }: ActivityStudioProps) {
   const componentId = useId();
   const headingId = `${componentId}-heading`;
   const statusId = `${componentId}-status`;
   const [ageBand, setAgeBand] =
-    useState<ActivityStudioAgeBand>(initialAgeBand);
+    useState<ActivityStudioAgeBand>(initialAgeBand ?? ACTIVITY_STUDIO_AGE_BANDS[0]);
   const [category, setCategory] =
     useState<ActivityStudioCategoryFilter>("tumu");
   const [collection, setCollection] =
@@ -164,10 +160,16 @@ export function ActivityStudio({
     useState<ActivityDrawingPadEvidence | null>(null);
   const [observationReturnActivityId, setObservationReturnActivityId] =
     useState<string | null>(null);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(6);
   const childHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const childModeReturnFocusRef = useRef<HTMLElement | null>(null);
   const childModeReturnActivityIdRef = useRef<string | null>(null);
   const childModeWasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (initialAgeBand) setAgeBand(initialAgeBand);
+  }, [initialAgeBand]);
 
   const activities = useMemo(
     () => filterActivityStudioItems({ ageBand, category, collection, query }),
@@ -188,12 +190,27 @@ export function ActivityStudio({
 
   const childModeOpen = Boolean(childActivity && childSession);
 
+  const visibleActivities = activities.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(6);
+  }, [ageBand, category, collection, query, scenarioId, participationRouteId]);
+
+  useEffect(() => {
+    onChildModeChange?.(childModeOpen);
+    return () => {
+      if (childModeOpen) onChildModeChange?.(false);
+    };
+  }, [childModeOpen, onChildModeChange]);
+
   useEffect(() => {
     const wasOpen = childModeWasOpenRef.current;
     childModeWasOpenRef.current = childModeOpen;
 
     if (childModeOpen && !wasOpen) {
       const frame = window.requestAnimationFrame(() => {
+        const scroll = childHeadingRef.current?.closest<HTMLElement>(".mobile-scroll");
+        if (scroll) scroll.scrollTop = 0;
         childHeadingRef.current?.focus({ preventScroll: true });
       });
       return () => window.cancelAnimationFrame(frame);
@@ -309,6 +326,34 @@ export function ActivityStudio({
       setBusyAction(null);
     }
   };
+
+  if (!initialAgeBand) {
+    return (
+      <main className="activity-studio" aria-labelledby={headingId}>
+        <header className="activity-studio__header">
+          <div className="activity-studio__header-icon" aria-hidden="true">
+            <MagicWandIcon />
+          </div>
+          <div>
+            <span className="activity-studio__kicker">Hazırla · uygula · yazdır</span>
+            <h1 id={headingId} data-route-heading tabIndex={-1}>
+              Etkinlik ve Materyal Stüdyosu
+            </h1>
+            <p>Yaşa uygun içerik için sınıfın resmî yaş bandını tamamlayın.</p>
+          </div>
+        </header>
+        <section className="activity-studio__empty" role="status" aria-live="polite">
+          <BackpackIcon aria-hidden="true" />
+          <h2>Yaş bandı seçilmeden etkinlik gösterilmez</h2>
+          <p>
+            Sistem 36–48, 48–60 veya 60–72 ay bilgisini tahmin etmez.
+            Sınıf profilini tamamladığınızda öneriler açılır.
+          </p>
+          {emptyStateAction}
+        </section>
+      </main>
+    );
+  }
 
   if (childActivity && childSession) {
     const drawingPadMode = activityStudioDrawingPadMode(childActivity);
@@ -439,15 +484,13 @@ export function ActivityStudio({
         </div>
         <div>
           <span className="activity-studio__kicker">Hazırla · uygula · yazdır</span>
-          <h1 id={headingId}>Etkinlik ve Materyal Stüdyosu</h1>
-          <p>Temel etkinliği sınıfın koşuluna, katılım yoluna ve yaşa göre dönüştür; planla, uygula ve gözleme bağla.</p>
-          <div className="activity-studio__inventory" aria-label="İçerik envanteri">
-            <span><strong>{ACTIVITY_STUDIO_ITEMS.length}</strong> özgün etkinlik</span>
-            <span><strong>{PEDAGOGICAL_VARIANT_COUNT.toLocaleString("tr-TR")}</strong> uygulama yolu</span>
-            <span><strong>{ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY}</strong> günlük rotasyon</span>
-            <span><strong>{ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT}</strong> yıllık öneri yuvası</span>
-            <span><strong>{ACTIVITY_YEAR_MONTH_LENSES.length}</strong> aylık odak</span>
-          </div>
+          <h1 id={headingId} data-route-heading tabIndex={-1}>
+            Etkinlik ve Materyal Stüdyosu
+          </h1>
+          <p>Bugün için kısa bir öneri seçin; ayrıntıları yalnız ihtiyaç duyduğunuzda açın.</p>
+          <p className="activity-studio__trust-note">
+            MaarifOS özgün içeriği · TYMM alanlarıyla uyarlanır · Resmî MEB etkinliği değildir.
+          </p>
         </div>
       </header>
 
@@ -462,6 +505,42 @@ export function ActivityStudio({
             placeholder="Etkinlik, malzeme veya TYMM alanı ara"
           />
         </label>
+
+        <div className="activity-studio__quick-filters" aria-label="Hızlı filtreler">
+          <button
+            type="button"
+            aria-pressed={collection === "hemen"}
+            onClick={() => setCollection((current) => current === "hemen" ? "tumu" : "hemen")}
+          >
+            20 dk hazır
+          </button>
+          <button
+            type="button"
+            aria-pressed={collection === "az-hazirlik"}
+            onClick={() => setCollection((current) => current === "az-hazirlik" ? "tumu" : "az-hazirlik")}
+          >
+            Az hazırlık
+          </button>
+          <button
+            type="button"
+            aria-pressed={scenarioId === "no-material"}
+            onClick={() => setScenarioId((current) => current === "no-material" ? "balanced" : "no-material")}
+          >
+            Malzemesiz
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="activity-studio__advanced-filter-toggle"
+          aria-expanded={advancedFiltersOpen}
+          onClick={() => setAdvancedFiltersOpen((current) => !current)}
+        >
+          {advancedFiltersOpen ? "Ayrıntılı filtreleri kapat" : "Tüm filtreler"}
+        </button>
+
+        {advancedFiltersOpen ? (
+          <div className="activity-studio__advanced-filters">
 
         <fieldset className="activity-studio__context-fieldset">
           <legend>Sınıfın bugünkü koşulu</legend>
@@ -564,11 +643,14 @@ export function ActivityStudio({
             ))}
           </div>
         </fieldset>
+          </div>
+        ) : null}
       </section>
 
       <p id={statusId} className="activity-studio__result-count" role="status">
         <strong>{activities.length}</strong> uygun etkinlik
         <span>
+          İlk {Math.min(visibleActivities.length, activities.length)} öneri gösteriliyor · {" "}
           {ACTIVITY_STUDIO_AGE_LABELS[ageBand]}
           {collection !== "tumu"
             ? ` · ${ACTIVITY_STUDIO_COLLECTIONS.find((item) => item.id === collection)?.label}`
@@ -588,7 +670,7 @@ export function ActivityStudio({
         aria-label="Uygun etkinlikler"
         aria-describedby={statusId}
       >
-        {activities.map((activity) => {
+        {visibleActivities.map((activity) => {
           const ageNote = activity.ageAdaptations[ageBand];
           const categoryLabel =
             ACTIVITY_STUDIO_CATEGORY_LABELS[activity.category];
@@ -619,60 +701,33 @@ export function ActivityStudio({
               </header>
 
               <p className="activity-card__prompt">{activity.teacherPrompt}</p>
-              <p className="activity-card__age-note">
-                <strong>{ACTIVITY_STUDIO_AGE_LABELS[ageBand]}:</strong> {ageNote}
-              </p>
+              <div className="activity-card__at-a-glance" aria-label="Etkinlik özeti">
+                <span>{activity.preparationMinutes} dk hazırlık</span>
+                <span>{activity.environment}</span>
+                <span>{activity.tymmDomains.slice(0, 2).join(" · ")}</span>
+              </div>
 
-              <dl className="activity-card__details">
-                <div>
-                  <dt>Ortam</dt>
-                  <dd>{activity.environment}</dd>
-                </div>
-                <div>
-                  <dt>TYMM alanı</dt>
-                  <dd>{activity.tymmDomains.join(", ")}</dd>
-                </div>
-                <div>
-                  <dt>Malzeme</dt>
-                  <dd>{activity.materials.join(", ")}</dd>
-                </div>
-                <div>
-                  <dt>Hazırlık</dt>
-                  <dd>{activity.preparationMinutes} dk</dd>
-                </div>
-              </dl>
-
-              <details className="activity-card__guide">
-                <summary>Öğretmen uygulama rehberi</summary>
+              <details className="activity-card__compact-details">
+                <summary>Ayrıntıları ve öğretmen rehberini aç</summary>
+                <p className="activity-card__age-note">
+                  <strong>{ACTIVITY_STUDIO_AGE_LABELS[ageBand]}:</strong> {ageNote}
+                </p>
+                <dl className="activity-card__details">
+                  <div><dt>Ortam</dt><dd>{activity.environment}</dd></div>
+                  <div><dt>TYMM alanı</dt><dd>{activity.tymmDomains.join(", ")}</dd></div>
+                  <div><dt>Malzeme</dt><dd>{activity.materials.join(", ")}</dd></div>
+                  <div><dt>Hazırlık</dt><dd>{activity.preparationMinutes} dk</dd></div>
+                </dl>
                 <div className="activity-card__guide-body">
-                  <ol>
-                    {activity.teacherSteps.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ol>
+                  <ol>{activity.teacherSteps.map((step) => <li key={step}>{step}</li>)}</ol>
                   <dl>
-                    <div>
-                      <dt>Katılım uyarlaması</dt>
-                      <dd>{activity.inclusionNote}</dd>
-                    </div>
-                    <div>
-                      <dt>Gözlem odağı</dt>
-                      <dd>{activity.observationPrompt}</dd>
-                    </div>
-                    <div>
-                      <dt>Aileye uzatma</dt>
-                      <dd>{activity.familyExtension}</dd>
-                    </div>
+                    <div><dt>Katılım uyarlaması</dt><dd>{activity.inclusionNote}</dd></div>
+                    <div><dt>Gözlem odağı</dt><dd>{activity.observationPrompt}</dd></div>
+                    <div><dt>Aileye uzatma</dt><dd>{activity.familyExtension}</dd></div>
                   </dl>
                 </div>
-              </details>
-
-              <details className="activity-card__adaptation">
-                <summary aria-label={`${activity.title} için bağlamsal uyarlamayı aç`}>
-                  <span><small>CANLI UYARLAMA</small><strong>{adaptation.scenario.label}</strong></span>
-                  <b>{adaptation.participationRoute.label}</b>
-                </summary>
-                <dl>
+                <dl className="activity-card__adaptation-details">
+                  <div><dt>Canlı uyarlama</dt><dd>{adaptation.scenario.label} · {adaptation.participationRoute.label}</dd></div>
                   <div><dt>Ortamı kur</dt><dd>{adaptation.setup}</dd></div>
                   <div><dt>Malzemeyi değiştir</dt><dd>{adaptation.materialSwap}</dd></div>
                   <div><dt>Kolaylaştır</dt><dd>{adaptation.facilitation}</dd></div>
@@ -729,6 +784,16 @@ export function ActivityStudio({
         })}
       </section>
 
+      {visibleCount < activities.length ? (
+        <button
+          type="button"
+          className="activity-studio__load-more"
+          onClick={() => setVisibleCount((current) => Math.min(current + 6, activities.length))}
+        >
+          6 öneri daha göster
+        </button>
+      ) : null}
+
       {activities.length === 0 ? (
         <section className="activity-studio__empty" role="status">
           <Pencil1Icon aria-hidden="true" />
@@ -739,8 +804,7 @@ export function ActivityStudio({
       ) : null}
 
       <p className="activity-studio__provenance">
-        Etkinlikler MaarifOS tarafından özgün hazırlanır; resmî MEB etkinliği veya
-        değerlendirme aracı değildir. Çocuk Modu puansız ve yetişkin eşliğindedir.
+        Çocuk Modu puansızdır, yetişkin eşliğindedir ve tek başına değerlendirme kaydı oluşturmaz.
       </p>
     </main>
   );

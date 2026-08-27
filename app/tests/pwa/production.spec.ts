@@ -265,8 +265,8 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
 
   // Bu lazy ekran çevrim içiyken hiç açılmadı; ilk kez tamamen ağsız yüklenebilmelidir.
   await page
-    .getByRole("region", { name: "Ben hazırladım" })
-    .getByRole("button", { name: /Oyun ve materyal fikirleri/ })
+    .getByRole("region", { name: "Bugünün işi tek yerde" })
+    .getByRole("button", { name: /Etkinlik bankası/ })
     .click();
   await expect(
     page.getByRole("heading", { name: "Etkinlik ve Materyal Stüdyosu", exact: true }),

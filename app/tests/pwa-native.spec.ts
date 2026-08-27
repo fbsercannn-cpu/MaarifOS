@@ -23,8 +23,8 @@ async function configureNativeClassroom(page: Page) {
 
 async function createPortfolioObservation(page: Page, text: string) {
   await page
-    .getByRole("region", { name: "Ben hazırladım" })
-    .getByRole("button", { name: /TYMM günlük plan/ })
+    .getByRole("region", { name: "Bugünün işi tek yerde" })
+    .getByRole("button", { name: /Günün planı/ })
     .click();
   const activityTitle = page.getByLabel("Etkinlik adı");
   if (await activityTitle.isVisible().catch(() => false)) {
@@ -67,9 +67,9 @@ test("native çalışma modu simülatör çerçevesi olmadan gerçek ekrana yerl
   await configureNativeClassroom(page);
   await expect(page.getByTestId("today-screen")).toBeVisible();
   await expect(page.getByRole("region", { name: "Sıradaki en iyi adım" })).toBeVisible();
-  const prepared = page.getByRole("region", { name: "Ben hazırladım" });
-  await expect(prepared.getByRole("button", { name: /TYMM günlük plan/ })).toBeVisible();
-  await expect(prepared.getByRole("button", { name: /Oyun ve materyal fikirleri/ })).toBeVisible();
+  const teacherDesk = page.getByRole("region", { name: "Bugünün işi tek yerde" });
+  await expect(teacherDesk.getByRole("button", { name: /Günün planı/ })).toBeVisible();
+  await expect(teacherDesk.getByRole("button", { name: /Etkinlik bankası/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Ayarları aç" }).click();
   await expect(page.getByRole("heading", { name: "Bu cihaza kur" })).toBeVisible();

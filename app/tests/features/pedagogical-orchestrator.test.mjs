@@ -189,10 +189,52 @@ test("öğrenme döngüsü ilk eksik aşamayı tek geçerli sıradaki iş yapar"
   assert.equal(loop.filter((stage) => stage.state === "current").length, 1);
 });
 
+test("öğrenme döngüsü gözlem veya genel plan belgesini uyarlama ve aile kanıtı saymaz", () => {
+  const workspace = teacherCycle({
+    daily: {
+      status: "ready",
+      planId: "plan-1",
+      conflictingPlanIds: [],
+      title: "Günlük plan",
+      activityCount: 1,
+      completedActivityCount: 1,
+      observationCount: 1,
+    },
+    monthly: {
+      id: "month-1",
+      title: "Ağustos",
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-31",
+      relation: "current",
+      weeklyPlanCount: 1,
+      dailyPlanCount: 1,
+      observationCount: 1,
+      linkedObservationCount: 1,
+      evaluationCount: 1,
+    },
+    documents: {
+      anecdoteIncompleteCount: 0,
+      anecdoteReviewRequiredCount: 0,
+      anecdoteReadyCount: 0,
+      monthlyEvaluationCount: 1,
+      planDocumentReady: true,
+    },
+  });
+  const loop = createPedagogicalLoop(workspace);
+  assert.equal(loop.find((stage) => stage.id === "reflect").state, "done");
+  assert.equal(loop.find((stage) => stage.id === "adapt").state, "current");
+  assert.equal(loop.find((stage) => stage.id === "family").state, "waiting");
+  assert.equal(loop.find((stage) => stage.id === "next-plan").state, "waiting");
+});
+
 test("yaş çözümleme ve kapsam radarı üç resmî bandı tahminsiz korur", () => {
   assert.equal(resolveActivityAgeBand("36–48 ay"), "36-48");
+  assert.equal(resolveActivityAgeBand("48 - 60 AY"), "48-60");
   assert.equal(resolveActivityAgeBand("60-72"), "60-72");
-  assert.equal(resolveActivityAgeBand(undefined), "48-60");
+  assert.equal(resolveActivityAgeBand(undefined), null);
+  assert.equal(resolveActivityAgeBand(""), null);
+  assert.equal(resolveActivityAgeBand("5 yaş"), null);
+  assert.equal(resolveActivityAgeBand("136-148 ay"), null);
   for (const ageBand of ["36-48", "48-60", "60-72"]) {
     const matrix = createPedagogicalCoverageMatrix(ageBand);
     assert.ok(matrix.length >= 7);

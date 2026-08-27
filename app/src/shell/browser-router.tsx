@@ -76,6 +76,8 @@ export function RouteFocusBoundary({
   useEffect(() => {
     const boundary = boundaryRef.current;
     if (!boundary) return;
+    const scrollContainer = boundary.closest<HTMLElement>(".mobile-scroll");
+    if (scrollContainer) scrollContainer.scrollTop = 0;
     const previousRouteHeading = focusedHeadingRef.current;
     const focusHeading = () => {
       const heading = boundary.querySelector<HTMLElement>("[data-route-heading]");

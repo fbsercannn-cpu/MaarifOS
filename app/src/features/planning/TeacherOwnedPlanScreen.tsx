@@ -28,6 +28,11 @@ import {
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import { KeyboardInput, KeyboardTextarea } from "../../mobile";
 import { downloadBrowserFile } from "../documents/browser-file-download.ts";
+import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+} from "../feedback/teacher-feedback.ts";
 import type { TeacherWorkCycleWorkspace } from "../teacher-cycle/teacher-work-cycle.ts";
 import type { PremiumContentPack } from "../premium-plans/domain.ts";
 import { loadPremiumPilotPreviewPack } from "../premium-plans/content-repository.ts";
@@ -64,6 +69,11 @@ import {
   buildNeutralTeacherYearOutline,
   buildTeacherFullYearMonthDrafts,
 } from "./teacher-year-outline.ts";
+import {
+  monthlyReviewFormBlockers,
+  teacherDocumentSelectionReady,
+  weeklyReviewFormBlockers,
+} from "./teacher-workbench-readiness.ts";
 import "./teacher-owned-plan.css";
 
 export interface TeacherOwnedPlanScreenProps {
@@ -198,6 +208,7 @@ export function TeacherOwnedPlanScreen({
   const [documentWeeklyPlanId, setDocumentWeeklyPlanId] = useState("");
   const [documentDailyPlanId, setDocumentDailyPlanId] = useState("");
   const [message, setMessage] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
   const [expandedMonthId, setExpandedMonthId] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<TeacherOwnedPlanRecord | null>(null);
   const [revisionTitle, setRevisionTitle] = useState("");
@@ -248,6 +259,16 @@ export function TeacherOwnedPlanScreen({
   const weeklyReviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const monthlyReviewReturnFocusRef = useRef<HTMLButtonElement | null>(null);
 
+  const clearOperationFeedback = () => {
+    setMessage("");
+    setFeedback(null);
+  };
+
+  const reportOperationError = (reason: unknown, fallbackDetail: string) => {
+    setMessage("");
+    setFeedback(createTeacherFeedback(reason, { fallbackDetail }));
+  };
+
   useEffect(() => {
     setPack(contentPack);
   }, [contentPack]);
@@ -282,13 +303,13 @@ export function TeacherOwnedPlanScreen({
           }
         }
         setMessage("");
+        setFeedback(null);
       })
       .catch((reason: unknown) => {
         if (!active) return;
-        setMessage(
-          reason instanceof Error
-            ? reason.message
-            : "Öğretmen planı çalışma alanı hazırlanamadı.",
+        reportOperationError(
+          reason,
+          "Öğretmen planı çalışma alanı hazırlanamadı. Kayıtlarınız değiştirilmedi.",
         );
       })
       .finally(() => {
@@ -444,7 +465,7 @@ export function TeacherOwnedPlanScreen({
   const createStarterPlan = async () => {
     if (!starter || saveBusy) return;
     setSaveBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       const authoredYearDrafts = fullYearMonthDrafts.map((month) => ({
         ...month,
@@ -542,7 +563,10 @@ export function TeacherOwnedPlanScreen({
       setTeacherGraph(graph);
       setMessage("Yıl → ay → hafta plan zinciri tek işlemde bu cihaza kaydedildi.");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Plan zinciri kaydedilemedi.");
+      reportOperationError(
+        reason,
+        "Plan zinciri kaydedilemedi. Yazdığınız plan metinleri korunuyor.",
+      );
     } finally {
       setSaveBusy(false);
     }
@@ -555,7 +579,7 @@ export function TeacherOwnedPlanScreen({
       missingFullYearMonthDrafts.length === 0
     ) return;
     setSaveBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       const graph = await onAppendPlanMonths({
         annualPlanId: teacherGraph.annual.id,
@@ -567,10 +591,9 @@ export function TeacherOwnedPlanScreen({
         `Eylül–Haziran plan omurgası tamamlandı: ${graph.months.length} ay ve ${graph.months.reduce((total, month) => total + month.weeks.length, 0)} hafta kullanılabilir.`,
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Yıllık planın eksik ayları eklenemedi.",
+      reportOperationError(
+        reason,
+        "Yıllık planın eksik ayları eklenemedi. Mevcut planlarınız değiştirilmedi.",
       );
     } finally {
       setSaveBusy(false);
@@ -581,13 +604,13 @@ export function TeacherOwnedPlanScreen({
     setEditingPlan(record);
     setRevisionTitle(record.title);
     setRevisionNarrative(narrativeFromRecord(record));
-    setMessage("");
+    clearOperationFeedback();
   };
 
   const saveRevision = async () => {
     if (!editingPlan || saveBusy) return;
     setSaveBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       await onRevisePlan({
         planId: editingPlan.id,
@@ -602,7 +625,10 @@ export function TeacherOwnedPlanScreen({
       setEditingPlan(null);
       setMessage("Plan revizyonu önceki sürüm korunarak kaydedildi.");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Plan revizyonu kaydedilemedi.");
+      reportOperationError(
+        reason,
+        "Plan revizyonu kaydedilemedi. Düzenlediğiniz metin korunuyor.",
+      );
     } finally {
       setSaveBusy(false);
     }
@@ -622,19 +648,22 @@ export function TeacherOwnedPlanScreen({
     if (reviewBusy || educationalWritesDisabled) return;
     weeklyReviewReturnFocusRef.current = trigger ?? null;
     setReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       const context = await loadTeacherWeeklyReviewContext(store, weekly.id);
       setReviewContext(context);
-      setSelectedObservationIds(context.observations.map((observation) => observation.id));
+      setSelectedObservationIds(
+        context.observations
+          .filter((observation) => observation.curriculumLinkIds.length > 0)
+          .map((observation) => observation.id),
+      );
       setWeeklyEvidenceSummary("");
       setWeeklyReflection("");
       setWeeklyDecision("adapt");
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Haftalık değerlendirme kanıtları açılamadı.",
+      reportOperationError(
+        reason,
+        "Haftalık değerlendirme kanıtları açılamadı. Plan kayıtlarınız değiştirilmedi.",
       );
     } finally {
       setReviewBusy(false);
@@ -644,7 +673,7 @@ export function TeacherOwnedPlanScreen({
   const saveWeeklyReview = async () => {
     if (!reviewContext || reviewBusy || educationalWritesDisabled) return;
     setReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       await onRecordWeeklyEvaluation({
         weeklyPlanId: reviewContext.weekly.id,
@@ -661,10 +690,9 @@ export function TeacherOwnedPlanScreen({
         "Haftalık değerlendirme kaydedildi; sonraki hafta için öneri yalnız öğretmen incelemesine taşındı.",
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Haftalık değerlendirme kaydedilemedi.",
+      reportOperationError(
+        reason,
+        "Haftalık değerlendirme kaydedilemedi. Yazdığınız değerlendirme korunuyor.",
       );
     } finally {
       setReviewBusy(false);
@@ -676,7 +704,7 @@ export function TeacherOwnedPlanScreen({
     setCarryReviewWeekly(weekly);
     setCarryTeacherNote("");
     setCarryAcceptedNarrative(narrativeFromRecord(weekly));
-    setMessage("");
+    clearOperationFeedback();
   };
 
   const submitCarryReview = async (
@@ -690,7 +718,7 @@ export function TeacherOwnedPlanScreen({
       educationalWritesDisabled
     ) return;
     setCarryReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       await onReviewWeeklyCarry({
         weeklyPlanId: carryReviewWeekly.id,
@@ -711,10 +739,9 @@ export function TeacherOwnedPlanScreen({
             : "Karar yeniden açıldı; kabul edilen plan içeriği önceki sürüme geri alındı.",
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Haftalık öneri kararı kaydedilemedi.",
+      reportOperationError(
+        reason,
+        "Haftalık öneri kararı kaydedilemedi. Mevcut plan içeriği değiştirilmedi.",
       );
     } finally {
       setCarryReviewBusy(false);
@@ -740,7 +767,7 @@ export function TeacherOwnedPlanScreen({
     ) return;
     monthlyReviewReturnFocusRef.current = trigger ?? null;
     setMonthlyReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       const context = await loadTeacherMonthlyReviewContext(store, monthly.id);
       setMonthlyReviewContext(context);
@@ -764,10 +791,9 @@ export function TeacherOwnedPlanScreen({
       setMonthlyProgramCriteria(defaultMonthlyCriteria(TEACHER_MONTHLY_PROGRAM_CRITERIA));
       setMonthlyTeacherCriteria(defaultMonthlyCriteria(TEACHER_MONTHLY_TEACHER_CRITERIA));
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Aylık değerlendirme kanıtları açılamadı.",
+      reportOperationError(
+        reason,
+        "Aylık değerlendirme kanıtları açılamadı. Plan kayıtlarınız değiştirilmedi.",
       );
     } finally {
       setMonthlyReviewBusy(false);
@@ -777,7 +803,7 @@ export function TeacherOwnedPlanScreen({
   const saveMonthlyReview = async () => {
     if (!monthlyReviewContext || monthlyReviewBusy || educationalWritesDisabled) return;
     setMonthlyReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       await onRecordMonthlyEvaluation({
         monthlyPlanId: monthlyReviewContext.monthly.id,
@@ -798,10 +824,9 @@ export function TeacherOwnedPlanScreen({
         "Aylık üç yönlü değerlendirme kaydedildi; sonraki ay önerisi öğretmen kaydı olarak korundu.",
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Aylık öğretmen değerlendirmesi kaydedilemedi.",
+      reportOperationError(
+        reason,
+        "Aylık öğretmen değerlendirmesi kaydedilemedi. Yazdığınız metinler korunuyor.",
       );
     } finally {
       setMonthlyReviewBusy(false);
@@ -817,7 +842,7 @@ export function TeacherOwnedPlanScreen({
     setMonthlyCarryReviewPlan(monthly);
     setMonthlyCarryTeacherNote("");
     setMonthlyCarryAcceptedNarrative(narrativeFromRecord(monthly));
-    setMessage("");
+    clearOperationFeedback();
   };
 
   const submitMonthlyCarryReview = async (
@@ -831,7 +856,7 @@ export function TeacherOwnedPlanScreen({
       educationalWritesDisabled
     ) return;
     setMonthlyCarryReviewBusy(true);
-    setMessage("");
+    clearOperationFeedback();
     try {
       await onReviewMonthlyCarry({
         monthlyPlanId: monthlyCarryReviewPlan.id,
@@ -853,10 +878,9 @@ export function TeacherOwnedPlanScreen({
             : "Aylık karar yeniden açıldı; kabul edilen içerik önceki sürüme geri alındı.",
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Sonraki ay öneri kararı kaydedilemedi.",
+      reportOperationError(
+        reason,
+        "Sonraki ay öneri kararı kaydedilemedi. Mevcut plan içeriği değiştirilmedi.",
       );
     } finally {
       setMonthlyCarryReviewBusy(false);
@@ -893,7 +917,7 @@ export function TeacherOwnedPlanScreen({
   const exportPlan = async (format: PremiumPlanExportFormat) => {
     if (exportBusy) return;
     setExportBusy(format);
-    setMessage("");
+    clearOperationFeedback();
     try {
       if (teacherGraph) {
         const file = await generateStandaloneTeacherOwnedPlanExportFile(
@@ -920,13 +944,83 @@ export function TeacherOwnedPlanScreen({
         `${format === "pdf" ? "PDF" : "Word"} belgesi bu cihazdaki kalıcı öğretmen planından hazırlandı.`,
       );
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Plan belgesi hazırlanamadı.");
+      reportOperationError(
+        reason,
+        "Plan belgesi hazırlanamadı. Plan kayıtlarınız değiştirilmedi.",
+      );
     } finally {
       setExportBusy(null);
     }
   };
 
-  const exportReady = teacherGraph !== null || (pack !== null && source !== null);
+  const weeklyFormBlockers = reviewContext
+    ? weeklyReviewFormBlockers({
+        domainEligible: reviewContext.readiness.eligible,
+        selectedObservationCount: selectedObservationIds.length,
+        evidenceSummary: weeklyEvidenceSummary,
+        reflection: weeklyReflection,
+      })
+    : [];
+  const weeklyFormFeedback: TeacherFeedback | null =
+    reviewContext && weeklyFormBlockers.length > 0
+      ? {
+          code: "evaluation.evidence",
+          severity: "warning",
+          title: `Haftalık değerlendirme için ${weeklyFormBlockers.length} adım kaldı`,
+          detail: weeklyFormBlockers.join(" "),
+          supportCode: "EVAL-WEEK-FORM-001",
+          action: { id: "focus-missing-field", label: "İlk eksik alanı aç" },
+        }
+      : null;
+  const monthlyFormBlockers = monthlyReviewContext
+    ? monthlyReviewFormBlockers({
+        childNarrative: monthlyChildNarrative,
+        programNarrative: monthlyProgramNarrative,
+        teacherNarrative: monthlyTeacherNarrative,
+        nextMonthRecommendation: monthlyNextRecommendation,
+        evidenceState: monthlyEvidenceState,
+        selectedEvidenceIsSufficient: selectedMonthlyEvidenceIsSufficient,
+      })
+    : [];
+  const monthlyFormFeedback: TeacherFeedback | null =
+    monthlyReviewContext && monthlyFormBlockers.length > 0
+      ? {
+          code: "evaluation.evidence",
+          severity: "warning",
+          title: `Aylık değerlendirme için ${monthlyFormBlockers.length} adım kaldı`,
+          detail: monthlyFormBlockers.map((blocker) => blocker.detail).join(" "),
+          supportCode: "EVAL-MONTH-FORM-001",
+          action: { id: "open-missing-review-step", label: "İlk eksik adımı aç" },
+        }
+      : null;
+  const teacherDocumentSelectionIsReady = !teacherGraph ||
+    teacherDocumentSelectionReady({
+      scopeKind: documentScopeKind,
+      dailyPlanId: documentDailyPlanId,
+      weeklyPlanId: documentWeeklyPlanId,
+      monthlyPlanId: documentMonthlyPlanId,
+      dailyPlanIds: dailyPlans.map((plan) => plan.planId),
+      weeklyPlanIds: weeklyDocumentOptions.map((plan) => plan.id),
+      monthlyPlanIds: monthlyDocumentOptions.map((plan) => plan.id),
+    });
+  const documentSelectionFeedback: TeacherFeedback | null =
+    teacherGraph && !teacherDocumentSelectionIsReady
+      ? {
+          code: "validation.generic",
+          severity: "warning",
+          title: "Seçtiğiniz kapsamda kayıt yok",
+          detail:
+            "Bu kapsam için henüz plan bulunmuyor. Yıllık / birleşik belgeyi hemen hazırlayabilirsiniz.",
+          supportCode: "DOC-SCOPE-001",
+          action: {
+            id: "use-combined-document",
+            label: "Yıllık / birleşik kapsamı kullan",
+          },
+        }
+      : null;
+  const exportReady =
+    (teacherGraph !== null || (pack !== null && source !== null)) &&
+    teacherDocumentSelectionIsReady;
   return (
     <div className="teacher-owned-plan-shell">
       <header className="teacher-owned-plan-header">
@@ -951,6 +1045,7 @@ export function TeacherOwnedPlanScreen({
 
         {busy ? <p className="teacher-owned-plan-status">Plan kayıtları doğrulanıyor…</p> : null}
         {message ? <p className="teacher-owned-plan-status" role="status">{message}</p> : null}
+        {feedback ? <TeacherFeedbackPanel feedback={feedback} /> : null}
         {educationalWritesDisabled ? (
           <p
             className="teacher-owned-plan-status"
@@ -1341,6 +1436,7 @@ export function TeacherOwnedPlanScreen({
                 className="teacher-owned-plan-status"
                 role="status"
                 id="teacher-weekly-readiness"
+                tabIndex={-1}
               >
                 <strong>Haftalık değerlendirme henüz hazır değil</strong>
                 <ul>
@@ -1348,6 +1444,29 @@ export function TeacherOwnedPlanScreen({
                     <li key={blocker}>{blocker}</li>
                   ))}
                 </ul>
+              </div>
+            ) : null}
+            {weeklyFormFeedback ? (
+              <div id="teacher-weekly-form-readiness">
+                <TeacherFeedbackPanel
+                  feedback={weeklyFormFeedback}
+                  onAction={() => {
+                    let target: HTMLElement | null = null;
+                    if (!reviewContext.readiness.eligible) {
+                      target = document.getElementById("teacher-weekly-readiness");
+                    } else if (selectedObservationIds.length === 0) {
+                      target = weeklyReviewRef.current?.querySelector<HTMLInputElement>(
+                        'input[type="checkbox"]:not(:disabled)',
+                      ) ?? null;
+                    } else if (weeklyEvidenceSummary.trim().length < 3) {
+                      target = document.getElementById("teacher-weekly-evidence-summary");
+                    } else {
+                      target = document.getElementById("teacher-weekly-reflection");
+                    }
+                    target?.scrollIntoView({ block: "center" });
+                    target?.focus({ preventScroll: true });
+                  }}
+                />
               </div>
             ) : null}
             {reviewContext.observations.length === 0 ? (
@@ -1427,12 +1546,12 @@ export function TeacherOwnedPlanScreen({
                 type="button"
                 className="teacher-owned-plan-primary"
                 onClick={() => void saveWeeklyReview()}
+                aria-describedby={
+                  weeklyFormFeedback ? "teacher-weekly-form-readiness" : undefined
+                }
                 disabled={
                   reviewBusy ||
-                  !reviewContext.readiness.eligible ||
-                  selectedObservationIds.length === 0 ||
-                  weeklyEvidenceSummary.trim().length < 3 ||
-                  weeklyReflection.trim().length < 3
+                  weeklyFormBlockers.length > 0
                 }
               >
                 {reviewBusy
@@ -1946,6 +2065,32 @@ export function TeacherOwnedPlanScreen({
               </div>
             ) : null}
 
+            {monthlyFormFeedback ? (
+              <div id="teacher-monthly-form-readiness">
+                <TeacherFeedbackPanel
+                  feedback={monthlyFormFeedback}
+                  onAction={() => {
+                    const firstBlocker = monthlyFormBlockers[0];
+                    if (!firstBlocker) return;
+                    setMonthlyReviewStep(firstBlocker.step);
+                    window.requestAnimationFrame(() => {
+                      const targetId =
+                        firstBlocker.step === "children"
+                          ? "teacher-monthly-child-narrative"
+                          : firstBlocker.step === "program"
+                            ? "teacher-monthly-program-narrative"
+                            : monthlyTeacherNarrative.trim().length < 3
+                              ? "teacher-monthly-teacher-narrative"
+                              : "teacher-monthly-next-recommendation";
+                      const target = document.getElementById(targetId);
+                      target?.scrollIntoView({ block: "center" });
+                      target?.focus({ preventScroll: true });
+                    });
+                  }}
+                />
+              </div>
+            ) : null}
+
             <div className="teacher-owned-plan-revision-actions">
               <button
                 type="button"
@@ -1985,14 +2130,12 @@ export function TeacherOwnedPlanScreen({
                   type="button"
                   className="teacher-owned-plan-primary"
                   onClick={() => void saveMonthlyReview()}
+                  aria-describedby={
+                    monthlyFormFeedback ? "teacher-monthly-form-readiness" : undefined
+                  }
                   disabled={
                     monthlyReviewBusy ||
-                    monthlyChildNarrative.trim().length < 3 ||
-                    monthlyProgramNarrative.trim().length < 3 ||
-                    monthlyTeacherNarrative.trim().length < 3 ||
-                    monthlyNextRecommendation.trim().length < 3 ||
-                    (monthlyEvidenceState === "sufficient-evidence" &&
-                      !selectedMonthlyEvidenceIsSufficient)
+                    monthlyFormBlockers.length > 0
                   }
                 >
                   {monthlyReviewBusy
@@ -2161,11 +2304,37 @@ export function TeacherOwnedPlanScreen({
               </p>
             </div>
           ) : null}
+          {documentSelectionFeedback ? (
+            <div id="teacher-document-selection-readiness">
+              <TeacherFeedbackPanel
+                feedback={documentSelectionFeedback}
+                onAction={() => setDocumentScopeKind("combined")}
+              />
+            </div>
+          ) : null}
           <div>
-            <button type="button" onClick={() => void exportPlan("pdf")} disabled={!exportReady || exportBusy !== null}>
+            <button
+              type="button"
+              onClick={() => void exportPlan("pdf")}
+              disabled={!exportReady || exportBusy !== null}
+              aria-describedby={
+                documentSelectionFeedback
+                  ? "teacher-document-selection-readiness"
+                  : undefined
+              }
+            >
               <DownloadIcon aria-hidden="true" /> {exportBusy === "pdf" ? "PDF hazırlanıyor…" : "PDF hazırla"}
             </button>
-            <button type="button" onClick={() => void exportPlan("word")} disabled={!exportReady || exportBusy !== null}>
+            <button
+              type="button"
+              onClick={() => void exportPlan("word")}
+              disabled={!exportReady || exportBusy !== null}
+              aria-describedby={
+                documentSelectionFeedback
+                  ? "teacher-document-selection-readiness"
+                  : undefined
+              }
+            >
               <FileTextIcon aria-hidden="true" /> {exportBusy === "word" ? "Word hazırlanıyor…" : "Word hazırla"}
             </button>
           </div>

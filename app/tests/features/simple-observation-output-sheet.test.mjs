@@ -32,12 +32,12 @@ test("gözlem çıktı sheet'i çocuk, hedef kitle ve dönemden tek istek üreti
 
 test("yalnız tek ana CTA vardır ve callback gerçekten await edilir", () => {
   assert.equal((componentSource.match(/type="submit"/gu) ?? []).length, 1);
-  assert.equal((componentSource.match(/Belgeyi hazırla/gu) ?? []).length, 1);
-  assert.match(componentSource, /await onGenerate\(request\)/u);
+  assert.equal((componentSource.match(/Paylaş veya indir/gu) ?? []).length, 1);
+  assert.match(componentSource, /const result = await onGenerate\(request\)/u);
   assert.match(componentSource, /setBusy\(true\)/u);
   assert.match(componentSource, /finally \{[\s\S]*setBusy\(false\)/u);
   assert.match(componentSource, /disabled=\{unavailable\}/u);
-  assert.doesNotMatch(componentSource, /onay/iu);
+  assert.match(componentSource, /Kişisel veri uyarısından sonra/u);
 });
 
 test("hata, ilerleme ve başarı erişilebilir canlı bölgelerde gösterilir", () => {
@@ -46,7 +46,18 @@ test("hata, ilerleme ve başarı erişilebilir canlı bölgelerde gösterilir", 
   assert.match(componentSource, /aria-live="polite"/u);
   assert.match(componentSource, /aria-busy=\{busy\}/u);
   assert.match(componentSource, /Belge hazırlanıyor…/u);
-  assert.match(componentSource, /Belge bu cihazda hazırlandı\./u);
+  assert.match(
+    componentSource,
+    /Belge telefonunuzun paylaşım ekranına gönderildi\./u,
+  );
+  assert.match(
+    componentSource,
+    /Paylaşım desteklenmedi; belge onayınızla bu cihaza indirildi\./u,
+  );
+  assert.match(
+    componentSource,
+    /Paylaşım iptal edildi; belge gönderilmedi veya indirilmedi\./u,
+  );
   assert.match(componentSource, /onOpenChange=\{onOpenChange\}/u);
 });
 

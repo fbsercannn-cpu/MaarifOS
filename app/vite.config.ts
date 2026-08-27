@@ -23,6 +23,11 @@ export default defineConfig({
               test: /node_modules[\\/](?:motion|motion-dom|motion-utils|@use-gesture)[\\/]/,
               priority: 10,
             },
+            {
+              name: "teacher-feedback",
+              test: /src[\\/]features[\\/]feedback[\\/]/,
+              priority: 15,
+            },
           ],
         },
       },

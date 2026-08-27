@@ -6,6 +6,7 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
+import { canonicalJson } from "../../src/core/backup/canonical-json.ts";
 import { archiveAcademicYear } from "../../src/features/archive/academic-year-archive.ts";
 import {
   CURRICULUM_PROGRAM_LABELS,
@@ -170,6 +171,39 @@ test("pedagojik öneri kaynağı plan ve etkinliğe aynı atomik snapshot olarak
     snapshot.activities[0].pedagogicalProvenance,
   );
 
+});
+
+test("farklı gün taşıyan pedagojik kaynak doğrudan servis çağrısında sıfır yazımla reddedilir", async () => {
+  const store = activeStore();
+  const sourceActivity = ACTIVITY_STUDIO_ITEMS.find((item) =>
+    item.ageBands.includes("48-60"),
+  );
+  assert.ok(sourceActivity);
+  const pedagogicalProvenance = createPedagogicalPlanBridge({
+    activity: sourceActivity,
+    civilDate: "2026-09-02",
+    ageBand: "48-60",
+    scenarioId: "balanced",
+    participationRouteId: "multiple",
+    now: new Date("2026-09-01T06:05:00.000Z"),
+  });
+  const before = canonicalJson(await store.readSnapshot());
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planTitle: `${sourceActivity.title} planı`,
+      activityTitle: sourceActivity.title,
+      startTime: "09:30",
+      endTime: "10:00",
+      curriculumProfile,
+      ...planAssignment,
+      pedagogicalProvenance,
+      now: new Date("2026-09-01T06:10:00.000Z"),
+    }),
+    /Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor/u,
+  );
+  assert.equal(canonicalJson(await store.readSnapshot()), before);
 });
 
 async function createEvidenceChain(store) {

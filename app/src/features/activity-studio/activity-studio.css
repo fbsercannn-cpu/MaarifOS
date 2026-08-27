@@ -1003,12 +1003,117 @@
   flex: 0 0 auto;
 }
 
+.activity-studio__trust-note {
+  margin-top: 8px !important;
+  color: var(--maarif-muted, #667085) !important;
+  font-size: 12px !important;
+}
+
+.activity-studio__quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-studio__quick-filters button,
+.activity-studio__advanced-filter-toggle,
+.activity-studio__load-more {
+  min-height: 44px;
+  padding: 9px 13px;
+  color: var(--maarif-teal-dark, #176b63);
+  background: #ffffff;
+  border: 1px solid var(--maarif-line, #d7dfdc);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.activity-studio__quick-filters button[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--maarif-teal-dark, #176b63);
+  border-color: var(--maarif-teal-dark, #176b63);
+}
+
+.activity-studio__advanced-filter-toggle,
+.activity-studio__load-more {
+  width: 100%;
+  border-radius: 14px;
+}
+
+.activity-studio__advanced-filters {
+  display: grid;
+  gap: 14px;
+}
+
+.activity-card__at-a-glance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.activity-card__at-a-glance span {
+  padding: 5px 8px;
+  color: var(--maarif-teal-dark, #176b63);
+  background: var(--maarif-mint-soft, #edf8f4);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.activity-card__compact-details {
+  border-top: 1px solid var(--maarif-line-soft, #e7ecea);
+  padding-top: 10px;
+}
+
+.activity-card__compact-details > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--maarif-teal-dark, #176b63);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.activity-card__compact-details[open] > summary {
+  margin-bottom: 10px;
+}
+
+.activity-card__adaptation-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.activity-card__adaptation-details > div {
+  display: grid;
+  gap: 3px;
+}
+
+.activity-card__adaptation-details dt {
+  color: var(--maarif-muted, #667085);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.activity-card__adaptation-details dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .activity-studio button:focus-visible,
-.activity-child-mode button:focus-visible,
-.activity-child-mode [tabindex="-1"]:focus-visible {
+.activity-child-mode button:focus-visible {
   outline: 3px solid #ffffff !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 6px #0b2a55 !important;
+}
+
+.activity-child-mode [tabindex="-1"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 @media (min-width: 640px) {
@@ -1040,6 +1145,19 @@
   .activity-card,
   .activity-child-mode__task {
     padding: 12px;
+  }
+
+  .activity-studio__quick-filters {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .activity-studio__quick-filters button {
+    min-width: 0;
+    padding: 7px 5px;
+    border-radius: 14px;
+    font-size: 11px;
+    line-height: 1.15;
   }
 
   .activity-card__header {

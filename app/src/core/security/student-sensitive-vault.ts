@@ -25,8 +25,10 @@ type StudentSensitiveCipherEnvelope = {
 
 type StudentSensitivePayload = {
   version: typeof STUDENT_SENSITIVE_ENVELOPE_VERSION;
+  optionalCode?: string;
   nationalIdentityNumber?: string;
   contactPhones: Array<{ id: string; phone: string }>;
+  contactNames: Array<{ id: string; name: string }>;
   careDetails?: Record<string, string | boolean>;
 };
 
@@ -254,7 +256,7 @@ function careDetailsRecord(value: unknown): Record<string, string | boolean> {
   return normalized;
 }
 
-function containsPlaintext(record: StoredRecord): boolean {
+function containsLegacyPlaintext(record: StoredRecord): boolean {
   if (Object.prototype.hasOwnProperty.call(record, "nationalIdentityNumber")) {
     return true;
   }
@@ -262,6 +264,19 @@ function containsPlaintext(record: StoredRecord): boolean {
   return contactRecords(record).some((contact) =>
     Object.prototype.hasOwnProperty.call(contact, "phone"),
   );
+}
+
+function containsExpandedPlaintext(record: StoredRecord): boolean {
+  if (Object.prototype.hasOwnProperty.call(record, "optionalCode")) {
+    return true;
+  }
+  return contactRecords(record).some((contact) =>
+    Object.prototype.hasOwnProperty.call(contact, "name"),
+  );
+}
+
+function containsPlaintext(record: StoredRecord): boolean {
+  return containsLegacyPlaintext(record) || containsExpandedPlaintext(record);
 }
 
 function hasContactMetadata(record: StoredRecord): boolean {
@@ -296,7 +311,19 @@ function extractSensitivePayload(record: StoredRecord): {
   const payload: StudentSensitivePayload = {
     version: STUDENT_SENSITIVE_ENVELOPE_VERSION,
     contactPhones: [],
+    contactNames: [],
   };
+  if (Object.prototype.hasOwnProperty.call(publicRecord, "optionalCode")) {
+    if (
+      typeof publicRecord.optionalCode !== "string" ||
+      !publicRecord.optionalCode.trim() ||
+      publicRecord.optionalCode.length > 40
+    ) {
+      throw new Error("Hassas öğrenci numarası doğrulanamadı.");
+    }
+    payload.optionalCode = publicRecord.optionalCode;
+    delete publicRecord.optionalCode;
+  }
   if (Object.prototype.hasOwnProperty.call(publicRecord, "nationalIdentityNumber")) {
     if (
       typeof publicRecord.nationalIdentityNumber !== "string" ||
@@ -330,14 +357,30 @@ function extractSensitivePayload(record: StoredRecord): {
       });
       const publicContact = structuredClone(contact);
       delete publicContact.phone;
+      if (Object.prototype.hasOwnProperty.call(contact, "name")) {
+        if (
+          typeof contact.name !== "string" ||
+          !contact.name.trim() ||
+          contact.name.length > 120
+        ) {
+          throw new Error("Hassas öğrenci yakını adı doğrulanamadı.");
+        }
+        payload.contactNames.push({
+          id: contact.id as string,
+          name: contact.name,
+        });
+        delete publicContact.name;
+      }
       return publicContact;
     });
   }
 
   const hasSensitiveValue =
+    payload.optionalCode !== undefined ||
     payload.nationalIdentityNumber !== undefined ||
     payload.careDetails !== undefined ||
-    payload.contactPhones.length > 0;
+    payload.contactPhones.length > 0 ||
+    payload.contactNames.length > 0;
   return { publicRecord, payload: hasSensitiveValue ? payload : null };
 }
 
@@ -346,14 +389,21 @@ function parseSensitivePayload(value: unknown): StudentSensitivePayload {
     !isRecord(value) ||
     value.version !== STUDENT_SENSITIVE_ENVELOPE_VERSION ||
     !Array.isArray(value.contactPhones) ||
+    (value.contactNames !== undefined && !Array.isArray(value.contactNames)) ||
+    (value.optionalCode !== undefined &&
+      (typeof value.optionalCode !== "string" ||
+        !value.optionalCode.trim() ||
+        value.optionalCode.length > 40)) ||
     (value.nationalIdentityNumber !== undefined &&
       (typeof value.nationalIdentityNumber !== "string" ||
         !value.nationalIdentityNumber)) ||
     Object.keys(value).some(
       (key) =>
         key !== "version" &&
+        key !== "optionalCode" &&
         key !== "nationalIdentityNumber" &&
         key !== "contactPhones" &&
+        key !== "contactNames" &&
         key !== "careDetails",
     )
   ) {
@@ -375,12 +425,33 @@ function parseSensitivePayload(value: unknown): StudentSensitivePayload {
     ids.add(entry.id);
     return { id: entry.id, phone: entry.phone };
   });
+  const nameIds = new Set<string>();
+  const contactNames = (value.contactNames ?? []).map((entry) => {
+    if (
+      !isRecord(entry) ||
+      Object.keys(entry).sort().join(",") !== "id,name" ||
+      typeof entry.id !== "string" ||
+      !entry.id ||
+      nameIds.has(entry.id) ||
+      typeof entry.name !== "string" ||
+      !entry.name.trim() ||
+      entry.name.length > 120
+    ) {
+      throw new Error("Hassas öğrenci verisi doğrulanamadı.");
+    }
+    nameIds.add(entry.id);
+    return { id: entry.id, name: entry.name };
+  });
   return {
     version: STUDENT_SENSITIVE_ENVELOPE_VERSION,
+    ...(typeof value.optionalCode === "string"
+      ? { optionalCode: value.optionalCode }
+      : {}),
     ...(typeof value.nationalIdentityNumber === "string"
       ? { nationalIdentityNumber: value.nationalIdentityNumber }
       : {}),
     contactPhones,
+    contactNames,
     ...(value.careDetails !== undefined
       ? { careDetails: careDetailsRecord(value.careDetails) }
       : {}),
@@ -390,6 +461,7 @@ function parseSensitivePayload(value: unknown): StudentSensitivePayload {
 function restoreSensitivePayload(
   publicRecord: StoredRecord,
   payload: StudentSensitivePayload,
+  options: { allowLegacyExpandedPlaintext?: boolean } = {},
 ): StoredRecord {
   const restored = structuredClone(publicRecord) as SensitiveStudentRecord;
   delete restored[STUDENT_SENSITIVE_ENVELOPE_FIELD];
@@ -397,17 +469,50 @@ function restoreSensitivePayload(
   const phoneByContact = new Map(
     payload.contactPhones.map((contact) => [contact.id, contact.phone]),
   );
+  const nameByContact = new Map(
+    payload.contactNames.map((contact) => [contact.id, contact.name]),
+  );
   if (
     contacts.length !== phoneByContact.size ||
-    contacts.some((contact) => !phoneByContact.has(contact.id as string))
+    contacts.some((contact) => !phoneByContact.has(contact.id as string)) ||
+    [...nameByContact.keys()].some((id) => !phoneByContact.has(id))
+  ) {
+    throw new Error("Hassas öğrenci verisi doğrulanamadı.");
+  }
+  const publicHasOptionalCode = Object.prototype.hasOwnProperty.call(
+    restored,
+    "optionalCode",
+  );
+  if (
+    (publicHasOptionalCode && !options.allowLegacyExpandedPlaintext) ||
+    (publicHasOptionalCode && payload.optionalCode !== undefined)
   ) {
     throw new Error("Hassas öğrenci verisi doğrulanamadı.");
   }
   if (contacts.length > 0) {
-    restored.contacts = contacts.map((contact) => ({
-      ...contact,
-      phone: phoneByContact.get(contact.id as string) as string,
-    }));
+    restored.contacts = contacts.map((contact) => {
+      const id = contact.id as string;
+      const publicHasName = Object.prototype.hasOwnProperty.call(
+        contact,
+        "name",
+      );
+      if (
+        (publicHasName && !options.allowLegacyExpandedPlaintext) ||
+        (publicHasName && nameByContact.has(id))
+      ) {
+        throw new Error("Hassas öğrenci verisi doğrulanamadı.");
+      }
+      return {
+        ...contact,
+        phone: phoneByContact.get(id) as string,
+        ...(nameByContact.has(id)
+          ? { name: nameByContact.get(id) as string }
+          : {}),
+      };
+    });
+  }
+  if (payload.optionalCode !== undefined) {
+    restored.optionalCode = payload.optionalCode;
   }
   if (payload.nationalIdentityNumber !== undefined) {
     restored.nationalIdentityNumber = payload.nationalIdentityNumber;
@@ -525,6 +630,17 @@ export class StudentSensitiveVault {
     if (containsPlaintext(record)) {
       throw new Error("Hassas öğrenci verisi doğrulanamadı.");
     }
+    return this.openSealedStudentRecord(record, subject);
+  }
+
+  private async openSealedStudentRecord(
+    record: StoredRecord,
+    subject: string,
+    options: { allowLegacyExpandedPlaintext?: boolean } = {},
+  ): Promise<StoredRecord> {
+    const envelope = (record as SensitiveStudentRecord)[
+      STUDENT_SENSITIVE_ENVELOPE_FIELD
+    ];
     assertCipherEnvelope(envelope);
     const key = await this.getExistingKey();
     let plaintext: ArrayBuffer;
@@ -553,7 +669,7 @@ export class StudentSensitiveVault {
     } catch {
       throw new Error("Hassas öğrenci verisi doğrulanamadı.");
     }
-    return restoreSensitivePayload(record, parseSensitivePayload(parsed));
+    return restoreSensitivePayload(record, parseSensitivePayload(parsed), options);
   }
 
   async sealRecoverySnapshot(
@@ -597,6 +713,18 @@ export class StudentSensitiveVault {
     subject: string,
   ): Promise<{ record: StoredRecord; changed: boolean }> {
     if (hasSealedStudentSensitiveData(record)) {
+      if (containsLegacyPlaintext(record)) {
+        await this.openStudentRecord(record, subject);
+      }
+      if (containsExpandedPlaintext(record)) {
+        const opened = await this.openSealedStudentRecord(record, subject, {
+          allowLegacyExpandedPlaintext: true,
+        });
+        return {
+          record: await this.sealStudentRecord(opened, subject),
+          changed: true,
+        };
+      }
       await this.openStudentRecord(record, subject);
       return { record: structuredClone(record), changed: false };
     }

@@ -52,14 +52,14 @@ test("eski sürümden sonra güncellemeyi sessizce kaydeder ve tarihli notları 
   ).toHaveCount(0);
   await expect(
     page.getByText(
-      "MaarifOS 0.16.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      "MaarifOS 0.19.0 sade Maarif Modeli sürümü kullanıma hazır.",
       { exact: true },
     ),
   ).toBeVisible();
   await expect.poll(async () => page.evaluate((storageKey) => {
     const value = window.localStorage.getItem(storageKey);
     return value ? JSON.parse(value).acknowledgedVersion : null;
-  }, RELEASE_STORAGE_KEY)).toBe("0.16.0");
+  }, RELEASE_STORAGE_KEY)).toBe("0.19.0");
 
   await page.reload();
   await expect(
@@ -70,13 +70,13 @@ test("eski sürümden sonra güncellemeyi sessizce kaydeder ve tarihli notları 
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.16.0");
-  await expect(settings).toContainText("22 Ağustos 2026");
+  await expect(settings).toContainText("MaarifOS 0.19.0");
+  await expect(settings).toContainText("27 Ağustos 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "Etkinlik bankası 120 özgün çekirdek etkinliğe",
+    "Geçmiş bir kaynak hafta artık bugünün hızlı planına bağlanmaz",
   );
 });
 
@@ -96,14 +96,14 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi sessizce kay
   ).toHaveCount(0);
   await expect(
     page.getByText(
-      "MaarifOS 0.16.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      "MaarifOS 0.19.0 sade Maarif Modeli sürümü kullanıma hazır.",
       { exact: true },
     ),
   ).toBeVisible();
   await expect.poll(async () => page.evaluate((storageKey) => {
     const value = window.localStorage.getItem(storageKey);
     return value ? JSON.parse(value).acknowledgedVersion : null;
-  }, RELEASE_STORAGE_KEY)).toBe("0.16.0");
+  }, RELEASE_STORAGE_KEY)).toBe("0.19.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({
@@ -127,7 +127,7 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await expect(addSheet).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: /MaarifOS 0\.16\.0 hazır.*Yenile/ }),
+    page.getByRole("button", { name: /MaarifOS 0\.19\.0 hazır.*Yenile/ }),
   ).toBeVisible();
 });
 

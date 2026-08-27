@@ -31,6 +31,7 @@ test("Bugün önerisine dokununca genel listenin başı değil exact etkinlik a�
   await page.goto("/?native=1");
   await configureClassroomAndStudent(page);
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await page.getByRole("button", { name: /Bugünün akışını ve haftayı aç/ }).click();
   const suggestion = page
     .locator(".simple-today__suggestion-list > button")
     .first();
@@ -48,9 +49,86 @@ test("Bugün önerisine dokununca genel listenin başı değil exact etkinlik a�
   );
 });
 
+test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe bağlanır", async ({
+  page,
+}, testInfo) => {
+  test.slow();
+  await page.goto("/?native=1");
+  await configureClassroomAndStudent(page);
+  await page.getByRole("button", { name: "Etkinlikler", exact: true }).click();
+
+  const activity = page.locator("article.activity-card").first();
+  await activity.getByRole("button", { name: /etkinliğini planıma ekle$/u }).click();
+
+  const planDialog = page.getByRole("dialog", { name: "Günlük plan oluşturma" });
+  await expect(planDialog).toBeVisible();
+  const target = planDialog
+    .getByRole("group", { name: "Program hedefleri" })
+    .locator("button.curriculum-target")
+    .first();
+  await target.evaluate((element) =>
+    element.scrollIntoView({ block: "center", inline: "nearest" }),
+  );
+  // Native kaydırma yüzeyindeki momentum tıklamasını yutmasın; gerçek parmak
+  // kullanımındaki kısa duraklamayı iki telefon motorunda da taklit et.
+  await page.waitForTimeout(250);
+  await target.tap();
+  await expect(
+    planDialog
+      .getByRole("navigation", { name: "Günlük plan oluşturma adımları" })
+      .getByRole("button", { name: /Kontrol/u }),
+  ).toHaveAttribute("aria-current", "step");
+  await planDialog.getByText("Başlık ve saati değiştir", { exact: true }).click();
+  await planDialog.getByLabel("Plan tarihi").fill("2026-08-28");
+  await planDialog.getByRole("button", { name: "Planı kaydet" }).click();
+
+  await expect(planDialog).toBeHidden();
+  await expect(
+    page.getByText("Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor.", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+
+  // Üretim paketi kaynak TypeScript modüllerini yayımlamaz. Canlı kabul UI
+  // sonucunu burada doğrular; aynı bundle'ın atomik IDB sözleşmesi yerel smoke
+  // kapısında aşağıdaki exact snapshot denetiminden geçer.
+  if (testInfo.project.name.startsWith("live-")) return;
+
+  const saved = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    const plan = snapshot.plans.find(
+      (record) =>
+        record.planType === "daily" && record.civilDate === "2026-08-28",
+    );
+    const activityRecord = snapshot.activities.find(
+      (record) => record.planId === plan?.id,
+    );
+    return {
+      planDate: plan?.civilDate ?? null,
+      planSourceDate: plan?.pedagogicalProvenance?.civilDate ?? null,
+      activityDate: activityRecord?.civilDate ?? null,
+      activitySourceDate:
+        activityRecord?.pedagogicalProvenance?.civilDate ?? null,
+    };
+  });
+
+  expect(saved).toEqual({
+    planDate: "2026-08-28",
+    planSourceDate: "2026-08-28",
+    activityDate: "2026-08-28",
+    activitySourceDate: "2026-08-28",
+  });
+});
+
 test("etkinlik baskısı gerçek pencere açar; seçim ve çizim öğretmen taslağına taşınır", async ({
   page,
 }) => {
+  // Açılır pencere, canvas, gerçek indirme ve IndexedDB bağlam çözümünü birlikte
+  // sınayan bu çok aşamalı kanıtı yalnız kendi test bütçesi içinde yavaş say.
+  test.slow();
   await page.goto("/?native=1");
   await configureClassroomAndStudent(page);
   await page.getByRole("button", { name: "Etkinlikler", exact: true }).click();
@@ -58,6 +136,7 @@ test("etkinlik baskısı gerçek pencere açar; seçim ve çizim öğretmen tasl
     page.getByRole("heading", { name: "Etkinlik ve Materyal Stüdyosu" }),
   ).toBeVisible();
 
+  await page.getByRole("button", { name: "Tüm filtreler", exact: true }).click();
   await page
     .locator(".activity-studio__category-options")
     .getByRole("button", { name: "Çizim", exact: true })

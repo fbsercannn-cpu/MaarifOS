@@ -1,7 +1,20 @@
 import type { ActivityStudioItem } from "./activity-studio-model.ts";
+import { OFFICIAL_ACADEMIC_CALENDAR_2026_2027 } from "../calendar/academic-calendar.ts";
+import { officialTeachingCivilDates2026_2027 } from "../planning/teacher-week-teaching-days.ts";
 
-export const ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY = 180 as const;
 export const ACTIVITY_YEAR_DAILY_SUGGESTION_COUNT = 3 as const;
+
+const OFFICIAL_ACTIVITY_YEAR_CIVIL_DATES = Object.freeze([
+  ...officialTeachingCivilDates2026_2027(),
+]);
+
+/**
+ * Sabit bir "yaklaşık 180 hafta içi" varsayımı değildir. Okul öncesi uyum
+ * haftası, iki dönem, ara/yarıyıl tatilleri ve tam gün tatiller aynı kanonik
+ * MEB takvim çözümleyicisinden geçirilerek hesaplanır.
+ */
+export const ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY =
+  OFFICIAL_ACTIVITY_YEAR_CIVIL_DATES.length;
 export const ACTIVITY_YEAR_RECOMMENDATION_SLOT_COUNT =
   ACTIVITY_YEAR_SCHOOL_DAY_CAPACITY * ACTIVITY_YEAR_DAILY_SUGGESTION_COUNT;
 
@@ -214,6 +227,38 @@ export interface ActivityYearRotationDay {
   readonly activities: readonly ActivityStudioItem[];
 }
 
+function weekdayCivilDates(
+  start: Date,
+  schoolDayCount: number,
+): readonly string[] {
+  const result: string[] = [];
+  const cursor = new Date(start);
+  while (result.length < schoolDayCount) {
+    const weekday = cursor.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) {
+      result.push(cursor.toISOString().slice(0, 10));
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
+
+function rotationCivilDates(
+  start: Date,
+  schoolDayCount: number,
+): readonly string[] {
+  const startCivilDate = start.toISOString().slice(0, 10);
+  if (
+    startCivilDate >= OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
+    startCivilDate <= OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate
+  ) {
+    return OFFICIAL_ACTIVITY_YEAR_CIVIL_DATES.filter(
+      (civilDate) => civilDate >= startCivilDate,
+    ).slice(0, schoolDayCount);
+  }
+  return weekdayCivilDates(start, schoolDayCount);
+}
+
 export function createActivityYearRotation(input: {
   readonly items: readonly ActivityStudioItem[];
   readonly startCivilDate: string;
@@ -228,34 +273,28 @@ export function createActivityYearRotation(input: {
   const days: ActivityYearRotationDay[] = [];
   const categoryBuckets = groupByCategory(input.items);
   const nextItemByCategory = new Map<string, number>();
-  const cursor = new Date(start);
-  while (days.length < schoolDayCount) {
-    const weekday = cursor.getUTCDay();
-    if (weekday !== 0 && weekday !== 6) {
-      const civilDate = cursor.toISOString().slice(0, 10);
-      const activities: ActivityStudioItem[] = [];
-      const dailyTarget = Math.min(
-        ACTIVITY_YEAR_DAILY_SUGGESTION_COUNT,
-        categoryBuckets.length,
-      );
-      for (let slot = 0; slot < dailyTarget; slot += 1) {
-        const bucket = categoryBuckets[
-          positiveModulo(days.length + slot, categoryBuckets.length)
-        ];
-        if (!bucket) continue;
-        const nextIndex = nextItemByCategory.get(bucket.category) ?? 0;
-        const item = bucket.items[positiveModulo(nextIndex, bucket.items.length)];
-        nextItemByCategory.set(bucket.category, nextIndex + 1);
-        if (item) activities.push(item);
-      }
-      days.push(
-        Object.freeze({
-          civilDate,
-          activities: Object.freeze(activities),
-        }),
-      );
+  for (const civilDate of rotationCivilDates(start, schoolDayCount)) {
+    const activities: ActivityStudioItem[] = [];
+    const dailyTarget = Math.min(
+      ACTIVITY_YEAR_DAILY_SUGGESTION_COUNT,
+      categoryBuckets.length,
+    );
+    for (let slot = 0; slot < dailyTarget; slot += 1) {
+      const bucket = categoryBuckets[
+        positiveModulo(days.length + slot, categoryBuckets.length)
+      ];
+      if (!bucket) continue;
+      const nextIndex = nextItemByCategory.get(bucket.category) ?? 0;
+      const item = bucket.items[positiveModulo(nextIndex, bucket.items.length)];
+      nextItemByCategory.set(bucket.category, nextIndex + 1);
+      if (item) activities.push(item);
     }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    days.push(
+      Object.freeze({
+        civilDate,
+        activities: Object.freeze(activities),
+      }),
+    );
   }
   return Object.freeze(days);
 }

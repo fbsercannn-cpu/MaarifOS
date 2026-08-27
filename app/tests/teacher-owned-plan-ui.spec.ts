@@ -75,6 +75,19 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   const documentCenter = dialog.locator(
     'section[aria-labelledby="teacher-plan-export-title"]',
   );
+  await documentCenter.getByLabel("Belge kapsamı").selectOption("daily");
+  const documentFeedback = documentCenter.getByTestId("teacher-feedback");
+  await expect(documentFeedback).toHaveAttribute("role", "status");
+  await expect(documentFeedback).toHaveAttribute(
+    "data-feedback-code",
+    "validation.generic",
+  );
+  await expect(documentFeedback).toContainText("Seçtiğiniz kapsamda kayıt yok");
+  await expect(documentCenter.getByRole("button", { name: "PDF hazırla" })).toBeDisabled();
+  await documentFeedback
+    .getByRole("button", { name: "Yıllık / birleşik kapsamı kullan" })
+    .click();
+  await expect(documentCenter.getByLabel("Belge kapsamı")).toHaveValue("combined");
   await documentCenter.getByLabel("Belge kapsamı").selectOption("combined");
   await expect(documentCenter.getByTestId("teacher-owned-document-basis")).toHaveText(
     "MaarifOS destek belgesi",
@@ -257,6 +270,12 @@ test("öğretmen eksik gün kapanışı ve program bağıyla haftalık karar yaz
   await expect(review).toContainText("Haftalık değerlendirme henüz hazır değil");
   await expect(review).toContainText("Bu hafta öğretim günü yok");
   await expect(review).toContainText("Program bağı tamamlanmadan seçilemez");
+  const formFeedback = review.getByTestId("teacher-feedback");
+  await expect(formFeedback).toHaveAttribute("role", "status");
+  await expect(formFeedback).toContainText("Haftalık değerlendirme için");
+  await expect(formFeedback).toContainText("En az bir öğretmen onaylı gözlem seçin");
+  await formFeedback.getByRole("button", { name: "İlk eksik alanı aç" }).click();
+  await expect(review.locator("#teacher-weekly-readiness")).toBeFocused();
   await review
     .getByLabel("Kanıt özeti")
     .fill("Kurgu Ada ortak oyun sırasını arkadaşının önerisiyle yeniden düzenledi.");

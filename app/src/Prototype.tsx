@@ -123,6 +123,11 @@ import { loadStudentAttendanceHistory } from "./features/attendance";
 import { ATTENDANCE_EVENT_LABELS } from "./features/attendance/attendance-panel-model";
 import { RouteFocusBoundary, useBrowserRouter } from "./shell";
 import { classifyApplicationError } from "./core/errors";
+import { TeacherFeedbackPanel } from "./features/feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+} from "./features/feedback/teacher-feedback.ts";
 import {
   createTodayStudentCards,
   todayPlanItemStatusLabel,
@@ -257,6 +262,7 @@ import {
   type TodayWorkspace,
 } from "./features/today/today-data";
 import type { ClassroomScheduleKind } from "./core/domain/classroom";
+import { classroomRosterDocumentMissingFields } from "./features/classroom/classroom-screen-model.ts";
 import {
   buildClassObservationExport,
   buildStudentObservationExport,
@@ -296,7 +302,6 @@ import {
 } from "./release";
 import { COLLECTION_NAMES } from "./core/domain/model";
 import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-provenance.ts";
-import { InviteAccessScreen } from "./features/access/InviteAccessScreen.tsx";
 import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
 import { createActivityStudioObservationSeed } from "./features/activity-studio/activity-observation-seed.ts";
 import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
@@ -304,11 +309,16 @@ import {
   PARTICIPATION_ROUTES,
   PEDAGOGICAL_SCENARIOS,
 } from "./features/pedagogical-os/pedagogical-orchestrator.ts";
-import { openHtmlPrintWindow } from "./features/printing/open-html-print-window.ts";
 
 const ClassroomScreen = lazy(() =>
   import("./features/simple-experience/SimpleClassroomScreen.tsx").then((module) => ({
     default: module.SimpleClassroomScreen,
+  })),
+);
+
+const InviteAccessScreen = lazy(() =>
+  import("./features/access/InviteAccessScreen.tsx").then((module) => ({
+    default: module.InviteAccessScreen,
   })),
 );
 
@@ -1441,7 +1451,8 @@ function EvidenceCaptureScreen({
   const [categories, setCategories] = useState<QuickObservationCategory[]>([]);
   const [observationGuide, setObservationGuide] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [safeError, setSafeError] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
   const [draftStatus, setDraftStatus] = useState<
     "ready" | "loading" | "saving" | "saved" | "error"
   >("ready");
@@ -1601,7 +1612,7 @@ function EvidenceCaptureScreen({
     try {
       await flushCurrentDraft();
     } catch {
-      setError(
+      setSafeError(
         "Mevcut taslak kaydedilemediği için çocuk değiştirilmedi. Cihaz verilerine yeniden bağlanın.",
       );
       return;
@@ -1679,7 +1690,7 @@ function EvidenceCaptureScreen({
     try {
       await flushCurrentDraft();
     } catch {
-      setError(
+      setSafeError(
         "Mevcut taslak kaydedilemediği için gözlem kapsamı değiştirilmedi.",
       );
       return;
@@ -1697,7 +1708,7 @@ function EvidenceCaptureScreen({
     try {
       await flushCurrentDraft();
     } catch {
-      setError(
+      setSafeError(
         "Mevcut taslak kaydedilemediği için gözlem kapsamı değiştirilmedi.",
       );
       return;
@@ -1714,7 +1725,7 @@ function EvidenceCaptureScreen({
     try {
       await flushCurrentDraft();
     } catch {
-      setError(
+      setSafeError(
         "Mevcut taslak kaydedilemediği için çocuk seçimi değiştirilmedi.",
       );
       return;
@@ -1731,7 +1742,7 @@ function EvidenceCaptureScreen({
     try {
       await flushCurrentDraft();
     } catch {
-      setError(
+      setSafeError(
         "Mevcut taslak kaydedilemediği için sınıf seçimi değiştirilmedi.",
       );
       return;
@@ -1785,10 +1796,12 @@ function EvidenceCaptureScreen({
       .catch((reason) => {
         if (batchRestoreSequenceRef.current !== loadSequence) return;
         batchRestoreAppliedRef.current = true;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Gözlem notu kaydedilemedi.",
+        setSafeError("");
+        setFeedback(
+          createTeacherFeedback(reason, {
+            fallbackDetail:
+              "Gözlem taslağı bu cihazdan açılamadı. Yeni notunuzu yazabilir veya yeniden deneyebilirsiniz.",
+          }),
         );
         setDraftStatus("error");
       });
@@ -1866,7 +1879,8 @@ function EvidenceCaptureScreen({
       busy
     ) return;
     setBusy(true);
-    setError("");
+    setSafeError("");
+    setFeedback(null);
     // Final kaydı başlatmadan önce gecikmeli taslak yazımını kesin. Aksi halde
     // 450 ms'lik otomatik-kayıt callback'i finalize işleminden sonra kuyruğa
     // girip silinmiş taslağı yeniden canlandırabilir ve sonraki gözlemde eski
@@ -1903,7 +1917,12 @@ function EvidenceCaptureScreen({
       await actions.close();
     } catch (reason) {
       finalizedRef.current = false;
-      setError(reason instanceof Error ? reason.message : "Gözlem notu kaydedilemedi.");
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Gözlem notu kaydedilemedi. Yazdıklarınız korunuyor; yeniden deneyebilirsiniz.",
+        }),
+      );
       setBusy(false);
     }
   };
@@ -2068,17 +2087,13 @@ function EvidenceCaptureScreen({
                 {observationGuidance}
               </p>
               {!isChildQuoteObservation ? (
-                <Carousel
-                  className="quick-starter-row"
-                  contentClassName="quick-starter-track"
-                  ariaLabel="Tarafsız cümle başlangıçları"
-                >
+                <div className="quick-starter-grid" role="group" aria-label="Tarafsız cümle başlangıçları">
                   {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
                     <button type="button" key={starter.id} onClick={() => applyStarter(starter.text)}>
                       {starter.text}
                     </button>
                   ))}
-                </Carousel>
+                </div>
               ) : null}
             </section>
 
@@ -2164,7 +2179,14 @@ function EvidenceCaptureScreen({
               </div>
             </details>
 
-              {error ? <p className="d1-error" role="alert">{error}</p> : null}
+              {safeError ? <p className="d1-error" role="alert">{safeError}</p> : null}
+              {feedback ? (
+                <TeacherFeedbackPanel
+                  feedback={feedback}
+                  onAction={saveReady ? () => void save() : undefined}
+                  compact
+                />
+              ) : null}
             </>
           )}
         </div>
@@ -2220,7 +2242,7 @@ function EvidenceLinkScreen({
   const [legacyReferenceTitle, setLegacyReferenceTitle] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
   const selectedTarget = observation.plannedCurriculumTargets.find(
     (target) => target.id === selectedTargetId,
   );
@@ -2249,12 +2271,17 @@ function EvidenceLinkScreen({
   const save = async () => {
     if (!targetForSave || !confirmed || busy) return;
     setBusy(true);
-    setError("");
+    setFeedback(null);
     try {
       await actions.confirm(observation, targetForSave);
       flow.replace(createAssessmentScreen(observation, targetForSave, actions));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Program bağlantısı kaydedilemedi.");
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Program bağlantısı kaydedilemedi. Seçiminiz korunuyor; yeniden deneyebilirsiniz.",
+        }),
+      );
       setBusy(false);
     }
   };
@@ -2332,7 +2359,13 @@ function EvidenceLinkScreen({
           </label>
         </div>
 
-        {error ? <p className="d1-error" role="alert">{error}</p> : null}
+        {feedback ? (
+          <TeacherFeedbackPanel
+            feedback={feedback}
+            onAction={() => void save()}
+            compact
+          />
+        ) : null}
         <button
           className="d1-primary"
           type="button"
@@ -2369,12 +2402,12 @@ function AssessmentScreen({
   const [assessmentLevel, setAssessmentLevel] =
     useState<CurriculumAssessmentLevel>("not_assessed");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
 
   const save = async () => {
     if (!text.trim() || busy) return;
     setBusy(true);
-    setError("");
+    setFeedback(null);
     try {
       await actions.createDraft(
         observation,
@@ -2385,7 +2418,12 @@ function AssessmentScreen({
       );
       flow.replace(createCompletionScreen(observation, target, actions));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Değerlendirme taslağı kaydedilemedi.");
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Değerlendirme taslağı kaydedilemedi. Metniniz korunuyor; yeniden deneyebilirsiniz.",
+        }),
+      );
       setBusy(false);
     }
   };
@@ -2444,7 +2482,13 @@ function AssessmentScreen({
         </div>
 
         <p className="d1-integrity-note"><ClockIcon aria-hidden="true" /> Tek not sınırlı bir kanıttır; taslak öğretmen incelemesi bekleyecek.</p>
-        {error ? <p className="d1-error" role="alert">{error}</p> : null}
+        {feedback ? (
+          <TeacherFeedbackPanel
+            feedback={feedback}
+            onAction={() => void save()}
+            compact
+          />
+        ) : null}
         <button className="d1-primary" type="button" onClick={() => void save()} disabled={busy || !text.trim()}>
           {busy ? "Kaydediliyor…" : "İnceleme taslağını oluştur"}
         </button>
@@ -3036,6 +3080,7 @@ export default function Prototype() {
       readyCount: 0,
     });
   const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
+  const [activityChildModeOpen, setActivityChildModeOpen] = useState(false);
   const [observationContextChoice, setObservationContextChoice] =
     useState<ObservationContextChoice | null>(null);
   const [newStudentName, setNewStudentName] = useState("");
@@ -3224,6 +3269,14 @@ export default function Prototype() {
     [backupHealthReceipt, lastSuccessfulBackupAt],
   );
   const [announcement, setAnnouncement] = useState("MaarifOS hazır.");
+
+  useEffect(() => {
+    if (!classroomOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("school-name")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [classroomOpen]);
   const authView = useMemo(() => deriveWelcomeViewModel(authState), [authState]);
   const dataHydrated =
     persistenceState.phase === "ready" || persistenceState.phase === "pending";
@@ -3283,6 +3336,12 @@ export default function Prototype() {
     preparationPlanningWindow.defaultCivilDate ??
     upcomingPlanningCivilDate ??
     todayWorkspace.civilDate;
+  const planFlowTeacherWeek =
+    teacherWorkCycle.weekly &&
+    defaultPlanFlowCivilDate >= teacherWorkCycle.weekly.periodStart &&
+    defaultPlanFlowCivilDate <= teacherWorkCycle.weekly.periodEnd
+      ? teacherWorkCycle.weekly
+      : null;
   const planWritesDisabled =
     educationalWritesDisabled && !preparationPlanningAllowed;
   // Historical plans keep their provenance for backup compatibility, but no
@@ -3429,6 +3488,19 @@ export default function Prototype() {
     startTime: classroomForm.startTime,
     endTime: classroomForm.endTime,
   });
+  const classroomSetupSubmitHint = dataBusy
+    ? "Sınıf bilgileri kaydediliyor."
+    : writesBlocked
+      ? "Cihaz verileri yazmaya hazır olduğunda kaydetme açılır."
+      : !classroomSetupReadinessState.period
+        ? "Okul adı, öğretmen adı soyadı, sınıf adı ve eğitim yılı bilgilerini tamamlayın."
+        : !classroomSetupReadinessState.program
+          ? "36–48, 48–60 veya 60–72 ay yaş bandını seçin."
+          : !classroomSetupReadinessState.schedule
+            ? "Çalışma düzeni ile geçerli başlangıç ve bitiş saatlerini seçin."
+            : academicYearTransitionRequired && !academicYearTransitionConfirmed
+              ? "Yeni dönem geçişi özetini okuyup onay kutusunu işaretleyin."
+              : "Bütün zorunlu bilgiler tamamlandı; sınıfı kaydedebilirsiniz.";
   const visibleCalendarDays = useMemo(
     () => calendarMonthDays(calendarMonth),
     [calendarMonth],
@@ -6771,10 +6843,10 @@ export default function Prototype() {
       return;
     }
     let copySources: TeacherOwnedDailyFlowCopySource[] = [];
-    if (!initialTemplate && teacherWorkCycle.weekly) {
+    if (!initialTemplate && planFlowTeacherWeek) {
       try {
         copySources = await loadTeacherOwnedDailyFlowCopySources(store, {
-          weeklyPlanId: teacherWorkCycle.weekly.id,
+          weeklyPlanId: planFlowTeacherWeek.id,
           beforeCivilDate: defaultPlanFlowCivilDate,
         });
       } catch {
@@ -7166,7 +7238,7 @@ export default function Prototype() {
   };
 
   const openTymmAgeGuide = () => {
-    const nextAgeBand = currentClassTymmAgeBand ?? "36-48";
+    const nextAgeBand = currentClassTymmAgeBand ?? tymmGuideAgeBand;
     const nextGuide = getTymmAgeGuide(nextAgeBand) ?? tymmAgeGuides[0];
     setTymmGuideAgeBand(nextGuide.ageBand);
     setTymmGuideDomain(nextGuide.domainOutcomeCounts[0].domain);
@@ -8037,7 +8109,7 @@ export default function Prototype() {
     );
   };
 
-  const downloadSimpleClassRoster = async () => {
+  const prepareSimpleClassRosterPdfInput = async () => {
     const snapshot = await store.readSnapshot();
     const scope = resolveActiveClassroomScope(snapshot);
     if (!scope || !configuredClassroom) {
@@ -8057,20 +8129,40 @@ export default function Prototype() {
       setStudentAddOpen(true);
       throw new Error("Sınıf listesi için önce ilk çocuğu ekleyin.");
     }
-    const [{ createSimpleClassRosterDocument }, { downloadBrowserFile }] =
-      await Promise.all([
-        import("./features/students/simple-class-roster-document.ts"),
-        import("./features/documents/browser-file-download.ts"),
-      ]);
-    const file = createSimpleClassRosterDocument({
+    return {
       scope,
       snapshot,
       schoolName,
       teacherName,
       generatedAt: new Date().toISOString(),
-    });
-    downloadBrowserFile(file);
-    setAnnouncement(`${file.rowCount} öğrencilik imzalı sınıf listesi hazırlandı.`);
+    };
+  };
+
+  const downloadSimpleClassRoster = async () => {
+    const [input, { downloadSimpleClassRosterPdf }] = await Promise.all([
+      prepareSimpleClassRosterPdfInput(),
+      import("./features/classroom/class-roster-file-actions.ts"),
+    ]);
+    const summary = await downloadSimpleClassRosterPdf(input);
+    setAnnouncement(
+      `${summary.rowCount} öğrencilik, ${summary.pageCount} sayfalık imzalı sınıf listesi PDF olarak indirildi.`,
+    );
+  };
+
+  const shareSimpleClassRoster = async () => {
+    const [input, { shareSimpleClassRosterPdf }] = await Promise.all([
+      prepareSimpleClassRosterPdfInput(),
+      import("./features/classroom/class-roster-file-actions.ts"),
+    ]);
+    const result = await shareSimpleClassRosterPdf(input);
+    setAnnouncement(
+      result === "shared"
+        ? "Sınıf listesi hassas veri onayıyla paylaşım ekranına gönderildi."
+        : result === "downloaded"
+          ? "Dosya paylaşımı desteklenmedi; sınıf listesi gerçek PDF olarak indirildi."
+          : "Sınıf listesi paylaşımı iptal edildi; dosya gönderilmedi.",
+    );
+    return result;
   };
 
   const downloadSimpleObservation = async (request: {
@@ -8092,8 +8184,13 @@ export default function Prototype() {
       setClassroomOpen(true);
       throw new Error("Belge için okul adı ve öğretmen adı soyadını bir kez yazın.");
     }
-    const { createSimpleObservationDocument, simpleObservationDocumentBlob } =
-      await import("./features/reports/simple-observation-document.ts");
+    const [
+      { createSimpleObservationDocument },
+      { shareSimpleObservationDocumentWithDownloadFallback },
+    ] = await Promise.all([
+      import("./features/reports/simple-observation-document.ts"),
+      import("./features/reports/simple-observation-share.ts"),
+    ]);
     const file = createSimpleObservationDocument({
       audience: request.audience,
       scope,
@@ -8106,16 +8203,16 @@ export default function Prototype() {
       period: request.period,
       generatedAt: new Date().toISOString(),
     });
-    const blob = simpleObservationDocumentBlob(file);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = file.fileName;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    const result =
+      await shareSimpleObservationDocumentWithDownloadFallback(file);
     setAnnouncement(
-      `${file.observationCount} kayıt içeren ${request.audience === "parent" ? "veli" : "idare"} gözlem özeti hazırlandı.`,
+      result === "shared"
+        ? `${file.observationCount} kayıt içeren ${request.audience === "parent" ? "veli" : "idare"} gözlem özeti paylaşım ekranına gönderildi.`
+        : result === "downloaded"
+          ? `${file.observationCount} kayıt içeren gözlem özeti bu cihaza indirildi.`
+          : "Gözlem özeti paylaşımı iptal edildi; dosya gönderilmedi.",
     );
+    return result;
   };
 
   const downloadSimplePlan = async (
@@ -8517,11 +8614,14 @@ export default function Prototype() {
     configuredClassroom?.schoolName?.trim() &&
       configuredClassroom.teacherName?.trim(),
   );
+  const incompleteRosterStudents = students.filter(
+    (student) => classroomRosterDocumentMissingFields(student).length > 0,
+  );
   const simpleDocumentOutputStates = {
     roster: !documentIdentityReady
       ? "needs-setup"
       : students.length > 0
-        ? "ready"
+        ? incompleteRosterStudents.length > 0 ? "incomplete" : "ready"
         : "needs-content",
     observations: !documentIdentityReady || students.length === 0
       ? "needs-setup"
@@ -8553,7 +8653,7 @@ export default function Prototype() {
   } as const;
   const renderActivityStudio = () => (
     <ActivityStudio
-      initialAgeBand={currentClassTymmAgeBand ?? "48-60"}
+      initialAgeBand={currentClassTymmAgeBand}
       initialActivityId={studioOpenOptionsRef.current.activityId}
       initialScenarioId={studioOpenOptionsRef.current.scenarioId ?? "balanced"}
       initialCollection={studioOpenOptionsRef.current.collection ?? "tumu"}
@@ -8590,7 +8690,10 @@ export default function Prototype() {
       onApply={(activity) => {
         setAnnouncement(`${activity.title} için gözetimli Çocuk Modu açıldı.`);
       }}
-      onPrint={(request) => {
+      onPrint={async (request) => {
+        const { openHtmlPrintWindow } = await import(
+          "./features/printing/open-html-print-window.ts"
+        );
         const result = openHtmlPrintWindow({
           html: request.printable.html,
           title: `${request.activity.title} · MaarifOS`,
@@ -8616,6 +8719,24 @@ export default function Prototype() {
           "preserve",
         )
       }
+      onChildModeChange={setActivityChildModeOpen}
+      emptyStateAction={
+        !currentClassTymmAgeBand ? (
+          <button
+            type="button"
+            className="sheet-primary"
+            onClick={() => {
+              setClassroomSetupSection("period");
+              setClassroomOpen(true);
+              setAnnouncement(
+                "Etkinlikleri açmak için sınıfın 36–48, 48–60 veya 60–72 ay bandını seçin.",
+              );
+            }}
+          >
+            Sınıf profilini tamamla
+          </button>
+        ) : undefined
+      }
     />
   );
   const securityGateOpen =
@@ -8626,7 +8747,9 @@ export default function Prototype() {
   if (sharedInviteRequired && !sharedInviteGranted) {
     return (
       <div className="maarif-app-shell" style={shellStyle}>
-        <InviteAccessScreen onAccessGranted={() => setSharedInviteGranted(true)} />
+        <Suspense fallback={<div className="route-loading" role="status">Erişim hazırlanıyor…</div>}>
+          <InviteAccessScreen onAccessGranted={() => setSharedInviteGranted(true)} />
+        </Suspense>
       </div>
     );
   }
@@ -8750,7 +8873,7 @@ export default function Prototype() {
                   preparationPlanningAllowed={preparationPlanningAllowed}
                   preparationPlanningCivilDate={preparationPlanningWindow.defaultCivilDate}
                   upcomingPlanningCivilDate={upcomingPlanningCivilDate}
-                  ageBand={currentClassTymmAgeBand ?? "48-60"}
+                  ageBand={currentClassTymmAgeBand}
                   civilDate={attendanceCivilDate}
                   dataBusy={dataBusy}
                   onOpenLevel={openPlanWorkbenchLevel}
@@ -8762,6 +8885,13 @@ export default function Prototype() {
                     setAnnouncement("Çıktılar.");
                   }}
                   onOpenActivityStudio={openCaptureEntry}
+                  onOpenAgeBandSetup={() => {
+                    setClassroomSetupSection("period");
+                    setClassroomOpen(true);
+                    setAnnouncement(
+                      "Plan desteği için sınıfın resmî yaş bandını seçin.",
+                    );
+                  }}
                 />
                 <section
                   className="tymm-guide-entry"
@@ -8825,6 +8955,9 @@ export default function Prototype() {
                 studentCount={students.length}
                 observationCount={allEvidenceObservations.length}
                 outputStates={simpleDocumentOutputStates}
+                incompleteRosterStudentCount={incompleteRosterStudents.length}
+                schoolNameReady={Boolean(configuredClassroom?.schoolName?.trim())}
+                teacherNameReady={Boolean(configuredClassroom?.teacherName?.trim())}
                 dataBusy={dataBusy}
                 onOpenItem={openDocumentWorkspaceItem}
                 onOpenPreparationCenter={() => {
@@ -8834,6 +8967,7 @@ export default function Prototype() {
                   setAnnouncement("Belge hazırlama alanı açıldı.");
                 }}
                 onDownloadClassRoster={downloadSimpleClassRoster}
+                onShareClassRoster={shareSimpleClassRoster}
                 onDownloadPlan={downloadSimplePlan}
                 onOpenObservationOutput={() => {
                   if (!documentIdentityReady) {
@@ -8870,6 +9004,17 @@ export default function Prototype() {
                   setAnnouncement(
                     "Çıktı için eksik okul ve öğretmen bilgileri alanı açıldı.",
                   );
+                }}
+                onOpenRosterRequirements={() => {
+                  const firstIncompleteStudent = incompleteRosterStudents[0];
+                  navigatePrimaryRoute("classroom");
+                  if (firstIncompleteStudent) {
+                    setStudentActionsOpenId(firstIncompleteStudent.id);
+                    setAnnouncement(`${firstIncompleteStudent.name} için eksik öğrenci bilgileri açıldı.`);
+                  } else {
+                    setStudentAddOpen(true);
+                    setAnnouncement("Sınıf listesi için ilk çocuğu ekleyin.");
+                  }
                 }}
               />
             </Suspense>
@@ -8971,7 +9116,7 @@ export default function Prototype() {
         </MobileScroll>
       </RouteFocusBoundary>
 
-      <nav className="bottom-nav" aria-label="Ana menü">
+      {!activityChildModeOpen ? <nav className="bottom-nav" aria-label="Ana menü">
         {visiblePrimaryNavigation().map((item) => {
           const active =
             item.id === "capture"
@@ -9011,7 +9156,7 @@ export default function Prototype() {
             </button>
           );
         })}
-      </nav>
+      </nav> : null}
 
       {futurePlanNotice ? (
         <aside className="future-plan-notice" role="status" data-testid="future-plan-notice">
@@ -9369,11 +9514,15 @@ export default function Prototype() {
           <section className="tymm-domain-section" aria-labelledby="tymm-domain-heading">
             <div className="tymm-section-heading">
               <span>
-                <small>Eksiksiz katalog sayımı</small>
+                <small>Eksiksiz öğrenme çıktısı sayımı</small>
                 <h3 id="tymm-domain-heading">Yedi öğrenme alanı</h3>
               </span>
               <TargetIcon aria-hidden="true" />
             </div>
+            <p className="catalog-scope-note">
+              Bu sayı yalnız resmî öğrenme çıktılarını kapsar; alan becerileri,
+              süreç ve programlar arası bileşenler planlarda ayrı izlenir.
+            </p>
             <div className="tymm-domain-tabs" role="tablist" aria-label="Öğrenme alanları">
               {selectedTymmGuide.domainOutcomeCounts.map((item) => (
                 <button
@@ -9788,6 +9937,7 @@ export default function Prototype() {
               <label htmlFor="school-name">Okul adı</label>
               <KeyboardInput
                 id="school-name"
+                autoFocus
                 value={classroomForm.schoolName}
                 onChange={(event) => setClassroomForm((current) => ({ ...current, schoolName: event.target.value }))}
                 placeholder="Örn. Cumhuriyet Anaokulu"
@@ -10002,6 +10152,7 @@ export default function Prototype() {
             <button
               className="sheet-primary"
               type="submit"
+              aria-describedby="classroom-setup-submit-hint"
               disabled={
                 dataBusy ||
                 writesBlocked ||
@@ -10015,6 +10166,9 @@ export default function Prototype() {
                   ? "Yeni eğitim yılına geç"
                   : "Sınıfımı hazırla"}
             </button>
+            <small id="classroom-setup-submit-hint" aria-live="polite">
+              {classroomSetupSubmitHint}
+            </small>
           </div>
         </form>
       </BottomSheet>
@@ -13045,15 +13199,19 @@ export default function Prototype() {
                 initialPedagogicalProvenance={
                   studioPedagogicalProvenance ?? undefined
                 }
+                enforceOfficialTeachingDays={academicYearMatchesCalendarProfile(
+                  configuredClassroom,
+                  OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+                )}
                 teacherOwnedDailyFlowContext={
                   !premiumDailyTemplate &&
                   !scheduledPlanEditDraft?.premium &&
-                  teacherWorkCycle.weekly
+                  planFlowTeacherWeek
                     ? {
                         schedule: configuredClassroom.schedule,
-                        weeklyPlanId: teacherWorkCycle.weekly.id,
-                        allowedDateStart: teacherWorkCycle.weekly.periodStart,
-                        allowedDateEnd: teacherWorkCycle.weekly.periodEnd,
+                        weeklyPlanId: planFlowTeacherWeek.id,
+                        allowedDateStart: planFlowTeacherWeek.periodStart,
+                        allowedDateEnd: planFlowTeacherWeek.periodEnd,
                         ...(teacherOwnedDailyFlowCopySources.length > 0
                           ? { copySources: teacherOwnedDailyFlowCopySources }
                           : {}),

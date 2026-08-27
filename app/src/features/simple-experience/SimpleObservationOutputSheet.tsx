@@ -2,10 +2,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import { FileTextIcon, PersonIcon } from "@radix-ui/react-icons";
 
 import { BottomSheet, KeyboardInput } from "../../mobile";
+import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+} from "../feedback/teacher-feedback.ts";
 import type {
   SimpleObservationDocumentAudience,
   SimpleObservationPeriod,
 } from "../reports/simple-observation-document.ts";
+import type { SimpleObservationShareResult } from "../reports/simple-observation-share.ts";
 import "./simple-observation-output-sheet.css";
 
 export interface SimpleObservationOutputStudent {
@@ -32,7 +38,7 @@ export interface SimpleObservationOutputSheetProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onGenerate: (
     request: SimpleObservationOutputRequest,
-  ) => void | Promise<void>;
+  ) => SimpleObservationShareResult | Promise<SimpleObservationShareResult>;
 }
 
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
@@ -109,6 +115,7 @@ export function SimpleObservationOutputSheet({
   const [endCivilDate, setEndCivilDate] = useState(initialEndCivilDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -119,6 +126,7 @@ export function SimpleObservationOutputSheet({
       setStartCivilDate(initialStartCivilDate);
       setEndCivilDate(initialEndCivilDate);
       setError("");
+      setFeedback(null);
       setStatus("");
     } else if (!open && wasOpenRef.current) {
       sessionRef.current += 1;
@@ -141,12 +149,14 @@ export function SimpleObservationOutputSheet({
     ) {
       setStudentId(students[0]?.id ?? "");
       setError("");
+      setFeedback(null);
       setStatus("");
     }
   }, [open, studentId, students]);
 
   const clearFeedback = () => {
     setError("");
+    setFeedback(null);
     setStatus("");
   };
 
@@ -175,19 +185,27 @@ export function SimpleObservationOutputSheet({
     operationRef.current = operation;
     setBusy(true);
     setError("");
+    setFeedback(null);
     setStatus("Belge hazırlanıyor…");
     try {
-      await onGenerate(request);
+      const result = await onGenerate(request);
       if (sessionRef.current === session) {
-        setStatus("Belge bu cihazda hazırlandı.");
+        setStatus(
+          result === "shared"
+            ? "Belge telefonunuzun paylaşım ekranına gönderildi."
+            : result === "downloaded"
+              ? "Paylaşım desteklenmedi; belge onayınızla bu cihaza indirildi."
+              : "Paylaşım iptal edildi; belge gönderilmedi veya indirilmedi.",
+        );
       }
     } catch (reason) {
       if (sessionRef.current === session) {
         setStatus("");
-        setError(
-          reason instanceof Error && reason.message.trim()
-            ? reason.message
-            : "Belge hazırlanamadı. Tekrar deneyin.",
+        setFeedback(
+          createTeacherFeedback(reason, {
+            fallbackDetail:
+              "Gözlem belgesi hazırlanamadı. Seçimleriniz korunuyor; yeniden deneyebilirsiniz.",
+          }),
         );
       }
     } finally {
@@ -203,7 +221,7 @@ export function SimpleObservationOutputSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Gözlem özeti"
-      description="Çocuğu, kimin için olduğunu ve dönemi seçin. Belge bu cihazda hazırlanır."
+      description="Çocuğu, kimin için olduğunu ve dönemi seçin. Kişisel veri uyarısından sonra telefonda paylaşabilir veya indirebilirsiniz."
       snap={0.9}
     >
       <form
@@ -328,6 +346,13 @@ export function SimpleObservationOutputSheet({
             {error}
           </p>
         ) : null}
+        {feedback ? (
+          <TeacherFeedbackPanel
+            feedback={feedback}
+            onAction={() => void handleSubmit()}
+            compact
+          />
+        ) : null}
         {status ? (
           <p
             className="simple-observation-output__feedback is-status"
@@ -345,7 +370,7 @@ export function SimpleObservationOutputSheet({
             aria-describedby="simple-observation-output-hint"
           >
             <FileTextIcon aria-hidden="true" />
-            {busy ? "Hazırlanıyor…" : "Belgeyi hazırla"}
+            {busy ? "Hazırlanıyor…" : "Paylaş veya indir"}
           </button>
           <small id="simple-observation-output-hint">
             {students.length === 0

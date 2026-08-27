@@ -137,7 +137,7 @@ export function createMarifTeacherAgentBrief(
   }
 
   const evidence = [
-    `Kurulum ${input.setup.completedCount}/${input.setup.totalCount}`,
+    `Sınıf ${input.control.attendance.expected} çocuk`,
     input.educationalWritesDisabled
       ? "Yoklama öğretmen başlatınca açılacak"
       : `Yoklama ${input.control.attendance.expected - input.control.attendance.unmarked}/${input.control.attendance.expected}`,

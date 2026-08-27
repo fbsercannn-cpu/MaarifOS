@@ -161,3 +161,21 @@ export function assertPedagogicalPlanProvenance(
     throw new Error(`${label} geçersiz veya değiştirilmiş.`);
   }
 }
+
+/**
+ * Etkinlik Atölyesi bağlamını öğretmenin son seçtiği plan gününe bağlar.
+ * Kaynak etkinlik, uyarlama ve değer izi değişmez; yalnız plan gününün tek
+ * otoritesi olan civilDate yeniden yazılır.
+ */
+export function bindPedagogicalPlanProvenanceToCivilDate(
+  provenance: PedagogicalPlanProvenance,
+  civilDate: string,
+): PedagogicalPlanProvenance {
+  assertPedagogicalPlanProvenance(provenance);
+  const bound: PedagogicalPlanProvenance = {
+    ...provenance,
+    civilDate,
+  };
+  assertPedagogicalPlanProvenance(bound);
+  return Object.freeze(bound);
+}

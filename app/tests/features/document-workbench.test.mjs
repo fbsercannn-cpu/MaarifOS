@@ -95,5 +95,9 @@ test("Çıktılar navigasyonu kalıcı route açar ve tek dokunuş handler'ları
   assert.match(screenSource, /state === "needs-setup"/);
   assert.match(screenSource, /onOpenSetup\(\)/);
   assert.match(prototypeSource, /onOpenSetup=\{\(\) =>/);
-  assert.doesNotMatch(screenSource, /onay/iu);
+  assert.match(screenSource, /else await onDownloadPlan\(id\);/u);
+  assert.match(
+    screenSource,
+    /Hassas veri onayından sonra sınıf listesi paylaşım ekranına gönderildi\./u,
+  );
 });

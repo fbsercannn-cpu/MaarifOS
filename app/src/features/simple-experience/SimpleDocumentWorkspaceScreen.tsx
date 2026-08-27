@@ -8,6 +8,11 @@ import {
 } from "@radix-ui/react-icons";
 
 import type { DocumentWorkspaceScreenProps } from "../documents/DocumentWorkspaceScreen.tsx";
+import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+} from "../feedback/teacher-feedback.ts";
 import "./simple-workspaces.css";
 
 export type SimplePlanOutputKind = "annual" | "monthly" | "weekly" | "daily";
@@ -21,10 +26,16 @@ export type SimpleDocumentOutputState =
 export interface SimpleDocumentWorkspaceScreenProps
   extends DocumentWorkspaceScreenProps {
   onDownloadClassRoster(): void | Promise<void>;
+  onShareClassRoster(): Promise<"shared" | "downloaded" | "cancelled">;
   onDownloadPlan(kind: SimplePlanOutputKind): void | Promise<void>;
   onOpenObservationOutput(): void;
   onOpenSetup(): void;
+  onOpenRosterRequirements(): void;
   outputStates?: Partial<Record<SimpleDocumentOutputId, SimpleDocumentOutputState>>;
+  outputRequirements?: Partial<Record<SimpleDocumentOutputId, string>>;
+  incompleteRosterStudentCount?: number;
+  schoolNameReady?: boolean;
+  teacherNameReady?: boolean;
 }
 
 const OUTPUTS = [
@@ -32,7 +43,7 @@ const OUTPUTS = [
     id: "roster",
     label: "İDARE",
     title: "Sınıf listesi",
-    detail: "Öğrenci no, T.C. kimlik, veli ve imza alanlı yazdırılabilir dosya",
+    detail: "Öğrenci no, T.C. kimlik, veli ve imza alanlı gerçek A4 PDF",
     icon: PersonIcon,
   },
   {
@@ -101,7 +112,8 @@ function outputAction(
   state: SimpleDocumentOutputState,
 ): string {
   if (state === "ready") {
-    if (id === "roster" || id === "observations") return "Yazdırılabilir dosya";
+    if (id === "roster") return "PDF indir";
+    if (id === "observations") return "Yazdırılabilir dosya";
     return "PDF";
   }
   if (state === "needs-setup" || id === "roster") return "Bilgileri tamamla";
@@ -116,19 +128,36 @@ export function SimpleDocumentWorkspaceScreen({
   observationCount,
   dataBusy,
   onDownloadClassRoster,
+  onShareClassRoster,
   onDownloadPlan,
   onOpenObservationOutput,
   onOpenSetup,
+  onOpenRosterRequirements,
   onOpenPreparationCenter,
   outputStates,
+  outputRequirements,
+  incompleteRosterStudentCount = 0,
+  schoolNameReady = true,
+  teacherNameReady = true,
 }: SimpleDocumentWorkspaceScreenProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
+  const [retryId, setRetryId] = useState<SimpleDocumentOutputId | "roster-share" | null>(null);
+  const setupRequirement = [
+    schoolNameReady ? null : "okul adı",
+    teacherNameReady ? null : "öğretmen adı soyadı",
+  ].filter((field): field is string => field !== null).join(" ve ");
+  const rosterRequirement = incompleteRosterStudentCount > 0
+    ? `${incompleteRosterStudentCount} çocuk için öğrenci no, T.C. kimlik veya veli iletişimi tamamlanmalı.`
+    : undefined;
 
   const run = async (id: (typeof OUTPUTS)[number]["id"]) => {
     if (busyId || dataBusy) return;
     setBusyId(id);
     setMessage("");
+    setFeedback(null);
+    setRetryId(null);
     try {
       const state = outputStates?.[id] ?? defaultOutputState(id, {
         workspace,
@@ -140,6 +169,11 @@ export function SimpleDocumentWorkspaceScreen({
         setMessage("Eksik okul ve öğretmen bilgileri alanı açıldı.");
         return;
       }
+      if (id === "roster" && state !== "ready") {
+        onOpenRosterRequirements();
+        setMessage(outputRequirements?.roster ?? rosterRequirement ?? "Sınıf listesi için eksik öğrenci bilgileri açıldı.");
+        return;
+      }
       if (id === "roster") await onDownloadClassRoster();
       else if (id === "observations") onOpenObservationOutput();
       else await onDownloadPlan(id);
@@ -147,11 +181,64 @@ export function SimpleDocumentWorkspaceScreen({
         id === "observations"
           ? "Gözlem için yazdırılabilir dosya alanı açıldı."
           : id === "roster"
-            ? "Yazdırılabilir dosya bu cihazda hazırlandı."
+            ? "Gerçek A4 PDF bu cihazda indirildi; PDF önizlemesinden açıp yazdırabilirsiniz."
             : "PDF bu cihazda hazırlandı.",
       );
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Belge hazırlanamadı.");
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Belge hazırlanamadı. Seçiminiz korunuyor; yeniden deneyebilirsiniz.",
+        }),
+      );
+      setRetryId(id);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const shareRoster = async () => {
+    if (busyId || dataBusy) return;
+    setBusyId("roster-share");
+    setMessage("");
+    setFeedback(null);
+    setRetryId(null);
+    try {
+      const state = outputStates?.roster ?? defaultOutputState("roster", {
+        workspace,
+        studentCount,
+        observationCount,
+      });
+      if (state === "needs-setup") {
+        onOpenSetup();
+        setMessage("Eksik okul ve öğretmen bilgileri alanı açıldı.");
+        return;
+      }
+      if (state !== "ready") {
+        onOpenRosterRequirements();
+        setMessage(
+          outputRequirements?.roster ??
+            rosterRequirement ??
+            "Sınıf listesi için eksik öğrenci bilgileri açıldı.",
+        );
+        return;
+      }
+      const result = await onShareClassRoster();
+      setMessage(
+        result === "shared"
+          ? "Hassas veri onayından sonra sınıf listesi paylaşım ekranına gönderildi."
+          : result === "downloaded"
+            ? "Bu telefon PDF dosyası paylaşımını desteklemedi; aynı gerçek PDF güvenli indirme olarak hazırlandı."
+            : "Paylaşım iptal edildi; hiçbir dosya gönderilmedi veya indirilmedi.",
+      );
+    } catch (reason) {
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Sınıf listesi paylaşılamadı. Hiçbir dosya gönderilmedi; yeniden deneyebilirsiniz.",
+        }),
+      );
+      setRetryId("roster-share");
     } finally {
       setBusyId(null);
     }
@@ -169,6 +256,22 @@ export function SimpleDocumentWorkspaceScreen({
         </div>
       </header>
 
+      {setupRequirement.length > 0 ? (
+        <button
+          type="button"
+          className="simple-workspace__setup-banner"
+          onClick={onOpenSetup}
+        >
+          <span>
+            <small>BİR KEZ TAMAMLAYIN</small>
+            <strong>Belgeler için {setupRequirement} eksik</strong>
+            <em>Tamamladığınızda bütün uygun çıktılar tek dokunuşla açılır.</em>
+          </span>
+          <b>Bilgileri yaz</b>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
+      ) : null}
+
       <section className="simple-workspace__section" aria-labelledby="simple-outputs-heading">
         <div className="simple-workspace__heading">
           <div>
@@ -185,6 +288,8 @@ export function SimpleDocumentWorkspaceScreen({
               observationCount,
             });
             const action = outputAction(output.id, state);
+            const requirement = outputRequirements?.[output.id] ??
+              (output.id === "roster" ? rosterRequirement : undefined);
             const busy = busyId === output.id;
             return (
               <button
@@ -193,13 +298,13 @@ export function SimpleDocumentWorkspaceScreen({
                 onClick={() => void run(output.id)}
                 disabled={dataBusy || busyId !== null}
                 aria-busy={busy}
-                aria-label={`${output.title}. Durum: ${STATE_LABELS[state]}. ${busy ? "Hazırlanıyor" : action}. ${output.detail}`}
+                aria-label={`${output.title}. Durum: ${STATE_LABELS[state]}. ${busy ? "Hazırlanıyor" : action}. ${requirement ?? output.detail}`}
               >
                 <span className="simple-action-list__icon" aria-hidden="true"><Icon /></span>
                 <span>
                   <small>{output.label}</small>
                   <strong>{output.title}</strong>
-                  <em>{output.detail}</em>
+                  <em>{requirement ?? output.detail}</em>
                 </span>
                 <span className={`simple-state is-${state}`}>
                   {busy ? "Hazırlanıyor" : action}
@@ -209,7 +314,34 @@ export function SimpleDocumentWorkspaceScreen({
             );
           })}
         </div>
+        <button
+          type="button"
+          className="simple-workspace__advanced-documents"
+          onClick={() => void shareRoster()}
+          disabled={dataBusy || busyId !== null}
+          aria-busy={busyId === "roster-share"}
+        >
+          <PersonIcon aria-hidden="true" />
+          <span>
+            <strong>{busyId === "roster-share" ? "Sınıf listesi PDF hazırlanıyor…" : "Sınıf listesi PDF paylaş"}</strong>
+            <small>T.C. kimlik ve veli telefonu içerir; önce açık uyarı gösterilir. Dosya paylaşımı yoksa PDF indirilir.</small>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
         {message ? <p className="simple-workspace__message" role="status">{message}</p> : null}
+        {feedback ? (
+          <TeacherFeedbackPanel
+            feedback={feedback}
+            onAction={
+              retryId === "roster-share"
+                ? () => void shareRoster()
+                : retryId
+                  ? () => void run(retryId)
+                  : undefined
+            }
+            compact
+          />
+        ) : null}
       </section>
 
       <button

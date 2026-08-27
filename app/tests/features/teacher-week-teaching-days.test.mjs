@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   localNoSchoolPeriodsFromCalendarEntries,
+  officialTeachingCivilDates2026_2027,
+  resolveOfficialTeachingCivilDate,
   resolveTeacherWeekTeachingDays,
 } from "../../src/features/planning/teacher-week-teaching-days.ts";
 
@@ -141,6 +143,50 @@ test("ara tatili ve tam gün resmî tatilleri, Kurban günleri dahil, öğretim 
     sacrificeWeek.provenance.excludedPeriodIds.includes("sacrifice-feast"),
     true,
   );
+});
+
+test("günlük plan tarihi resmî takvimde fail-closed çözülür ve en yakın öğretim gününü verir", () => {
+  const dates = officialTeachingCivilDates2026_2027();
+  assert.equal(dates.length, 186);
+  assert.equal(dates[0], "2026-09-07");
+  assert.equal(dates.at(-1), "2027-06-25");
+
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2026-09-01"), {
+    applies: true,
+    civilDate: "2026-09-01",
+    isTeachingDay: false,
+    nearestCivilDate: "2026-09-07",
+  });
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2026-09-14"), {
+    applies: true,
+    civilDate: "2026-09-14",
+    isTeachingDay: true,
+    nearestCivilDate: "2026-09-14",
+  });
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2026-11-16"), {
+    applies: true,
+    civilDate: "2026-11-16",
+    isTeachingDay: false,
+    nearestCivilDate: "2026-11-13",
+  });
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2027-01-30"), {
+    applies: true,
+    civilDate: "2027-01-30",
+    isTeachingDay: false,
+    nearestCivilDate: "2027-01-22",
+  });
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2027-06-26"), {
+    applies: true,
+    civilDate: "2027-06-26",
+    isTeachingDay: false,
+    nearestCivilDate: "2027-06-25",
+  });
+  assert.deepEqual(resolveOfficialTeachingCivilDate("2026-08-27"), {
+    applies: false,
+    civilDate: "2026-08-27",
+    isTeachingDay: false,
+    nearestCivilDate: null,
+  });
 });
 
 test("özel eğitim yılında Mon–Fri fallback ve açık kaynaklı no-school istisnasını provenance ile görünür kılar", () => {

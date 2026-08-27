@@ -5,6 +5,7 @@ test.describe.configure({ timeout: 60_000 });
 async function configureClassroomWithoutStudents(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   await expect(setup).toBeVisible({ timeout: 15_000 });
+  await expect(setup.getByLabel("Okul adı")).toBeFocused();
 
   await setup.getByLabel("Okul adı").fill("Kurgu Mobil Anaokulu");
   await setup.getByLabel("Öğretmen adı soyadı").fill("Kurgu Öğretmen");
@@ -128,32 +129,35 @@ test("aktif alt menü göstergesi düğme içinde kalır ve kaydırma sonrası s
 
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Planlar", exact: true })).toBeVisible();
+  await expect(page.locator(".mobile-scroll")).toHaveJSProperty("scrollTop", 0);
   await expect(page.getByRole("button", { name: "Planlar", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
 });
 
-test("320 pikselde hazırlanmış asistan kartları kırpılmaz", async ({
+test("320 pikselde öğretmen masası kartları kırpılmaz", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/?native=1");
   await configureClassroomWithoutStudents(page);
 
-  const quickActions = page.locator(".simple-today__prepared-list");
-  await expect(quickActions).toBeVisible();
-  const layout = await quickActions.evaluate((region) => {
+  const teacherDesk = page.locator(".simple-today__desk-grid");
+  await expect(teacherDesk).toBeVisible();
+  const layout = await teacherDesk.evaluate((region) => {
     const titles = [...region.querySelectorAll("button strong")];
     return {
       buttonCount: region.querySelectorAll(":scope > button").length,
+      horizontalOverflow: region.scrollWidth > region.clientWidth + 1,
       clippedTitles: titles
         .filter((title) => title.scrollHeight > title.clientHeight + 1)
         .map((title) => title.textContent?.trim() ?? ""),
     };
   });
 
-  expect(layout.buttonCount).toBe(2);
+  expect(layout.buttonCount).toBe(4);
+  expect(layout.horizontalOverflow).toBe(false);
   expect(layout.clippedTitles).toEqual([]);
 });
 
@@ -316,6 +320,7 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
 
   const studio = page.locator("main.activity-studio");
   await expect(studio).toBeVisible();
+  await studio.getByRole("button", { name: "Tüm filtreler", exact: true }).click();
   await studio
     .locator(".activity-studio__category-options")
     .getByRole("button", { name: "Çizim", exact: true })
@@ -327,12 +332,14 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
 
   const childMode = page.locator("main.activity-child-mode");
   await expect(childMode).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Ana menü" })).toHaveCount(0);
+  await expect(page.locator(".mobile-scroll")).toHaveJSProperty("scrollTop", 0);
 
   for (const label of ["PNG indir", "Yazdır"] as const) {
-    await expectAboveBottomNavigationAndHitTestable(
-      page,
-      childMode.getByRole("button", { name: label, exact: true }),
-    );
+    const target = childMode.getByRole("button", { name: label, exact: true });
+    await target.scrollIntoViewIfNeeded();
+    await expect(target).toBeVisible();
+    await expect(target).toBeInViewport();
   }
 
   const footer = childMode.locator(".activity-child-mode__footer");
@@ -341,10 +348,10 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
     "Pas geç",
     "Öğretmene dön",
   ] as const) {
-    await expectAboveBottomNavigationAndHitTestable(
-      page,
-      footer.getByRole("button", { name: label, exact: true }),
-    );
+    const target = footer.getByRole("button", { name: label, exact: true });
+    await target.scrollIntoViewIfNeeded();
+    await expect(target).toBeVisible();
+    await expect(target).toBeInViewport();
   }
 
   await footer.getByRole("button", { name: "Öğretmene dön", exact: true }).click();

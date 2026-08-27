@@ -97,6 +97,13 @@ export interface TeacherWeekTeachingDayResolution {
   readonly provenance: TeachingDayResolutionProvenance;
 }
 
+export interface OfficialTeachingCivilDateResolution {
+  readonly applies: boolean;
+  readonly civilDate: string;
+  readonly isTeachingDay: boolean;
+  readonly nearestCivilDate: string | null;
+}
+
 export interface ResolveTeacherWeekTeachingDaysInput {
   readonly academicYear: Pick<
     StoredRecord,
@@ -344,6 +351,90 @@ export function resolveTeacherWeekTeachingDays(
     scheduleEndTime: schedule?.endTime ?? null,
     timeZone: CLASSROOM_TIME_ZONE,
     provenance,
+  };
+}
+
+let officialTeachingCivilDatesCache: readonly string[] | null = null;
+
+/**
+ * Günlük, haftalık ve yıllık planların aynı tarih kümesini kullanması için
+ * 2026–2027 okul öncesi öğretim günlerini tek kanonik çözümleyiciden üretir.
+ */
+export function officialTeachingCivilDates2026_2027(): readonly string[] {
+  if (officialTeachingCivilDatesCache) return officialTeachingCivilDatesCache;
+  officialTeachingCivilDatesCache = Object.freeze([
+    ...resolveTeacherWeekTeachingDays({
+      academicYear: {
+        id: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id,
+        name: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
+        startDate: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+        endDate: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+      },
+      weekly: {
+        id: `${OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id}-all-teaching-days`,
+        periodStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+        periodEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalEndDate,
+      },
+    }).expectedCivilDates,
+  ]);
+  return officialTeachingCivilDatesCache;
+}
+
+function civilDateDistance(left: string, right: string): number {
+  return Math.abs(
+    Date.parse(`${left}T12:00:00.000Z`) -
+      Date.parse(`${right}T12:00:00.000Z`),
+  );
+}
+
+export function resolveOfficialTeachingCivilDate(
+  civilDate: string,
+): OfficialTeachingCivilDateResolution {
+  if (
+    !isCivilDate(civilDate) ||
+    civilDate < OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate ||
+    civilDate > OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate
+  ) {
+    return {
+      applies: false,
+      civilDate,
+      isTeachingDay: false,
+      nearestCivilDate: null,
+    };
+  }
+
+  const teachingCivilDates = officialTeachingCivilDates2026_2027();
+  const isTeachingDay = teachingCivilDates.includes(civilDate);
+  if (isTeachingDay) {
+    return {
+      applies: true,
+      civilDate,
+      isTeachingDay: true,
+      nearestCivilDate: civilDate,
+    };
+  }
+
+  const nextCivilDateIndex = teachingCivilDates.findIndex(
+    (candidate) => candidate > civilDate,
+  );
+  const nextCivilDate = nextCivilDateIndex >= 0
+    ? teachingCivilDates[nextCivilDateIndex] ?? null
+    : null;
+  const previousCivilDate = nextCivilDateIndex === -1
+    ? teachingCivilDates.at(-1) ?? null
+    : teachingCivilDates[nextCivilDateIndex - 1] ?? null;
+  const nearestCivilDate = previousCivilDate && nextCivilDate
+    ? civilDateDistance(civilDate, nextCivilDate) <=
+        civilDateDistance(civilDate, previousCivilDate)
+      ? nextCivilDate
+      : previousCivilDate
+    : nextCivilDate ?? previousCivilDate;
+
+  return {
+    applies: true,
+    civilDate,
+    isTeachingDay: false,
+    nearestCivilDate,
   };
 }
 

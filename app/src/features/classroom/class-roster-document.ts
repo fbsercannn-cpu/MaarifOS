@@ -1,9 +1,40 @@
 import type { ActiveClassroomScope } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
+import {
+  A4_PDF_CANVAS_HEIGHT,
+  A4_PDF_CANVAS_WIDTH,
+  createA4ImagePdf,
+  jpegDataUrlBytes,
+} from "../documents/canvas-image-pdf.ts";
 
 export const CLASS_ROSTER_DOCUMENT_FORMAT = "html" as const;
 export const CLASS_ROSTER_DOCUMENT_MIME_TYPE = "text/html;charset=utf-8" as const;
 export const CLASS_ROSTER_HTML_FILE_SIGNATURE = "<!doctype html>" as const;
+export const CLASS_ROSTER_DOCUMENT_KIND = "class-roster" as const;
+export const CLASS_ROSTER_PDF_FORMAT = "pdf" as const;
+export const CLASS_ROSTER_PDF_MIME_TYPE = "application/pdf" as const;
+export const CLASS_ROSTER_PDF_FILE_SIGNATURE = "%PDF-" as const;
+
+/**
+ * Bu kabiliyetler üretilen gerçek baytları tarif eder. HTML dosyasını PDF diye
+ * etiketlemez ve cihazda bulunup bulunmadığı bilinmeyen paylaşım API'sini vaat
+ * etmez.
+ */
+export const CLASS_ROSTER_DOCUMENT_CAPABILITIES = Object.freeze({
+  preview: "local-html" as const,
+  download: "html-file" as const,
+  print: "browser-dialog-after-open" as const,
+  share: "platform-dependent" as const,
+  pdf: "not-generated" as const,
+});
+
+export const CLASS_ROSTER_PDF_CAPABILITIES = Object.freeze({
+  preview: "local-html" as const,
+  download: "pdf-file" as const,
+  print: "pdf-viewer" as const,
+  share: "web-share-file-with-download-fallback" as const,
+  pdf: "generated" as const,
+});
 
 export interface ClassRosterDocumentInput {
   readonly scope: ActiveClassroomScope;
@@ -15,15 +46,92 @@ export interface ClassRosterDocumentInput {
 }
 
 export interface ClassRosterDocumentFile {
+  readonly documentKind: typeof CLASS_ROSTER_DOCUMENT_KIND;
   readonly format: typeof CLASS_ROSTER_DOCUMENT_FORMAT;
   readonly fileName: string;
   readonly mimeType: typeof CLASS_ROSTER_DOCUMENT_MIME_TYPE;
   readonly bytes: Uint8Array;
   readonly html: string;
   readonly rowCount: number;
+  readonly pageCount: number;
+  readonly containsSensitiveData: true;
+  readonly capabilities: typeof CLASS_ROSTER_DOCUMENT_CAPABILITIES;
   readonly generatedAt: string;
   readonly generatedCivilDate: string;
   readonly scope: ActiveClassroomScope;
+}
+
+export interface ClassRosterPdfRuntime {
+  readonly createCanvas?: () => HTMLCanvasElement;
+  readonly waitForFonts?: () => Promise<void>;
+}
+
+export interface ClassRosterPdfDocumentFile {
+  readonly documentKind: typeof CLASS_ROSTER_DOCUMENT_KIND;
+  readonly format: typeof CLASS_ROSTER_PDF_FORMAT;
+  readonly fileName: string;
+  readonly mimeType: typeof CLASS_ROSTER_PDF_MIME_TYPE;
+  readonly bytes: Uint8Array;
+  /** Aynı doğrulanmış satırların yerel, dış kaynaksız HTML önizlemesi. */
+  readonly html: string;
+  readonly htmlFileName: string;
+  readonly rowCount: number;
+  readonly pageCount: number;
+  readonly containsSensitiveData: true;
+  readonly capabilities: typeof CLASS_ROSTER_PDF_CAPABILITIES;
+  readonly generatedAt: string;
+  readonly generatedCivilDate: string;
+  readonly scope: ActiveClassroomScope;
+}
+
+export interface ClassRosterPdfDocumentOutputContract {
+  readonly metadata: Readonly<{
+    documentKind: typeof CLASS_ROSTER_DOCUMENT_KIND;
+    format: typeof CLASS_ROSTER_PDF_FORMAT;
+    rowCount: number;
+    pageCount: number;
+    generatedAt: string;
+    generatedCivilDate: string;
+    containsSensitiveData: true;
+  }>;
+  readonly preview: Readonly<{
+    kind: "local-html";
+    title: string;
+    html: string;
+    mimeType: typeof CLASS_ROSTER_DOCUMENT_MIME_TYPE;
+  }>;
+  readonly download: Readonly<{
+    kind: "pdf-file";
+    fileName: string;
+    mimeType: typeof CLASS_ROSTER_PDF_MIME_TYPE;
+    bytes: Uint8Array;
+  }>;
+  readonly capabilities: typeof CLASS_ROSTER_PDF_CAPABILITIES;
+}
+
+export interface ClassRosterDocumentOutputContract {
+  readonly metadata: Readonly<{
+    documentKind: typeof CLASS_ROSTER_DOCUMENT_KIND;
+    format: typeof CLASS_ROSTER_DOCUMENT_FORMAT;
+    rowCount: number;
+    pageCount: number;
+    generatedAt: string;
+    generatedCivilDate: string;
+    containsSensitiveData: true;
+  }>;
+  readonly preview: Readonly<{
+    kind: "local-html";
+    title: string;
+    html: string;
+    mimeType: typeof CLASS_ROSTER_DOCUMENT_MIME_TYPE;
+  }>;
+  readonly download: Readonly<{
+    kind: "html-file";
+    fileName: string;
+    mimeType: typeof CLASS_ROSTER_DOCUMENT_MIME_TYPE;
+    bytes: Uint8Array;
+  }>;
+  readonly capabilities: typeof CLASS_ROSTER_DOCUMENT_CAPABILITIES;
 }
 
 interface RosterContact {
@@ -201,22 +309,25 @@ function estimatedWrappedLines(value: string, charactersPerLine: number): number
  * Sabit satır yüksekliği uygulanmaz; gerçek içerik yine serbestçe büyür.
  */
 function estimatedRosterRowHeightMm(row: RosterRow): number {
-  const nameLines = estimatedWrappedLines(row.fullName, 24);
+  // A4 tablo sütunlarının gerçek 9pt yazı genişliğine göre ihtiyatlı karakter
+  // bütçeleri. Özellikle uzun Türkçe unvanlar ve biçimlendirilmiş telefonlar
+  // tarayıcıda estimator'ın önceki değerinden daha erken sarılıyor.
+  const nameLines = estimatedWrappedLines(row.fullName, 15);
   const contactLabelLines = row.contacts.length === 0
     ? 1
     : row.contacts.reduce(
-        (sum, contact) => sum + estimatedWrappedLines(contact.label, 30),
+        (sum, contact) => sum + estimatedWrappedLines(contact.label, 18),
         0,
       );
   const contactPhoneLines = row.contacts.length === 0
     ? 1
     : row.contacts.reduce(
-        (sum, contact) => sum + estimatedWrappedLines(contact.phone, 23),
+        (sum, contact) => sum + estimatedWrappedLines(contact.phone, 13),
         0,
       );
   const separatorAllowance = Math.max(0, row.contacts.length - 1) * 1.8;
   const contentLines = Math.max(nameLines, contactLabelLines, contactPhoneLines);
-  return 4.2 + contentLines * 3.35 + separatorAllowance;
+  return 5 + contentLines * 4 + separatorAllowance;
 }
 
 function paginateRosterRows(rows: readonly RosterRow[]): RosterRow[][] {
@@ -232,39 +343,63 @@ function paginateRosterRows(rows: readonly RosterRow[]): RosterRow[][] {
     pageCount += 1;
   }
 
-  const pages: RosterRow[][] = [];
-  let rowIndex = 0;
-  let remainingHeight = totalHeight;
-  let remainingBalanceWeight =
-    (pageCount - 1) * STANDARD_PAGE_BALANCE_WEIGHT +
-    SIGNATURE_PAGE_BALANCE_WEIGHT;
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-    const pagesAfterThis = pageCount - pageIndex - 1;
-    const capacity = pagesAfterThis === 0
-      ? SIGNATURE_PAGE_ROW_BUDGET_MM
-      : STANDARD_PAGE_ROW_BUDGET_MM;
-    const balanceWeight = pagesAfterThis === 0
-      ? SIGNATURE_PAGE_BALANCE_WEIGHT
-      : STANDARD_PAGE_BALANCE_WEIGHT;
-    const targetHeight =
-      remainingHeight * (balanceWeight / remainingBalanceWeight);
-    const startIndex = rowIndex;
-    let used = 0;
-    while (rowIndex < rows.length - pagesAfterThis) {
-      const nextHeight = heights[rowIndex];
-      if (rowIndex > startIndex) {
-        const currentDistance = Math.abs(targetHeight - used);
-        const nextDistance = Math.abs(targetHeight - (used + nextHeight));
-        if (used + nextHeight > capacity || nextDistance > currentDistance) break;
+  // Toplam yükseklik hesabı satırların bölünebildiğini varsayar. Uzun ve
+  // birbirinden farklı satırlar son sayfaya yığıldığında bu varsayım tutmaz;
+  // son satırların sessizce dışarıda kalmasına asla izin vermeden sayfa sayısını
+  // artırıp yeniden dengeleriz.
+  while (pageCount <= rows.length) {
+    const pages: RosterRow[][] = [];
+    const pageHeights: number[] = [];
+    let rowIndex = 0;
+    let remainingHeight = totalHeight;
+    let remainingBalanceWeight =
+      (pageCount - 1) * STANDARD_PAGE_BALANCE_WEIGHT +
+      SIGNATURE_PAGE_BALANCE_WEIGHT;
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      const pagesAfterThis = pageCount - pageIndex - 1;
+      const capacity = pagesAfterThis === 0
+        ? SIGNATURE_PAGE_ROW_BUDGET_MM
+        : STANDARD_PAGE_ROW_BUDGET_MM;
+      const balanceWeight = pagesAfterThis === 0
+        ? SIGNATURE_PAGE_BALANCE_WEIGHT
+        : STANDARD_PAGE_BALANCE_WEIGHT;
+      const targetHeight =
+        remainingHeight * (balanceWeight / remainingBalanceWeight);
+      const startIndex = rowIndex;
+      let used = 0;
+      if (pagesAfterThis === 0) {
+        while (rowIndex < rows.length) {
+          used += heights[rowIndex];
+          rowIndex += 1;
+        }
+      } else {
+        while (rowIndex < rows.length - pagesAfterThis) {
+          const nextHeight = heights[rowIndex];
+          if (rowIndex > startIndex) {
+            const currentDistance = Math.abs(targetHeight - used);
+            const nextDistance = Math.abs(targetHeight - (used + nextHeight));
+            if (used + nextHeight > capacity || nextDistance > currentDistance) break;
+          }
+          used += nextHeight;
+          rowIndex += 1;
+        }
       }
-      used += nextHeight;
-      rowIndex += 1;
+      pages.push(rows.slice(startIndex, rowIndex));
+      pageHeights.push(used);
+      remainingHeight -= used;
+      remainingBalanceWeight -= balanceWeight;
     }
-    pages.push(rows.slice(startIndex, rowIndex));
-    remainingHeight -= used;
-    remainingBalanceWeight -= balanceWeight;
+    const allPagesFit = pageHeights.every((height, index) => {
+      const isLastPage = index === pageHeights.length - 1;
+      const capacity = isLastPage
+        ? SIGNATURE_PAGE_ROW_BUDGET_MM
+        : STANDARD_PAGE_ROW_BUDGET_MM;
+      return height <= capacity || pages[index].length === 1;
+    });
+    if (rowIndex === rows.length && allPagesFit) return pages;
+    pageCount += 1;
   }
-  return pages;
+  return rows.map((row) => [row]);
 }
 
 function rosterRowMarkup(row: RosterRow, index: number): string {
@@ -287,7 +422,7 @@ function buildHtml(options: {
   generatedCivilDate: string;
   displayDate: string;
   rows: readonly RosterRow[];
-}): string {
+}): { html: string; pageCount: number } {
   const pages = paginateRosterRows(options.rows);
   let rowOffset = 0;
   const pageMarkup = pages
@@ -299,7 +434,7 @@ function buildHtml(options: {
             .join("\n")
         : '<tr><td class="empty-roster" colspan="6">Bu sınıfta kayıtlı öğrenci bulunmuyor.</td></tr>';
       rowOffset += pageRows.length;
-      return `<section class="roster-page${isLastPage ? " roster-page--last" : ""}" aria-label="Sınıf listesi · sayfa ${pageIndex + 1} / ${pages.length}">
+      return `<section class="roster-page${isLastPage ? " roster-page--last" : ""}" data-page-number="${pageIndex + 1}" data-page-count="${pages.length}" data-row-count="${pageRows.length}" aria-label="Sınıf listesi · sayfa ${pageIndex + 1} / ${pages.length}">
       <table aria-label="Öğrenci listesi · sayfa ${pageIndex + 1} / ${pages.length}">
         <colgroup>
           <col style="width: 5.5%">
@@ -366,13 +501,18 @@ function buildHtml(options: {
     })
     .join("\n");
 
-  return `${CLASS_ROSTER_HTML_FILE_SIGNATURE}
+  const html = `${CLASS_ROSTER_HTML_FILE_SIGNATURE}
 <html lang="tr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="maarifos-generated-at" content="${escapeHtml(options.generatedAt)}">
   <meta name="maarifos-civil-date" content="${escapeHtml(options.generatedCivilDate)}">
+  <meta name="maarifos-document-kind" content="${CLASS_ROSTER_DOCUMENT_KIND}">
+  <meta name="maarifos-output-format" content="${CLASS_ROSTER_DOCUMENT_FORMAT}">
+  <meta name="maarifos-row-count" content="${options.rows.length}">
+  <meta name="maarifos-page-count" content="${pages.length}">
+  <meta name="maarifos-contains-sensitive-data" content="true">
   <title>${escapeHtml(options.classroomName)} · Sınıf Listesi</title>
   <style>
     @page { size: A4 portrait; margin: 12mm; }
@@ -421,6 +561,15 @@ function buildHtml(options: {
       page-break-after: auto;
     }
     .screen-page-number { display: none; }
+    .screen-output-help {
+      margin: 0 auto 4mm;
+      padding: 3mm 4mm;
+      border: .25mm solid #b8c7c3;
+      background: #f7faf9;
+      color: var(--ink-soft);
+      font-size: 8pt;
+      line-height: 1.45;
+    }
     table {
       width: 100%;
       border: 0;
@@ -595,6 +744,7 @@ function buildHtml(options: {
     @media screen and (min-width: 701px) {
       body { padding: 10mm; background: #e9eeec; }
       main { width: 210mm; }
+      .screen-output-help { width: 210mm; }
       .roster-page {
         min-height: 297mm;
         margin: 0 auto 10mm;
@@ -614,6 +764,12 @@ function buildHtml(options: {
       html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
       body { min-width: 0; background: #eef2f1; font-size: 14px; }
       main { width: 100%; max-width: 100%; }
+      .screen-output-help {
+        margin: 0;
+        padding: 12px 16px;
+        border-width: 0 0 1px;
+        font-size: 12px;
+      }
       .roster-page {
         padding: 16px;
         background: #eef2f1;
@@ -698,25 +854,36 @@ function buildHtml(options: {
     }
     @media print {
       html, body { width: auto; min-height: auto; }
+      .screen-output-help { display: none; }
       .roster-page { width: 100%; }
     }
   </style>
 </head>
 <body>
+  <p class="screen-output-help" role="note">Bu dosya yerel A4 HTML önizlemesidir; PDF dosyası değildir. Açtıktan sonra tarayıcınızın yazdırma ekranını kullanabilirsiniz. PDF olarak kaydetme ve paylaşma seçenekleri cihaza göre değişir.</p>
   <main aria-label="Sınıf listesi belgesi">
     ${pageMarkup}
   </main>
 </body>
 </html>`;
+  return { html, pageCount: pages.length };
 }
 
-/**
- * Aktif sınıf kapsamını snapshot üzerinde tekrar doğrular ve yalnız o sınıfın
- * etkin öğrencilerini A4 baskıya hazır, dış kaynaksız bir HTML dosyasına çevirir.
- */
-export function createClassRosterDocument(
+interface ResolvedClassRosterDocumentInput {
+  readonly schoolName: string;
+  readonly teacherName: string;
+  readonly classroomName: string;
+  readonly academicYearLabel: string;
+  readonly generatedAt: string;
+  readonly generatedCivilDate: string;
+  readonly displayDate: string;
+  readonly rows: readonly RosterRow[];
+  readonly scope: ActiveClassroomScope;
+}
+
+function resolveClassRosterDocumentInput(
   input: ClassRosterDocumentInput,
-): ClassRosterDocumentFile {
+): ResolvedClassRosterDocumentInput {
   const schoolName = requireText(input.schoolName, "Okul adı");
   const teacherName = requireText(input.teacherName, "Öğretmen adı soyadı");
   const classroom = input.snapshot.classrooms.find(
@@ -748,8 +915,7 @@ export function createClassRosterDocument(
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const { civilDate: generatedCivilDate, displayDate } =
     generatedDateParts(generatedAt);
-  const rows = rosterRows(input.snapshot.students, input.scope);
-  const html = buildHtml({
+  return {
     schoolName,
     teacherName,
     classroomName,
@@ -757,18 +923,503 @@ export function createClassRosterDocument(
     generatedAt,
     generatedCivilDate,
     displayDate,
-    rows,
+    rows: rosterRows(input.snapshot.students, input.scope),
+    scope: { ...input.scope },
+  };
+}
+
+/**
+ * Aktif sınıf kapsamını snapshot üzerinde tekrar doğrular ve yalnız o sınıfın
+ * etkin öğrencilerini A4 baskıya hazır, dış kaynaksız bir HTML dosyasına çevirir.
+ */
+export function createClassRosterDocument(
+  input: ClassRosterDocumentInput,
+): ClassRosterDocumentFile {
+  const resolved = resolveClassRosterDocumentInput(input);
+  const { html, pageCount } = buildHtml({
+    ...resolved,
   });
   return {
+    documentKind: CLASS_ROSTER_DOCUMENT_KIND,
     format: CLASS_ROSTER_DOCUMENT_FORMAT,
-    fileName: `MaarifOS_Sinif_Listesi_${safeFileSegment(classroomName)}_${safeFileSegment(academicYearLabel)}.html`,
+    fileName: `MaarifOS_Sinif_Listesi_${safeFileSegment(resolved.classroomName)}_${safeFileSegment(resolved.academicYearLabel)}.html`,
     mimeType: CLASS_ROSTER_DOCUMENT_MIME_TYPE,
     bytes: encoder.encode(html),
     html,
-    rowCount: rows.length,
-    generatedAt,
-    generatedCivilDate,
-    scope: { ...input.scope },
+    rowCount: resolved.rows.length,
+    pageCount,
+    containsSensitiveData: true,
+    capabilities: CLASS_ROSTER_DOCUMENT_CAPABILITIES,
+    generatedAt: resolved.generatedAt,
+    generatedCivilDate: resolved.generatedCivilDate,
+    scope: resolved.scope,
+  };
+}
+
+const PDF_PAGE_MARGIN = 54;
+const PDF_TABLE_TOP = 340;
+const PDF_STANDARD_BODY_BOTTOM = 1650;
+const PDF_LAST_BODY_BOTTOM = 1490;
+const PDF_ROW_LINE_HEIGHT = 23;
+const PDF_COLUMN_WIDTHS = [54, 100, 230, 170, 310, 268] as const;
+
+interface PdfRosterRowLayout {
+  readonly row: RosterRow;
+  readonly cells: readonly (readonly string[])[];
+  readonly height: number;
+}
+
+function splitLongCanvasWord(
+  context: CanvasRenderingContext2D,
+  word: string,
+  maxWidth: number,
+): string[] {
+  if (context.measureText(word).width <= maxWidth) return [word];
+  const pieces: string[] = [];
+  let piece = "";
+  for (const character of word) {
+    const candidate = piece + character;
+    if (piece && context.measureText(candidate).width > maxWidth) {
+      pieces.push(piece);
+      piece = character;
+    } else {
+      piece = candidate;
+    }
+  }
+  if (piece) pieces.push(piece);
+  return pieces.length > 0 ? pieces : [word];
+}
+
+function wrapCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const lines: string[] = [];
+  for (const explicitLine of text.split("\n")) {
+    const words = explicitLine
+      .split(/\s+/u)
+      .filter(Boolean)
+      .flatMap((word) => splitLongCanvasWord(context, word, maxWidth));
+    if (words.length === 0) {
+      lines.push("—");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (line && context.measureText(candidate).width > maxWidth) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines.length > 0 ? lines : ["—"];
+}
+
+function pdfRosterRowLayout(
+  context: CanvasRenderingContext2D,
+  row: RosterRow,
+  sequence: number,
+): PdfRosterRowLayout {
+  const contactLabels = row.contacts.length > 0
+    ? row.contacts.map((contact) => contact.label).join("\n")
+    : "—";
+  const contactPhones = row.contacts.length > 0
+    ? row.contacts.map((contact) => contact.phone).join("\n")
+    : "—";
+  const values = [
+    String(sequence),
+    row.studentNumber,
+    row.fullName,
+    row.nationalIdentityNumber,
+    contactLabels,
+    contactPhones,
+  ];
+  const cells = values.map((value, index) => {
+    context.font = index === 2
+      ? '700 17px Arial, "Helvetica Neue", sans-serif'
+      : '400 17px Arial, "Helvetica Neue", sans-serif';
+    return wrapCanvasText(context, value, PDF_COLUMN_WIDTHS[index]! - 18);
+  });
+  const lineCount = Math.max(...cells.map((lines) => lines.length));
+  return {
+    row,
+    cells,
+    height: Math.max(52, lineCount * PDF_ROW_LINE_HEIGHT + 22),
+  };
+}
+
+function layoutHeight(layouts: readonly PdfRosterRowLayout[]): number {
+  return layouts.reduce((total, layout) => total + layout.height, 0);
+}
+
+function paginatePdfRosterRows(
+  layouts: readonly PdfRosterRowLayout[],
+): PdfRosterRowLayout[][] {
+  if (layouts.length === 0) return [[]];
+  const standardCapacity = PDF_STANDARD_BODY_BOTTOM - PDF_TABLE_TOP;
+  const lastCapacity = PDF_LAST_BODY_BOTTOM - PDF_TABLE_TOP;
+  const pages: PdfRosterRowLayout[][] = [];
+  let page: PdfRosterRowLayout[] = [];
+  let used = 0;
+  for (const layout of layouts) {
+    if (page.length > 0 && used + layout.height > standardCapacity) {
+      pages.push(page);
+      page = [];
+      used = 0;
+    }
+    page.push(layout);
+    used += layout.height;
+  }
+  pages.push(page);
+
+  while (true) {
+    const last = pages.at(-1)!;
+    if (layoutHeight(last) <= lastCapacity || last.length <= 1) break;
+    let splitAt = last.length - 1;
+    while (splitAt > 0) {
+      const previousPage = last.slice(0, splitAt);
+      const nextLastPage = last.slice(splitAt);
+      if (
+        layoutHeight(previousPage) <= standardCapacity &&
+        layoutHeight(nextLastPage) <= lastCapacity
+      ) {
+        pages[pages.length - 1] = previousPage;
+        pages.push(nextLastPage);
+        break;
+      }
+      splitAt -= 1;
+    }
+    if (splitAt === 0) {
+      const trailing = last.pop();
+      if (!trailing) break;
+      pages.push([trailing]);
+    }
+  }
+  return pages;
+}
+
+function drawCanvasLines(
+  context: CanvasRenderingContext2D,
+  lines: readonly string[],
+  x: number,
+  y: number,
+  lineHeight: number,
+): void {
+  lines.forEach((line, index) => {
+    context.fillText(line, x, y + index * lineHeight);
+  });
+}
+
+function drawClassRosterPdfPage(
+  context: CanvasRenderingContext2D,
+  resolved: ResolvedClassRosterDocumentInput,
+  pageRows: readonly PdfRosterRowLayout[],
+  pageIndex: number,
+  pageCount: number,
+  isLastPage: boolean,
+): void {
+  const contentWidth = A4_PDF_CANVAS_WIDTH - PDF_PAGE_MARGIN * 2;
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, A4_PDF_CANVAS_WIDTH, A4_PDF_CANVAS_HEIGHT);
+  context.fillStyle = "#176b5b";
+  context.fillRect(0, 0, A4_PDF_CANVAS_WIDTH, 22);
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+
+  context.fillStyle = "#415865";
+  context.font = '700 18px Arial, "Helvetica Neue", sans-serif';
+  const schoolLines = wrapCanvasText(context, resolved.schoolName, 760).slice(0, 2);
+  drawCanvasLines(context, schoolLines, PDF_PAGE_MARGIN, 68, 22);
+  context.fillStyle = "#17324d";
+  context.font = '700 34px Arial, "Helvetica Neue", sans-serif';
+  context.fillText("SINIF LİSTESİ", PDF_PAGE_MARGIN, 132);
+  context.fillStyle = "#176b5b";
+  context.font = '700 16px Arial, "Helvetica Neue", sans-serif';
+  context.textAlign = "right";
+  context.fillText(`${resolved.rows.length} öğrenci`, A4_PDF_CANVAS_WIDTH - PDF_PAGE_MARGIN, 96);
+  context.fillStyle = "#415865";
+  context.font = '600 15px Arial, "Helvetica Neue", sans-serif';
+  context.fillText(`Sayfa ${pageIndex + 1} / ${pageCount}`, A4_PDF_CANVAS_WIDTH - PDF_PAGE_MARGIN, 126);
+  context.textAlign = "left";
+  context.fillStyle = "#176b5b";
+  context.fillRect(PDF_PAGE_MARGIN, 150, contentWidth, 4);
+
+  const meta = [
+    ["Sınıf", resolved.classroomName],
+    ["Eğitim yılı", resolved.academicYearLabel],
+    ["Öğretmen", resolved.teacherName],
+    ["Belge tarihi", resolved.displayDate],
+  ] as const;
+  const metaTop = 170;
+  const metaWidth = contentWidth / 2;
+  const metaHeight = 58;
+  meta.forEach(([label, value], index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = PDF_PAGE_MARGIN + column * metaWidth;
+    const y = metaTop + row * metaHeight;
+    context.fillStyle = "#f4f8f7";
+    context.fillRect(x, y, metaWidth, metaHeight);
+    context.strokeStyle = "#a9b8b5";
+    context.lineWidth = 1;
+    context.strokeRect(x, y, metaWidth, metaHeight);
+    context.fillStyle = "#176b5b";
+    context.font = '700 13px Arial, "Helvetica Neue", sans-serif';
+    context.fillText(label.toLocaleUpperCase("tr-TR"), x + 12, y + 19);
+    context.fillStyle = "#17324d";
+    context.font = '600 17px Arial, "Helvetica Neue", sans-serif';
+    const valueLines = wrapCanvasText(context, value, metaWidth - 24).slice(0, 2);
+    drawCanvasLines(context, valueLines, x + 12, y + 42, 18);
+  });
+
+  const headings = [
+    "Sıra",
+    "Öğrenci No",
+    "Adı Soyadı",
+    "T.C. Kimlik No",
+    "Veli / Yakın",
+    "Telefon",
+  ];
+  let x = PDF_PAGE_MARGIN;
+  const tableHeaderTop = PDF_TABLE_TOP - 48;
+  headings.forEach((heading, index) => {
+    const width = PDF_COLUMN_WIDTHS[index]!;
+    context.fillStyle = "#176b5b";
+    context.fillRect(x, tableHeaderTop, width, 48);
+    context.strokeStyle = "#ffffff";
+    context.strokeRect(x, tableHeaderTop, width, 48);
+    context.fillStyle = "#ffffff";
+    context.font = '700 15px Arial, "Helvetica Neue", sans-serif';
+    const lines = wrapCanvasText(context, heading, width - 14).slice(0, 2);
+    drawCanvasLines(context, lines, x + 7, tableHeaderTop + 21, 17);
+    x += width;
+  });
+
+  let y = PDF_TABLE_TOP;
+  if (pageRows.length === 0) {
+    context.fillStyle = "#f8faf9";
+    context.fillRect(PDF_PAGE_MARGIN, y, contentWidth, 76);
+    context.strokeStyle = "#a9b8b5";
+    context.strokeRect(PDF_PAGE_MARGIN, y, contentWidth, 76);
+    context.fillStyle = "#415865";
+    context.font = '400 19px Arial, "Helvetica Neue", sans-serif';
+    context.textAlign = "center";
+    context.fillText(
+      "Bu sınıfta kayıtlı öğrenci bulunmuyor.",
+      A4_PDF_CANVAS_WIDTH / 2,
+      y + 45,
+    );
+    context.textAlign = "left";
+    y += 76;
+  } else {
+    pageRows.forEach((layout, pageRowIndex) => {
+      let cellX = PDF_PAGE_MARGIN;
+      layout.cells.forEach((lines, columnIndex) => {
+        const width = PDF_COLUMN_WIDTHS[columnIndex]!;
+        context.fillStyle = pageRowIndex % 2 === 0 ? "#ffffff" : "#f8faf9";
+        context.fillRect(cellX, y, width, layout.height);
+        context.strokeStyle = "#a9b8b5";
+        context.lineWidth = 1;
+        context.strokeRect(cellX, y, width, layout.height);
+        context.fillStyle = "#17324d";
+        context.font = columnIndex === 2
+          ? '700 17px Arial, "Helvetica Neue", sans-serif'
+          : '400 17px Arial, "Helvetica Neue", sans-serif';
+        drawCanvasLines(context, lines, cellX + 9, y + 26, PDF_ROW_LINE_HEIGHT);
+        cellX += width;
+      });
+      y += layout.height;
+    });
+  }
+
+  if (isLastPage) {
+    const footerTop = Math.max(y + 28, 1510);
+    context.strokeStyle = "#176b5b";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(PDF_PAGE_MARGIN, footerTop);
+    context.lineTo(A4_PDF_CANVAS_WIDTH - PDF_PAGE_MARGIN, footerTop);
+    context.stroke();
+    context.fillStyle = "#415865";
+    context.font = '400 14px Arial, "Helvetica Neue", sans-serif';
+    const privacyLines = wrapCanvasText(
+      context,
+      "Bu belge kişisel veri içerir. Yalnız eğitim ve sınıf yönetimi amacıyla güvenli biçimde saklayınız.",
+      640,
+    );
+    drawCanvasLines(context, privacyLines, PDF_PAGE_MARGIN, footerTop + 30, 19);
+    context.fillStyle = "#17324d";
+    context.font = '700 16px Arial, "Helvetica Neue", sans-serif';
+    context.fillText("Sınıf öğretmeni", 860, footerTop + 30);
+    context.font = '600 16px Arial, "Helvetica Neue", sans-serif';
+    context.fillText(resolved.teacherName, 860, footerTop + 57);
+    context.strokeStyle = "#415865";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(860, footerTop + 102);
+    context.lineTo(1168, footerTop + 102);
+    context.stroke();
+    context.fillStyle = "#415865";
+    context.font = '400 13px Arial, "Helvetica Neue", sans-serif';
+    context.fillText("İmza", 860, footerTop + 123);
+  }
+
+  context.fillStyle = "#5c6b72";
+  context.font = '400 13px Arial, "Helvetica Neue", sans-serif';
+  context.textAlign = "center";
+  context.fillText(
+    `MaarifOS · ${resolved.generatedCivilDate} · ${pageIndex + 1}/${pageCount}`,
+    A4_PDF_CANVAS_WIDTH / 2,
+    A4_PDF_CANVAS_HEIGHT - 26,
+  );
+  context.textAlign = "left";
+}
+
+/**
+ * Aynı doğrulanmış snapshot'tan HTML önizleme ve gerçek A4 PDF baytlarını
+ * birlikte üretir. PDF, tarayıcının Türkçe glifleri çizdiği JPEG sayfalarını
+ * taşır; bu nedenle haricî font veya PDF kütüphanesi gerektirmez.
+ */
+export async function createClassRosterPdfDocument(
+  input: ClassRosterDocumentInput,
+  options: { readonly runtime?: ClassRosterPdfRuntime } = {},
+): Promise<ClassRosterPdfDocumentFile> {
+  const resolved = resolveClassRosterDocumentInput(input);
+  const { html } = buildHtml({ ...resolved });
+  if (!options.runtime?.createCanvas && typeof document === "undefined") {
+    throw new Error(
+      "Sınıf listesi PDF'si yalnız belge üretimini destekleyen uygulama ortamında hazırlanabilir.",
+    );
+  }
+  if (options.runtime?.waitForFonts) {
+    await options.runtime.waitForFonts();
+  } else if (typeof document !== "undefined") {
+    await document.fonts?.ready;
+  }
+  const canvas = options.runtime?.createCanvas
+    ? options.runtime.createCanvas()
+    : document.createElement("canvas");
+  canvas.width = A4_PDF_CANVAS_WIDTH;
+  canvas.height = A4_PDF_CANVAS_HEIGHT;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Sınıf listesi PDF sayfa yüzeyi hazırlanamadı.");
+
+  const layouts = resolved.rows.map((row, index) =>
+    pdfRosterRowLayout(context, row, index + 1),
+  );
+  const pages = paginatePdfRosterRows(layouts);
+  const images: Uint8Array[] = [];
+  pages.forEach((pageRows, pageIndex) => {
+    drawClassRosterPdfPage(
+      context,
+      resolved,
+      pageRows,
+      pageIndex,
+      pages.length,
+      pageIndex === pages.length - 1,
+    );
+    images.push(jpegDataUrlBytes(canvas.toDataURL("image/jpeg", 0.94)));
+  });
+  const bytes = createA4ImagePdf(images, {
+    title: "MaarifOS Sinif Listesi",
+    creator: "MaarifOS",
+  });
+  const baseName = `MaarifOS_Sinif_Listesi_${safeFileSegment(resolved.classroomName)}_${safeFileSegment(resolved.academicYearLabel)}`;
+  return {
+    documentKind: CLASS_ROSTER_DOCUMENT_KIND,
+    format: CLASS_ROSTER_PDF_FORMAT,
+    fileName: `${baseName}.pdf`,
+    mimeType: CLASS_ROSTER_PDF_MIME_TYPE,
+    bytes,
+    html,
+    htmlFileName: `${baseName}.html`,
+    rowCount: resolved.rows.length,
+    pageCount: pages.length,
+    containsSensitiveData: true,
+    capabilities: CLASS_ROSTER_PDF_CAPABILITIES,
+    generatedAt: resolved.generatedAt,
+    generatedCivilDate: resolved.generatedCivilDate,
+    scope: resolved.scope,
+  };
+}
+
+export function classRosterPdfDocumentOutputContract(
+  file: ClassRosterPdfDocumentFile,
+): ClassRosterPdfDocumentOutputContract {
+  const bytes = new Uint8Array(file.bytes.byteLength);
+  bytes.set(file.bytes);
+  return {
+    metadata: {
+      documentKind: file.documentKind,
+      format: file.format,
+      rowCount: file.rowCount,
+      pageCount: file.pageCount,
+      generatedAt: file.generatedAt,
+      generatedCivilDate: file.generatedCivilDate,
+      containsSensitiveData: true,
+    },
+    preview: {
+      kind: "local-html",
+      title: file.htmlFileName.replace(/\.html$/u, ""),
+      html: file.html,
+      mimeType: CLASS_ROSTER_DOCUMENT_MIME_TYPE,
+    },
+    download: {
+      kind: "pdf-file",
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      bytes,
+    },
+    capabilities: file.capabilities,
+  };
+}
+
+export function classRosterPdfDocumentBlob(
+  file: ClassRosterPdfDocumentFile,
+): Blob {
+  const bytes = new Uint8Array(file.bytes.byteLength);
+  bytes.set(file.bytes);
+  return new Blob([bytes.buffer], { type: file.mimeType });
+}
+
+/**
+ * Aynı bayt kaynağından önizleme ve indirme tanımlarını üretir. İndirme
+ * baytları kopyalanır; tüketici dosya nesnesinin değişmez içeriğini bozamamış
+ * olur.
+ */
+export function classRosterDocumentOutputContract(
+  file: ClassRosterDocumentFile,
+): ClassRosterDocumentOutputContract {
+  const bytes = new Uint8Array(file.bytes.byteLength);
+  bytes.set(file.bytes);
+  return {
+    metadata: {
+      documentKind: file.documentKind,
+      format: file.format,
+      rowCount: file.rowCount,
+      pageCount: file.pageCount,
+      generatedAt: file.generatedAt,
+      generatedCivilDate: file.generatedCivilDate,
+      containsSensitiveData: true,
+    },
+    preview: {
+      kind: "local-html",
+      title: file.fileName.replace(/\.html$/u, ""),
+      html: file.html,
+      mimeType: file.mimeType,
+    },
+    download: {
+      kind: "html-file",
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      bytes,
+    },
+    capabilities: file.capabilities,
   };
 }
 

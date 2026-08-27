@@ -54,27 +54,27 @@ test("temiz cihaz tek kurulum odağını korur, sınıf kurulunca ilk öğrenciy
   expect(classNameLayout.scrollHeight).toBeLessThanOrEqual(classNameLayout.clientHeight + 1);
   expect(classNameLayout.whiteSpace).toBe("normal");
   const nextTask = page.getByLabel("Sıradaki en iyi adım");
-  const quickActions = page.locator(".simple-today__prepared-list");
+  const teacherDesk = page.locator(".simple-today__desk-grid");
   await expect(nextTask).toBeVisible();
   await expect(nextTask).toContainText("İlk çocuğu ekleyin");
-  await expect(quickActions.getByRole("button")).toHaveCount(2);
+  await expect(teacherDesk.getByRole("button")).toHaveCount(4);
 
   const layout = await today.evaluate((screen) => {
     const focus = screen.querySelector<HTMLElement>(".simple-today__focus");
-    const quick = screen.querySelector<HTMLElement>(".simple-today__prepared");
+    const desk = screen.querySelector<HTMLElement>(".simple-today__desk");
     return {
       screenScrollWidth: screen.scrollWidth,
       screenClientWidth: screen.clientWidth,
       focusTop: focus?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
       focusBottom: focus?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY,
-      quickTop: quick?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+      deskTop: desk?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
     };
   });
 
   expect(layout.screenScrollWidth).toBeLessThanOrEqual(layout.screenClientWidth);
   expect(layout.focusTop).toBeLessThan(520);
   expect(layout.focusBottom).toBeLessThanOrEqual(844);
-  expect(layout.quickTop).toBeLessThan(844);
+  expect(layout.deskTop).toBeLessThan(844);
 
   for (const viewport of [
     { width: 320, height: 568 },

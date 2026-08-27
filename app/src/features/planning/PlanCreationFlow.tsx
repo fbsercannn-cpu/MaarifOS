@@ -18,7 +18,10 @@ import {
   type FlowScreen,
 } from "../../mobile";
 import { isCivilDate } from "../../core/domain/attendance.ts";
-import type { PedagogicalPlanProvenance } from "../../core/domain/pedagogical-plan-provenance.ts";
+import {
+  bindPedagogicalPlanProvenanceToCivilDate,
+  type PedagogicalPlanProvenance,
+} from "../../core/domain/pedagogical-plan-provenance.ts";
 import {
   isLocalTime,
   type ClassroomSchedule,
@@ -40,7 +43,7 @@ import {
 import {
   CURRICULUM_TARGET_KIND_LABELS,
   curriculumAgeBandFromLabel,
-  curriculumTargetsForProfile,
+  curriculumTargetsForResolvedAgeBand,
   type CurriculumAssignmentMode,
   type CurriculumTargetSnapshot,
 } from "../curriculum/curriculum-catalog";
@@ -48,11 +51,30 @@ import {
   PRESCHOOL_ACTIVITY_AREAS,
   PRESCHOOL_ACTIVITY_SUGGESTIONS,
   type PreschoolActivityArea,
+  type PreschoolActivitySuggestion,
 } from "./activity-suggestions";
 import type {
   ScheduledPlanEditDraft,
   TeacherOwnedDailyFlowCopySource,
 } from "./scheduled-plan-workspace.ts";
+import { resolveOfficialTeachingCivilDate } from "./teacher-week-teaching-days.ts";
+import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+  type TeacherFeedbackCode,
+} from "../feedback/teacher-feedback.ts";
+
+interface PlanReadinessBlocker {
+  code:
+    | TeacherFeedbackCode
+    | "plan.activity"
+    | "plan.title"
+    | "plan.calendar-day";
+  detail: string;
+  actionLabel?: string;
+  apply?: () => void;
+}
 
 function formatTurkishCivilDate(civilDate: string) {
   if (!isCivilDate(civilDate)) return "Plan tarihini YYYY-AA-GG biçiminde yazın";
@@ -74,6 +96,264 @@ function curriculumDisplayLabel(profile: CurriculumProfileSnapshot): string {
   return profile.framework === "meb_2024"
     ? "Okul Öncesi Eğitim Programı — EÇE/2024"
     : "Türkiye Yüzyılı Maarif Modeli";
+}
+
+const ACTIVITY_TARGET_DOMAINS: Record<Exclude<PreschoolActivityArea, "all">, readonly string[]> = {
+  mathematics: ["Matematik"],
+  science: ["Fen"],
+  "language-literacy": ["Türkçe"],
+  "values-social": ["Sosyal"],
+  "movement-health": ["Hareket ve Sağlık"],
+  "art-music": ["Sanat", "Müzik"],
+  "play-drama": ["Türkçe", "Sosyal", "Sanat"],
+  outdoor: ["Fen", "Hareket ve Sağlık"],
+};
+
+type SemanticTargetConcept = {
+  id: string;
+  label: string;
+  activitySignals: readonly string[];
+  targetSignals: readonly string[];
+};
+
+const SEMANTIC_TARGET_CONCEPTS: readonly SemanticTargetConcept[] = [
+  {
+    id: "observe",
+    label: "gözlem ve veri toplama",
+    activitySignals: ["gözlem", "incele", "izle", "kaydet", "fark et"],
+    targetSignals: ["gözlem", "incele", "izle", "veri", "kanıt"],
+  },
+  {
+    id: "predict",
+    label: "tahmin yürütme",
+    activitySignals: ["tahmin", "öngör", "ne olur"],
+    targetSignals: ["tahmin", "çıkarım", "öngör"],
+  },
+  {
+    id: "experiment",
+    label: "deneme ve problem çözme",
+    activitySignals: ["dene", "deney", "çöz", "tasarla", "kurtar", "sorun"],
+    targetSignals: ["deney", "çöz", "sorgula", "model", "strateji", "problem"],
+  },
+  {
+    id: "compare",
+    label: "karşılaştırma ve sınıflandırma",
+    activitySignals: ["karşılaştır", "sınıflandır", "gruplandır", "benzer", "farklı"],
+    targetSignals: ["karşılaştır", "sınıflandır", "benzer", "farklı", "çözümle"],
+  },
+  {
+    id: "quantity",
+    label: "sayı ve miktar ilişkisi",
+    activitySignals: ["say", "sayı", "miktar", "adet", "eşit", "paylaştır"],
+    targetSignals: ["say", "sayı", "miktar", "nicelik", "matematik"],
+  },
+  {
+    id: "measure",
+    label: "ölçme ve özellikleri karşılaştırma",
+    activitySignals: ["ölç", "uzunluk", "kapasite", "ağırlık", "denge", "derinlik"],
+    targetSignals: ["ölç", "özellik", "karşılaştır", "matematik", "veri"],
+  },
+  {
+    id: "space",
+    label: "konum, yön ve harita",
+    activitySignals: ["konum", "yön", "harita", "rota", "kroki", "yakın", "uzak"],
+    targetSignals: ["konum", "yön", "harita", "kroki", "mekân", "coğraf"],
+  },
+  {
+    id: "sequence",
+    label: "sıralama ve zaman ilişkisi",
+    activitySignals: ["sırala", "önce", "sonra", "zaman", "günlük", "hikâye"],
+    targetSignals: ["sırala", "zaman", "kronolojik", "anlat", "öykü", "hikâye"],
+  },
+  {
+    id: "communicate",
+    label: "dinleme ve kendini ifade etme",
+    activitySignals: ["anlat", "konuş", "dinle", "soru", "ileti", "sözcük", "hikâye"],
+    targetSignals: ["anlat", "konuş", "dinle", "soru", "ifade", "sözcük", "görüş"],
+  },
+  {
+    id: "sound",
+    label: "ses ve ritim farkındalığı",
+    activitySignals: ["ses", "ritim", "müzik", "çalgı", "uyak", "hece"],
+    targetSignals: ["ses", "ritim", "müzik", "çalgı", "hece", "işitsel"],
+  },
+  {
+    id: "movement",
+    label: "hareket ve beden farkındalığı",
+    activitySignals: ["hareket", "denge", "beden", "parkur", "dans", "nefes"],
+    targetSignals: ["hareket", "denge", "beden", "dans", "zindelik", "fiziksel"],
+  },
+  {
+    id: "health",
+    label: "sağlık, öz bakım ve güvenlik",
+    activitySignals: ["sağlık", "temiz", "besin", "güven", "koru", "el", "su"],
+    targetSignals: ["sağlık", "temiz", "beslen", "güven", "koru", "sıvı"],
+  },
+  {
+    id: "social",
+    label: "iş birliği ve adil paylaşım",
+    activitySignals: ["birlikte", "iş birliği", "paylaş", "adil", "sıra", "yardım", "ortak"],
+    targetSignals: ["birlikte", "sosyal", "paylaş", "adil", "grup", "toplum", "iletişim"],
+  },
+  {
+    id: "emotion",
+    label: "duygu ve ihtiyaçları ifade etme",
+    activitySignals: ["duygu", "empati", "ihtiyaç", "nezaket", "barış", "merhamet"],
+    targetSignals: ["duygu", "empati", "ihtiyaç", "ifade", "sosyal", "değer"],
+  },
+  {
+    id: "art",
+    label: "özgün görsel ve sanatsal ifade",
+    activitySignals: ["çiz", "boya", "renk", "doku", "heykel", "sanat", "görsel"],
+    targetSignals: ["çiz", "renk", "sanat", "görsel", "özgün", "ifade", "tasarla"],
+  },
+  {
+    id: "nature",
+    label: "doğa ve yakın çevreyi inceleme",
+    activitySignals: ["doğa", "bahçe", "ağaç", "toprak", "canlı", "hava", "yağmur"],
+    targetSignals: ["doğa", "çevre", "canlı", "coğraf", "fen", "gözlem"],
+  },
+] as const;
+
+const SEMANTIC_STOP_WORDS = new Set([
+  "acaba",
+  "ardından",
+  "birlikte",
+  "bunun",
+  "cocuklar",
+  "cocuklarin",
+  "dair",
+  "etkinlik",
+  "farkli",
+  "gore",
+  "icin",
+  "iliskin",
+  "kadar",
+  "kendi",
+  "olarak",
+  "olan",
+  "oldugu",
+  "uzerinden",
+  "yonelik",
+]);
+
+function foldTurkish(value: string): string {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ç", "c")
+    .replaceAll("ğ", "g")
+    .replaceAll("ı", "i")
+    .replaceAll("ö", "o")
+    .replaceAll("ş", "s")
+    .replaceAll("ü", "u")
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim();
+}
+
+function semanticStem(value: string): string {
+  const folded = foldTurkish(value);
+  return folded.length > 6 ? folded.slice(0, 6) : folded;
+}
+
+function semanticTokens(value: string): string[] {
+  return foldTurkish(value)
+    .split(/\s+/u)
+    .filter((token) => token.length >= 3 && !SEMANTIC_STOP_WORDS.has(token));
+}
+
+function textMatchesSignal(text: string, signal: string): boolean {
+  const textTokens = semanticTokens(text);
+  const signalTokens = semanticTokens(signal);
+  return signalTokens.length > 0 && signalTokens.every((signalToken) => {
+    const signalStem = semanticStem(signalToken);
+    return textTokens.some((textToken) => {
+      const textStem = semanticStem(textToken);
+      return textStem === signalStem ||
+        (textStem.length >= 4 && signalStem.length >= 4 &&
+          (textStem.startsWith(signalStem) || signalStem.startsWith(textStem)));
+    });
+  });
+}
+
+function matchingConcepts(
+  activityText: string,
+  targetText: string,
+): SemanticTargetConcept[] {
+  return SEMANTIC_TARGET_CONCEPTS.filter(
+    (concept) =>
+      concept.activitySignals.some((signal) => textMatchesSignal(activityText, signal)) &&
+      concept.targetSignals.some((signal) => textMatchesSignal(targetText, signal)),
+  );
+}
+
+export interface PlanTargetRecommendation {
+  target: CurriculumTargetSnapshot;
+  score: number;
+  reason: string;
+  matchedConceptIds: string[];
+}
+
+export function rankPlanTargetRecommendations(input: {
+  targets: readonly CurriculumTargetSnapshot[];
+  activityTitle: string;
+  activitySuggestion?: PreschoolActivitySuggestion;
+  semanticNotes?: readonly string[];
+  ageBandLabel: string;
+  limit?: number;
+}): PlanTargetRecommendation[] {
+  const preferredDomains = input.activitySuggestion
+    ? ACTIVITY_TARGET_DOMAINS[input.activitySuggestion.area]
+    : [];
+  const activityText = [
+    input.activityTitle,
+    input.activitySuggestion?.teacherPrompt,
+    ...(input.semanticNotes ?? []),
+  ].filter((value): value is string => Boolean(value?.trim())).join(" ");
+  const activityTokenStems = new Set(
+    semanticTokens(activityText).map(semanticStem),
+  );
+
+  return input.targets
+    .map((target, sourceIndex): PlanTargetRecommendation & { sourceIndex: number } => {
+      const targetText = `${target.domain} ${target.referenceTitle}`;
+      const targetTokenStems = new Set(semanticTokens(targetText).map(semanticStem));
+      const directOverlap = [...activityTokenStems].filter((stem) =>
+        targetTokenStems.has(stem)
+      ).length;
+      const concepts = matchingConcepts(activityText, targetText);
+      const domainIndex = preferredDomains.indexOf(target.domain);
+      const domainScore = domainIndex < 0
+        ? 0
+        : Math.max(12, 36 - domainIndex * 8);
+      const score = domainScore + Math.min(directOverlap, 4) * 5 + concepts.length * 24;
+      const conceptLabels = concepts.slice(0, 2).map((concept) => concept.label);
+      const reason = conceptLabels.length > 0 && domainIndex >= 0
+        ? `${target.domain} alanı ile ${conceptLabels.join(" ve ")} odağı eşleşiyor.`
+        : conceptLabels.length > 0
+          ? `Etkinliğin ${conceptLabels.join(" ve ")} odağıyla eşleşiyor.`
+          : directOverlap > 0 && domainIndex >= 0
+            ? `${target.domain} alanı ve etkinlik amacıyla ortak ifadeler taşıyor.`
+            : domainIndex >= 0
+              ? `Etkinliğin ${target.domain} alanıyla doğrudan ilişkili.`
+              : directOverlap > 0
+                ? "Etkinlik adı veya öğretmen amacıyla ortak ifadeler taşıyor."
+                : `${input.ageBandLabel} için resmî katalogdaki güvenli genel seçeneklerden biri.`;
+      return {
+        target,
+        score,
+        reason,
+        matchedConceptIds: concepts.map((concept) => concept.id),
+        sourceIndex,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.sourceIndex - right.sourceIndex ||
+        left.target.referenceCode.localeCompare(right.target.referenceCode, "tr-TR"),
+    )
+    .slice(0, input.limit ?? 4)
+    .map(({ sourceIndex: _sourceIndex, ...recommendation }) => recommendation);
 }
 
 function createFlowHeader(title: string, step: string, onClose: () => void) {
@@ -157,6 +437,7 @@ export function PlanCreationScreen({
   initialActivityTitle,
   initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
+  enforceOfficialTeachingDays = false,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -171,22 +452,13 @@ export function PlanCreationScreen({
   initialActivityTitle?: string;
   initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
+  enforceOfficialTeachingDays?: boolean;
 }) {
   const introHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [ids] = useState(() => ({
     planId: initialEdit?.planId ?? crypto.randomUUID(),
     activityId: initialEdit?.activityId ?? crypto.randomUUID(),
   }));
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const heading = introHeadingRef.current;
-      if (!heading) return;
-      const scroll = heading.closest<HTMLElement>(".mobile-scroll");
-      if (scroll) scroll.scrollTop = 0;
-      heading.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
   const [planTitle, setPlanTitle] = useState(
     initialEdit?.planTitle ?? initialTemplate?.planTitle ??
       (initialActivityTitle ? `${initialActivityTitle} planı` : "Günlük öğrenme planı"),
@@ -252,13 +524,24 @@ export function PlanCreationScreen({
     useState<TeacherOwnedDailyFlowTemplateSource | undefined>(undefined);
   const [suggestionArea, setSuggestionArea] =
     useState<PreschoolActivityArea>("all");
+  const [simpleStep, setSimpleStep] = useState<1 | 2 | 3>(
+    initialActivityTitle ? 2 : 1,
+  );
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const heading = introHeadingRef.current;
+      if (!heading) return;
+      const scroll = heading.closest<HTMLElement>(".mobile-scroll");
+      if (scroll) scroll.scrollTop = 0;
+      heading.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [simpleStep]);
+  const [simpleIdeaToolsOpen, setSimpleIdeaToolsOpen] = useState(false);
+  const [simpleTargetToolsOpen, setSimpleTargetToolsOpen] = useState(false);
   const curriculumAgeBand = curriculumAgeBandFromLabel(ageGroup);
   const availableTargets = useMemo(
-    () =>
-      curriculumTargetsForProfile(
-        curriculumProfile,
-        curriculumAgeBand ?? undefined,
-      ),
+    () => curriculumTargetsForResolvedAgeBand(curriculumProfile, curriculumAgeBand),
     [curriculumAgeBand, curriculumProfile],
   );
   const [targetQuery, setTargetQuery] = useState("");
@@ -279,7 +562,7 @@ export function PlanCreationScreen({
     initialEdit?.studentIds ?? [],
   );
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [errorFeedback, setErrorFeedback] = useState<TeacherFeedback | null>(null);
   const targetDomains = useMemo(
     () => Array.from(new Set(availableTargets.map((target) => target.domain))),
     [availableTargets],
@@ -322,12 +605,58 @@ export function PlanCreationScreen({
   const selectedActivitySuggestion = PRESCHOOL_ACTIVITY_SUGGESTIONS.find(
     (suggestion) => suggestion.title === activityTitle,
   );
+  const semanticNotes = useMemo(
+    () => initialPedagogicalProvenance
+      ? [
+          initialPedagogicalProvenance.adaptation.setup,
+          initialPedagogicalProvenance.adaptation.materialSwap,
+          initialPedagogicalProvenance.adaptation.facilitation,
+          initialPedagogicalProvenance.adaptation.evidencePrompt,
+          initialPedagogicalProvenance.valueTrace.action,
+          initialPedagogicalProvenance.valueTrace.evidence,
+        ]
+      : [],
+    [initialPedagogicalProvenance],
+  );
+  const simpleTargetRecommendations = useMemo(
+    () => rankPlanTargetRecommendations({
+      targets: availableTargets,
+      activityTitle,
+      ...(selectedActivitySuggestion
+        ? { activitySuggestion: selectedActivitySuggestion }
+        : {}),
+      semanticNotes,
+      ageBandLabel: ageGroup,
+      limit: 4,
+    }),
+    [
+      activityTitle,
+      ageGroup,
+      availableTargets,
+      selectedActivitySuggestion,
+      semanticNotes,
+    ],
+  );
+  const simpleRecommendationByTargetId = useMemo(
+    () => new Map(
+      simpleTargetRecommendations.map((recommendation) => [
+        recommendation.target.id,
+        recommendation,
+      ]),
+    ),
+    [simpleTargetRecommendations],
+  );
   const assignedStudentIds = initialEdit?.studentIds ??
     (assignmentMode === "whole-class"
       ? students.map((student) => student.id)
       : selectedStudentIds);
   const assignmentCount = selectedTargets.length * assignedStudentIds.length;
   const planDateValid = isCivilDate(planCivilDate);
+  const officialTeachingDate = planDateValid && enforceOfficialTeachingDays
+    ? resolveOfficialTeachingCivilDate(planCivilDate)
+    : null;
+  const planDateIsOfficialTeachingDay =
+    !officialTeachingDate?.applies || officialTeachingDate.isTeachingDay;
   const startTimeValid = isLocalTime(startTime);
   const endTimeValid = !endTime || isLocalTime(endTime);
   const timeOrderValid =
@@ -354,6 +683,20 @@ export function PlanCreationScreen({
       ));
   const teacherOwnedDailyFlowEnabled =
     teacherOwnedDailyFlowBlocks.length > 0 && !initialTemplate;
+  const simpleWizardEnabled =
+    !initialEdit && !initialTemplate;
+  const simpleStepHeading = simpleStep === 1
+    ? "Bugün hangi etkinliği yapacaksınız?"
+    : simpleStep === 2
+      ? "Bu etkinlikte hangi TYMM hedefini izleyeceksiniz?"
+      : "Planı kontrol edip kaydedin.";
+  const simpleStepDescription = `${teacherOwnedDailyFlowEnabled
+    ? "Günün 10 bölümlük akışı hazırdır; yalnız ihtiyaç duyarsanız açıp düzenleyin. "
+    : ""}${simpleStep === 1
+    ? "Hazır bir fikre dokunun veya kendi etkinlik adınızı yazın."
+    : simpleStep === 2
+      ? "Önerilen hedeflerden birine dokunun; son kontrole geçersiniz."
+      : "Etkinlik ve hedef hazır. İsterseniz saat veya çocuk kapsamını değiştirin."}`;
   const teacherOwnedDailyFlowTotalMinutes = teacherOwnedDailyFlowBlocks.reduce(
     (total, block) => total + block.durationMinutes,
     0,
@@ -437,73 +780,188 @@ export function PlanCreationScreen({
     planTitle === initialTemplate.planTitle
       ? `${initialTemplate.alternativeActivitySnapshot.title} planı`
       : planTitle;
-  const saveBlockingReasons = [
-    !activityTitle.trim()
-      ? "Bir etkinlik seçin veya etkinlik adını yazın."
-      : null,
-    !planTitle.trim() ? "Plan başlığını yazın." : null,
-    selectedTargets.length === 0
-      ? "En az bir program hedefi seçin."
-      : null,
-    assignedStudentIds.length === 0
-      ? "En az bir çocuk seçerek çocuk kapsamını tamamlayın."
-      : null,
-    !planDateValid
-      ? "Plan tarihini YYYY-AA-GG biçiminde yazın."
-      : null,
-    planDateValid && !planDateInPremiumWeek
-      ? "Plan tarihini kaynak haftanın tarih aralığına alın."
-      : null,
-    !startTimeValid
-      ? "Başlangıç saatini SS:DD biçiminde yazın."
-      : null,
-    !endTimeValid
-      ? "Bitiş saatini SS:DD biçiminde yazın."
-      : null,
-    startTimeValid && endTimeValid && !timeOrderValid
-      ? "Bitiş saati başlangıç saatinden sonra olmalıdır."
-      : null,
-    !premiumDailyFlowValid
-      ? "Tam gün akışındaki süre ve not alanlarını kontrol edin."
-      : null,
-    !teacherOwnedDateInWeek
-      ? "Plan tarihini öğretmen planındaki kaynak haftanın tarih aralığına alın."
-      : null,
+  const allowedPlanDateStart =
+    initialEdit?.allowedDateStart ??
+    initialTemplate?.weekSnapshot.periodStart ??
+    teacherOwnedDailyFlowContext?.allowedDateStart ??
+    civilDate;
+  const allowedPlanDateEnd =
+    initialEdit?.allowedDateEnd ??
+    initialTemplate?.weekSnapshot.periodEnd ??
+    teacherOwnedDailyFlowContext?.allowedDateEnd ??
+    civilDate;
+  const availableTeacherActivityBlock = teacherOwnedDailyFlowBlocks.find(
+    (
+      block,
+    ): block is TeacherOwnedDailyFlowBlockDraft & {
+      kind: TeacherOwnedActivityFlowBlockKind;
+    } =>
+      (block.kind === "teacher-activity-one" || block.kind === "teacher-activity-two") &&
+      block.status !== "skipped",
+  );
+  const saveBlockingItems: PlanReadinessBlocker[] = [];
+  if (!curriculumAgeBand) {
+    saveBlockingItems.push({
+      code: "plan.program-profile",
+      detail:
+        "Plan hedeflerini açmak için sınıf profilinde 36–48, 48–60 veya 60–72 ay resmî yaş bandını seçin.",
+    });
+  }
+  if (!activityTitle.trim()) {
+    saveBlockingItems.push({
+      code: "plan.activity",
+      detail: "Bir etkinlik seçin veya etkinlik adını yazın.",
+      actionLabel: "Etkinlik seç",
+      apply: () => {
+        setSimpleStep(1);
+        setSimpleIdeaToolsOpen(true);
+      },
+    });
+  }
+  if (!planTitle.trim()) {
+    saveBlockingItems.push({
+      code: "plan.title",
+      detail: "Plan başlığını yazın.",
+      actionLabel: "Başlığı tamamla",
+      apply: () => setPlanTitle(activityTitle.trim() ? `${activityTitle.trim()} planı` : "Günlük öğrenme planı"),
+    });
+  }
+  if (selectedTargets.length === 0) {
+    saveBlockingItems.push({
+      code: "plan.target",
+      detail: "En az bir TYMM hedefi seçin.",
+      actionLabel: "Hedef seç",
+      apply: () => {
+        setSimpleStep(2);
+        setSimpleTargetToolsOpen(true);
+      },
+    });
+  }
+  if (assignedStudentIds.length === 0) {
+    saveBlockingItems.push({
+      code: "plan.child-scope",
+      detail: "En az bir çocuk seçerek çocuk kapsamını tamamlayın.",
+      ...(students.length > 0
+        ? {
+            actionLabel: "Tüm sınıfı seç",
+            apply: () => {
+              setAssignmentMode("whole-class");
+              setSelectedStudentIds(students.map((student) => student.id));
+            },
+          }
+        : {}),
+    });
+  }
+  if (!planDateValid) {
+    saveBlockingItems.push({
+      code: "plan.week-range",
+      detail: "Plan tarihini YYYY-AA-GG biçiminde yazın.",
+      actionLabel: "Kaynak günü kullan",
+      apply: () => setPlanCivilDate(allowedPlanDateStart),
+    });
+  } else if (!planDateInPremiumWeek || !teacherOwnedDateInWeek) {
+    saveBlockingItems.push({
+      code: "plan.week-range",
+      detail: "Plan tarihini bağlı olduğu kaynak haftanın tarih aralığına alın.",
+      actionLabel: "Kaynak haftaya al",
+      apply: () => setPlanCivilDate(allowedPlanDateStart),
+    });
+  } else if (!planDateIsOfficialTeachingDay) {
+    const nearestCivilDate = officialTeachingDate?.nearestCivilDate ?? null;
+    saveBlockingItems.push({
+      code: "plan.calendar-day",
+      detail: nearestCivilDate
+        ? `${formatTurkishCivilDate(planCivilDate)} resmî MEB çalışma takviminde öğretim günü değildir. En yakın öğretim günü ${formatTurkishCivilDate(nearestCivilDate)}.`
+        : `${formatTurkishCivilDate(planCivilDate)} resmî MEB çalışma takviminde öğretim günü değildir.`,
+      ...(nearestCivilDate
+        ? {
+            actionLabel: "En yakın öğretim gününe al",
+            apply: () => setPlanCivilDate(nearestCivilDate),
+          }
+        : {}),
+    });
+  }
+  if (!startTimeValid || !endTimeValid || !timeOrderValid) {
+    saveBlockingItems.push({
+      code: "plan.time",
+      detail: "Başlangıç ve bitiş saatlerini kontrol edin; bitiş başlangıçtan sonra olmalıdır.",
+      actionLabel: "Sınıf saatini kullan",
+      apply: () => {
+        setStartTime(defaultStartTime);
+        setEndTime(defaultEndTime);
+      },
+    });
+  }
+  if (!premiumDailyFlowValid) {
+    saveBlockingItems.push({
+      code: "plan.flow",
+      detail: "Tam gün akışındaki süre ve not alanlarını kontrol edin.",
+    });
+  }
+  if (
     teacherOwnedDailyFlowEnabled &&
     teacherOwnedDailyFlowTotalMinutes !== expectedTeacherOwnedDailyFlowMinutes
-      ? `10 bölümün toplamını sınıfın ${expectedTeacherOwnedDailyFlowMinutes} dakikalık çalışma düzeniyle eşitleyin.`
-      : null,
-    !teacherOwnedDailyFlowValid &&
-    teacherOwnedDateInWeek &&
-    teacherOwnedDailyFlowTotalMinutes === expectedTeacherOwnedDailyFlowMinutes
-      ? "Öğretmenin 10 bölümlü günlük akışındaki başlık, süre ve notları kontrol edin."
-      : null,
-    !teacherOwnedActivityBlockValid
-      ? "Gerçek etkinliğin uygulanacağı, atlanmamış bir akış bölümü seçin."
-      : null,
-  ].filter((reason): reason is string => reason !== null);
-  const saveReady = !busy && saveBlockingReasons.length === 0;
-  const saveDisabled = busy || saveBlockingReasons.length > 0;
-  const saveReadinessTitle = error
-    ? "Plan kaydedilemedi"
-    : busy
-      ? "Plan kaydediliyor"
-      : saveReady
-        ? "Kaydetmeye hazır"
-        : saveBlockingReasons.length === 1
-          ? "1 adım kaldı"
-          : `${saveBlockingReasons.length} adım kaldı`;
-  const saveReadinessDetail = error
-    ? error
-    : busy
-      ? "Kayıt tamamlanana kadar bu ekranda kalın."
-      : saveReady
-        ? initialEdit
-          ? "Değişiklikler kontrol edildi; kaydedebilirsiniz."
-          : teacherOwnedDailyFlowEnabled
-            ? "Etkinlik, hedef, çocuk kapsamı ve 10 akış bölümü tamamlandı."
-            : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
-        : saveBlockingReasons.join(" ");
+  ) {
+    saveBlockingItems.push({
+      code: "plan.flow",
+      detail: `10 bölümün toplamını sınıfın ${expectedTeacherOwnedDailyFlowMinutes} dakikalık çalışma düzeniyle eşitleyin.`,
+      ...(teacherOwnedDurationAdjustmentBlock
+        ? {
+            actionLabel: "Süreyi otomatik eşitle",
+            apply: () =>
+              setTeacherOwnedDailyFlowBlocks((current) =>
+                current.map((block) =>
+                  block.kind === teacherOwnedDurationAdjustmentBlock.kind
+                    ? {
+                        ...block,
+                        durationMinutes:
+                          block.durationMinutes + teacherOwnedDurationDifference,
+                      }
+                    : block,
+                ),
+              ),
+          }
+        : {}),
+    });
+  } else if (!teacherOwnedDailyFlowValid && teacherOwnedDateInWeek) {
+    saveBlockingItems.push({
+      code: "plan.flow",
+      detail: "10 bölümlü günlük akıştaki başlık, süre ve notları kontrol edin.",
+    });
+  }
+  if (!teacherOwnedActivityBlockValid) {
+    saveBlockingItems.push({
+      code: "plan.flow",
+      detail: "Gerçek etkinliğin uygulanacağı, atlanmamış bir akış bölümü seçin.",
+      ...(availableTeacherActivityBlock
+        ? {
+            actionLabel: "Uygun bölümü seç",
+            apply: () => setTeacherOwnedActivityBlockKind(availableTeacherActivityBlock.kind),
+          }
+        : {}),
+    });
+  }
+  const primarySaveBlocker = saveBlockingItems[0];
+  const saveReady = !busy && saveBlockingItems.length === 0;
+  const saveDisabled = busy || saveBlockingItems.length > 0;
+  const saveReadinessTitle = busy
+    ? "Plan kaydediliyor"
+    : saveReady
+      ? "Kaydetmeye hazır"
+      : saveBlockingItems.length === 1
+        ? "1 adım kaldı"
+        : `${saveBlockingItems.length} adım kaldı`;
+  const saveReadinessDetail = busy
+    ? "Kayıt tamamlanana kadar bu ekranda kalın."
+    : saveReady
+      ? initialEdit
+        ? "Değişiklikler kontrol edildi; kaydedebilirsiniz."
+        : teacherOwnedDailyFlowEnabled
+          ? "Etkinlik, hedef, çocuk kapsamı ve 10 akış bölümü tamamlandı."
+          : "Etkinlik, hedef ve çocuk kapsamı tamamlandı."
+      : `${primarySaveBlocker?.detail ?? "Eksik alanları tamamlayın."}${
+          saveBlockingItems.length > 1 ? ` ${saveBlockingItems.length - 1} adım daha var.` : ""
+        }`;
   const selectPremiumApplication = (useAlternative: boolean) => {
     setPremiumAlternativeActivated(useAlternative);
     if (!initialTemplate) return;
@@ -526,6 +984,7 @@ export function PlanCreationScreen({
       assignedStudentIds.length === 0 ||
       !planDateValid ||
       !planDateInPremiumWeek ||
+      !planDateIsOfficialTeachingDay ||
       !startTimeValid ||
       !endTimeValid ||
       !timeOrderValid ||
@@ -535,7 +994,7 @@ export function PlanCreationScreen({
       busy
     ) return;
     setBusy(true);
-    setError("");
+    setErrorFeedback(null);
     try {
       if (initialEdit) {
         if (!onUpdate) {
@@ -563,6 +1022,12 @@ export function PlanCreationScreen({
         });
         return;
       }
+      const pedagogicalProvenance = initialPedagogicalProvenance
+        ? bindPedagogicalPlanProvenanceToCivilDate(
+            initialPedagogicalProvenance,
+            planCivilDate,
+          )
+        : undefined;
       await onCreate({
         ...ids,
         civilDate: planCivilDate,
@@ -584,14 +1049,48 @@ export function PlanCreationScreen({
                 : {}),
             }
           : {}),
-        ...(initialPedagogicalProvenance
-          ? { pedagogicalProvenance: initialPedagogicalProvenance }
+        ...(pedagogicalProvenance
+          ? { pedagogicalProvenance }
           : {}),
         ...(initialTemplate ? { premiumAlternativeActivated } : {}),
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Plan kaydedilemedi.");
+      setErrorFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail: initialEdit
+            ? "Değişiklikler kaydedilemedi. Taslağınız korunuyor."
+            : "Plan kaydedilemedi. Taslağınız korunuyor.",
+        }),
+      );
       setBusy(false);
+    }
+  };
+
+  const applyErrorFeedbackAction = () => {
+    const actionId = errorFeedback?.action?.id;
+    if (!actionId) return;
+    setErrorFeedback(null);
+    if (actionId === "use-source-week") {
+      setPlanCivilDate(allowedPlanDateStart);
+      return;
+    }
+    if (actionId === "select-target") {
+      setSimpleStep(2);
+      setSimpleTargetToolsOpen(true);
+      return;
+    }
+    if (actionId === "select-whole-class") {
+      setAssignmentMode("whole-class");
+      setSelectedStudentIds(students.map((student) => student.id));
+      return;
+    }
+    if (actionId === "restore-class-time") {
+      setStartTime(defaultStartTime);
+      setEndTime(defaultEndTime);
+      return;
+    }
+    if (actionId === "align-plan-date" || actionId === "retry") {
+      void save();
     }
   };
 
@@ -601,9 +1100,30 @@ export function PlanCreationScreen({
       <div className="d1-flow-content">
         <div className="d1-flow-intro">
           <span className="d1-kicker">{initialEdit ? "Kayıtlı öğretmen planı" : "Günlük plan hazırlığı"}</span>
-          <h1 ref={introHeadingRef} tabIndex={-1}>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : teacherOwnedDailyFlowEnabled ? "Etkinliği seçin, TYMM hedefini işaretleyin." : "Bir etkinlik ve bir program hedefi seçin."}</h1>
-          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : teacherOwnedDailyFlowEnabled ? "Günün 10 bölümlük akışı hazırdır. Yalnız ihtiyaç duyarsanız açıp düzenleyin; etkinlik ve program hedefi seçiminizden sonra planı kaydedin." : "İsterseniz başlık ve saat ayrıntılarını değiştirebilirsiniz."}</p>
+          <h1 ref={introHeadingRef} tabIndex={-1}>{initialEdit ? "Gelecek planın uygulama ayrıntılarını düzenleyin." : initialTemplate ? "Tam gün akışını sınıfınıza hazırlayın." : simpleStepHeading}</h1>
+          <p>{initialEdit ? "Plan kimliği, kaynak hafta, program hedefleri ve çocuk kapsamı korunur; tarih, saat, başlıklar ve öğretmen akış notları güncellenebilir." : initialTemplate ? "On blok hazır gelir; etkinliği, tarihi, hedefleri ve çocuk kapsamını öğretmen belirler." : simpleStepDescription}</p>
         </div>
+
+        {simpleWizardEnabled ? (
+          <nav className="simple-plan-steps" aria-label="Günlük plan oluşturma adımları">
+            {["Etkinlik", "TYMM hedefi", "Kontrol"].map((label, index) => {
+              const step = (index + 1) as 1 | 2 | 3;
+              return (
+                <button
+                  type="button"
+                  key={label}
+                  data-state={step === simpleStep ? "current" : step < simpleStep ? "complete" : "upcoming"}
+                  aria-current={step === simpleStep ? "step" : undefined}
+                  disabled={step > simpleStep}
+                  onClick={() => setSimpleStep(step)}
+                >
+                  <span>{step < simpleStep ? <CheckCircledIcon aria-hidden="true" /> : step}</span>
+                  <strong>{label}</strong>
+                </button>
+              );
+            })}
+          </nav>
+        ) : null}
 
         <section className="d1-context-card" aria-label="Plan bağlamı">
           <span>{formatTurkishCivilDate(planCivilDate)}</span>
@@ -1154,7 +1674,7 @@ export function PlanCreationScreen({
           </details>
         ) : null}
 
-        {!initialEdit ? <section className="plan-ideas" aria-labelledby="plan-ideas-title">
+        {!initialEdit && (!simpleWizardEnabled || simpleStep === 1) ? <section className="plan-ideas" aria-labelledby="plan-ideas-title">
           <div className="plan-ideas-heading">
             <div>
               <span className="d1-kicker">Oyun temelli fikir havuzu</span>
@@ -1164,31 +1684,42 @@ export function PlanCreationScreen({
               {selectedActivitySuggestion ? "Fikir seçildi" : "Birini seçin"}
             </strong>
           </div>
-          <p>
-            Alanı seçin, ardından bir etkinliğe dokunun.
-          </p>
-          <Carousel
-            className="plan-area-carousel"
-            contentClassName="plan-area-track"
-            ariaLabel="Etkinlik fikir alanları"
-          >
-            {PRESCHOOL_ACTIVITY_AREAS.map((area) => (
-              <button
-                type="button"
-                key={area.id}
-                aria-pressed={suggestionArea === area.id}
-                onClick={() => setSuggestionArea(area.id)}
-              >
-                {area.label}
-              </button>
-            ))}
-          </Carousel>
+          <p>Bir fikre dokunun; TYMM hedefi seçimine geçin.</p>
+          {simpleWizardEnabled ? (
+            <button
+              type="button"
+              className="simple-plan-more"
+              aria-expanded={simpleIdeaToolsOpen}
+              onClick={() => setSimpleIdeaToolsOpen((current) => !current)}
+            >
+              {simpleIdeaToolsOpen ? "Alan filtrelerini kapat" : "Başka bir alandan fikir bul"}
+              <ChevronDownIcon aria-hidden="true" />
+            </button>
+          ) : null}
+          {!simpleWizardEnabled || simpleIdeaToolsOpen ? (
+            <Carousel
+              className="plan-area-carousel"
+              contentClassName="plan-area-track"
+              ariaLabel="Etkinlik fikir alanları"
+            >
+              {PRESCHOOL_ACTIVITY_AREAS.map((area) => (
+                <button
+                  type="button"
+                  key={area.id}
+                  aria-pressed={suggestionArea === area.id}
+                  onClick={() => setSuggestionArea(area.id)}
+                >
+                  {area.label}
+                </button>
+              ))}
+            </Carousel>
+          ) : null}
           <Carousel
             className="plan-suggestion-carousel"
             contentClassName="plan-suggestion-track"
             ariaLabel="Etkinlik fikirleri"
           >
-            {visibleActivitySuggestions.slice(0, 8).map((suggestion) => (
+            {visibleActivitySuggestions.slice(0, simpleWizardEnabled ? 4 : 8).map((suggestion) => (
               <button
                 type="button"
                 className="plan-suggestion"
@@ -1199,6 +1730,7 @@ export function PlanCreationScreen({
                   if (planTitle === "Günlük öğrenme planı") {
                     setPlanTitle(`${suggestion.title} planı`);
                   }
+                  if (simpleWizardEnabled) setSimpleStep(2);
                 }}
               >
                 <StarIcon aria-hidden="true" />
@@ -1212,17 +1744,33 @@ export function PlanCreationScreen({
           </Carousel>
         </section> : null}
 
-        <div className="d1-form">
-          <label htmlFor="d1-activity-title">Etkinlik adı</label>
-          <KeyboardInput
-            id="d1-activity-title"
-            value={activityTitle}
-            onChange={(event) => setActivityTitle(event.target.value)}
-            placeholder="Örn. Bahçede gölge incelemesi"
-            autoComplete="off"
-          />
+        {!simpleWizardEnabled || simpleStep !== 2 ? <div className="d1-form">
+          {!simpleWizardEnabled || simpleStep === 1 ? (
+            <>
+              <label htmlFor="d1-activity-title">
+                {simpleWizardEnabled ? "Kendi etkinliğim" : "Etkinlik adı"}
+              </label>
+              <KeyboardInput
+                id="d1-activity-title"
+                value={activityTitle}
+                onChange={(event) => setActivityTitle(event.target.value)}
+                placeholder="Örn. Bahçede gölge incelemesi"
+                autoComplete="off"
+              />
+              {simpleWizardEnabled ? (
+                <button
+                  type="button"
+                  className="d1-primary simple-plan-continue"
+                  disabled={!activityTitle.trim()}
+                  onClick={() => setSimpleStep(2)}
+                >
+                  TYMM hedefini seç
+                </button>
+              ) : null}
+            </>
+          ) : null}
 
-          <details className="quick-details plan-optional-details">
+          {!simpleWizardEnabled || simpleStep === 3 ? <details className="quick-details plan-optional-details">
             <summary>
               <span>
                 <ClockIcon aria-hidden="true" />
@@ -1239,9 +1787,9 @@ export function PlanCreationScreen({
                 onChange={(event) => setPlanTitle(event.target.value)}
                 autoComplete="off"
               />
-              {!planDateInPremiumWeek ? (
-                <p className="d1-error" role="alert">
-                  Plan tarihi {initialEdit ? `${initialEdit.allowedDateStart} – ${initialEdit.allowedDateEnd}` : initialTemplate?.weekSnapshot.dateRange} içinde olmalıdır.
+              {!planDateInPremiumWeek || !teacherOwnedDateInWeek ? (
+                <p className="d1-error" id="d1-plan-date-guidance" role="status">
+                  Plan tarihi {allowedPlanDateStart} – {allowedPlanDateEnd} içinde olmalıdır.
                 </p>
               ) : null}
               <label htmlFor="d1-plan-date">Plan tarihi</label>
@@ -1252,6 +1800,11 @@ export function PlanCreationScreen({
                 placeholder="YYYY-AA-GG"
                 inputMode="numeric"
                 autoComplete="off"
+                aria-describedby={
+                  !planDateInPremiumWeek || !teacherOwnedDateInWeek
+                    ? "d1-plan-date-guidance"
+                    : undefined
+                }
               />
               <div className="d1-form-grid">
                 <label htmlFor="d1-start-time">Başlangıç
@@ -1272,8 +1825,19 @@ export function PlanCreationScreen({
                 </label>
               </div>
             </div>
-          </details>
-        </div>
+          </details> : null}
+        </div> : null}
+
+        {simpleWizardEnabled && simpleStep >= 2 ? (
+          <section className="simple-plan-selection" aria-label="Seçilen plan özeti">
+            <button type="button" onClick={() => setSimpleStep(simpleStep === 3 ? 2 : 1)}>Geri</button>
+            <span>
+              <small>ETKİNLİK</small>
+              <strong>{activityTitle}</strong>
+              {simpleStep === 3 ? <em>{selectedTargets.map((target) => target.referenceCode).join(", ")}</em> : null}
+            </span>
+          </section>
+        ) : null}
 
         {initialEdit ? (
           <section className="scheduled-plan-locked-scope" aria-label="Korunan plan kapsamı">
@@ -1284,7 +1848,7 @@ export function PlanCreationScreen({
             </p>
           </section>
         ) : <>
-        <section className="curriculum-picker" aria-labelledby="curriculum-picker-title">
+        {!simpleWizardEnabled || simpleStep === 2 ? <section className="curriculum-picker" aria-labelledby="curriculum-picker-title">
           <div className="curriculum-section-heading">
             <div>
               <span className="d1-kicker">Program omurgası</span>
@@ -1292,63 +1856,104 @@ export function PlanCreationScreen({
             </div>
             <strong aria-live="polite">{selectedTargets.length} hedef seçili</strong>
           </div>
-          <KeyboardInput
-            value={targetQuery}
-            onChange={(event) => setTargetQuery(event.target.value)}
-            placeholder="Kod, başlık veya alan ara"
-            aria-label="Program hedeflerinde ara"
-          />
-          <Carousel
-            className="plan-area-carousel"
-            contentClassName="plan-area-track"
-            ariaLabel="Program alanları"
-          >
-            {targetDomains.map((domain) => (
-              <button
-                type="button"
-                key={domain}
-                aria-pressed={targetDomain === domain}
-                onClick={() => setTargetDomain(domain)}
+          {!curriculumAgeBand ? (
+            <div className="catalog-scope-note" role="status" aria-live="polite">
+              <strong>Resmî yaş bandı seçilmeden hedef gösterilmez.</strong>
+              <p>
+                Bu planı kapatıp Sınıf &gt; Profili düzenle alanından 36–48,
+                48–60 veya 60–72 ay bandını seçin. Maarif Modeli hedefleri
+                ancak bu seçimden sonra yaşa göre açılır.
+              </p>
+            </div>
+          ) : null}
+          {curriculumAgeBand && simpleWizardEnabled && !simpleTargetToolsOpen ? (
+            <p className="catalog-scope-note" data-testid="semantic-target-explanation">
+              Öneriler; etkinlik adı, öğretmen amacı, {ageGroup} yaş bandı ve varsa
+              uyarlama veya materyal notlarındaki anlam ilişkisine göre sıralandı.
+              Resmî değerlendirme değildir; son seçim öğretmene aittir.
+            </p>
+          ) : null}
+          {curriculumAgeBand && simpleWizardEnabled ? (
+            <button
+              type="button"
+              className="simple-plan-more"
+              aria-expanded={simpleTargetToolsOpen}
+              onClick={() => setSimpleTargetToolsOpen((current) => !current)}
+            >
+              {simpleTargetToolsOpen ? "Arama ve alanları kapat" : "Daha fazla hedef ara"}
+              <ChevronDownIcon aria-hidden="true" />
+            </button>
+          ) : null}
+          {curriculumAgeBand && (!simpleWizardEnabled || simpleTargetToolsOpen) ? (
+            <>
+              <KeyboardInput
+                value={targetQuery}
+                onChange={(event) => setTargetQuery(event.target.value)}
+                placeholder="Kod, başlık veya alan ara"
+                aria-label="Program hedeflerinde ara"
+              />
+              <Carousel
+                className="plan-area-carousel"
+                contentClassName="plan-area-track"
+                ariaLabel="Program alanları"
               >
-                {domain}
-              </button>
-            ))}
-          </Carousel>
+                {targetDomains.map((domain) => (
+                  <button
+                    type="button"
+                    key={domain}
+                    aria-pressed={targetDomain === domain}
+                    onClick={() => setTargetDomain(domain)}
+                  >
+                    {domain}
+                  </button>
+                ))}
+              </Carousel>
+            </>
+          ) : null}
           <div className="curriculum-target-list" role="group" aria-label="Program hedefleri">
-            {visibleTargets.map((target) => {
+            {(simpleWizardEnabled && !simpleTargetToolsOpen
+              ? simpleTargetRecommendations.map((recommendation) => recommendation.target)
+              : visibleTargets).map((target) => {
               const selected = selectedTargetIds.includes(target.id);
+              const recommendation = simpleRecommendationByTargetId.get(target.id);
               return (
                 <button
                   type="button"
                   className={selected ? "curriculum-target is-selected" : "curriculum-target"}
                   aria-pressed={selected}
                   key={target.id}
-                  onClick={() =>
+                  onClick={() => {
                     setSelectedTargetIds((current) =>
                       current.includes(target.id)
                         ? current.filter((id) => id !== target.id)
                         : [...current, target.id],
-                    )
-                  }
+                    );
+                    if (simpleWizardEnabled && !selected) setSimpleStep(3);
+                  }}
                 >
                   <span>
                     <b>{target.referenceCode}</b>
                     <small>{target.domain} · {CURRICULUM_TARGET_KIND_LABELS[target.kind]}</small>
                   </span>
                   <strong>{target.referenceTitle}</strong>
+                  {simpleWizardEnabled && recommendation ? (
+                    <small className="curriculum-target-reason">
+                      Öneri nedeni: {recommendation.reason}
+                    </small>
+                  ) : null}
                   <em>{selected ? "Seçildi" : "Seç"}</em>
                 </button>
               );
             })}
           </div>
-          <p className="catalog-scope-note">
+          {curriculumAgeBand && (!simpleWizardEnabled || simpleTargetToolsOpen) ? <p className="catalog-scope-note">
             {targetDomain || targetQuery.trim()
               ? "İlk 16 eşleşme gösterilir; arayarak daha da daraltabilirsiniz."
               : "Seçili yaş bandındaki ilk 6 hedef gösteriliyor. Alan seçerek veya arayarak daraltabilirsiniz."}
-          </p>
-        </section>
+          </p> : null}
+        </section> : null}
 
-        <details className="quick-details plan-optional-details">
+        {!simpleWizardEnabled || simpleStep === 3 ? <details className="quick-details plan-optional-details">
           <summary>
             <span>
               <PersonIcon aria-hidden="true" />
@@ -1403,38 +2008,55 @@ export function PlanCreationScreen({
             <span>{assignmentCount} planlı takip kaydı açılacak.</span>
           </div>
           </div>
-        </details>
+        </details> : null}
         </>}
       </div>
     </MobileScroll>
-    <section
+    {!simpleWizardEnabled || simpleStep === 3 ? <section
       className="plan-save-dock"
       aria-label="Plan kaydetme durumu"
-      data-error={error ? "true" : "false"}
+      data-error={errorFeedback ? "true" : "false"}
     >
-      <div
-        id="plan-save-readiness"
-        className={
-          error
-            ? "plan-readiness is-error"
-            : saveReady
-              ? "plan-readiness is-ready"
-              : "plan-readiness"
-        }
-        role={error ? "alert" : "status"}
-        aria-live={error ? "assertive" : "polite"}
-        aria-atomic="true"
-      >
-        {!error && saveReady ? (
-          <CheckCircledIcon aria-hidden="true" />
-        ) : (
-          <ExclamationTriangleIcon aria-hidden="true" />
-        )}
-        <span>
-          <strong>{saveReadinessTitle}</strong>
-          <small>{saveReadinessDetail}</small>
-        </span>
-      </div>
+      {errorFeedback ? (
+        <div id="plan-save-readiness">
+          <TeacherFeedbackPanel
+            feedback={errorFeedback}
+            onAction={errorFeedback.action ? applyErrorFeedbackAction : undefined}
+            compact
+          />
+        </div>
+      ) : (
+        <div
+          id="plan-save-readiness"
+          className={saveReady ? "plan-readiness is-ready" : "plan-readiness"}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-warning-code={primarySaveBlocker?.code}
+        >
+          {saveReady ? (
+            <CheckCircledIcon aria-hidden="true" />
+          ) : (
+            <ExclamationTriangleIcon aria-hidden="true" />
+          )}
+          <span>
+            <strong>{saveReadinessTitle}</strong>
+            <small>{saveReadinessDetail}</small>
+            {primarySaveBlocker?.actionLabel && primarySaveBlocker.apply ? (
+              <button
+                className="plan-readiness-action"
+                type="button"
+                onClick={() => {
+                  setErrorFeedback(null);
+                  primarySaveBlocker.apply?.();
+                }}
+              >
+                {primarySaveBlocker.actionLabel}
+              </button>
+            ) : null}
+          </span>
+        </div>
+      )}
       <button
         className="d1-primary"
         type="button"
@@ -1444,7 +2066,7 @@ export function PlanCreationScreen({
       >
         {busy ? "Kaydediliyor…" : initialEdit ? "Değişiklikleri kaydet" : initialTemplate ? "Tam gün planını kaydet" : "Planı kaydet"}
       </button>
-    </section>
+    </section> : null}
     </>
   );
 }
@@ -1464,6 +2086,7 @@ export function PlanCreationFlow({
   initialActivityTitle,
   initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
+  enforceOfficialTeachingDays,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -1479,13 +2102,14 @@ export function PlanCreationFlow({
   initialActivityTitle?: string;
   initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
+  enforceOfficialTeachingDays?: boolean;
 }) {
   const initial = useMemo<FlowScreen>(
     () => ({
       id: initialEdit ? "plan-edit" : "plan-create",
       title: initialEdit ? "Planı düzenle" : "Plan oluştur",
       headerHeight: 64,
-      header: createFlowHeader(initialEdit ? "Planı düzenle" : "Plan oluştur", "1 / 1", onClose),
+      header: createFlowHeader(initialEdit ? "Planı düzenle" : "Plan oluştur", "3 adım", onClose),
       render: () => (
         <PlanCreationScreen
           civilDate={civilDate}
@@ -1501,6 +2125,7 @@ export function PlanCreationFlow({
           initialActivityTitle={initialActivityTitle}
           initialPedagogicalProvenance={initialPedagogicalProvenance}
           teacherOwnedDailyFlowContext={teacherOwnedDailyFlowContext}
+          enforceOfficialTeachingDays={enforceOfficialTeachingDays}
         />
       ),
     }),
@@ -1519,6 +2144,7 @@ export function PlanCreationFlow({
       initialActivityTitle,
       initialPedagogicalProvenance,
       teacherOwnedDailyFlowContext,
+      enforceOfficialTeachingDays,
     ],
   );
 

@@ -8,6 +8,7 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
+import { ACTIVITY_STUDIO_ITEMS } from "../../src/features/activity-studio/activity-studio-model.ts";
 import { curriculumTargetsForProfile } from "../../src/features/curriculum/curriculum-catalog.ts";
 import { TYMM_2024_CATALOG_METADATA } from "../../src/features/curriculum/tymm-2024-catalog.ts";
 import {
@@ -15,6 +16,7 @@ import {
   createPlanWithActivity,
   updateScheduledPlanWithActivity,
 } from "../../src/features/evidence/evidence-flow.ts";
+import { createPedagogicalPlanBridge } from "../../src/features/pedagogical-os/pedagogical-plan-bridge.ts";
 import { parsePremiumContentPack } from "../../src/features/premium-plans/content-repository.ts";
 import { createPremiumDailyFlowDraft } from "../../src/features/premium-plans/domain.ts";
 import {
@@ -307,6 +309,67 @@ test("gelecek plan düzenlemesi kimlik/provenance korur ve tarihi üç yerde ato
   assert.equal(after.plans.filter((plan) => plan.planType === "daily").length, 1);
   assert.equal(after.activities.length, 1);
   assert.equal(after.calendarEntries.length, 0);
+});
+
+test("gelecek plan başka güne taşınırken pedagojik kaynak iki kayıtta atomik yeniden bağlanır", async () => {
+  const store = activeStore();
+  const sourceActivity = ACTIVITY_STUDIO_ITEMS.find((item) =>
+    item.ageBands.includes("60-72"),
+  );
+  const curriculumTarget = curriculumTargetsForProfile(profile, "60-72")[0];
+  assert.ok(sourceActivity && curriculumTarget);
+  const pedagogicalProvenance = createPedagogicalPlanBridge({
+    activity: sourceActivity,
+    civilDate: "2026-09-08",
+    ageBand: "60-72",
+    scenarioId: "balanced",
+    participationRouteId: "multiple",
+    now: new Date("2026-09-07T05:00:00.000Z"),
+  });
+  await createPlanWithActivity(store, {
+    civilDate: "2026-09-08",
+    planId,
+    activityId,
+    planTitle: `${sourceActivity.title} planı`,
+    activityTitle: sourceActivity.title,
+    startTime: "09:00",
+    endTime: "09:40",
+    curriculumProfile: profile,
+    curriculumTargets: [curriculumTarget],
+    assignmentMode: "whole-class",
+    studentIds: [studentId],
+    pedagogicalProvenance,
+    now: new Date("2026-09-07T05:10:00.000Z"),
+  });
+  const draft = await loadScheduledPlanEditDraft(store, {
+    planId,
+    now: new Date("2026-09-07T08:00:00.000Z"),
+  });
+
+  const updated = await updateScheduledPlanWithActivity(store, {
+    ...draft,
+    civilDate: "2026-09-09",
+    planTitle: `${sourceActivity.title} — ikinci gün`,
+    activityTitle: sourceActivity.title,
+    now: new Date("2026-09-07T08:10:00.000Z"),
+  });
+
+  assert.equal(updated.plan.civilDate, "2026-09-09");
+  assert.equal(updated.activity.civilDate, "2026-09-09");
+  assert.equal(updated.plan.pedagogicalProvenance.civilDate, "2026-09-09");
+  assert.equal(updated.activity.pedagogicalProvenance.civilDate, "2026-09-09");
+  assert.equal(
+    canonicalJson(updated.plan.pedagogicalProvenance),
+    canonicalJson(updated.activity.pedagogicalProvenance),
+  );
+  assert.equal(
+    updated.plan.pedagogicalProvenance.sourceActivityId,
+    pedagogicalProvenance.sourceActivityId,
+  );
+  assert.equal(
+    updated.plan.pedagogicalProvenance.capturedAt,
+    pedagogicalProvenance.capturedAt,
+  );
 });
 
 test("hafta dışı, stale, gözlemli, başlamış ve başka sınıf düzenlemeleri sıfır yazımla reddedilir", async () => {

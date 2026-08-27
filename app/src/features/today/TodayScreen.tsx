@@ -20,6 +20,11 @@ import {
 import { Carousel } from "../../mobile/Carousel.tsx";
 import { readBackupHealthReceipt } from "../../core/storage/backup-reminder.ts";
 import type { TeacherDayCarryForwardItem } from "../day-closure/teacher-day-closure.ts";
+import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
+import {
+  createTeacherFeedback,
+  type TeacherFeedback,
+} from "../feedback/teacher-feedback.ts";
 import { SetupProgressCenter } from "../onboarding/SetupProgressCenter.tsx";
 import {
   createSetupProgressEvidence,
@@ -153,6 +158,11 @@ function CarryForwardItemCard({
   const [deferredUntil, setDeferredUntil] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
+  const [retryRequest, setRetryRequest] = useState<{
+    readonly state: "resolved" | "deferred" | "reopened";
+    readonly deferredUntilCivilDate?: string;
+  } | null>(null);
   const minimumDeferredDate = nextCivilDate(currentCivilDate);
   const actionUnavailableId = `carry-action-unavailable-${item.sourceIssueId}`;
   const feedbackId = `carry-feedback-${item.sourceIssueId}`;
@@ -167,10 +177,14 @@ function CarryForwardItemCard({
       (!deferredUntilCivilDate || deferredUntilCivilDate <= currentCivilDate)
     ) {
       setMessage("Erteleme tarihi bugünden sonra olmalıdır.");
+      setFeedback(null);
+      setRetryRequest(null);
       return;
     }
     setBusy(true);
     setMessage("");
+    setFeedback(null);
+    setRetryRequest(null);
     try {
       await onTransition({
         sourceIssueIdentity: item.sourceIssueId,
@@ -187,11 +201,13 @@ function CarryForwardItemCard({
             : `Taşınan iş ${carryForwardDateLabel(deferredUntilCivilDate!)} tarihine ertelendi.`,
       );
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : "Taşınan iş güncellenemedi.",
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Taşınan iş güncellenemedi. Mevcut tarih ve durum korunuyor; yeniden deneyebilirsiniz.",
+        }),
       );
+      setRetryRequest({ state, ...(deferredUntilCivilDate ? { deferredUntilCivilDate } : {}) });
     } finally {
       setBusy(false);
     }
@@ -244,6 +260,8 @@ function CarryForwardItemCard({
               aria-describedby={!onTransition ? actionUnavailableId : feedbackId}
               onClick={() => {
                 setMessage("");
+                setFeedback(null);
+                setRetryRequest(null);
                 setDeferOpen((open) => !open);
               }}
             >
@@ -297,6 +315,18 @@ function CarryForwardItemCard({
       >
         {message}
       </small>
+      {feedback ? (
+        <TeacherFeedbackPanel
+          feedback={feedback}
+          onAction={retryRequest
+            ? () => void transition(
+                retryRequest.state,
+                retryRequest.deferredUntilCivilDate,
+              )
+            : undefined}
+          compact
+        />
+      ) : null}
     </article>
   );
 }
