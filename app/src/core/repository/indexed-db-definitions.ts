@@ -1,4 +1,4 @@
-export const MAARIFOS_DATABASE_VERSION = 5;
+export const MAARIFOS_DATABASE_VERSION = 6;
 
 export interface IndexedDbMigration {
   toVersion: number;
@@ -28,6 +28,11 @@ export const INDEXED_DB_MIGRATIONS: readonly IndexedDbMigration[] = [
     toVersion: 5,
     description:
       "Öğretmen onaylı değer kanıt bağları koleksiyonunu ve kapsam/kanıt indekslerini ekler.",
+  },
+  {
+    toVersion: 6,
+    description:
+      "Gözlemleri plan ve gerçek etkinlik ilişkisine göre sorgulayan indeksleri ekler.",
   },
 ] as const;
 
@@ -67,4 +72,9 @@ export const VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS = [
     ],
     options: { unique: false },
   },
+] as const satisfies readonly IndexDefinition[];
+
+export const OBSERVATION_RELATION_INDEX_DEFINITIONS = [
+  { name: "by-plan", keyPath: "planId" },
+  { name: "by-activity", keyPath: "activityId" },
 ] as const satisfies readonly IndexDefinition[];

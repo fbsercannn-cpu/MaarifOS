@@ -2,11 +2,11 @@
 
 **Tarih:** 28 Ağustos 2026
 
-**Kanonik canlı taban:** MaarifOS `0.19.0`, Sites sürüm `30`
+**Kanonik canlı sürüm:** MaarifOS `0.19.1`
 
-**Kaynak taban:** `agent/maarif-reform` / `7f654b4bf0c9f240d4d288e1bb32c842d849f92f`
+**Kaynak revizyonu:** `agent/maarif-reform` / `11b5913568b90860ccd76c1a5b845030d2bae307`
 
-**Durum:** `IN_PROGRESS` — bu belge uygulama veya yayın kanıtı değildir.
+**Durum:** `VERIFIED` — Aşama A otomatik, paket ve canlı kabul kapıları aynı kaynak revizyonunda geçmiştir.
 
 ## Öğretmen-gölge bağlamı
 
@@ -109,3 +109,24 @@ Production kabulü aynı temiz telefon profili üzerinde şu sırayla yapılır:
   PDF diye sunulması, 390 px bilgi kırpılması, sürüm kaynaklarının ayrışması,
   kalite/paket/live kapılarından herhangi birinin başarısız veya çalıştırılmamış
   olması.
+
+## Gerçekleşen kabul kanıtı
+
+`0.19.1` sürümünde skoru sıfır hedef önerisi fail-closed kapatıldı; öğretmen
+alan veya kodla hedef seçmeden plan yazımı açılmadı. Uygulama üretimi raster
+belgelerin görünür adları `görsel PDF` olarak düzeltildi ve resmî MEB kaynak PDF
+bağlantısı değişmeden korundu. Bugün sınıf bağlamı 320/390/430 px telefon
+matrisinde kırpılmadan aktı; görünür kritik hedeflerin 44×44 px altına düşmediği
+ve ciddi/kritik Axe ihlali olmadığı doğrulandı.
+
+Korunan runtime, politika lint'i, TypeScript, tam `quality:gate`, founder build,
+Sites sözleşmesi ve production PWA yeniden başlatma kapıları çıkış kodu `0` ile
+geçti. Taze Sites arşivi
+`maarifos-0.19.1-20260828-115851-sites.tar.gz` için SHA-256
+`7c0cdadb7417bb24da527cb59182945d4f4dbe53e1450afbc4b65bac7c8e893b8`
+olarak sabitlendi. Production Sites sürüm kimliği
+`appgprj_6a60733e774c8191bbeeb1cca335281d~appgver_8a2adbfdc2c881918b319dc710dbae8b`
+üzerinde aynı telefon akışı yeniden kabul edildi.
+
+Aşama A yalnız MR-050–MR-053 kapsamını kapatır; Aşama B–E veya bütünsel
+`10/10` iddiası üretmez.

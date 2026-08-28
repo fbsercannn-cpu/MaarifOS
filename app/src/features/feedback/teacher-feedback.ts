@@ -4,29 +4,57 @@ import { classifyApplicationError } from "../../core/errors/error-classifier.ts"
 
 export type TeacherFeedbackSeverity = "info" | "warning" | "error";
 
-export type TeacherFeedbackCode =
-  | "plan.source-date"
-  | "plan.week-range"
-  | "plan.program-profile"
-  | "plan.target"
-  | "plan.child-scope"
-  | "plan.time"
-  | "plan.conflict"
-  | "plan.evidence-locked"
-  | "plan.flow"
-  | "plan.integrity"
-  | "classroom.scope"
-  | "observation.scope"
-  | "evaluation.evidence"
-  | "device.storage"
-  | "device.integrity"
-  | "device.offline"
-  | "security.boundary"
-  | "validation.generic"
-  | "unknown";
+/**
+ * Öğretmen yüzeyindeki bütün kararlı geri bildirim kodlarının çalışma zamanı
+ * sözleşmesi. Yeni kodlar bu listeye eklenir; mevcut kodlar sessizce yeniden
+ * anlamlandırılmaz veya kaldırılmaz.
+ */
+export const TEACHER_FEEDBACK_CODES = [
+  "plan.source-date",
+  "plan.date-format",
+  "plan.week-range",
+  "plan.calendar-day",
+  "plan.age-profile",
+  "plan.program-profile",
+  "plan.activity",
+  "plan.title",
+  "plan.target",
+  "plan.child-scope",
+  "plan.time",
+  "plan.conflict",
+  "plan.evidence-locked",
+  "plan.flow",
+  "plan.integrity",
+  "plan.integrity.activity-date",
+  "plan.integrity.teacher-flow-shape",
+  "plan.integrity.teacher-source-chain",
+  "plan.integrity.teacher-activity-source",
+  "plan.integrity.teacher-flow-block",
+  "plan.integrity.premium-flow-shape",
+  "plan.integrity.premium-source-missing",
+  "plan.integrity.premium-source-chain",
+  "plan.integrity.premium-activity-id",
+  "plan.integrity.premium-activity-snapshot",
+  "plan.integrity.premium-activity-source",
+  "plan.edit.activity-count",
+  "plan.edit.past-or-today",
+  "plan.edit.status-locked",
+  "plan.edit.evidence-locked",
+  "classroom.scope",
+  "observation.scope",
+  "evaluation.evidence",
+  "device.storage",
+  "device.integrity",
+  "device.offline",
+  "security.boundary",
+  "validation.generic",
+  "unknown",
+] as const;
+
+export type TeacherFeedbackCode = (typeof TEACHER_FEEDBACK_CODES)[number];
 
 export type TeacherFeedbackActionId =
-  | "align-plan-date"
+  | "select-activity"
   | "use-source-week"
   | "select-target"
   | "select-whole-class"
@@ -71,12 +99,21 @@ const RULES: readonly TeacherFeedbackRule[] = [
     code: "plan.source-date",
     severity: "error",
     supportCode: "PLAN-DATE-001",
-    title: "Etkinlik ve plan günü eşleşmedi",
+    title: "Etkinlik kaynağı doğrulanamadı",
     detail:
-      "Etkinlik kaynağı seçtiğiniz plan gününe bağlanamadı. Taslağınız korunuyor; günleri tek dokunuşla eşitleyebilirsiniz.",
-    action: { id: "align-plan-date", label: "Plan gününe eşitle" },
-    patterns: [/pedagojik etkinlik kaynağı plan günüyle uyuşmuyor/i],
+      "Plan günü kayıttan önce otomatik eşitlenir. Bu uyarı kaynak ilişkisinin doğrulanamadığını gösterir. Taslağınız korunuyor; etkinliği yeniden seçin.",
+    action: { id: "select-activity", label: "Etkinliği yeniden seç" },
+    patterns: [/^pedagojik etkinlik kaynağı plan günüyle uyuşmuyor\.?$/i],
     applicationCodes: ["plan.source-date"],
+  },
+  {
+    code: "plan.date-format",
+    severity: "warning",
+    supportCode: "PLAN-DATE-002",
+    title: "Plan tarihi geçerli biçimde değil",
+    detail: "Plan gününü YYYY-AA-GG biçiminde yazın veya önerilen kaynak gününü kullanın.",
+    patterns: [/^plan günü yyyy-aa-gg biçiminde olmalıdır\.?$/i],
+    applicationCodes: ["plan.date-format"],
   },
   {
     code: "plan.week-range",
@@ -94,6 +131,28 @@ const RULES: readonly TeacherFeedbackRule[] = [
     applicationCodes: ["plan.week-range"],
   },
   {
+    code: "plan.calendar-day",
+    severity: "warning",
+    supportCode: "PLAN-CALENDAR-001",
+    title: "Seçilen gün öğretim günü değil",
+    detail:
+      "Resmî MEB çalışma takvimindeki en yakın öğretim gününü seçin; plan taslağınız korunur.",
+    patterns: [/^.+resmî meb çalışma takviminde öğretim günü değildir(?:\. .+)?\.?$/i],
+    applicationCodes: ["plan.calendar-day"],
+  },
+  {
+    code: "plan.age-profile",
+    severity: "warning",
+    supportCode: "PLAN-AGE-001",
+    title: "Sınıfın resmî yaş bandı eksik",
+    detail:
+      "TYMM hedeflerini açmak için sınıf profilinde 36–48, 48–60 veya 60–72 ay yaş bandını seçin.",
+    patterns: [
+      /^plan hedeflerini açmak için sınıf profilinde 36[–-]48, 48[–-]60 veya 60[–-]72 ay resmî yaş bandını seçin\.?$/i,
+    ],
+    applicationCodes: ["plan.age-profile"],
+  },
+  {
     code: "plan.program-profile",
     severity: "error",
     supportCode: "PLAN-PROGRAM-001",
@@ -101,11 +160,36 @@ const RULES: readonly TeacherFeedbackRule[] = [
     detail:
       "Planın yaş grubu veya program profili etkin sınıfla uyuşmuyor. Sınıf ve plan bilgilerinizi kontrol edin.",
     patterns: [
-      /plan program profili.*sınıfın kayıtlı program profiliyle uyuşmuyor/i,
-      /program profili/i,
-      /program çerçevesi/i,
+      /^plan program profili (?:aktif )?sınıfın kayıtlı program profiliyle uyuşmuyor\.?$/i,
+      /^seçilen program hedefi aktif sınıfın program, katalog ve kaynak sürümüyle uyuşmuyor\.?$/i,
+      /^bu paket yalnız doğrulanmış tymm 2024 program profiliyle kullanılabilir\.?$/i,
     ],
     applicationCodes: ["plan.program-profile"],
+  },
+  {
+    code: "plan.activity",
+    severity: "warning",
+    supportCode: "PLAN-ACTIVITY-001",
+    title: "Etkinlik seçilmedi",
+    detail: "Bir etkinlik seçin veya etkinlik adını yazın.",
+    action: { id: "select-activity", label: "Etkinlik seç" },
+    patterns: [
+      /^bir etkinlik seçin veya etkinlik adını yazın\.?$/i,
+      /^etkinlik (?:adı|başlığı) zorunludur\.?$/i,
+    ],
+    applicationCodes: ["plan.activity"],
+  },
+  {
+    code: "plan.title",
+    severity: "warning",
+    supportCode: "PLAN-TITLE-001",
+    title: "Plan başlığı eksik",
+    detail: "Plan başlığını tamamlayın; etkinlik adını başlık olarak da kullanabilirsiniz.",
+    patterns: [
+      /^plan başlığını yazın\.?$/i,
+      /^plan başlığı (?:boş bırakılamaz|gereklidir|zorunludur)\.?$/i,
+    ],
+    applicationCodes: ["plan.title"],
   },
   {
     code: "plan.target",
@@ -114,7 +198,10 @@ const RULES: readonly TeacherFeedbackRule[] = [
     title: "TYMM hedefi seçilmedi",
     detail: "Planı kaydetmek için etkinlikte izleyeceğiniz en az bir TYMM hedefini seçin.",
     action: { id: "select-target", label: "Hedef seç" },
-    patterns: [/en az bir program hedefi/i, /program hedefi seç/i, /tymm hedefi/i],
+    patterns: [
+      /^plan için en az bir program hedefi seçilmelidir\.?$/i,
+      /^en az bir tymm hedefi seçin\.?$/i,
+    ],
     applicationCodes: ["plan.target"],
   },
   {
@@ -125,10 +212,9 @@ const RULES: readonly TeacherFeedbackRule[] = [
     detail: "Planın uygulanacağı çocukları seçin veya etkin sınıfın tamamını plana ekleyin.",
     action: { id: "select-whole-class", label: "Tüm sınıfı seç" },
     patterns: [
-      /en az bir çocuk/i,
-      /çocuk kapsam/i,
-      /öğrenci dağıtım/i,
-      /seçili çocuk/i,
+      /^en az bir çocuk seçerek çocuk kapsamını tamamlayın\.?$/i,
+      /^öğrenci dağıtım biçimi tüm sınıf veya seçili çocuklar olmalıdır\.?$/i,
+      /^seçili çocuk kapsamı etkin sınıfta bulunamadı\.?$/i,
     ],
     applicationCodes: ["plan.child-scope"],
   },
@@ -140,7 +226,11 @@ const RULES: readonly TeacherFeedbackRule[] = [
     detail:
       "Başlangıç ve bitiş saatlerini geçerli biçimde yazın; bitiş saati başlangıçtan sonra olmalıdır.",
     action: { id: "restore-class-time", label: "Sınıf saatini kullan" },
-    patterns: [/etkinlik saat/i, /başlangıç saat/i, /bitiş saat/i, /ss:dd/i],
+    patterns: [
+      /^etkinlik saatleri ss:dd biçiminde olmalıdır\.?$/i,
+      /^etkinlik bitiş saati başlangıç saatinden sonra olmalıdır\.?$/i,
+      /^öğretmen günlük akışı için sınıfın başlangıç ve bitiş saatleri tamamlanmalıdır\.?$/i,
+    ],
     applicationCodes: ["plan.time"],
   },
   {
@@ -187,7 +277,12 @@ const RULES: readonly TeacherFeedbackRule[] = [
     title: "Günlük akışı kontrol edin",
     detail:
       "Akış bölümlerindeki başlık, süre veya uygulama seçimi tamamlanmadı. Eksik bölümü düzenleyip yeniden deneyin.",
-    patterns: [/tam gün akış/i, /günlük akış/i, /akış bölüm/i, /10 bölüm/i],
+    patterns: [
+      /^kayıtlı tam gün akışı düzenleme için doğrulanamadı\.?$/i,
+      /^öğretmenin kayıtlı 10 bölümlü günlük akışı düzenleme için doğrulanamadı\.?$/i,
+      /^öğretmenin günlük akışı tam olarak 10 bölüm taşımalıdır\.?$/i,
+      /^öğretmen günlük akışı .+ dakikalık sınıf düzeniyle tam eşleşmelidir; mevcut toplam .+ dakikadır\.?$/i,
+    ],
     applicationCodes: ["plan.flow"],
   },
   {

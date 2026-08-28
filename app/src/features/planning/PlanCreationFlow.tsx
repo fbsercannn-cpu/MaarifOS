@@ -66,11 +66,7 @@ import {
 } from "../feedback/teacher-feedback.ts";
 
 interface PlanReadinessBlocker {
-  code:
-    | TeacherFeedbackCode
-    | "plan.activity"
-    | "plan.title"
-    | "plan.calendar-day";
+  code: TeacherFeedbackCode;
   detail: string;
   actionLabel?: string;
   apply?: () => void;
@@ -438,8 +434,8 @@ export function PlanCreationScreen({
     ? "Hazır bir fikre dokunun veya kendi etkinlik adınızı yazın."
     : simpleStep === 2
       ? simpleTargetRecommendations.length > 0
-        ? "Kanıtlı önerilerden birine dokunun; son kontrole geçersiniz."
-        : "Kanıtlı otomatik eşleşme bulunamadı. Alan veya kodla hedef seçin."
+        ? "Semantik olası hedeflerden birine dokunun; son kontrole geçersiniz."
+        : "Semantik olası eşleşme bulunamadı. Alan veya kodla hedef seçin."
       : "Etkinlik ve hedef hazır. İsterseniz saat veya çocuk kapsamını değiştirin."}`;
   const teacherOwnedDailyFlowTotalMinutes = teacherOwnedDailyFlowBlocks.reduce(
     (total, block) => total + block.durationMinutes,
@@ -546,7 +542,7 @@ export function PlanCreationScreen({
   const saveBlockingItems: PlanReadinessBlocker[] = [];
   if (!curriculumAgeBand) {
     saveBlockingItems.push({
-      code: "plan.program-profile",
+      code: "plan.age-profile",
       detail:
         "Plan hedeflerini açmak için sınıf profilinde 36–48, 48–60 veya 60–72 ay resmî yaş bandını seçin.",
     });
@@ -598,7 +594,7 @@ export function PlanCreationScreen({
   }
   if (!planDateValid) {
     saveBlockingItems.push({
-      code: "plan.week-range",
+      code: "plan.date-format",
       detail: "Plan tarihini YYYY-AA-GG biçiminde yazın.",
       actionLabel: "Kaynak günü kullan",
       apply: () => setPlanCivilDate(allowedPlanDateStart),
@@ -833,7 +829,12 @@ export function PlanCreationScreen({
       setEndTime(defaultEndTime);
       return;
     }
-    if (actionId === "align-plan-date" || actionId === "retry") {
+    if (actionId === "select-activity") {
+      setSimpleStep(1);
+      setSimpleIdeaToolsOpen(true);
+      return;
+    }
+    if (actionId === "retry") {
       void save();
     }
   };
@@ -1618,11 +1619,11 @@ export function PlanCreationScreen({
               aria-live="polite"
             >
               {simpleTargetRecommendations.length > 0
-                ? <>Öneriler; etkinlik adı, öğretmen amacı, {ageGroup} yaş bandı ve varsa
-                    uyarlama veya materyal notlarındaki anlam ilişkisine göre sıralandı.
-                    Resmî değerlendirme değildir; son seçim öğretmene aittir.</>
-                : <>Bu etkinlik için kanıtlı otomatik eşleşme bulunamadı. Daha fazla hedef
-                    ara bölümünden alan veya kodla seçim yapın.</>}
+                ? <>Olası hedefler; etkinlik adı, öğretmen amacı, {ageGroup} yaş bandı ve varsa
+                     uyarlama veya materyal notlarındaki anlam ilişkisine göre sıralandı.
+                    Resmî eşleştirme veya doğrulama değildir; son seçim öğretmene aittir.</>
+                : <>Bu etkinlik için semantik olası eşleşme bulunamadı. Daha fazla hedef
+                     ara bölümünden alan veya kodla seçim yapın.</>}
             </p>
           ) : null}
           {curriculumAgeBand && simpleWizardEnabled ? (
@@ -1690,7 +1691,7 @@ export function PlanCreationScreen({
                   <strong>{target.referenceTitle}</strong>
                   {simpleWizardEnabled && recommendation ? (
                     <small className="curriculum-target-reason">
-                      Öneri nedeni: {recommendation.reason}
+                      Olası eşleşme nedeni: {recommendation.reason}
                     </small>
                   ) : null}
                   <em>{selected ? "Seçildi" : "Seç"}</em>

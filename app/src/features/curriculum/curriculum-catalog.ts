@@ -8,6 +8,7 @@ import {
   TYMM_2024_LEARNING_OUTCOMES,
   type Tymm2024AgeBand,
 } from "./tymm-2024-catalog.ts";
+import type { TymmHolisticLearningOutcomeReference } from "./tymm-holistic-graph.ts";
 
 export type CurriculumAgeBand = Tymm2024AgeBand;
 
@@ -46,6 +47,7 @@ export interface CurriculumTargetDefinition {
   domain: string;
   ageBands?: readonly CurriculumAgeBand[];
   sourcePage?: number;
+  sourceSha256?: `sha256:${string}`;
   parentCode?: string;
   sourceUrl: string;
   sourceLabel: string;
@@ -57,11 +59,17 @@ export interface CurriculumTargetDefinition {
 }
 
 export interface CurriculumTargetSnapshot
-  extends Omit<CurriculumTargetDefinition, "ageBands" | "sourcePage"> {
+  extends CurriculumTargetDefinition {
   catalogId: string;
   sourceVersion: string;
   referenceOrigin: CurriculumProfileSnapshot["referenceOrigin"];
   officialCatalogVerified: boolean;
+  /**
+   * Büyük grafiği her plana kopyalamadan, seçilen öğrenme çıktısının exact
+   * bütüncül TYMM düğüm paketini sürüm ve içerik özetiyle sabitler. İnsan
+   * incelemesi tamamlanmadığı sürece referans bunu açıkça taşır.
+   */
+  holisticGraphReference?: TymmHolisticLearningOutcomeReference;
 }
 
 export interface PlannedCurriculumAssignment {
@@ -383,6 +391,7 @@ const TYMM_2024_CURRICULUM_TARGETS: readonly CurriculumTargetDefinition[] =
     domain: outcome.domain,
     ageBands: [outcome.ageBand],
     sourcePage: outcome.sourcePage,
+    sourceSha256: TYMM_2024_CATALOG_METADATA.sourceSha256,
     sourceUrl: TYMM_2024_CATALOG_METADATA.sourceUrl,
     sourceLabel: `${TYMM_2024_CATALOG_METADATA.sourceDocumentTitle} · Ek 1 Alan Matrisi · s. ${outcome.sourcePage}`,
     sourceCheckedOn: TYMM_2024_CATALOG_METADATA.sourceCheckedOn,
@@ -445,13 +454,9 @@ export function curriculumTargetsForProfile(
     : frameworkTargets;
 
   return targets.map((target) => {
-    const {
-      ageBands: _ageBands,
-      sourcePage: _sourcePage,
-      ...snapshotTarget
-    } = target;
     return {
-      ...snapshotTarget,
+      ...target,
+      ...(target.ageBands ? { ageBands: [...target.ageBands] } : {}),
       catalogId: profile.catalogId,
       sourceVersion: profile.sourceVersion,
       referenceOrigin: profile.referenceOrigin,

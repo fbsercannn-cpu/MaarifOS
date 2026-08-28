@@ -42,6 +42,7 @@ import {
   type CurriculumTargetSnapshot,
   type PlannedCurriculumAssignment,
 } from "../curriculum/curriculum-catalog.ts";
+import type { TymmHolisticLearningOutcomeReference } from "../curriculum/tymm-holistic-graph.ts";
 import {
   parsePremiumLensPreferenceRecord,
   premiumDailyFlowSnapshot,
@@ -196,6 +197,18 @@ function sameCurriculumProfile(
   );
 }
 
+function sameCurriculumProgramSource(
+  left: CurriculumProfileSnapshot,
+  right: CurriculumProfileSnapshot,
+): boolean {
+  return (
+    left.framework === right.framework &&
+    left.programLabel === right.programLabel &&
+    left.catalogId === right.catalogId &&
+    left.sourceVersion === right.sourceVersion
+  );
+}
+
 function curriculumProfileFromUnknown(value: unknown): CurriculumProfileSnapshot | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   try {
@@ -229,6 +242,22 @@ function normalizeCurriculumTargets(
         target.verificationStatus !== "teacher-declared-unverified")
     ) {
       throw new Error("Seçilen program hedefinin kaynak veya başlık bilgisi eksik.");
+    }
+    if (
+      target.framework === "tymm" &&
+      target.catalogCompleteness === "complete" &&
+      target.verificationStatus === "official-source-checked" &&
+      target.officialCatalogVerified &&
+      (!Number.isInteger(target.sourcePage) ||
+        Number(target.sourcePage) < 1 ||
+        typeof target.sourceSha256 !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/u.test(target.sourceSha256) ||
+        !Array.isArray(target.ageBands) ||
+        target.ageBands.length !== 1)
+    ) {
+      throw new Error(
+        "Resmî TYMM hedefinin yaş bandı, kaynak sayfası veya PDF özeti eksik.",
+      );
     }
     if (uniqueIds.has(target.id)) {
       throw new Error("Aynı program hedefi bir plana birden fazla eklenemez.");
@@ -302,6 +331,65 @@ async function activeScopeInTransaction(
 
 function sameScope(record: StoredRecord, scope: ActiveClassroomScope): boolean {
   return recordBelongsToClassroomScope(record, scope);
+}
+
+function cloneHolisticGraphReference(
+  reference: TymmHolisticLearningOutcomeReference,
+): TymmHolisticLearningOutcomeReference {
+  return Object.freeze({
+    ...reference,
+    relatedNodeIds: Object.freeze([...reference.relatedNodeIds]),
+  });
+}
+
+async function attachCanonicalHolisticGraphReferences(
+  targets: readonly CurriculumTargetSnapshot[],
+): Promise<CurriculumTargetSnapshot[]> {
+  const needsGraph = targets.some(
+    (target) =>
+      target.framework === "tymm" &&
+      target.kind === "learning-outcome" &&
+      target.catalogCompleteness === "complete" &&
+      target.verificationStatus === "official-source-checked" &&
+      target.officialCatalogVerified === true &&
+      Array.isArray(target.ageBands) &&
+      target.ageBands.length === 1,
+  );
+  if (!needsGraph) {
+    return targets.map(({ holisticGraphReference: _ignored, ...target }) => ({
+      ...target,
+    }));
+  }
+
+  const { createTymmHolisticLearningOutcomeReference } = await import(
+    "../curriculum/tymm-holistic-graph.ts"
+  );
+  return targets.map(({ holisticGraphReference: _ignored, ...target }) => {
+    if (
+      target.framework !== "tymm" ||
+      target.kind !== "learning-outcome" ||
+      target.catalogCompleteness !== "complete" ||
+      target.verificationStatus !== "official-source-checked" ||
+      target.officialCatalogVerified !== true ||
+      !Array.isArray(target.ageBands) ||
+      target.ageBands.length !== 1
+    ) {
+      return { ...target };
+    }
+    const reference = createTymmHolisticLearningOutcomeReference(
+      target.ageBands[0],
+      target.referenceCode,
+    );
+    if (!reference) {
+      throw new Error(
+        "Resmî TYMM öğrenme çıktısının bütüncül program grafiği bağlantısı bulunamadı.",
+      );
+    }
+    return {
+      ...target,
+      holisticGraphReference: cloneHolisticGraphReference(reference),
+    };
+  });
 }
 
 function sameCanonicalSnapshot(left: unknown, right: unknown): boolean {
@@ -432,9 +520,8 @@ export async function createPlanWithActivity(
   const planId = validUuid(input.planId, "Plan");
   const activityId = validUuid(input.activityId, "Etkinlik");
   const profile = normalizeCurriculumProfile(input.curriculumProfile);
-  const curriculumTargets = normalizeCurriculumTargets(
-    input.curriculumTargets,
-    profile,
+  const curriculumTargets = await attachCanonicalHolisticGraphReferences(
+    normalizeCurriculumTargets(input.curriculumTargets, profile),
   );
   if (
     input.assignmentMode !== "whole-class" &&
@@ -448,12 +535,12 @@ export async function createPlanWithActivity(
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
   const timestamp = now.toISOString();
-  if (input.pedagogicalProvenance) {
-    assertPedagogicalPlanProvenance(input.pedagogicalProvenance);
-    if (input.pedagogicalProvenance.civilDate !== input.civilDate) {
-      throw new Error("Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor.");
-    }
-  }
+  const pedagogicalProvenance = input.pedagogicalProvenance
+    ? bindPedagogicalPlanProvenanceToCivilDate(
+        input.pedagogicalProvenance,
+        input.civilDate,
+      )
+    : undefined;
   let result: PlanActivityResult | null = null;
 
   await store.transaction(
@@ -834,10 +921,10 @@ export async function createPlanWithActivity(
               teacherOwnedDailyFlow,
             }
           : {}),
-        ...(input.pedagogicalProvenance
+        ...(pedagogicalProvenance
           ? {
               pedagogicalProvenance: structuredClone(
-                input.pedagogicalProvenance,
+                pedagogicalProvenance,
               ),
             }
           : {}),
@@ -892,10 +979,10 @@ export async function createPlanWithActivity(
               teacherOwnedFlowBlockId,
             }
           : {}),
-        ...(input.pedagogicalProvenance
+        ...(pedagogicalProvenance
           ? {
               pedagogicalProvenance: structuredClone(
-                input.pedagogicalProvenance,
+                pedagogicalProvenance,
               ),
             }
           : {}),
@@ -1411,7 +1498,7 @@ export async function confirmObservationCurriculumLink(
       const planProfile = curriculumProfileFromUnknown(
         plan?.curriculumProfileSnapshot,
       );
-      if (!planProfile || !sameCurriculumProfile(planProfile, profile)) {
+      if (!planProfile || !sameCurriculumProgramSource(planProfile, profile)) {
         throw new Error(
           "Program bağlantısı planın doğrulanmış katalog ve program profiliyle uyuşmuyor.",
         );
@@ -1456,6 +1543,17 @@ export async function confirmObservationCurriculumLink(
           );
         }
       }
+      if (!plannedTarget && profile.officialCatalogVerified) {
+        throw new Error(
+          "Elle yazılan program referansı resmî katalog hedefi olarak işaretlenemez.",
+        );
+      }
+      const referenceOrigin = plannedTarget
+        ? plannedTarget.referenceOrigin
+        : "teacher-declared";
+      const officialCatalogVerified = plannedTarget
+        ? plannedTarget.officialCatalogVerified
+        : false;
       const approvedByUserId = await resolveLocalTeacherIdentity(transaction, {
         now,
         requestedTeacherUserId: requestedApproverId,
@@ -1466,8 +1564,8 @@ export async function confirmObservationCurriculumLink(
             link.framework === profile.framework &&
             link.sourceVersion === profile.sourceVersion &&
             link.referenceCode === referenceCode &&
-            (link.referenceOrigin ?? "teacher-declared") === profile.referenceOrigin &&
-            (link.officialCatalogVerified === true) === profile.officialCatalogVerified,
+            (link.referenceOrigin ?? "teacher-declared") === referenceOrigin &&
+            (link.officialCatalogVerified === true) === officialCatalogVerified,
         )
       ) {
         return;
@@ -1483,8 +1581,8 @@ export async function confirmObservationCurriculumLink(
         confirmedAt: timestamp,
         approvedByUserId,
         confirmationMethod: "teacher-confirmed",
-        referenceOrigin: profile.referenceOrigin,
-        officialCatalogVerified: profile.officialCatalogVerified,
+        referenceOrigin,
+        officialCatalogVerified,
       };
       result = {
         ...link,
@@ -1494,8 +1592,21 @@ export async function confirmObservationCurriculumLink(
               targetKind: plannedTarget.kind,
               targetDomain: plannedTarget.domain,
               targetSourceUrl: plannedTarget.sourceUrl,
+              ...(plannedTarget.sourcePage
+                ? { targetSourcePage: plannedTarget.sourcePage }
+                : {}),
+              ...(plannedTarget.sourceSha256
+                ? { targetSourceSha256: plannedTarget.sourceSha256 }
+                : {}),
+              ...(plannedTarget.holisticGraphReference
+                ? {
+                    holisticGraphReference: cloneHolisticGraphReference(
+                      plannedTarget.holisticGraphReference,
+                    ),
+                  }
+                : {}),
             }
-          : {}),
+          : { targetSourceUrl: "about:blank" }),
         observationId,
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
@@ -1503,7 +1614,7 @@ export async function confirmObservationCurriculumLink(
         updatedAt: timestamp,
         civilDate: civilDateInIstanbul(now),
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: 2,
       };
       await transaction.putMany("evidenceCurriculumLinks", [result]);
     },

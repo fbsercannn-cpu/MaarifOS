@@ -2029,6 +2029,87 @@ button {
   line-height: 1.4;
 }
 
+.quick-observation-guide {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  background: #f4f8f7;
+  border: 1px solid #d5e4e0;
+  border-radius: 12px;
+}
+
+.quick-observation-guide > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.quick-observation-guide > div > svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  color: var(--maarif-teal);
+}
+
+.quick-observation-guide > div span,
+.quick-observation-guide > div strong,
+.quick-observation-guide > div small {
+  display: block;
+  min-width: 0;
+}
+
+.quick-observation-guide > div strong {
+  color: var(--maarif-navy);
+  font-size: 13px;
+}
+
+.quick-observation-guide > div small,
+.quick-observation-guide > p {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.quick-observation-guide ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quick-observation-guide button {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  overflow-wrap: anywhere;
+  color: var(--maarif-teal-dark);
+  text-align: left;
+  background: var(--maarif-white);
+  border: 1px solid #c7ddd8;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quick-observation-guide button[aria-pressed="true"] {
+  color: var(--maarif-white);
+  background: var(--maarif-teal);
+  border-color: var(--maarif-teal);
+}
+
+.quick-observation-guide button:disabled,
+.quick-note-card textarea:disabled,
+.quick-starter-grid button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.quick-observation-guide > p {
+  margin: 0;
+}
+
 .quick-starter-row {
   width: 100%;
 }
@@ -5226,7 +5307,7 @@ button {
 }
 
 .student-observation-filters {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
 }
 
 .student-observation-filters button {
@@ -5350,6 +5431,16 @@ button {
 }
 
 .observation-link-state--linked {
+  color: #28563f;
+  background: var(--maarif-green-soft);
+}
+
+.observation-link-state--assessment {
+  color: #4d3c7c;
+  background: var(--maarif-plum-soft);
+}
+
+.observation-link-state--complete {
   color: #28563f;
   background: var(--maarif-green-soft);
 }
@@ -6086,6 +6177,12 @@ fieldset.student-contact-permissions legend {
   color: #8a4a34;
   font-size: 10px;
   font-weight: 760;
+}
+
+.student-observation-timeline article > button.student-observation-assessment-action {
+  color: #4d3c7c;
+  background: var(--maarif-plum-soft);
+  border-color: #cfc3e1;
 }
 
 .anecdote-source-observation p {

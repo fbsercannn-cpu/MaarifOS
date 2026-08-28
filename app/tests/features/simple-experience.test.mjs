@@ -70,10 +70,11 @@ test("kişisel asistan ana ekranı tek gerekçeli eylem ve yinelenmeyen öğretm
   assert.match(todaySource, /simple-today__brief-action/);
   assert.match(todaySource, /ÖĞRETMEN MASASI/);
   assert.match(todaySource, /Bugünün işi tek yerde/);
-  assert.match(todaySource, /Yaşa ve tarihe göre çevrimdışı öneriler/);
+  assert.match(todaySource, /Yaş bandı ve tarih rotasyonuna göre çevrimdışı fikirler/);
   assert.match(todaySource, /Bugünün akışını ve haftayı aç/);
   assert.match(todaySource, /advancedSupportOpen/);
-  assert.match(todaySource, /Hazır etkinlik önerileri/);
+  assert.match(todaySource, /Özgün etkinlik fikirleri/);
+  assert.match(todaySource, /pedagojik\s+uygunluğu öğretmen sınıfın o günkü durumuna göre belirler/);
   assert.match(todaySource, /Öğretmen akışı/);
   assert.match(todaySource, /actions\.onOpenWeekDay\(day\.civilDate\)/);
   assert.doesNotMatch(todaySource, /simple-today__steps/);
@@ -89,7 +90,7 @@ test("eksik yaş bandı etkinlik, pedagojik akış ve TYMM hedeflerini fail-clos
   assert.match(todaySource, /actions\.onOpenSetupStep\("classroom"\)/u);
   assert.match(planCreationSource, /curriculumTargetsForResolvedAgeBand\(curriculumProfile, curriculumAgeBand\)/u);
   assert.match(planCreationSource, /Resmî yaş bandı seçilmeden hedef gösterilmez/u);
-  assert.match(planCreationSource, /code: "plan\.program-profile"/u);
+  assert.match(planCreationSource, /code: "plan\.age-profile"/u);
 });
 
 test("kişisel asistan 320 piksel telefonda dokunma ve yoğunluk sözleşmesini korur", () => {

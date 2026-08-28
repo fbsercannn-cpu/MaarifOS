@@ -23,6 +23,13 @@ import {
   type TeacherOwnedDailyFlowBlockEdit,
 } from "../../core/domain/teacher-owned-daily-flow.ts";
 import { isTeacherOwnedPlanRecord } from "../../core/domain/teacher-owned-plan.ts";
+import {
+  planRelationFinding,
+  type PlanIntegrityFinding,
+  type PlanIntegrityFindingCode,
+  type PlanRelationFinding,
+  type PlanRelationFindingCode,
+} from "./plan-relation-policy.ts";
 
 export interface ScheduledPlanSummary {
   planId: string;
@@ -35,7 +42,11 @@ export interface ScheduledPlanSummary {
   persistedActivityCount: number;
   editable: boolean;
   editBlockReason: string | null;
+  editBlockCode: PlanRelationFindingCode | null;
+  editBlockSupportCode: string | null;
   integrityStatus: "valid" | "invalid";
+  integrityCode: PlanIntegrityFindingCode | null;
+  integritySupportCode: string | null;
   planUpdatedAt: string;
   activityUpdatedAt: string | null;
 }
@@ -182,19 +193,19 @@ function scopedPlan(
  * istemez; yalnız öğretmenin cihazındaki kalıcı kaydın kendi kaynaklarıyla tutarlı
  * olup olmadığını denetler.
  */
-export function scheduledPlanIntegrityIssue(options: {
+export function scheduledPlanIntegrityFinding(options: {
   plan: StoredRecord;
   activity: StoredRecord | null;
   plans: readonly StoredRecord[];
   scope: ActiveClassroomScope;
-}): string | null {
+}): Readonly<PlanIntegrityFinding> | null {
   const { plan, activity, plans, scope } = options;
   if (activity && activity.civilDate !== plan.civilDate) {
-    return "Plan ile gerçek etkinliğin kayıtlı tarihleri uyuşmuyor.";
+    return planRelationFinding("plan.integrity.activity-date");
   }
   if (plan.teacherOwnedDailyFlow !== undefined) {
     if (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)) {
-      return "Öğretmenin 10 bölümlü günlük akış kaydı doğrulanamadı.";
+      return planRelationFinding("plan.integrity.teacher-flow-shape");
     }
     const annual = scopedPlan(plans, plan.sourceAnnualPlanId, "annual", scope);
     const monthly = scopedPlan(plans, plan.sourceMonthlyPlanId, "monthly", scope);
@@ -217,7 +228,7 @@ export function scheduledPlanIntegrityIssue(options: {
       String(plan.civilDate) < weekly.periodStart ||
       String(plan.civilDate) > weekly.periodEnd
     ) {
-      return "Öğretmenin günlük akışının yıl, ay ve hafta kaynak zinciri doğrulanamadı.";
+      return planRelationFinding("plan.integrity.teacher-source-chain");
     }
     if (
       activity &&
@@ -225,7 +236,7 @@ export function scheduledPlanIntegrityIssue(options: {
         activity.sourceMonthlyPlanId !== monthly.id ||
         activity.sourceWeeklyPlanId !== weekly.id)
     ) {
-      return "Öğretmen planı ile etkinliği arasındaki kaynak zinciri uyuşmuyor.";
+      return planRelationFinding("plan.integrity.teacher-activity-source");
     }
     if (activity?.teacherOwnedFlowBlockId !== undefined) {
       const linkedBlock = typeof activity.teacherOwnedFlowBlockId === "string"
@@ -239,7 +250,7 @@ export function scheduledPlanIntegrityIssue(options: {
           linkedBlock.kind !== "teacher-activity-two") ||
         linkedBlock.status === "skipped"
       ) {
-        return "Gerçek etkinliğin öğretmen akışı bölüm bağlantısı doğrulanamadı.";
+        return planRelationFinding("plan.integrity.teacher-flow-block");
       }
     }
     return null;
@@ -252,13 +263,13 @@ export function scheduledPlanIntegrityIssue(options: {
 
   const flow = parsePremiumFlow(plan);
   if (!flow || flow.planCivilDate !== plan.civilDate) {
-    return "Kayıtlı tam gün akışının tarih veya 10 blok bütünlüğü doğrulanamadı.";
+    return planRelationFinding("plan.integrity.premium-flow-shape");
   }
   const annual = scopedPlan(plans, plan.sourceAnnualPlanId, "annual", scope);
   const monthly = scopedPlan(plans, plan.sourceMonthlyPlanId, "monthly", scope);
   const weekly = scopedPlan(plans, plan.sourceWeeklyPlanId, "weekly", scope);
   if (!annual || !monthly || !weekly) {
-    return "Kayıtlı planın yıllık, aylık veya haftalık kaynak zinciri eksik.";
+    return planRelationFinding("plan.integrity.premium-source-missing");
   }
   if (
     monthly.annualPlanId !== annual.id ||
@@ -272,12 +283,12 @@ export function scheduledPlanIntegrityIssue(options: {
     !sameCanonical(plan.sourceContentPackSnapshot, monthly.contentPackSnapshot) ||
     !sameCanonical(plan.sourceContentPackSnapshot, weekly.contentPackSnapshot)
   ) {
-    return "Kayıtlı planın kaynak hafta veya içerik paketi zinciri değişmiş.";
+    return planRelationFinding("plan.integrity.premium-source-chain");
   }
   const sourceTemplateId = text(plan.sourceActivityTemplateId);
   const appliedTemplateId = text(plan.appliedActivityTemplateId);
   if (!sourceTemplateId || !appliedTemplateId) {
-    return "Kayıtlı planın kaynak etkinlik kimliği eksik.";
+    return planRelationFinding("plan.integrity.premium-activity-id");
   }
   const weeklySource = snapshotById(weekly.premiumActivityTemplates, sourceTemplateId);
   const monthlySource = snapshotById(monthly.premiumActivityTemplates, sourceTemplateId);
@@ -293,7 +304,7 @@ export function scheduledPlanIntegrityIssue(options: {
     !sameCanonical(weeklyApplied, plan.appliedActivityTemplateSnapshot) ||
     !sameCanonical(monthlyApplied, plan.appliedActivityTemplateSnapshot)
   ) {
-    return "Kayıtlı planın etkinlik kaynak görüntüsü doğrulanamadı.";
+    return planRelationFinding("plan.integrity.premium-activity-snapshot");
   }
   if (activity) {
     const provenanceKeys = [
@@ -314,30 +325,43 @@ export function scheduledPlanIntegrityIssue(options: {
         (key) => !sameCanonical(plan[key], activity[key]),
       )
     ) {
-      return "Plan ile etkinlik arasındaki premium kaynak zinciri uyuşmuyor.";
+      return planRelationFinding("plan.integrity.premium-activity-source");
     }
   }
   return null;
 }
 
-function editBlockReason(options: {
+/**
+ * Eski string tüketicileri için uyumluluk katmanı. Yeni tüketiciler kod ve destek
+ * bilgisini koruyan `scheduledPlanIntegrityFinding` sonucunu kullanmalıdır.
+ */
+export function scheduledPlanIntegrityIssue(options: {
+  plan: StoredRecord;
+  activity: StoredRecord | null;
+  plans: readonly StoredRecord[];
+  scope: ActiveClassroomScope;
+}): string | null {
+  return scheduledPlanIntegrityFinding(options)?.message ?? null;
+}
+
+function editBlockFinding(options: {
   plan: StoredRecord;
   activities: readonly StoredRecord[];
   observations: readonly StoredRecord[];
-  integrityIssue: string | null;
+  integrityFinding: Readonly<PlanRelationFinding> | null;
   today: string;
-}): string | null {
-  const { plan, activities, observations, integrityIssue, today } = options;
-  if (integrityIssue) return integrityIssue;
+}): Readonly<PlanRelationFinding> | null {
+  const { plan, activities, observations, integrityFinding, today } = options;
+  if (integrityFinding) return integrityFinding;
   if (activities.length !== 1) {
-    return "Düzenleme için günlük plana bağlı tek bir gerçek etkinlik bulunmalıdır.";
+    return planRelationFinding("plan.edit.activity-count");
   }
   const activity = activities[0];
   if (plan.civilDate <= today) {
-    return "Yalnız henüz başlamamış gelecek tarihli planlar düzenlenebilir.";
+    return planRelationFinding("plan.edit.past-or-today");
   }
   if (plan.coverageStatus !== "planned" || activity.status !== "planned") {
-    return "Başlamış veya tamamlanmış planlar düzenlenemez.";
+    return planRelationFinding("plan.edit.status-locked");
   }
   if (
     observations.some(
@@ -346,7 +370,7 @@ function editBlockReason(options: {
         (observation.planId === plan.id || observation.activityId === activity.id),
     )
   ) {
-    return "Gözlem kanıtı bulunan planlar geriye dönük değiştirilemez.";
+    return planRelationFinding("plan.edit.evidence-locked");
   }
   return null;
 }
@@ -381,17 +405,17 @@ export function resolveScheduledPlanWorkspace(
       const teacherOwnedFlow = isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)
         ? plan.teacherOwnedDailyFlow
         : null;
-      const integrityIssue = scheduledPlanIntegrityIssue({
+      const integrityFinding = scheduledPlanIntegrityFinding({
         plan,
         activity,
         plans: snapshot.plans,
         scope,
       });
-      const reason = editBlockReason({
+      const blockFinding = editBlockFinding({
         plan,
         activities,
         observations: snapshot.observations,
-        integrityIssue,
+        integrityFinding,
         today,
       });
       return {
@@ -404,9 +428,13 @@ export function resolveScheduledPlanWorkspace(
         flowBlockCount:
           premiumFlow?.blocks.length ?? teacherOwnedFlow?.blocks.length ?? 0,
         persistedActivityCount: activities.length,
-        editable: reason === null,
-        editBlockReason: reason,
-        integrityStatus: integrityIssue ? "invalid" : "valid",
+        editable: blockFinding === null,
+        editBlockReason: blockFinding?.message ?? null,
+        editBlockCode: blockFinding?.code ?? null,
+        editBlockSupportCode: blockFinding?.supportCode ?? null,
+        integrityStatus: integrityFinding ? "invalid" : "valid",
+        integrityCode: integrityFinding?.code ?? null,
+        integritySupportCode: integrityFinding?.supportCode ?? null,
         planUpdatedAt: plan.updatedAt,
         activityUpdatedAt: activity?.updatedAt ?? null,
       };

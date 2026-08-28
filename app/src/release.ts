@@ -63,15 +63,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.19.1",
+  version: "0.20.0",
   releasedOn: "2026-08-28",
-  title: "Kanıtlı plan önerisi ve dürüst belge adları",
+  title: "Bütüncül TYMM grafiği ve kesintisiz gözlem akışı",
   notes: Object.freeze([
-    "Kanıt bulunmayan bir etkinlik artık sırf yaş bandına uygun olduğu için TYMM hedefi önermez; öğretmeni alan veya kodla açık seçime yönlendirir.",
-    "Kanıtlı hedef önerileri sıfır puanlı kayıtlarla yapay biçimde tamamlanmaz ve son pedagojik seçim öğretmende kalır.",
-    "Canvas tabanlı sınıf listesi, plan, Ek 18 ve anekdot çıktıları erişilebilir belge izlenimi vermeden açıkça görsel PDF olarak adlandırılır.",
-    "390 piksel telefonlarda sınıf, yaş bandı ve TYMM bilgisi kırpılmadan iki satıra akar.",
-    "Word, HTML, dış MEB PDF kaynağı, dosya biçimi ve çevrimdışı çalışma sözleşmeleri değişmeden korunur.",
+    "Resmî okul öncesi PDF'sinden üretilen sürümlü TYMM grafiği; 210 öğrenme çıktısını süreç, beceri ve program bileşenleriyle kaynak sayfası ve içerik özeti üzerinden bağlar.",
+    "Grafik ve 357 etkinlik-yaş ile 30 yaş-ay inceleme kaydı, iki bağımsız okul öncesi uzmanı onaylayana kadar açıkça insan incelemesi bekliyor olarak kalır.",
+    "Yeni resmî planlar seçilen bütüncül graf düğümlerini değişmez kompakt referansla plan, etkinlik, gözlem ve değerlendirme zincirinde korur.",
+    "Program bağlantısından sonra yarım bırakılan gözlem artık kaybolmaz; öğrenci profilinden değerlendirme adımına geri dönülür.",
+    "Elle girilen program hedefleri resmî katalog hedefi gibi saklanamaz; plan günü kaynak tarihi güvenli biçimde otomatik eşitlenir ve uyarılar kararlı destek kodları taşır.",
   ]),
 });
 

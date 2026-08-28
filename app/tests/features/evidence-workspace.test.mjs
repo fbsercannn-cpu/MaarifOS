@@ -179,6 +179,12 @@ function workspaceSnapshot() {
       classroomId,
       confirmationMethod: "teacher-confirmed",
       referenceCode: "EÇE-KURGU-01",
+      referenceTitle: "Kurgu öğretmen program beyanı",
+      framework: "meb_2024",
+      catalogId: "ogretmen-beyani-ece",
+      sourceVersion: "2024.1",
+      referenceOrigin: "teacher-declared",
+      officialCatalogVerified: false,
       civilDate: "2026-09-02",
     },
     {
@@ -231,6 +237,64 @@ test("D1 read-model yalnız aktif sınıfın yapılandırılmış kanıtlarını
     referenceOrigin: "teacher-declared",
     officialCatalogVerified: false,
   });
+  assert.equal(
+    workspace.pendingObservations[0].workflowStatus,
+    "program-bağlantısı-bekliyor",
+  );
+  assert.equal(
+    workspace.linkedObservations[0].workflowStatus,
+    "değerlendirme-bekliyor",
+  );
+  assert.deepEqual(workspace.linkedObservations[0].assessmentDraftIds, []);
+  assert.deepEqual(
+    workspace.linkedObservations[0].confirmedCurriculumTargets,
+    [
+      {
+        id: "00000000-0000-4000-8000-000000000512",
+        framework: "meb_2024",
+        catalogId: "ogretmen-beyani-ece",
+        sourceVersion: "2024.1",
+        referenceCode: "EÇE-KURGU-01",
+        referenceTitle: "Kurgu öğretmen program beyanı",
+        kind: "learning-outcome",
+        domain: "Öğretmen beyanı",
+        sourceUrl: "about:blank",
+        sourceLabel: "Öğretmen beyanı · resmî katalogda doğrulanmadı",
+        sourceCheckedOn: "2026-09-02",
+        catalogCompleteness: "partial",
+        verificationStatus: "teacher-declared-unverified",
+        referenceOrigin: "teacher-declared",
+        officialCatalogVerified: false,
+      },
+    ],
+  );
+});
+
+test("kaynaklı öğretmen değerlendirmesi gözlem zincirini tamamlanmış yapar", () => {
+  const snapshot = workspaceSnapshot();
+  const assessmentDraftId = "00000000-0000-4000-8000-000000000514";
+  snapshot.reportDrafts.push({
+    ...base,
+    id: assessmentDraftId,
+    academicYearId: yearId,
+    classroomId,
+    reportType: "evidence-assessment",
+    status: "teacher-review-required",
+    authoredBy: "teacher",
+    observationIds: [linkedObservationId],
+    teacherAssessmentText:
+      "Seçili gözlem, çocuğun iki grubu ayırarak sürdürdüğünü gösteriyor.",
+    civilDate: "2026-09-02",
+  });
+
+  const workspace = resolveEvidenceWorkspace(
+    snapshot,
+    new Date("2026-09-02T09:00:00.000Z"),
+  );
+  assert.equal(workspace.linkedObservations[0].workflowStatus, "tamamlandı");
+  assert.deepEqual(workspace.linkedObservations[0].assessmentDraftIds, [
+    assessmentDraftId,
+  ]);
 });
 
 test("program adı çözümlemesi TYMM içindeki 2024 ifadesini EÇE sanmaz", () => {

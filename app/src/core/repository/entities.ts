@@ -77,6 +77,12 @@ export interface StudentRecord extends StoredRecord {
 
 export interface ObservationRecord extends StoredRecord {
   rawText: string;
+  planId?: string;
+  activityId?: string;
+  rawTextImmutable?: true;
+  workflowStatus?: "captured";
+  context?: string;
+  childQuote?: string;
   observedAt?: string;
   studentId?: string;
   studentIds?: string[];
@@ -86,6 +92,84 @@ export interface ObservationRecord extends StoredRecord {
   observationCategories?: QuickObservationCategory[];
   _MUKERRER_INCELE?: true;
   duplicateOf?: string;
+}
+
+/**
+ * Günlük planla atomik kurulan gerçek etkinliğin repository sözleşmesi.
+ * Eski arşivlerde bazı pedagojik alanlar bulunmayabildiği için yalnız ilişki
+ * omurgası zorunludur; içerik snapshot'ları kendi domain doğrulayıcılarında
+ * fail-closed denetlenir.
+ */
+export interface ActivityRecord extends StoredRecord {
+  planId?: string;
+  title?: string;
+  academicYearId?: string;
+  classroomId?: string;
+  status?: "planned" | "in_progress" | "completed" | "cancelled";
+  legacyAssignmentStatus?: "needs-review";
+}
+
+export interface CanonicalActivityRecord extends ActivityRecord {
+  planId: string;
+  title: string;
+}
+
+/** Plan koleksiyonunun ortak ilişki omurgası. */
+export interface PlanRecord extends StoredRecord {
+  planType?: string;
+  title?: string;
+  academicYearId?: string;
+  classroomId?: string;
+}
+
+export interface CanonicalDailyPlanRecord extends PlanRecord {
+  planType: "daily" | "spontaneous-observation";
+  title: string;
+}
+
+/**
+ * Nesnel bir gözlem ile öğretmenin açıkça doğruladığı program referansı
+ * arasındaki kanonik bağ. Program profili ile hedef kaynağının doğrulanma
+ * durumu ayrı alanlarda tutulur; elle yazılan bir hedef resmîleşemez.
+ */
+export interface CurriculumEvidenceLinkRecord extends StoredRecord {
+  observationId: string;
+  academicYearId: string;
+  classroomId: string;
+  framework: "tymm" | "meb_2024";
+  programLabel: string;
+  catalogId: string;
+  sourceVersion: string;
+  referenceCode: string;
+  referenceTitle: string;
+  confirmedAt: string;
+  approvedByUserId: string;
+  confirmationMethod: "teacher-confirmed";
+  referenceOrigin?: "teacher-declared" | "official-catalog";
+  officialCatalogVerified?: boolean;
+  plannedTargetId?: string;
+  targetKind?: string;
+  targetDomain?: string;
+  targetSourceUrl?: string;
+  targetSourcePage?: number;
+  targetSourceSha256?: `sha256:${string}`;
+  holisticGraphReference?: HolisticGraphReferenceRecord;
+}
+
+export interface HolisticGraphReferenceRecord {
+  readonly graphId: "meb-tymm-okul-oncesi-2024-holistic-graph";
+  readonly graphVersion: "1.0.0";
+  readonly catalogContentSha256: `sha256:${string}`;
+  readonly reviewStatus: "pending-human-review";
+  readonly outcomeNodeId: string;
+  readonly relatedNodeIds: readonly string[];
+  readonly sourceSha256: `sha256:${string}`;
+}
+
+export interface CanonicalCurriculumEvidenceLinkRecord
+  extends CurriculumEvidenceLinkRecord {
+  referenceOrigin: "teacher-declared" | "official-catalog";
+  officialCatalogVerified: boolean;
 }
 
 export const VALUE_EVIDENCE_ROLES = [
@@ -174,12 +258,12 @@ export interface EntityMap {
   attendanceRecords: AttendanceRecord;
   observations: ObservationRecord;
   observationRevisions: StoredRecord;
-  activities: StoredRecord;
+  activities: ActivityRecord;
   mediaAssets: StoredRecord;
-  plans: StoredRecord;
+  plans: PlanRecord;
   calendarEntries: CalendarEntryRecord;
   maarifReferences: StoredRecord;
-  evidenceCurriculumLinks: StoredRecord;
+  evidenceCurriculumLinks: CurriculumEvidenceLinkRecord;
   valueEvidenceLinks: ValueEvidenceLinkRecord;
   portfolioSelections: StoredRecord;
   reportDrafts: StoredRecord;
@@ -219,6 +303,52 @@ function isRequiredText(value: unknown): value is string {
 
 function isSha256Digest(value: unknown): value is string {
   return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+}
+
+const TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 =
+  "sha256:3605c74ddc95970671cc54994d40702b6831ad46e92cfed4a9047597804d4d8a";
+const TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 =
+  "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09";
+
+function isHolisticGraphReference(
+  value: unknown,
+): value is HolisticGraphReferenceRecord {
+  if (!isObject(value)) return false;
+  const relatedNodeIds = value.relatedNodeIds;
+  const expectedKeys = [
+    "catalogContentSha256",
+    "graphId",
+    "graphVersion",
+    "outcomeNodeId",
+    "relatedNodeIds",
+    "reviewStatus",
+    "sourceSha256",
+  ];
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index])
+  ) {
+    return false;
+  }
+  if (
+    value.graphId !== "meb-tymm-okul-oncesi-2024-holistic-graph" ||
+    value.graphVersion !== "1.0.0" ||
+    value.catalogContentSha256 !== TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 ||
+    value.reviewStatus !== "pending-human-review" ||
+    value.sourceSha256 !== TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 ||
+    !isRequiredText(value.outcomeNodeId) ||
+    !/^outcome:(36-48|48-60|60-72):/u.test(value.outcomeNodeId) ||
+    !Array.isArray(relatedNodeIds) ||
+    relatedNodeIds.some((nodeId) => !isRequiredText(nodeId)) ||
+    new Set(relatedNodeIds).size !== relatedNodeIds.length ||
+    relatedNodeIds.some(
+      (nodeId, index) => index > 0 && nodeId <= relatedNodeIds[index - 1],
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function isUtcIso(value: unknown): value is string {
@@ -380,6 +510,12 @@ function isObservationRecord(value: unknown): value is ObservationRecord {
   return (
     studentIdsValid &&
     observationCategoriesValid &&
+    (value.planId === undefined || isUuid(value.planId)) &&
+    (value.activityId === undefined || isUuid(value.activityId)) &&
+    (value.rawTextImmutable === undefined || value.rawTextImmutable === true) &&
+    (value.workflowStatus === undefined || value.workflowStatus === "captured") &&
+    (value.context === undefined || typeof value.context === "string") &&
+    (value.childQuote === undefined || typeof value.childQuote === "string") &&
     (value.studentId === undefined ||
       (typeof value.studentId === "string" && UUID_PATTERN.test(value.studentId))) &&
     (value.academicYearId === undefined ||
@@ -397,6 +533,95 @@ function isObservationRecord(value: unknown): value is ObservationRecord {
       (typeof value.duplicateOf === "string" &&
         UUID_PATTERN.test(value.duplicateOf)))
   );
+}
+
+function isScopedUuid(value: unknown): boolean {
+  return value === undefined || isUuid(value);
+}
+
+function isActivityRecord(value: unknown): value is ActivityRecord {
+  return (
+    isStoredRecord(value) &&
+    (value.planId === undefined || isUuid(value.planId)) &&
+    (value.title === undefined || isRequiredText(value.title)) &&
+    isScopedUuid(value.academicYearId) &&
+    isScopedUuid(value.classroomId) &&
+    (value.legacyAssignmentStatus === undefined ||
+      value.legacyAssignmentStatus === "needs-review") &&
+    (value.legacyAssignmentStatus === "needs-review" ||
+      (isUuid(value.planId) && isRequiredText(value.title))) &&
+    (value.status === undefined ||
+      value.status === "planned" ||
+      value.status === "in_progress" ||
+      value.status === "completed" ||
+      value.status === "cancelled")
+  );
+}
+
+function isPlanRecord(value: unknown): value is PlanRecord {
+  return (
+    isStoredRecord(value) &&
+    (value.planType === undefined || isRequiredText(value.planType)) &&
+    (value.title === undefined || isRequiredText(value.title)) &&
+    (isRequiredText(value.title) ||
+      value.legacyAssignmentStatus === "needs-review") &&
+    isScopedUuid(value.academicYearId) &&
+    isScopedUuid(value.classroomId)
+  );
+}
+
+function isCurriculumEvidenceLinkRecord(
+  value: unknown,
+): value is CurriculumEvidenceLinkRecord {
+  if (
+    !isStoredRecord(value) ||
+    (value.schemaVersion !== 1 && value.schemaVersion !== 2)
+  ) {
+    return false;
+  }
+  const referenceOrigin = value.referenceOrigin ?? "teacher-declared";
+  const officialCatalogVerified = value.officialCatalogVerified ?? false;
+  if (
+    !isUuid(value.observationId) ||
+    !isUuid(value.academicYearId) ||
+    !isUuid(value.classroomId) ||
+    !isUuid(value.approvedByUserId) ||
+    (value.framework !== "tymm" && value.framework !== "meb_2024") ||
+    !isRequiredText(value.programLabel) ||
+    !isRequiredText(value.catalogId) ||
+    !isRequiredText(value.sourceVersion) ||
+    !isRequiredText(value.referenceCode) ||
+    !isRequiredText(value.referenceTitle) ||
+    !isUtcIso(value.confirmedAt) ||
+    value.confirmationMethod !== "teacher-confirmed" ||
+    (referenceOrigin !== "teacher-declared" &&
+      referenceOrigin !== "official-catalog") ||
+    typeof officialCatalogVerified !== "boolean" ||
+    (officialCatalogVerified && referenceOrigin !== "official-catalog") ||
+    (value.plannedTargetId !== undefined && !isRequiredText(value.plannedTargetId)) ||
+    (value.targetKind !== undefined && !isRequiredText(value.targetKind)) ||
+    (value.targetDomain !== undefined && !isRequiredText(value.targetDomain)) ||
+    (value.targetSourceUrl !== undefined && !isRequiredText(value.targetSourceUrl)) ||
+    (value.targetSourcePage !== undefined &&
+      (typeof value.targetSourcePage !== "number" ||
+        !Number.isInteger(value.targetSourcePage) ||
+        value.targetSourcePage < 1)) ||
+    (value.targetSourceSha256 !== undefined &&
+      !isSha256Digest(value.targetSourceSha256)) ||
+    (value.holisticGraphReference !== undefined &&
+      !isHolisticGraphReference(value.holisticGraphReference)) ||
+    (value.schemaVersion === 2 &&
+      value.framework === "tymm" &&
+      officialCatalogVerified === true &&
+      value.targetKind === "learning-outcome" &&
+      value.targetSourceSha256 === TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 &&
+      !isHolisticGraphReference(value.holisticGraphReference))
+  ) {
+    return false;
+  }
+  return referenceOrigin === "official-catalog"
+    ? officialCatalogVerified === true && value.targetSourceUrl !== "about:blank"
+    : officialCatalogVerified === false;
 }
 
 export function isValueEvidenceLinkRecord(
@@ -490,12 +715,12 @@ export const ENTITY_RECORD_GUARDS = {
   attendanceRecords: isRepositoryAttendanceRecord,
   observations: isObservationRecord,
   observationRevisions: isStoredRecord,
-  activities: isStoredRecord,
+  activities: isActivityRecord,
   mediaAssets: isStoredRecord,
-  plans: isStoredRecord,
+  plans: isPlanRecord,
   calendarEntries: isCalendarEntryRecord,
   maarifReferences: isStoredRecord,
-  evidenceCurriculumLinks: isStoredRecord,
+  evidenceCurriculumLinks: isCurriculumEvidenceLinkRecord,
   valueEvidenceLinks: isValueEvidenceLinkRecord,
   portfolioSelections: isStoredRecord,
   reportDrafts: isStoredRecord,

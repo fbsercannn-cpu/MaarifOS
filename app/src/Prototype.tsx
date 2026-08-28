@@ -172,6 +172,10 @@ import { ensureSpontaneousObservationContext } from "./features/evidence/spontan
 import { resolveObservationContext } from "./features/evidence/observation-context";
 import { verifyCommittedObservationRefresh } from "./features/evidence/observation-commit-refresh";
 import {
+  createObservationCurriculumLinkCommand,
+  OBSERVATION_WORKFLOW_STATUS_LABELS,
+} from "./features/evidence/observation-workflow-status.ts";
+import {
   hasNonSeedEvidenceText,
   mergeEvidenceSeedParagraph,
 } from "./features/evidence/evidence-seed-merge";
@@ -951,6 +955,7 @@ async function persistAppLockSetting(
 type EvidenceFlowRequest = {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
+  assessmentTarget?: CurriculumTargetSnapshot;
   initialStudentId?: string;
   initialDraft?: EvidenceCaptureSeed;
 };
@@ -1627,6 +1632,7 @@ function EvidenceCaptureScreen({
     setLegacyDetailsReviewRequired(false);
     setObservationType("quick-note");
     setCategories([]);
+    setObservationGuide("");
     setDraftStatus("loading");
     const seed =
       initialDraft &&
@@ -1813,6 +1819,7 @@ function EvidenceCaptureScreen({
   }, [activity.id, activity.planId, initialStudentId]);
 
   const toggleCategory = (category: QuickObservationCategory) => {
+    setObservationGuide("");
     setCategories((current) =>
       current.includes(category)
         ? current.filter((item) => item !== category)
@@ -1834,8 +1841,11 @@ function EvidenceCaptureScreen({
   const observationGuidance = isChildQuoteObservation
     ? "Çocuğun sözünü yorum eklemeden ve düzeltmeden yazın."
     : "Gördüğünüz ve duyduğunuz olayı yorum eklemeden yazın.";
-  const saveBlockedReason = busy
-    ? "Gözlem bu cihaza kaydediliyor."
+  const draftLoading = draftStatus === "loading";
+  const saveBlockedReason = draftLoading
+    ? "Taslak yükleniyor; yazma alanı veri kaybını önlemek için kısa süre kilitli."
+    : busy
+      ? "Gözlem bu cihaza kaydediliyor."
     : selectionMode === "single" && !studentId
       ? "Önce gözlem yaptığınız çocuğu seçin."
       : selectionMode === "selected-children" && groupStudentIds.length < 2
@@ -1876,7 +1886,8 @@ function EvidenceCaptureScreen({
       (!singleReady && !groupReady) ||
       !rawText.trim() ||
       legacyDetailsReviewRequired ||
-      busy
+      busy ||
+      draftLoading
     ) return;
     setBusy(true);
     setSafeError("");
@@ -2052,7 +2063,7 @@ function EvidenceCaptureScreen({
                       type="checkbox"
                       checked={groupConfirmed}
                       onChange={(event) => setGroupConfirmed(event.target.checked)}
-                      disabled={busy || groupStudentIds.length < 2}
+                      disabled={draftLoading || busy || groupStudentIds.length < 2}
                     />
                     <span>
                       <strong>{groupStudentIds.length} çocuk için aynı gözlem geçerli</strong>
@@ -2082,6 +2093,7 @@ function EvidenceCaptureScreen({
                 placeholder={observationPlaceholder}
                 rows={6}
                 aria-describedby="quick-observation-guidance"
+                disabled={draftLoading || busy}
               />
               <p id="quick-observation-guidance">
                 {observationGuidance}
@@ -2089,12 +2101,50 @@ function EvidenceCaptureScreen({
               {!isChildQuoteObservation ? (
                 <div className="quick-starter-grid" role="group" aria-label="Tarafsız cümle başlangıçları">
                   {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
-                    <button type="button" key={starter.id} onClick={() => applyStarter(starter.text)}>
+                    <button
+                      type="button"
+                      key={starter.id}
+                      onClick={() => applyStarter(starter.text)}
+                      disabled={draftLoading || busy}
+                    >
                       {starter.text}
                     </button>
                   ))}
                 </div>
               ) : null}
+              <aside
+                className="quick-observation-guide"
+                aria-labelledby="quick-observation-guide-heading"
+              >
+                <div>
+                  <ReaderIcon aria-hidden="true" />
+                  <span>
+                    <strong id="quick-observation-guide-heading">
+                      Bakıp yazabileceğiniz ipuçları
+                    </strong>
+                    <small>Bir odağa dokunun; yalnız gözlediğiniz olayı yazın.</small>
+                  </span>
+                </div>
+                <ul>
+                  {visibleObservationGuides.map((guide) => (
+                    <li key={guide}>
+                      <button
+                        type="button"
+                        aria-pressed={observationGuide === guide}
+                        onClick={() => setObservationGuide(guide)}
+                        disabled={draftLoading || busy}
+                      >
+                        {guide}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p role="status" aria-live="polite">
+                  {observationGuide
+                    ? `Seçili gözlem odağı: ${observationGuide}`
+                    : "Henüz bir odak seçmediniz; serbestçe de yazabilirsiniz."}
+                </p>
+              </aside>
             </section>
 
             {legacyDetailsReviewRequired ? (
@@ -2156,6 +2206,7 @@ function EvidenceCaptureScreen({
                       key={id}
                       onClick={() => setObservationType(id)}
                       aria-pressed={observationType === id}
+                      disabled={draftLoading || busy}
                     >
                       <Icon aria-hidden="true" />
                       {label}
@@ -2171,6 +2222,7 @@ function EvidenceCaptureScreen({
                       key={id}
                       onClick={() => toggleCategory(id)}
                       aria-pressed={categories.includes(id)}
+                      disabled={draftLoading || busy}
                     >
                       {label}
                     </button>
@@ -2298,8 +2350,16 @@ function EvidenceLinkScreen({
         <blockquote className="d1-observation-quote">{observation.rawText}</blockquote>
 
         <section className="d1-warning-card">
-          <strong>Planlanan hedefle sınırlandırıldı</strong>
-          <p>Bağlantı yalnız bu etkinlik için önceden seçilen program hedeflerinden kurulabilir. Son karar öğretmen onayıdır.</p>
+          <strong>
+            {observation.plannedCurriculumTargets.length > 0
+              ? "Planlanan hedefle sınırlandırıldı"
+              : "Öğretmen beyanı · resmî katalogda doğrulanmadı"}
+          </strong>
+          <p>
+            {observation.plannedCurriculumTargets.length > 0
+              ? "Bağlantı yalnız bu etkinlik için önceden seçilen program hedeflerinden kurulabilir. Son karar öğretmen onayıdır."
+              : "Eski veya plansız gözlem için yazdığınız referans öğretmen beyanı olarak saklanır; resmî program hedefi sayılmaz."}
+          </p>
           <small>{curriculumDisplayLabel(observation.curriculumProfile)} · {observation.curriculumProfile.sourceVersion}</small>
         </section>
 
@@ -2599,6 +2659,7 @@ function createCompletionScreen(
 function EvidenceCaptureFlow({
   activity,
   pendingObservation,
+  assessmentTarget,
   initialStudentId,
   initialDraft,
   students,
@@ -2606,6 +2667,7 @@ function EvidenceCaptureFlow({
 }: {
   activity: EvidenceActivitySummary;
   pendingObservation?: EvidenceObservationSummary;
+  assessmentTarget?: CurriculumTargetSnapshot;
   initialStudentId?: string;
   initialDraft?: EvidenceCaptureSeed;
   students: Student[];
@@ -2613,7 +2675,9 @@ function EvidenceCaptureFlow({
 }) {
   const initial = useMemo<FlowScreen>(
     () =>
-      pendingObservation
+      pendingObservation && assessmentTarget
+        ? createAssessmentScreen(pendingObservation, assessmentTarget, actions)
+        : pendingObservation
         ? createEvidenceLinkScreen(pendingObservation, actions)
         : {
             id: `capture-${activity.id}`,
@@ -2633,7 +2697,15 @@ function EvidenceCaptureFlow({
               />
             ),
           },
-    [actions, activity, initialDraft, initialStudentId, pendingObservation, students],
+    [
+      actions,
+      activity,
+      assessmentTarget,
+      initialDraft,
+      initialStudentId,
+      pendingObservation,
+      students,
+    ],
   );
 
   return <FlowStack initial={initial} />;
@@ -3022,7 +3094,7 @@ export default function Prototype() {
   const [studentProfileTab, setStudentProfileTab] =
     useState<StudentProfileTab>("flow");
   const [studentObservationFilter, setStudentObservationFilter] =
-    useState<"all" | "pending">("all");
+    useState<"all" | "pending-link" | "pending-assessment">("all");
   const [studentObservationMonth, setStudentObservationMonth] =
     useState<StudentObservationMonth>("all");
   const [studentPortfolioWorkspace, setStudentPortfolioWorkspace] =
@@ -3565,7 +3637,11 @@ export default function Prototype() {
       )
     : [];
   const selectedStudentPendingLinks = selectedStudentObservations.filter(
-    (observation) => observation.confirmedCurriculumLinkIds.length === 0,
+    (observation) =>
+      observation.workflowStatus === "program-bağlantısı-bekliyor",
+  ).length;
+  const selectedStudentPendingAssessments = selectedStudentObservations.filter(
+    (observation) => observation.workflowStatus === "değerlendirme-bekliyor",
   ).length;
   const selectedStudentMonthObservations =
     studentObservationMonth === "all"
@@ -3575,11 +3651,16 @@ export default function Prototype() {
             observation.civilDate.startsWith(studentObservationMonth),
         );
   const visibleSelectedStudentObservations =
-    studentObservationFilter === "pending"
+    studentObservationFilter === "pending-link"
       ? selectedStudentMonthObservations.filter(
           (observation) =>
-            observation.confirmedCurriculumLinkIds.length === 0,
+            observation.workflowStatus === "program-bağlantısı-bekliyor",
         )
+      : studentObservationFilter === "pending-assessment"
+        ? selectedStudentMonthObservations.filter(
+            (observation) =>
+              observation.workflowStatus === "değerlendirme-bekliyor",
+          )
       : selectedStudentMonthObservations;
   const portfolioSelectionByObservationId = useMemo(
     () =>
@@ -7377,6 +7458,56 @@ export default function Prototype() {
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
 
+  const openPendingAssessment = (
+    observation: EvidenceObservationSummary,
+  ) => {
+    if (educationalWriteNotice) {
+      setClassroomOpen(true);
+      setAnnouncement(educationalWriteNotice);
+      return;
+    }
+    if (observation.workflowStatus !== "değerlendirme-bekliyor") {
+      setAnnouncement("Bu gözlem için bekleyen bir değerlendirme adımı yok.");
+      return;
+    }
+    const target = observation.confirmedCurriculumTargets[0];
+    if (!target) {
+      setAnnouncement(
+        "Program bağlantısının kaynak bilgisi güvenle çözümlenemedi; değerlendirme açılmadı.",
+      );
+      return;
+    }
+    const activity = evidenceWorkspace.activities.find(
+      (item) => item.id === observation.activityId,
+    ) ?? {
+      id: observation.activityId,
+      planId: observation.planId,
+      title: observation.activityTitle,
+      startTime: "00:00",
+      status: "completed" as const,
+      civilDate: observation.civilDate,
+      curriculumProfile: observation.curriculumProfile,
+      curriculumTargets: observation.plannedCurriculumTargets,
+      assignedStudentIds: [observation.studentId],
+      assignmentMode: "legacy-unscoped" as const,
+      contextKind: "planned-activity" as const,
+      ...(observation.premiumProvenance
+        ? { premiumProvenance: observation.premiumProvenance }
+        : {}),
+    };
+    d1ReturnFocusRef.current ??=
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setStudentProfileOpen(false);
+    surfaceTransitionRef.current = "evidence-flow";
+    setEvidenceFlowRequest({
+      activity,
+      pendingObservation: observation,
+      assessmentTarget: target,
+    });
+  };
+
   const saveAnecdoteDocumentDraft = async (
     observationId: string,
     values: {
@@ -7884,23 +8015,12 @@ export default function Prototype() {
     },
     confirm: async (observation, target) => {
       if (educationalWriteNotice) throw new Error(educationalWriteNotice);
-      const isPlannedTarget = observation.plannedCurriculumTargets.some(
-        (planned) => planned.id === target.id,
-      );
       await enqueuePersistence(
         () =>
-          confirmObservationCurriculumLink(store, {
-            observationId: observation.id,
-            framework: observation.curriculumProfile.framework,
-            catalogId: observation.curriculumProfile.catalogId,
-            sourceVersion: observation.curriculumProfile.sourceVersion,
-            referenceCode: target.referenceCode,
-            referenceTitle: target.referenceTitle,
-            referenceOrigin: observation.curriculumProfile.referenceOrigin,
-            officialCatalogVerified:
-              observation.curriculumProfile.officialCatalogVerified,
-            ...(isPlannedTarget ? { plannedTargetId: target.id } : {}),
-          }),
+          confirmObservationCurriculumLink(
+            store,
+            createObservationCurriculumLinkCommand(observation, target),
+          ),
         {
           ...evidenceMutationGuards(observation.premiumProvenance),
           failureDetail:
@@ -9520,8 +9640,9 @@ export default function Prototype() {
               <TargetIcon aria-hidden="true" />
             </div>
             <p className="catalog-scope-note">
-              Bu sayı yalnız resmî öğrenme çıktılarını kapsar; alan becerileri,
-              süreç ve programlar arası bileşenler planlarda ayrı izlenir.
+              Bu sayı yalnız resmî öğrenme çıktılarını kapsar ve kaynak özetiyle
+              izlenir. Diğer program bileşenleri insan incelemesi tamamlandıkça
+              ayrıca eklenecektir.
             </p>
             <div className="tymm-domain-tabs" role="tablist" aria-label="Öğrenme alanları">
               {selectedTymmGuide.domainOutcomeCounts.map((item) => (
@@ -10981,7 +11102,7 @@ export default function Prototype() {
                 }}
                 onShowPendingLinks={() => {
                   setStudentProfileTab("flow");
-                  setStudentObservationFilter("pending");
+                  setStudentObservationFilter("pending-link");
                   setStudentObservationMonth("all");
                   setStudentObservationLimit(20);
                 }}
@@ -11100,13 +11221,23 @@ export default function Prototype() {
                 </button>
                 <button
                   type="button"
-                  aria-pressed={studentObservationFilter === "pending"}
+                  aria-pressed={studentObservationFilter === "pending-link"}
                   onClick={() => {
-                    setStudentObservationFilter("pending");
+                    setStudentObservationFilter("pending-link");
                     setStudentObservationLimit(20);
                   }}
                 >
                   Bağlantı bekleyen · {selectedStudentPendingLinks}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={studentObservationFilter === "pending-assessment"}
+                  onClick={() => {
+                    setStudentObservationFilter("pending-assessment");
+                    setStudentObservationLimit(20);
+                  }}
+                >
+                  Değerlendirme bekleyen · {selectedStudentPendingAssessments}
                 </button>
               </div>
               <div className="student-observation-export-actions">
@@ -11132,8 +11263,11 @@ export default function Prototype() {
                   {visibleSelectedStudentObservations
                     .slice(0, studentObservationLimit)
                     .map((observation) => {
-                    const pending =
-                      observation.confirmedCurriculumLinkIds.length === 0;
+                    const workflowStatus = observation.workflowStatus;
+                    const pendingLink =
+                      workflowStatus === "program-bağlantısı-bekliyor";
+                    const pendingAssessment =
+                      workflowStatus === "değerlendirme-bekliyor";
                     return (
                       <li key={observation.id}>
                         <span className="student-observation-time-dot" aria-hidden="true" />
@@ -11143,13 +11277,16 @@ export default function Prototype() {
                               {formatObservationDateTime(observation.observedAt)}
                             </time>
                             <span
-                              className={
-                                pending
-                                  ? "observation-link-state observation-link-state--pending"
-                                  : "observation-link-state observation-link-state--linked"
-                              }
+                              className={`observation-link-state observation-link-state--${
+                                pendingLink
+                                  ? "pending"
+                                  : pendingAssessment
+                                    ? "assessment"
+                                    : "complete"
+                              }`}
+                              data-workflow-status={workflowStatus}
                             >
-                              {pending ? "Bağ bekliyor" : "Bağ tamam"}
+                              {OBSERVATION_WORKFLOW_STATUS_LABELS[workflowStatus]}
                             </span>
                           </div>
                           <small>{observation.activityTitle}</small>
@@ -11163,13 +11300,23 @@ export default function Prototype() {
                               ) : null}
                             </details>
                           ) : null}
-                          {pending && isCapabilityEnabled("planEvidenceDetails") ? (
+                          {pendingLink && isCapabilityEnabled("planEvidenceDetails") ? (
                             <button
                               type="button"
                               onClick={() => openPendingObservation(observation)}
                             >
                               <Link2Icon aria-hidden="true" />
                               Program bağlantısını tamamla
+                            </button>
+                          ) : null}
+                          {pendingAssessment && isCapabilityEnabled("planEvidenceDetails") ? (
+                            <button
+                              type="button"
+                              className="student-observation-assessment-action"
+                              onClick={() => openPendingAssessment(observation)}
+                            >
+                              <ReaderIcon aria-hidden="true" />
+                              Değerlendirmeyi tamamla
                             </button>
                           ) : null}
                         </article>
@@ -11180,8 +11327,16 @@ export default function Prototype() {
               ) : (
                 <div className="student-observation-empty">
                   <ReaderIcon aria-hidden="true" />
-                  <strong>Henüz gözlem yok</strong>
-                  <span>İlk not kaydedildiğinde tarih ve saatiyle burada görünür.</span>
+                  <strong>
+                    {selectedStudentObservations.length > 0
+                      ? "Bu filtrede bekleyen kayıt yok"
+                      : "Henüz gözlem yok"}
+                  </strong>
+                  <span>
+                    {selectedStudentObservations.length > 0
+                      ? "Tümü filtresine dönerek tamamlanan kayıtları görebilirsiniz."
+                      : "İlk not kaydedildiğinde tarih ve saatiyle burada görünür."}
+                  </span>
                 </div>
               )}
               {visibleSelectedStudentObservations.length > studentObservationLimit ? (
@@ -13289,7 +13444,7 @@ export default function Prototype() {
           <Dialog.Overlay className="d1-flow-overlay" />
           <Dialog.Content
             className="d1-flow-layer"
-            key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}-${evidenceFlowRequest.initialStudentId ?? "none"}-${evidenceFlowRequest.initialDraft ? "seeded" : "plain"}`}
+            key={`evidence-flow-${evidenceFlowRequest.pendingObservation?.id ?? evidenceFlowRequest.activity.id}-${evidenceFlowRequest.assessmentTarget?.id ?? "no-assessment"}-${evidenceFlowRequest.initialStudentId ?? "none"}-${evidenceFlowRequest.initialDraft ? "seeded" : "plain"}`}
             onCloseAutoFocus={(event) => {
               const activityReturnTarget = document.querySelector<HTMLElement>(
                 '[data-activity-observation-return="true"]',
@@ -13311,6 +13466,7 @@ export default function Prototype() {
             <EvidenceCaptureFlow
               activity={evidenceFlowRequest.activity}
               pendingObservation={evidenceFlowRequest.pendingObservation}
+              assessmentTarget={evidenceFlowRequest.assessmentTarget}
               initialStudentId={evidenceFlowRequest.initialStudentId}
               initialDraft={evidenceFlowRequest.initialDraft}
               students={students}

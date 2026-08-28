@@ -10,9 +10,12 @@ import {
   ValidationError,
 } from "../../src/core/errors/application-errors.ts";
 import { TeacherOwnedPlanError } from "../../src/core/domain/teacher-owned-plan.ts";
-import { createTeacherFeedback } from "../../src/features/feedback/teacher-feedback.ts";
+import {
+  TEACHER_FEEDBACK_CODES,
+  createTeacherFeedback,
+} from "../../src/features/feedback/teacher-feedback.ts";
 
-test("pedagojik kaynak günü hatası öğretmen diline ve tek dokunuşlu çözüme dönüşür", () => {
+test("pedagojik kaynak günü hatası yeniden kaydetme döngüsü yerine kaynak seçimine döner", () => {
   const feedback = createTeacherFeedback(
     new Error("Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor."),
   );
@@ -21,10 +24,85 @@ test("pedagojik kaynak günü hatası öğretmen diline ve tek dokunuşlu çöz�
   assert.equal(feedback.severity, "error");
   assert.equal(feedback.supportCode, "PLAN-DATE-001");
   assert.deepEqual(feedback.action, {
-    id: "align-plan-date",
-    label: "Plan gününe eşitle",
+    id: "select-activity",
+    label: "Etkinliği yeniden seç",
   });
   assert.match(feedback.detail, /Taslağınız korunuyor/);
+});
+
+test("öğretmen geri bildirim kodu sözleşmesi benzersizdir ve tüm plan readiness kodlarını kapsar", () => {
+  assert.equal(new Set(TEACHER_FEEDBACK_CODES).size, TEACHER_FEEDBACK_CODES.length);
+  for (const code of [
+    "plan.activity",
+    "plan.title",
+    "plan.target",
+    "plan.child-scope",
+    "plan.date-format",
+    "plan.week-range",
+    "plan.calendar-day",
+    "plan.age-profile",
+    "plan.program-profile",
+    "plan.time",
+    "plan.flow",
+  ]) {
+    assert.ok(TEACHER_FEEDBACK_CODES.includes(code), `${code} sözleşmede bulunamadı`);
+  }
+});
+
+test("tarih biçimi, hafta aralığı, eksik yaş bandı ve profil uyuşmazlığı ayrı kodlanır", () => {
+  const cases = [
+    ["Plan günü YYYY-AA-GG biçiminde olmalıdır.", "plan.date-format", "PLAN-DATE-002"],
+    [
+      "Plan tarihi kayıtlı kaynak haftanın dışına taşınamaz.",
+      "plan.week-range",
+      "PLAN-WEEK-001",
+    ],
+    [
+      "Plan hedeflerini açmak için sınıf profilinde 36–48, 48–60 veya 60–72 ay resmî yaş bandını seçin.",
+      "plan.age-profile",
+      "PLAN-AGE-001",
+    ],
+    [
+      "Plan program profili aktif sınıfın kayıtlı program profiliyle uyuşmuyor.",
+      "plan.program-profile",
+      "PLAN-PROGRAM-001",
+    ],
+  ];
+
+  for (const [message, code, supportCode] of cases) {
+    const feedback = createTeacherFeedback(new Error(message));
+    assert.equal(feedback.code, code);
+    assert.equal(feedback.supportCode, supportCode);
+  }
+});
+
+test("etkinlik, başlık ve resmî öğretim günü eksikleri kendi readiness koduna dönüşür", () => {
+  const cases = [
+    ["Etkinlik başlığı zorunludur.", "plan.activity", "PLAN-ACTIVITY-001"],
+    ["Plan başlığı zorunludur.", "plan.title", "PLAN-TITLE-001"],
+    [
+      "16 Kasım 2026 resmî MEB çalışma takviminde öğretim günü değildir.",
+      "plan.calendar-day",
+      "PLAN-CALENDAR-001",
+    ],
+  ];
+
+  for (const [message, code, supportCode] of cases) {
+    const feedback = createTeacherFeedback(new Error(message));
+    assert.equal(feedback.code, code);
+    assert.equal(feedback.supportCode, supportCode);
+  }
+});
+
+test("genel program, hedef, saat ve akış sözleri plan hatası diye yanlış sınıflandırılmaz", () => {
+  for (const message of [
+    "Program profili ekranı bugün güncellendi.",
+    "TYMM hedefi kartı öğretmene gösterildi.",
+    "Başlangıç saati duyurusu hazırlandı.",
+    "Günlük akış tanıtım metni kaydedildi.",
+  ]) {
+    assert.equal(createTeacherFeedback(new Error(message)).code, "unknown", message);
+  }
 });
 
 test("hafta, hedef, çocuk ve saat uyarıları kararlı eylem kodları taşır", () => {

@@ -351,7 +351,7 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
               <p>
                 <strong>Etkinlik bankası</strong>
                 <small>{suggestedAgeBand
-                  ? "Yaşa ve tarihe göre çevrimdışı öneriler"
+                  ? "Yaş bandı ve tarih rotasyonuna göre çevrimdışı fikirler"
                   : "Önce resmî yaş bandını seçin"}</small>
               </p>
               <b>{suggestedAgeBand ? "Aç" : "Tamamla"}</b>
@@ -387,9 +387,13 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         <section className="simple-today__suggestions" aria-labelledby="simple-today-suggestions-title">
           <header>
             <div>
-              <span>BUGÜNE UYGUN</span>
-              <h2 id="simple-today-suggestions-title">Hazır etkinlik önerileri</h2>
+              <span>BUGÜN İÇİN SIRALANDI</span>
+              <h2 id="simple-today-suggestions-title">Özgün etkinlik fikirleri</h2>
               {monthLens ? <p>{monthLens.label}</p> : null}
+              <p>
+                Yaş bandı ve tarih rotasyonuna göre sıralanır; pedagojik
+                uygunluğu öğretmen sınıfın o günkü durumuna göre belirler.
+              </p>
             </div>
             {suggestedAgeBand ? (
               <button type="button" onClick={() => actions.onOpenActivityStudio()}>Tümünü gör</button>

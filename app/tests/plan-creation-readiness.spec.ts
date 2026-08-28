@@ -276,7 +276,7 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
     .getByRole("button");
   await expect(recommendations).toHaveCount(4);
   await expect(recommendations.first()).toContainText(/FAB\.(3|4)/u);
-  await expect(recommendations.first()).toContainText("Öneri nedeni:");
+  await expect(recommendations.first()).toContainText("Olası eşleşme nedeni:");
   await expect(recommendations.first()).toContainText(/tahmin|gözlem/u);
 
   await recommendations.first().click();

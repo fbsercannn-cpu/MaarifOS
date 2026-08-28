@@ -24,6 +24,12 @@ import {
   type CurriculumProfileInput,
   type CurriculumProfileSnapshot,
 } from "./evidence-flow.ts";
+import {
+  deriveObservationWorkflowStatus,
+  isTeacherConfirmedObservationLink,
+  observationAssessmentDraftIds,
+  type ObservationWorkflowStatus,
+} from "./observation-workflow-status.ts";
 import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
 
 export type EvidenceActivityStatus = "planned" | "in_progress" | "completed";
@@ -65,6 +71,9 @@ export interface EvidenceObservationSummary {
   curriculumProfile: CurriculumProfileSnapshot;
   plannedCurriculumTargets: CurriculumTargetSnapshot[];
   confirmedCurriculumLinkIds: string[];
+  confirmedCurriculumTargets: CurriculumTargetSnapshot[];
+  assessmentDraftIds: string[];
+  workflowStatus: ObservationWorkflowStatus;
   premiumProvenance?: EvidencePremiumProvenance;
 }
 
@@ -217,19 +226,64 @@ function activitySummary(
   };
 }
 
-function teacherConfirmedLinkIds(
+function teacherConfirmedLinks(
   links: readonly StoredRecord[],
   observationId: string,
-): string[] {
+): StoredRecord[] {
   return links
-    .filter(
-      (link) =>
-        link.observationId === observationId &&
-        link.confirmationMethod === "teacher-confirmed" &&
-        typeof link.deletedAt !== "string",
-    )
-    .map((link) => link.id)
-    .sort((left, right) => left.localeCompare(right));
+    .filter((link) => isTeacherConfirmedObservationLink(link, observationId))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function teacherConfirmedTarget(
+  link: StoredRecord,
+  plannedTargets: readonly CurriculumTargetSnapshot[],
+  profile: CurriculumProfileSnapshot,
+  observationCivilDate: string,
+): CurriculumTargetSnapshot | null {
+  const plannedTarget = plannedTargets.find(
+    (target) =>
+      (target.id === link.plannedTargetId ||
+        (target.referenceCode === link.referenceCode &&
+          target.referenceTitle === link.referenceTitle)) &&
+      target.framework === link.framework &&
+      target.catalogId === link.catalogId &&
+      target.sourceVersion === link.sourceVersion &&
+      target.referenceOrigin === link.referenceOrigin &&
+      target.officialCatalogVerified === link.officialCatalogVerified,
+  );
+  if (plannedTarget) return plannedTarget;
+
+  if (
+    link.referenceOrigin !== "teacher-declared" ||
+    link.officialCatalogVerified === true ||
+    typeof link.referenceCode !== "string" ||
+    !link.referenceCode.trim() ||
+    typeof link.referenceTitle !== "string" ||
+    !link.referenceTitle.trim()
+  ) {
+    return null;
+  }
+
+  return {
+    id: link.id,
+    framework: profile.framework,
+    catalogId: profile.catalogId,
+    sourceVersion: profile.sourceVersion,
+    referenceCode: link.referenceCode.trim(),
+    referenceTitle: link.referenceTitle.trim(),
+    kind: "learning-outcome",
+    domain: "Öğretmen beyanı",
+    sourceUrl: "about:blank",
+    sourceLabel: "Öğretmen beyanı · resmî katalogda doğrulanmadı",
+    sourceCheckedOn: isCivilDate(link.civilDate)
+      ? link.civilDate
+      : observationCivilDate,
+    catalogCompleteness: "partial",
+    verificationStatus: "teacher-declared-unverified",
+    referenceOrigin: "teacher-declared",
+    officialCatalogVerified: false,
+  };
 }
 
 export function resolveEvidenceWorkspace(
@@ -273,6 +327,11 @@ export function resolveEvidenceWorkspace(
       typeof record.deletedAt !== "string" &&
       recordBelongsToClassroomScope(record, scope),
   );
+  const scopedAssessmentDrafts = snapshot.reportDrafts.filter(
+    (record) =>
+      typeof record.deletedAt !== "string" &&
+      recordBelongsToClassroomScope(record, scope),
+  );
 
   const observations = snapshot.observations
     .filter(
@@ -302,6 +361,11 @@ export function resolveEvidenceWorkspace(
         typeof student.displayName === "string" && student.displayName.trim()
           ? student.displayName.trim()
           : "Çocuk";
+      const confirmedLinks = teacherConfirmedLinks(scopedLinks, record.id);
+      const assessmentDraftIds = observationAssessmentDraftIds(
+        scopedAssessmentDrafts,
+        record.id,
+      );
       return {
         id: record.id,
         studentId,
@@ -324,7 +388,23 @@ export function resolveEvidenceWorkspace(
         civilDate: record.civilDate,
         curriculumProfile: activity.curriculumProfile,
         plannedCurriculumTargets: activity.curriculumTargets,
-        confirmedCurriculumLinkIds: teacherConfirmedLinkIds(scopedLinks, record.id),
+        confirmedCurriculumLinkIds: confirmedLinks.map((link) => link.id),
+        confirmedCurriculumTargets: confirmedLinks
+          .map((link) =>
+            teacherConfirmedTarget(
+              link,
+              activity.curriculumTargets,
+              activity.curriculumProfile,
+              record.civilDate,
+            ),
+          )
+          .filter((target): target is CurriculumTargetSnapshot => target !== null),
+        assessmentDraftIds,
+        workflowStatus: deriveObservationWorkflowStatus({
+          observationId: record.id,
+          curriculumLinks: confirmedLinks,
+          reportDrafts: scopedAssessmentDrafts,
+        }),
         ...(activity.premiumProvenance
           ? { premiumProvenance: activity.premiumProvenance }
           : {}),

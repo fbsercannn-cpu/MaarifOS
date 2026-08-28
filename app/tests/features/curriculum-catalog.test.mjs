@@ -243,7 +243,7 @@ test("kod, başlık, alan, yaş ve sayfa içeriği sabit katalog digest'i ile ko
   );
 });
 
-test("katalog adaptörü TYMM'yi yaşa göre filtreler ve yedek snapshot'ına yeni alan sızdırmaz", () => {
+test("katalog adaptörü TYMM'yi yaşa göre filtreler ve kaynak kanıtını snapshot'ta korur", () => {
   const profile = {
     framework: "tymm",
     programLabel: "Türkiye Yüzyılı Maarif Modeli",
@@ -268,8 +268,9 @@ test("katalog adaptörü TYMM'yi yaşa göre filtreler ve yedek snapshot'ına ye
         target.kind === "learning-outcome" &&
         target.catalogId === TYMM_2024_CATALOG_METADATA.catalogId &&
         target.sourceVersion === TYMM_2024_CATALOG_METADATA.sourceVersion &&
-        !Object.hasOwn(target, "ageBands") &&
-        !Object.hasOwn(target, "sourcePage"),
+        target.ageBands?.length === 1 &&
+        Number.isInteger(target.sourcePage) &&
+        target.sourceSha256 === TYMM_2024_CATALOG_METADATA.sourceSha256,
     ),
   );
 

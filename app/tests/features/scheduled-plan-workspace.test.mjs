@@ -224,6 +224,10 @@ test("gelecek premium plan bir plan + bir gerçek etkinlik olarak keşfedilir; T
   assert.equal(calendarIndex.plans[0].flowBlockCount, 10);
   assert.equal(calendarIndex.plans[0].persistedActivityCount, 1);
   assert.equal(calendarIndex.plans[0].editable, true);
+  assert.equal(calendarIndex.plans[0].editBlockCode, null);
+  assert.equal(calendarIndex.plans[0].editBlockSupportCode, null);
+  assert.equal(calendarIndex.plans[0].integrityCode, null);
+  assert.equal(calendarIndex.plans[0].integritySupportCode, null);
 
   store.snapshot.settings.push({
     ...base,
@@ -249,6 +253,62 @@ test("gelecek premium plan bir plan + bir gerçek etkinlik olarak keşfedilir; T
     }),
     calendarIndex,
   );
+});
+
+test("dört düzenleme engeli takvim özetinde ayrı kod ve destek kodu taşır", async () => {
+  {
+    const store = activeStore();
+    await createFutureDailyPlan(store);
+    store.snapshot.activities = [];
+    const summary = resolveScheduledPlanWorkspace(await store.readSnapshot(), {
+      now: new Date("2026-09-07T08:00:00.000Z"),
+    }).plans[0];
+    assert.equal(summary.editBlockCode, "plan.edit.activity-count");
+    assert.equal(summary.editBlockSupportCode, "PLAN-EDIT-101");
+  }
+
+  {
+    const store = activeStore();
+    await createFutureDailyPlan(store);
+    const summary = resolveScheduledPlanWorkspace(await store.readSnapshot(), {
+      now: new Date("2026-09-08T08:00:00.000Z"),
+    }).plans[0];
+    assert.equal(summary.editBlockCode, "plan.edit.past-or-today");
+    assert.equal(summary.editBlockSupportCode, "PLAN-EDIT-102");
+  }
+
+  {
+    const store = activeStore();
+    await createFutureDailyPlan(store);
+    store.snapshot.activities.find((activity) => activity.id === activityId).status =
+      "completed";
+    const summary = resolveScheduledPlanWorkspace(await store.readSnapshot(), {
+      now: new Date("2026-09-07T08:00:00.000Z"),
+    }).plans[0];
+    assert.equal(summary.editBlockCode, "plan.edit.status-locked");
+    assert.equal(summary.editBlockSupportCode, "PLAN-EDIT-103");
+  }
+
+  {
+    const store = activeStore();
+    await createFutureDailyPlan(store);
+    store.snapshot.observations.push({
+      ...base,
+      id: "00000000-0000-4000-8000-000000000809",
+      planId,
+      activityId,
+      rawText: "Kurgu nesnel gözlem.",
+      rawTextImmutable: true,
+      academicYearId: yearId,
+      classroomId,
+      civilDate: "2026-09-08",
+    });
+    const summary = resolveScheduledPlanWorkspace(await store.readSnapshot(), {
+      now: new Date("2026-09-07T08:00:00.000Z"),
+    }).plans[0];
+    assert.equal(summary.editBlockCode, "plan.edit.evidence-locked");
+    assert.equal(summary.editBlockSupportCode, "PLAN-EDIT-104");
+  }
 });
 
 test("gelecek plan düzenlemesi kimlik/provenance korur ve tarihi üç yerde atomik değiştirir", async () => {
@@ -461,6 +521,11 @@ test("hafta dışı, stale, gözlemli, başlamış ve başka sınıf düzenlemel
       classroomId,
       civilDate: "2026-09-08",
     });
+    const locked = resolveScheduledPlanWorkspace(await store.readSnapshot(), {
+      now: new Date("2026-09-07T08:00:00.000Z"),
+    }).plans[0];
+    assert.equal(locked.editBlockCode, "plan.edit.evidence-locked");
+    assert.equal(locked.editBlockSupportCode, "PLAN-EDIT-104");
     const before = canonicalJson(await store.readSnapshot());
     await assert.rejects(updateScheduledPlanWithActivity(store, command), /Gözlem kanıtı/);
     assert.equal(canonicalJson(await store.readSnapshot()), before);
@@ -510,6 +575,15 @@ test("bozulmuş premium kaynak snapshot'ı takvim indeksinde bütünlük hatası
   assert.equal(workspace.plans.length, 1);
   assert.equal(workspace.plans[0].integrityStatus, "invalid");
   assert.equal(workspace.plans[0].editable, false);
+  assert.equal(
+    workspace.plans[0].integrityCode,
+    "plan.integrity.premium-activity-snapshot",
+  );
+  assert.equal(workspace.plans[0].integritySupportCode, "PLAN-INTEGRITY-110");
+  assert.equal(
+    workspace.plans[0].editBlockCode,
+    "plan.integrity.premium-activity-snapshot",
+  );
   assert.match(workspace.plans[0].editBlockReason, /kaynak görüntüsü/);
 });
 
@@ -544,6 +618,8 @@ test("standart günlük planda plan/activity tarih ayrışması da fail-closed k
     now: new Date("2026-09-07T08:00:00.000Z"),
   });
   assert.equal(workspace.plans[0].integrityStatus, "invalid");
+  assert.equal(workspace.plans[0].integrityCode, "plan.integrity.activity-date");
+  assert.equal(workspace.plans[0].integritySupportCode, "PLAN-INTEGRITY-101");
   assert.match(workspace.plans[0].editBlockReason, /tarihleri uyuşmuyor/);
   const before = canonicalJson(await store.readSnapshot());
   await assert.rejects(

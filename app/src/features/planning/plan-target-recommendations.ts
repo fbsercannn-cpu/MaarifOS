@@ -200,11 +200,14 @@ export interface PlanTargetRecommendation {
   score: number;
   reason: string;
   matchedConceptIds: string[];
+  evidenceLevel: "semantic-heuristic";
 }
 
 /**
- * Yalnız en az bir açık alan, sözcük veya kavram kanıtı bulunan hedefleri döndürür.
- * Yaşa uygun olmak tek başına pedagojik öneri kanıtı değildir.
+ * Yalnız en az bir açık kavram eşleşmesi veya iki bağımsız sözcük örtüşmesi
+ * bulunan hedefleri döndürür. Bu sonuç insan onaylı eşleme değil, öğretmenin
+ * inceleyeceği semantik bir olasılıktır; alan/yaş uygunluğu tek başına öneri
+ * üretmez.
  */
 export function rankPlanTargetRecommendations(input: {
   targets: readonly CurriculumTargetSnapshot[];
@@ -253,10 +256,20 @@ export function rankPlanTargetRecommendations(input: {
         score,
         reason,
         matchedConceptIds: concepts.map((concept) => concept.id),
+        evidenceLevel: "semantic-heuristic",
         sourceIndex,
       };
     })
-    .filter(({ score }) => score > 0)
+    .filter(
+      ({ matchedConceptIds, target }) => {
+        if (matchedConceptIds.length > 0) return true;
+        const targetText = `${target.domain} ${target.referenceTitle}`;
+        const targetTokenStems = new Set(semanticTokens(targetText).map(semanticStem));
+        return [...activityTokenStems].filter((stem) =>
+          targetTokenStems.has(stem)
+        ).length >= 2;
+      },
+    )
     .sort(
       (left, right) =>
         right.score - left.score ||

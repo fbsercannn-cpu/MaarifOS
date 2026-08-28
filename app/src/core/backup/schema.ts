@@ -445,6 +445,9 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "targetKind",
     "targetDomain",
     "targetSourceUrl",
+    "targetSourcePage",
+    "targetSourceSha256",
+    "holisticGraphReference",
   ],
   valueEvidenceLinks: [
     ...BASE_RECORD_KEYS,
@@ -1226,6 +1229,45 @@ function isValidCivilDate(value: unknown): value is string {
     parsed.getUTCMonth() === month - 1 &&
     parsed.getUTCDate() === day
   );
+}
+
+const TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 =
+  "sha256:3605c74ddc95970671cc54994d40702b6831ad46e92cfed4a9047597804d4d8a";
+const TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 =
+  "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09";
+
+function isTymmHolisticGraphReference(value: unknown): boolean {
+  const relatedNodeIds = isRecord(value) ? value.relatedNodeIds : undefined;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "catalogContentSha256",
+      "graphId",
+      "graphVersion",
+      "outcomeNodeId",
+      "relatedNodeIds",
+      "reviewStatus",
+      "sourceSha256",
+    ]) ||
+    value.graphId !== "meb-tymm-okul-oncesi-2024-holistic-graph" ||
+    value.graphVersion !== "1.0.0" ||
+    value.catalogContentSha256 !== TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 ||
+    value.reviewStatus !== "pending-human-review" ||
+    value.sourceSha256 !== TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 ||
+    typeof value.outcomeNodeId !== "string" ||
+    !/^outcome:(36-48|48-60|60-72):/u.test(value.outcomeNodeId) ||
+    !Array.isArray(relatedNodeIds) ||
+    relatedNodeIds.some(
+      (nodeId) => typeof nodeId !== "string" || nodeId.trim().length === 0,
+    ) ||
+    new Set(relatedNodeIds).size !== relatedNodeIds.length ||
+    relatedNodeIds.some(
+      (nodeId, index) => index > 0 && nodeId <= relatedNodeIds[index - 1],
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function istanbulCivilDate(value: string): string {
@@ -3159,6 +3201,7 @@ function assertBackupRelationships(
             [
               "catalogCompleteness",
               "catalogId",
+              "ageBands",
               "domain",
               "framework",
               "id",
@@ -3170,6 +3213,9 @@ function assertBackupRelationships(
               "referenceTitle",
               "sourceCheckedOn",
               "sourceLabel",
+              "sourcePage",
+              "sourceSha256",
+              "holisticGraphReference",
               "sourceUrl",
               "sourceVersion",
               "verificationStatus",
@@ -3212,7 +3258,26 @@ function assertBackupRelationships(
               target.referenceOrigin ===
                 (planProfile.referenceOrigin ?? "teacher-declared") &&
               target.officialCatalogVerified ===
-                (planProfile.officialCatalogVerified === true),
+                (planProfile.officialCatalogVerified === true) &&
+              (target.holisticGraphReference === undefined ||
+                isTymmHolisticGraphReference(target.holisticGraphReference)) &&
+              (target.framework !== "tymm" ||
+                target.catalogCompleteness !== "complete" ||
+                target.verificationStatus !== "official-source-checked" ||
+                target.officialCatalogVerified !== true ||
+                (Array.isArray(target.ageBands) &&
+                  target.ageBands.length === 1 &&
+                  target.ageBands.every(
+                    (ageBand) =>
+                      ageBand === "36-48" ||
+                      ageBand === "48-60" ||
+                      ageBand === "60-72",
+                  ) &&
+                  typeof target.sourcePage === "number" &&
+                  Number.isInteger(target.sourcePage) &&
+                  target.sourcePage >= 1 &&
+                  typeof target.sourceSha256 === "string" &&
+                  /^sha256:[0-9a-f]{64}$/u.test(target.sourceSha256))),
           );
         const studentsValid =
           assignedStudentIds.length > 0 &&
@@ -4184,15 +4249,20 @@ function assertBackupRelationships(
       link.approvedByUserId.trim().length === 0 ||
       !isValidUtcIso(link.confirmedAt) ||
       (link.targetSourceUrl !== undefined &&
-        !isSafeHttpsUrl(link.targetSourceUrl)) ||
+        !isSafeHttpsUrl(link.targetSourceUrl) &&
+        !(
+          link.targetSourceUrl === "about:blank" &&
+          linkProvenance.referenceOrigin === "teacher-declared" &&
+          linkProvenance.officialCatalogVerified === false
+        )) ||
       !profile ||
       profile.framework !== link.framework ||
       profile.catalogId !== link.catalogId ||
       profile.sourceVersion !== link.sourceVersion ||
       !profileProvenance ||
-      profileProvenance.referenceOrigin !== linkProvenance.referenceOrigin ||
-      profileProvenance.officialCatalogVerified !==
-        linkProvenance.officialCatalogVerified
+      (linkProvenance.referenceOrigin === "official-catalog" &&
+        (profileProvenance.referenceOrigin !== "official-catalog" ||
+          profileProvenance.officialCatalogVerified !== true))
     ) {
       throw new Error(
         `evidenceCurriculumLinks/${link.id} öğretmen onaylı program bağı geçersiz.`,

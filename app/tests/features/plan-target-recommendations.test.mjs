@@ -31,7 +31,7 @@ test("kanıt bulunmadığında yaş uygunluğu tek başına hedef önerisi üret
   assert.deepEqual(recommendations, []);
 });
 
-test("bir kanıtlı hedef sıfır puanlı kayıtlarla dörde tamamlanmaz", () => {
+test("bir semantik olası hedef yalnız alan eşleşen kayıtlarla dörde tamamlanmaz", () => {
   const recommendations = rankPlanTargetRecommendations({
     targets: [
       target("fen-1", "Fen", "Canlıları gözlemleyerek veri toplar."),
@@ -52,9 +52,25 @@ test("bir kanıtlı hedef sıfır puanlı kayıtlarla dörde tamamlanmaz", () =>
   assert.equal(recommendations.length, 1);
   assert.equal(recommendations[0]?.target.id, "fen-1");
   assert.ok(recommendations[0]?.score > 0);
+  assert.equal(recommendations[0]?.evidenceLevel, "semantic-heuristic");
 });
 
-test("doğrudan anlam kanıtı bulunan hedef önerilmeye devam eder", () => {
+test("yalnız etkinlik alanı eşleşen hedef otomatik öneri sayılmaz", () => {
+  const recommendations = rankPlanTargetRecommendations({
+    targets: [target("fen-1", "Fen", "Maddenin özelliklerini açıklar.")],
+    activityTitle: "Belirsiz nesne",
+    activitySuggestion: {
+      id: "local-science",
+      area: "science",
+      title: "Belirsiz nesne",
+      teacherPrompt: "Çocuk seçtiği nesneyle serbestçe çalışır.",
+    },
+  });
+
+  assert.deepEqual(recommendations, []);
+});
+
+test("doğrudan anlam eşleşmesi bulunan olası hedef önerilmeye devam eder", () => {
   const recommendations = rankPlanTargetRecommendations({
     targets: [
       target("muz-1", "Müzik", "Ritim kalıplarını uygular."),
@@ -71,11 +87,12 @@ test("doğrudan anlam kanıtı bulunan hedef önerilmeye devam eder", () => {
 test("boş öneri durumu öğretmene manuel alan veya kod seçimini erişilebilir biçimde gösterir", () => {
   assert.match(
     planFlowSource,
-    /Bu etkinlik için kanıtlı otomatik eşleşme bulunamadı\. Daha fazla hedef\s+ara bölümünden alan veya kodla seçim yapın\./u,
+    /Bu etkinlik için semantik olası eşleşme bulunamadı\. Daha fazla hedef\s+ara bölümünden alan veya kodla seçim yapın\./u,
   );
   assert.match(
     planFlowSource,
     /data-testid="semantic-target-explanation"[\s\S]*role="status"[\s\S]*aria-live="polite"/u,
   );
   assert.doesNotMatch(planFlowSource, /resmî katalogdaki güvenli genel seçenek/iu);
+  assert.doesNotMatch(planFlowSource, /kanıtlı (?:öneri|otomatik eşleşme)/iu);
 });

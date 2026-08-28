@@ -4383,7 +4383,7 @@ test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini 
   expect(result.backedUpSettingType).toBe("app-lock-config-v1");
 });
 
-test("IndexedDB v2, v3 ve v4 verisini v5'e kayıpsız taşır; değer kanıtı store ve indekslerini açar", async ({
+test("IndexedDB v2, v3 ve v4 verisini v6'ya kayıpsız taşır; kanıt store ve ilişki indekslerini açar", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -4534,7 +4534,7 @@ test("IndexedDB v2, v3 ve v4 verisini v5'e kayıpsız taşır; değer kanıtı s
   expect(result.every((item) => item.valueEvidenceCount === 0)).toBe(true);
   expect(
     result.every(
-      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 5,
+      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 6,
     ),
   ).toBe(true);
   expect(result[0].valueEvidenceStoreMetadata.indexes).toEqual([

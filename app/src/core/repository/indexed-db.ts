@@ -30,6 +30,7 @@ import {
 import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
+  OBSERVATION_RELATION_INDEX_DEFINITIONS,
   SCOPE_INDEX_DEFINITIONS,
   VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
   type IndexDefinition,
@@ -38,6 +39,7 @@ import {
 export {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
+  OBSERVATION_RELATION_INDEX_DEFINITIONS,
   VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
 } from "./indexed-db-definitions.ts";
 
@@ -95,6 +97,7 @@ const INDEXES_BY_COLLECTION: Partial<
   ],
   observations: [
     ...SCOPE_INDEX_DEFINITIONS,
+    ...OBSERVATION_RELATION_INDEX_DEFINITIONS,
     { name: "by-civil-date", keyPath: "civilDate" },
     {
       name: "by-classroom-civil-date",
@@ -261,7 +264,7 @@ function applyMigration(
     ensureCollectionIndexes(transaction);
     return;
   }
-  if (toVersion === 5) {
+  if (toVersion === 5 || toVersion === 6) {
     ensureCollectionStores(database);
     ensureCollectionIndexes(transaction);
     return;
