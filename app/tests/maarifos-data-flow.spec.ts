@@ -135,6 +135,10 @@ test("çocuk ekleme, sınıftan ayırma ve geri alma yeniden açılışta korunu
 test("cihaz verisi kalıcıdır; yedek doğrulanır ve replace geri yükleme veri kaybını önler", async ({
   page,
 }, testInfo) => {
+  // Şifreleme, replace restore, gözlem/yoklama mutabakatı ve son reload tek
+  // çok-aşamalı dayanıklılık kanıtıdır. Doğruluk süresine headroom verilir;
+  // iki testlik dilimin 120 sn performans bütçesi runner'da ayrıca korunur.
+  test.slow();
   const childName = "Ada Kurgu";
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await ensureClassroomConfigured(page);
