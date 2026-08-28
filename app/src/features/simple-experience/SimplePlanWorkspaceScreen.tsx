@@ -377,7 +377,7 @@ export function SimplePlanWorkspaceScreen({
           </button>
           <button type="button" onClick={onOpenDocuments} disabled={dataBusy}>
             <FileTextIcon aria-hidden="true" />
-            <span><strong>Plan çıktıları</strong><small>PDF ve yazdırılabilir belgeleri hazırla</small></span>
+            <span><strong>Plan çıktıları</strong><small>Görsel PDF ve yazdırılabilir belgeleri hazırla</small></span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
         </div>

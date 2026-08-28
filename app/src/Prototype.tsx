@@ -7465,7 +7465,7 @@ export default function Prototype() {
       );
       await refreshAnecdoteDocuments();
       setAnnouncement(
-        "Anekdot formu öğretmen incelemesiyle PDF ve Word çıktısına hazırlandı.",
+        "Anekdot formu öğretmen incelemesiyle görsel PDF ve düzenlenebilir Word çıktısına hazırlandı.",
       );
     } finally {
       setDataBusy(false);
@@ -7488,7 +7488,7 @@ export default function Prototype() {
     downloadBytes(file.fileName, file.mimeType, file.bytes);
     setAnnouncement(
       format === "pdf"
-        ? "Anekdot Kayıt Formu PDF olarak indirildi."
+        ? "Anekdot Kayıt Formu görsel PDF olarak indirildi."
         : "Anekdot Kayıt Formu düzenlenebilir Word belgesi olarak indirildi.",
     );
   };
@@ -8145,7 +8145,7 @@ export default function Prototype() {
     ]);
     const summary = await downloadSimpleClassRosterPdf(input);
     setAnnouncement(
-      `${summary.rowCount} öğrencilik, ${summary.pageCount} sayfalık imzalı sınıf listesi PDF olarak indirildi.`,
+      `${summary.rowCount} öğrencilik, ${summary.pageCount} sayfalık imzalı sınıf listesi görsel PDF olarak indirildi.`,
     );
   };
 
@@ -8159,7 +8159,7 @@ export default function Prototype() {
       result === "shared"
         ? "Sınıf listesi hassas veri onayıyla paylaşım ekranına gönderildi."
         : result === "downloaded"
-          ? "Dosya paylaşımı desteklenmedi; sınıf listesi gerçek PDF olarak indirildi."
+          ? "Dosya paylaşımı desteklenmedi; sınıf listesi görsel PDF olarak indirildi."
           : "Sınıf listesi paylaşımı iptal edildi; dosya gönderilmedi.",
     );
     return result;
@@ -8285,7 +8285,7 @@ export default function Prototype() {
       },
     );
     downloadBytes(file.fileName, file.mimeType, file.bytes);
-    setAnnouncement(`${kind === "annual" ? "Yıllık" : kind === "monthly" ? "Aylık" : kind === "weekly" ? "Haftalık" : "Günlük"} plan PDF belgesi hazırlandı.`);
+    setAnnouncement(`${kind === "annual" ? "Yıllık" : kind === "monthly" ? "Aylık" : kind === "weekly" ? "Haftalık" : "Günlük"} plan görsel PDF belgesi hazırlandı.`);
   };
 
   const openSetupProgressStep = (stepId: SetupProgressStepId) => {
@@ -10666,7 +10666,7 @@ export default function Prototype() {
               <h3 id="documents-plan-center-title">Plan ve değerlendirme belgeleri</h3>
               <p>
                 Yıllık, aylık, haftalık ve günlük plan kayıtları ile öğretmen
-                değerlendirmelerini aynı kaynak zincirinden PDF veya DOCX alın.
+                değerlendirmelerini aynı kaynak zincirinden görsel PDF veya DOCX alın.
               </p>
             </div>
           </div>

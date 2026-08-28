@@ -56,7 +56,7 @@ async function openTeacherPlanWorkspace(page: Page) {
 async function expectDocumentDownload(
   page: Page,
   dialog: ReturnType<Page["getByRole"]>,
-  buttonName: "PDF hazırla" | "Word hazırla",
+  buttonName: "Görsel PDF hazırla" | "Word hazırla",
   extension: ".pdf" | ".docx",
 ): Promise<Download> {
   const downloadPromise = page.waitForEvent("download");
@@ -113,7 +113,7 @@ test("öğretmen gerçek UI ile sınıfını kurar, haftalık planını revize e
     'section[aria-labelledby="teacher-plan-export-title"]',
   );
   await documentCenter.getByLabel("Belge kapsamı").selectOption("combined");
-  const pdf = await expectDocumentDownload(page, documentCenter, "PDF hazırla", ".pdf");
+  const pdf = await expectDocumentDownload(page, documentCenter, "Görsel PDF hazırla", ".pdf");
   const pdfPath = await pdf.path();
   expect(pdfPath).not.toBeNull();
   expect((await readFile(pdfPath!)).subarray(0, 4).toString("ascii")).toBe("%PDF");

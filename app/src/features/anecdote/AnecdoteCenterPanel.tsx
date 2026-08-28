@@ -266,12 +266,12 @@ function AnecdoteFormCard({
               onClick={() =>
                 void perform(
                   () => onDownload(form.observationId, "pdf"),
-                  "PDF indirildi.",
+                  "Görsel PDF indirildi.",
                 )
               }
             >
               <DownloadIcon aria-hidden="true" />
-              PDF indir
+              Görsel PDF indir
             </button>
             <button
               type="button"

@@ -175,6 +175,11 @@
   white-space: nowrap;
 }
 
+.simple-today__context-item:not(.is-date) small {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .simple-today__context-item.is-date small {
   overflow-wrap: anywhere;
   white-space: normal;

@@ -53,6 +53,20 @@ test("temiz cihaz tek kurulum odağını korur, sınıf kurulunca ilk öğrenciy
   expect(classNameLayout.scrollWidth).toBeLessThanOrEqual(classNameLayout.clientWidth + 1);
   expect(classNameLayout.scrollHeight).toBeLessThanOrEqual(classNameLayout.clientHeight + 1);
   expect(classNameLayout.whiteSpace).toBe("normal");
+  const classMeta = today
+    .locator(".simple-today__context-item:not(.is-date)")
+    .locator("small");
+  await expect(classMeta).toHaveText("0 çocuk · 60–72 ay · TYMM");
+  const classMetaLayout = await classMeta.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    whiteSpace: getComputedStyle(element).whiteSpace,
+  }));
+  expect(classMetaLayout.whiteSpace).toBe("normal");
+  expect(classMetaLayout.scrollWidth).toBeLessThanOrEqual(classMetaLayout.clientWidth + 1);
+  expect(classMetaLayout.scrollHeight).toBeLessThanOrEqual(classMetaLayout.clientHeight + 1);
   const nextTask = page.getByLabel("Sıradaki en iyi adım");
   const teacherDesk = page.locator(".simple-today__desk-grid");
   await expect(nextTask).toBeVisible();

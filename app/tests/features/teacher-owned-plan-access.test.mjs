@@ -237,7 +237,7 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.match(screenSource, /Plan omurgası hazırlanabilir/);
   assert.match(screenSource, /teacher-owned-evaluation-write-notice/);
   assert.match(screenSource, /Tek tıkla çıktı/);
-  assert.match(screenSource, /PDF hazırla/);
+  assert.match(screenSource, /Görsel PDF hazırla/);
   assert.match(screenSource, /Word hazırla/);
   assert.doesNotMatch(screenSource, /documentApproved/);
   assert.doesNotMatch(screenSource, /Belgeyi önizle/);

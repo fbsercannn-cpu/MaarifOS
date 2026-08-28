@@ -86,7 +86,7 @@ export function createDocumentWorkspacePresentation(
         title: `${workspace.documents.anecdoteReadyCount} onaylı form hazır`,
         detail: anecdotePending > 0
           ? `${anecdotePending} kayıt daha tamamlanmayı veya yeniden onayı bekliyor.`
-          : "Onaylı formlar PDF ve DOCX olarak alınabilir.",
+          : "Onaylı formlar görsel PDF ve DOCX olarak alınabilir.",
         source: "Değişmez gözlem + öğretmen onayı + program bağlantısı",
         actionLabel: "Anekdot formlarını aç",
         tone: anecdotePending > 0 ? "attention" : "ready",

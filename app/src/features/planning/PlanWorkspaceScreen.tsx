@@ -145,7 +145,7 @@ export function PlanWorkspaceScreen({
           </button>
           <button type="button" onClick={onOpenDocuments} disabled={dataBusy}>
             <ArchiveIcon aria-hidden="true" />
-            <span><strong>Plan belgeleri</strong><small>PDF, DOCX, değerlendirme ve Ek 18</small></span>
+            <span><strong>Plan belgeleri</strong><small>Görsel PDF, DOCX, değerlendirme ve Ek 18</small></span>
             <ChevronRightIcon aria-hidden="true" />
           </button>
         </div>

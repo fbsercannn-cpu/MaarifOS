@@ -380,7 +380,7 @@ test("anekdot formu yerel/reload/yedek zincirinden Belgeler ekranına ve gerçek
   );
   const [pdfDownload] = await Promise.all([
     page.waitForEvent("download"),
-    documents.getByRole("button", { name: "PDF indir" }).click(),
+    documents.getByRole("button", { name: "Görsel PDF indir" }).click(),
   ]);
   expect(pdfDownload.suggestedFilename()).toMatch(
     /^MaarifOS_Anekdot_Kayit_Formu_Ece_Yıldız_2026-09-09\.pdf$/,

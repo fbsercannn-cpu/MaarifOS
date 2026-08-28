@@ -100,7 +100,7 @@ test("süre farkı tek esnek bölümle kapatılır ve skipped zaman uygulanmış
 
 test("belge kapsamı tek tıkla indirilir; bütünlük denetimi içeride ve onay kutusuz kalır", () => {
   assert.match(teacherPlanScreenSource, /Tek tıkla çıktı/);
-  assert.match(teacherPlanScreenSource, /PDF hazırla/);
+  assert.match(teacherPlanScreenSource, /Görsel PDF hazırla/);
   assert.match(teacherPlanScreenSource, /Word hazırla/);
   assert.match(teacherPlanScreenSource, /şema, tarih, kaynak/);
   assert.doesNotMatch(teacherPlanScreenSource, /Belgeyi önizle/);

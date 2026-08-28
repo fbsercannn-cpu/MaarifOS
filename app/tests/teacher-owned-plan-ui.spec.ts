@@ -83,7 +83,7 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
     "validation.generic",
   );
   await expect(documentFeedback).toContainText("Seçtiğiniz kapsamda kayıt yok");
-  await expect(documentCenter.getByRole("button", { name: "PDF hazırla" })).toBeDisabled();
+  await expect(documentCenter.getByRole("button", { name: "Görsel PDF hazırla" })).toBeDisabled();
   await documentFeedback
     .getByRole("button", { name: "Yıllık / birleşik kapsamı kullan" })
     .click();
@@ -105,7 +105,7 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
 
   const pdfDownloadPromise = page.waitForEvent("download");
-  await documentCenter.getByRole("button", { name: "PDF hazırla" }).click();
+  await documentCenter.getByRole("button", { name: "Görsel PDF hazırla" }).click();
   const pdfDownload = await pdfDownloadPromise;
   expect(pdfDownload.suggestedFilename()).toBe(
     "MaarifOS_Ogretmen_Plani_Birlesik.pdf",

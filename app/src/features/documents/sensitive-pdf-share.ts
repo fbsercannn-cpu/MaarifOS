@@ -79,8 +79,8 @@ export async function shareSensitivePdfWithDownloadFallback(
     lastModified: Date.now(),
   });
   const shareData: ShareData = {
-    title: "MaarifOS sınıf listesi",
-    text: "Yetkili idare kullanımı için hazırlanmış hassas sınıf listesi PDF belgesi.",
+    title: "MaarifOS sınıf listesi · görsel PDF",
+    text: "Yetkili idare kullanımı için hazırlanmış hassas sınıf listesi görsel PDF belgesi.",
     files: [shareFile],
   };
   if (environment.canShare && !environment.canShare(shareData)) return download();

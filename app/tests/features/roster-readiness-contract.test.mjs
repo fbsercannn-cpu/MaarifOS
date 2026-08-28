@@ -39,7 +39,7 @@ test("sınıf listesi hazır olma alanları basılı öğrenci no, T.C. kimlik v
   );
 });
 
-test("Belgeler yüzeyi doğum tarihini sınıf listesi zorunluluğu diye sunmaz ve gerçek PDF eylemini söyler", () => {
+test("Belgeler yüzeyi doğum tarihini sınıf listesi zorunluluğu diye sunmaz ve görsel PDF eylemini söyler", () => {
   const source = readFileSync(
     new URL(
       "../../src/features/simple-experience/SimpleDocumentWorkspaceScreen.tsx",
@@ -56,7 +56,7 @@ test("Belgeler yüzeyi doğum tarihini sınıf listesi zorunluluğu diye sunmaz 
     source,
     /öğrenci no, T\.C\. kimlik veya veli iletişimi tamamlanmalı/u,
   );
-  assert.match(source, /return "PDF indir"/u);
-  assert.match(source, /Gerçek A4 PDF bu cihazda indirildi/u);
-  assert.match(source, /Sınıf listesi PDF paylaş/u);
+  assert.match(source, /return "Görsel PDF indir"/u);
+  assert.match(source, /Görsel A4 PDF bu cihazda indirildi/u);
+  assert.match(source, /Sınıf listesini görsel PDF olarak paylaş/u);
 });

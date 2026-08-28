@@ -3,6 +3,7 @@ import { expectNoUntriagedAxeViolations } from "./smoke/accessibility-fixtures";
 
 const TEST_STUDENT_NAME = "Plan Akışı Çocuğu";
 const FUTURE_PLAN_DATE = "2026-08-28";
+const EDITABLE_FUTURE_PLAN_DATE = "2027-06-08";
 
 test.describe.configure({ timeout: 120_000 });
 test.use({ viewport: { width: 390, height: 844 } });
@@ -39,8 +40,32 @@ async function configureClassroomWithStudent(
   await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
 }
 
-async function seedCurrentTeacherWeek(page: Page) {
-  await page.evaluate(async () => {
+async function seedCurrentTeacherWeek(
+  page: Page,
+  options: { editableFuture?: boolean } = {},
+) {
+  const planWindow = options.editableFuture
+    ? {
+        monthTitle: "Haziran öğretmen planı",
+        monthKey: "2027-06",
+        monthStart: "2027-06-01",
+        monthEnd: "2027-06-30",
+        weekTitle: "7–13 Haziran haftası",
+        weekKey: "2027-W23",
+        weekStart: "2027-06-07",
+        weekEnd: "2027-06-13",
+      }
+    : {
+        monthTitle: "Ağustos öğretmen planı",
+        monthKey: "2026-08",
+        monthStart: "2026-08-01",
+        monthEnd: "2026-08-31",
+        weekTitle: "24–30 Ağustos haftası",
+        weekKey: "2026-W35",
+        weekStart: "2026-08-24",
+        weekEnd: "2026-08-30",
+      };
+  await page.evaluate(async (window) => {
     const core = await import("/src/core/index.ts");
     const planning = await import(
       "/src/features/planning/teacher-owned-plan-service.ts"
@@ -55,19 +80,19 @@ async function seedCurrentTeacherWeek(page: Page) {
       },
       months: [
         {
-          title: "Ağustos öğretmen planı",
-          monthKey: "2026-08",
-          periodStart: "2026-08-01",
-          periodEnd: "2026-08-31",
+          title: window.monthTitle,
+          monthKey: window.monthKey,
+          periodStart: window.monthStart,
+          periodEnd: window.monthEnd,
           teacherContent: {
             narrative: "Sınıf ritmi ve araştırma merakını desteklemek.",
           },
           weeks: [
             {
-              title: "24–30 Ağustos haftası",
-              weekKey: "2026-W35",
-              periodStart: "2026-08-24",
-              periodEnd: "2026-08-30",
+              title: window.weekTitle,
+              weekKey: window.weekKey,
+              periodStart: window.weekStart,
+              periodEnd: window.weekEnd,
               teacherContent: {
                 narrative: "Tahmin, deneme, gözlem ve çocuk sözünü görünür kılmak.",
               },
@@ -78,7 +103,7 @@ async function seedCurrentTeacherWeek(page: Page) {
       now: new Date("2026-08-27T06:00:00.000Z"),
     });
     store.close();
-  });
+  }, planWindow);
 }
 
 async function seedPastTeacherWeek(page: Page) {
@@ -167,14 +192,14 @@ async function openDailyPlanWizard(page: Page) {
   return dialog;
 }
 
-async function readSavedPlan(page: Page) {
-  return page.evaluate(async () => {
+async function readSavedPlan(page: Page, civilDate = FUTURE_PLAN_DATE) {
+  return page.evaluate(async (expectedCivilDate) => {
     const core = await import("/src/core/index.ts");
     const store = new core.IndexedDbDataStore();
     const snapshot = await store.readSnapshot();
     store.close();
     const plan = snapshot.plans.find(
-      (record) => record.planType === "daily" && record.civilDate === "2026-08-28",
+      (record) => record.planType === "daily" && record.civilDate === expectedCivilDate,
     );
     const activity = snapshot.activities.find((record) => record.planId === plan?.id);
     return {
@@ -192,7 +217,7 @@ async function readSavedPlan(page: Page) {
         : [],
       updatedAt: typeof plan?.updatedAt === "string" ? plan.updatedAt : null,
     };
-  });
+  }, civilDate);
 }
 
 test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef nedenini açıklar", async ({
@@ -348,7 +373,7 @@ test("hızlı plan kaydet → reload → düzenle zincirinde aynı plan ve etkin
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroomWithStudent(page);
-  await seedCurrentTeacherWeek(page);
+  await seedCurrentTeacherWeek(page, { editableFuture: true });
   await page.reload({ waitUntil: "networkidle" });
 
   const dialog = await openDailyPlanWizard(page);
@@ -364,11 +389,11 @@ test("hızlı plan kaydet → reload → düzenle zincirinde aynı plan ve etkin
     .first()
     .click();
   await dialog.getByText("Başlık ve saati değiştir", { exact: true }).click();
-  await dialog.getByLabel("Plan tarihi").fill(FUTURE_PLAN_DATE);
+  await dialog.getByLabel("Plan tarihi").fill(EDITABLE_FUTURE_PLAN_DATE);
   await dialog.getByRole("button", { name: "Planı kaydet" }).click();
   await expect(dialog).toBeHidden();
 
-  const beforeReload = await readSavedPlan(page);
+  const beforeReload = await readSavedPlan(page, EDITABLE_FUTURE_PLAN_DATE);
   expect(beforeReload.planId).not.toBeNull();
   expect(beforeReload.activityId).not.toBeNull();
 
@@ -379,9 +404,16 @@ test("hızlı plan kaydet → reload → düzenle zincirinde aynı plan ve etkin
     .getByRole("button", { name: /Günlük eğitim planı/i })
     .click();
 
+  const todayPlan = page.getByRole("dialog", { name: "Gün planı" });
+  if (await todayPlan.isVisible()) {
+    await todayPlan
+      .getByRole("button", { name: /2026–2027 eğitim takvimi/i })
+      .click();
+  }
+
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await expect(calendar).toBeVisible();
-  await calendar.getByRole("gridcell", { name: /^28 Ağustos 2026/u }).click();
+  await calendar.getByRole("gridcell", { name: /^8 Haziran 2027/u }).click();
   const planCard = calendar.getByTestId("calendar-scheduled-plan");
   await expect(planCard).toContainText("Batar mı, yüzer mi?");
   await planCard.getByRole("button", { name: "Akışı gör" }).click();
@@ -395,7 +427,7 @@ test("hızlı plan kaydet → reload → düzenle zincirinde aynı plan ve etkin
   await expect(editor).toBeHidden();
 
   await page.reload({ waitUntil: "networkidle" });
-  const afterReload = await readSavedPlan(page);
+  const afterReload = await readSavedPlan(page, EDITABLE_FUTURE_PLAN_DATE);
   expect(afterReload.planId).toBe(beforeReload.planId);
   expect(afterReload.activityId).toBe(beforeReload.activityId);
   expect(afterReload.activityTitle).toBe(

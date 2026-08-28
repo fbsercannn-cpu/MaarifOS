@@ -21,7 +21,7 @@ class FakeFile {
   }
 }
 
-test("Web Share dosya desteğinde hassas veri uyarısı ve onaydan sonra gerçek PDF paylaşılır", async () => {
+test("Web Share dosya desteğinde hassas veri uyarısı ve onaydan sonra görsel PDF paylaşılır", async () => {
   const events = [];
   let sharedData;
   const result = await shareSensitivePdfWithDownloadFallback(file, {
@@ -51,6 +51,11 @@ test("Web Share dosya desteğinde hassas veri uyarısı ve onaydan sonra gerçek
   assert.equal(sharedData.files[0].name, file.fileName);
   assert.equal(sharedData.files[0].type, "application/pdf");
   assert.equal(sharedData.files[0].parts[0].byteLength, file.bytes.byteLength);
+  assert.equal(sharedData.title, "MaarifOS sınıf listesi · görsel PDF");
+  assert.equal(
+    sharedData.text,
+    "Yetkili idare kullanımı için hazırlanmış hassas sınıf listesi görsel PDF belgesi.",
+  );
 });
 
 test("hassas veri onayı verilmezse paylaşım ve indirme başlamaz", async () => {

@@ -50,7 +50,7 @@ test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır"
 
   await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
   let monthlyOutput = page.getByRole("button", {
-    name: /^Aylık eğitim planı\. Durum: Hazır\. PDF\./,
+    name: /^Aylık eğitim planı\. Durum: Hazır\. Görsel PDF\./,
   });
   await expect(monthlyOutput).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
@@ -66,7 +66,7 @@ test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır"
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByTestId("premium-plan-center")).toHaveCount(0);
   monthlyOutput = page.getByRole("button", {
-    name: /^Aylık eğitim planı\. Durum: Hazır\. PDF\./,
+    name: /^Aylık eğitim planı\. Durum: Hazır\. Görsel PDF\./,
   });
   await expect(monthlyOutput).toBeVisible();
 });

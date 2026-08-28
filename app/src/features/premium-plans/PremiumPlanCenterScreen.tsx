@@ -454,7 +454,7 @@ export function PremiumPlanCenterScreen({
         header: "deneme etkin",
         title: "Premium deneme bu cihazda etkin",
         detail:
-          "Deneme süresindeki içerik hakkı imzalı cihaz yetkisiyle doğrulandı; PDF ve Word çıktısı denemede kapalıdır.",
+          "Deneme süresindeki içerik hakkı imzalı cihaz yetkisiyle doğrulandı; görsel PDF ve düzenlenebilir Word çıktısı denemede kapalıdır.",
         access: "Premium deneme",
       };
     }
@@ -602,7 +602,7 @@ export function PremiumPlanCenterScreen({
         format,
       );
       downloadBrowserFile(file);
-      setExportMessage(`${format === "pdf" ? "PDF" : "Word"} dosyası cihazda hazırlandı.`);
+      setExportMessage(`${format === "pdf" ? "Görsel PDF" : "Word"} dosyası cihazda hazırlandı.`);
     } catch (reason) {
       setExportMessage(reason instanceof Error ? reason.message : "Plan dosyası hazırlanamadı.");
     } finally {
@@ -636,7 +636,7 @@ export function PremiumPlanCenterScreen({
       );
       downloadBrowserFile(file);
       setMonthlyExportMessage(
-        `${format === "pdf" ? "PDF" : "Düzenlenebilir Word"} dosyası seçili kalıcı değerlendirmeden hazırlandı.`,
+        `${format === "pdf" ? "Görsel PDF" : "Düzenlenebilir Word"} dosyası seçili kalıcı değerlendirmeden hazırlandı.`,
       );
     } catch (reason) {
       setMonthlyExportMessage(
@@ -2133,8 +2133,8 @@ export function PremiumPlanCenterScreen({
                     onClick={() => void downloadMonthlyEvaluation("pdf")}
                   >
                     {monthlyExportBusy === "pdf"
-                      ? "Ek 18 PDF hazırlanıyor…"
-                      : "Ek 18 + ek PDF indir"}
+                      ? "Ek 18 görsel PDF hazırlanıyor…"
+                      : "Ek 18 ve ekini görsel PDF olarak indir"}
                   </button>
                   <button
                     type="button"
@@ -2169,7 +2169,7 @@ export function PremiumPlanCenterScreen({
             <section className="premium-export-panel" aria-labelledby="premium-export-title">
               <div>
                 <span>Çevrimdışı belge merkezi</span>
-                <h2 id="premium-export-title">Gerçek PDF ve Word dosyası</h2>
+                <h2 id="premium-export-title">Görsel PDF ve düzenlenebilir Word dosyası</h2>
                 <p>Kurulmuş Eylül planı ve yıllık omurgayla birlikte öğretmenin kaydettiği günlük uyarlamalar, haftalık değerlendirmeler ve varsa aylık üç boyutlu değerlendirme dosyaya aynen eklenir.</p>
               </div>
               <div className="premium-export-actions">
@@ -2179,7 +2179,7 @@ export function PremiumPlanCenterScreen({
                   disabled={!installed || exportBusy !== null || !premiumExportAllowed}
                   onClick={() => void downloadPlan("pdf")}
                 >
-                  {exportBusy === "pdf" ? "PDF hazırlanıyor…" : "PDF indir"}
+                  {exportBusy === "pdf" ? "Görsel PDF hazırlanıyor…" : "Görsel PDF indir"}
                 </button>
                 <button
                   type="button"
@@ -2193,7 +2193,7 @@ export function PremiumPlanCenterScreen({
               {!installed ? <small>Çıktı için önce seçili paketi sınıfa ekleyin.</small> : null}
               {!premiumExportAllowed ? <small>Belge çıktısı doğrulanmış satın alma veya Kurucu Premium yetkisi bağlanana kadar kapalıdır.</small> : null}
               {effectivePremiumAccess?.grant.accessMode === "trial" ? (
-                <small>Deneme erişiminde PDF ve Word çıktısı kapalıdır.</small>
+                <small>Deneme erişiminde görsel PDF ve düzenlenebilir Word çıktısı kapalıdır.</small>
               ) : null}
               {exportMessage ? <p className="premium-export-message" role="status">{exportMessage}</p> : null}
             </section>

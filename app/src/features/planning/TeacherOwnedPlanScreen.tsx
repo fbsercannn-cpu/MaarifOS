@@ -941,7 +941,7 @@ export function TeacherOwnedPlanScreen({
         throw new Error("Belge için doğrulanmış bir plan zinciri bulunamadı.");
       }
       setMessage(
-        `${format === "pdf" ? "PDF" : "Word"} belgesi bu cihazdaki kalıcı öğretmen planından hazırlandı.`,
+        `${format === "pdf" ? "Görsel PDF" : "Word"} belgesi bu cihazdaki kalıcı öğretmen planından hazırlandı.`,
       );
     } catch (reason) {
       reportOperationError(
@@ -1039,7 +1039,7 @@ export function TeacherOwnedPlanScreen({
           <strong>Planlarınız bu cihazda size aittir</strong>
           <p>
             Kendi Yıl → Ay → Hafta planınızı oluşturabilir, revize edebilir ve
-            PDF/Word belgesini doğrudan alabilirsiniz.
+            görsel PDF veya düzenlenebilir Word belgesini doğrudan alabilirsiniz.
           </p>
         </section>
 
@@ -2234,7 +2234,7 @@ export function TeacherOwnedPlanScreen({
             <p>
               Planın şema, tarih, kaynak ve yıl → ay → hafta → gün zinciri
               içeride doğrulanır. Kapsamı ve kayıt adını burada kontrol edip
-              PDF veya Word belgesini hazırlayın.
+              görsel PDF veya düzenlenebilir Word belgesini hazırlayın.
             </p>
           </div>
           {teacherGraph ? (
@@ -2323,7 +2323,7 @@ export function TeacherOwnedPlanScreen({
                   : undefined
               }
             >
-              <DownloadIcon aria-hidden="true" /> {exportBusy === "pdf" ? "PDF hazırlanıyor…" : "PDF hazırla"}
+              <DownloadIcon aria-hidden="true" /> {exportBusy === "pdf" ? "Görsel PDF hazırlanıyor…" : "Görsel PDF hazırla"}
             </button>
             <button
               type="button"

@@ -63,16 +63,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.19.0",
-  releasedOn: "2026-08-27",
-  title: "Takvimle hizalı plan ve güvenli telefon paylaşımı",
+  version: "0.19.1",
+  releasedOn: "2026-08-28",
+  title: "Kanıtlı plan önerisi ve dürüst belge adları",
   notes: Object.freeze([
-    "Geçmiş bir kaynak hafta artık bugünün hızlı planına bağlanmaz; plan tarihi öğretmenin seçtiği günde kalır.",
-    "Resmî MEB takvimi yıllık etkinlik rotasyonunu ve günlük plan tarihini öğretim günleriyle sınırlar; tatil günü en yakın geçerli güne tek dokunuşla alınabilir.",
-    "Eksik veya geçersiz yaş bandı yanlış etkinlik ve hedef üretmez; öğretmeni sınıf kurulumuna yönlendirir.",
-    "Veli ve idare gözlem belgeleri açık kişisel veri uyarısından sonra telefon paylaşım ekranına gönderilir; destek yoksa güvenli indirilir.",
-    "Öğrenci numarası ve veli adı hassas veri kasasına taşındı; eski kayıtlar geriye uyumlu ve atomik biçimde yeniden mühürlenir.",
-    "Kurulum engelleri görünür ve ekran okuyucuya bağlı kesin gerekçe taşır; 256 piksele kadar içerik ve eylemler üst üste binmez.",
+    "Kanıt bulunmayan bir etkinlik artık sırf yaş bandına uygun olduğu için TYMM hedefi önermez; öğretmeni alan veya kodla açık seçime yönlendirir.",
+    "Kanıtlı hedef önerileri sıfır puanlı kayıtlarla yapay biçimde tamamlanmaz ve son pedagojik seçim öğretmende kalır.",
+    "Canvas tabanlı sınıf listesi, plan, Ek 18 ve anekdot çıktıları erişilebilir belge izlenimi vermeden açıkça görsel PDF olarak adlandırılır.",
+    "390 piksel telefonlarda sınıf, yaş bandı ve TYMM bilgisi kırpılmadan iki satıra akar.",
+    "Word, HTML, dış MEB PDF kaynağı, dosya biçimi ve çevrimdışı çalışma sözleşmeleri değişmeden korunur.",
   ]),
 });
 

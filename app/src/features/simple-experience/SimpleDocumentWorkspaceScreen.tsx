@@ -43,7 +43,7 @@ const OUTPUTS = [
     id: "roster",
     label: "İDARE",
     title: "Sınıf listesi",
-    detail: "Öğrenci no, T.C. kimlik, veli ve imza alanlı gerçek A4 PDF",
+    detail: "Öğrenci no, T.C. kimlik, veli ve imza alanlı görsel A4 PDF",
     icon: PersonIcon,
   },
   {
@@ -112,9 +112,9 @@ function outputAction(
   state: SimpleDocumentOutputState,
 ): string {
   if (state === "ready") {
-    if (id === "roster") return "PDF indir";
+    if (id === "roster") return "Görsel PDF indir";
     if (id === "observations") return "Yazdırılabilir dosya";
-    return "PDF";
+    return "Görsel PDF";
   }
   if (state === "needs-setup" || id === "roster") return "Bilgileri tamamla";
   if (id === "observations") return "Gözlem ekle";
@@ -181,8 +181,8 @@ export function SimpleDocumentWorkspaceScreen({
         id === "observations"
           ? "Gözlem için yazdırılabilir dosya alanı açıldı."
           : id === "roster"
-            ? "Gerçek A4 PDF bu cihazda indirildi; PDF önizlemesinden açıp yazdırabilirsiniz."
-            : "PDF bu cihazda hazırlandı.",
+            ? "Görsel A4 PDF bu cihazda indirildi; dosyayı önizlemeden açıp yazdırabilirsiniz."
+            : "Görsel PDF bu cihazda hazırlandı.",
       );
     } catch (reason) {
       setFeedback(
@@ -228,7 +228,7 @@ export function SimpleDocumentWorkspaceScreen({
         result === "shared"
           ? "Hassas veri onayından sonra sınıf listesi paylaşım ekranına gönderildi."
           : result === "downloaded"
-            ? "Bu telefon PDF dosyası paylaşımını desteklemedi; aynı gerçek PDF güvenli indirme olarak hazırlandı."
+            ? "Bu telefon görsel PDF dosyası paylaşımını desteklemedi; aynı görsel PDF güvenli indirme olarak hazırlandı."
             : "Paylaşım iptal edildi; hiçbir dosya gönderilmedi veya indirilmedi.",
       );
     } catch (reason) {
@@ -323,8 +323,8 @@ export function SimpleDocumentWorkspaceScreen({
         >
           <PersonIcon aria-hidden="true" />
           <span>
-            <strong>{busyId === "roster-share" ? "Sınıf listesi PDF hazırlanıyor…" : "Sınıf listesi PDF paylaş"}</strong>
-            <small>T.C. kimlik ve veli telefonu içerir; önce açık uyarı gösterilir. Dosya paylaşımı yoksa PDF indirilir.</small>
+            <strong>{busyId === "roster-share" ? "Sınıf listesi görsel PDF hazırlanıyor…" : "Sınıf listesini görsel PDF olarak paylaş"}</strong>
+            <small>T.C. kimlik ve veli telefonu içerir; önce açık uyarı gösterilir. Dosya paylaşımı yoksa görsel PDF indirilir.</small>
           </span>
           <ChevronRightIcon aria-hidden="true" />
         </button>

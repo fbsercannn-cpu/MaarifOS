@@ -30,6 +30,30 @@ const prototypeSource = readFileSync(
   new URL("../../src/Prototype.tsx", import.meta.url),
   "utf8",
 );
+const teacherPlanSource = readFileSync(
+  new URL("../../src/features/planning/TeacherOwnedPlanScreen.tsx", import.meta.url),
+  "utf8",
+);
+const premiumCenterSource = readFileSync(
+  new URL("../../src/features/premium-plans/PremiumPlanCenterScreen.tsx", import.meta.url),
+  "utf8",
+);
+const planWorkspaceSource = readFileSync(
+  new URL("../../src/features/planning/PlanWorkspaceScreen.tsx", import.meta.url),
+  "utf8",
+);
+const anecdoteCenterSource = readFileSync(
+  new URL("../../src/features/anecdote/AnecdoteCenterPanel.tsx", import.meta.url),
+  "utf8",
+);
+const documentWorkspaceModelSource = readFileSync(
+  new URL("../../src/features/documents/document-workspace-model.ts", import.meta.url),
+  "utf8",
+);
+const sensitivePdfShareSource = readFileSync(
+  new URL("../../src/features/documents/sensitive-pdf-share.ts", import.meta.url),
+  "utf8",
+);
 
 test("kişisel asistan ana ekranı tek gerekçeli eylem ve yinelenmeyen öğretmen masasıyla ilerletir", () => {
   assert.match(todaySource, /createMarifTeacherAgentBrief/);
@@ -95,11 +119,11 @@ test("planlar yalnız Maarif Modelini ve okulun manuel etkinliklerini öne çık
 
 test("tek-tık çıktılar sınıf, plan ve tek çocuk gözlem belgelerini birlikte sunar", () => {
   assert.match(documentsSource, /Sınıf listesi/);
-  assert.match(documentsSource, /gerçek A4 PDF/u);
-  assert.match(documentsSource, /PDF indir/u);
-  assert.match(documentsSource, /Sınıf listesi PDF paylaş/u);
+  assert.match(documentsSource, /görsel A4 PDF/u);
+  assert.match(documentsSource, /Görsel PDF indir/u);
+  assert.match(documentsSource, /Sınıf listesini görsel PDF olarak paylaş/u);
   assert.match(documentsSource, /önce açık uyarı gösterilir/u);
-  assert.match(documentsSource, /Dosya paylaşımı yoksa PDF indirilir/u);
+  assert.match(documentsSource, /Dosya paylaşımı yoksa görsel PDF indirilir/u);
   assert.doesNotMatch(documentsSource, /A4 HTML dosyası/u);
   assert.match(documentsSource, /Aylık eğitim planı/);
   assert.match(documentsSource, /Haftalık çalışma akışı/);
@@ -154,7 +178,28 @@ test("plan hızlı araçları hedef yüzeyi görünür ve açıklanmış biçimd
   assert.match(prototypeSource, /calendarEntryTitleRef\.current\?\.focus\(\)/u);
   assert.match(prototypeSource, /ref=\{calendarEntryTitleRef\}/u);
   assert.match(prototypeSource, /setAnnouncement\("Çıktılar\."\)/u);
-  assert.match(plansSource, /PDF ve yazdırılabilir belgeleri hazırla/u);
+  assert.match(plansSource, /Görsel PDF ve yazdırılabilir belgeleri hazırla/u);
+});
+
+test("canvas tabanlı uygulama çıktıları kullanıcıya tutarlı biçimde görsel PDF olarak adlandırılır", () => {
+  assert.match(documentsSource, /return "Görsel PDF"/u);
+  assert.match(prototypeSource, /plan görsel PDF belgesi hazırlandı/u);
+  assert.match(prototypeSource, /sınıf listesi görsel PDF olarak indirildi/u);
+  assert.match(prototypeSource, /görsel PDF veya DOCX alın/u);
+  assert.match(teacherPlanSource, /Görsel PDF hazırlanıyor…/u);
+  assert.match(teacherPlanSource, /Görsel PDF hazırla/u);
+  assert.match(premiumCenterSource, /Ek 18 görsel PDF hazırlanıyor…/u);
+  assert.match(premiumCenterSource, /Ek 18 ve ekini görsel PDF olarak indir/u);
+  assert.match(premiumCenterSource, /Görsel PDF ve düzenlenebilir Word dosyası/u);
+  assert.match(planWorkspaceSource, /Görsel PDF, DOCX, değerlendirme ve Ek 18/u);
+  assert.match(anecdoteCenterSource, /Görsel PDF indir/u);
+  assert.match(documentWorkspaceModelSource, /Onaylı formlar görsel PDF ve DOCX/u);
+  assert.match(sensitivePdfShareSource, /sınıf listesi · görsel PDF/u);
+  assert.match(sensitivePdfShareSource, /sınıf listesi görsel PDF belgesi/u);
+
+  assert.doesNotMatch(documentsSource, /gerçek A4 PDF/u);
+  assert.doesNotMatch(premiumCenterSource, />Gerçek PDF ve Word dosyası</u);
+  assert.match(prototypeSource, /Resmî program PDF’sini aç/u);
 });
 
 test("sınıf listesi indirme düğmesi yaptığı işi dürüstçe adlandırır", () => {
