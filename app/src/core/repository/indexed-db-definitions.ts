@@ -1,4 +1,4 @@
-export const MAARIFOS_DATABASE_VERSION = 6;
+export const MAARIFOS_DATABASE_VERSION = 7;
 
 export interface IndexedDbMigration {
   toVersion: number;
@@ -33,6 +33,11 @@ export const INDEXED_DB_MIGRATIONS: readonly IndexedDbMigration[] = [
     toVersion: 6,
     description:
       "Gözlemleri plan ve gerçek etkinlik ilişkisine göre sorgulayan indeksleri ekler.",
+  },
+  {
+    toVersion: 7,
+    description:
+      "Öğrenci tam-kayıt v2 kasası için atomik hazır durum deposunu ve eski istemci yazma sınırını ekler.",
   },
 ] as const;
 

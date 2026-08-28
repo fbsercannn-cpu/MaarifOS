@@ -25,8 +25,15 @@ import type { AttendanceRecord } from "../domain/attendance";
 import { canonicalJson } from "../backup/canonical-json";
 import {
   StudentSensitiveVault,
+  STUDENT_VAULT_READY_STATE_ID,
+  studentSensitiveKeyDatabaseName,
   type StudentSensitiveVaultOptions,
+  type StudentVaultMigrationItem,
+  type StudentVaultMigrationState,
+  type StudentVaultReadyState,
 } from "../security/student-sensitive-vault.ts";
+import type { LocalVaultSealedRecord } from "../security/local-vault-envelope.ts";
+import { openLocalVaultReadwriteTransaction } from "../security/local-vault-idb.ts";
 import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
@@ -46,6 +53,91 @@ export {
 export const DEFAULT_DATABASE_NAME = "maarifos-local";
 export const RECOVERY_SNAPSHOT_STORE_NAME =
   "__maarifosRecoverySnapshots";
+export const STUDENT_VAULT_STATE_STORE_NAME = "__maarifosVaultState";
+
+function deleteIndexedDatabase(
+  indexedDb: IDBFactory,
+  databaseName: string,
+  blockedTimeoutMs: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let blockedTimer: ReturnType<typeof setTimeout> | undefined;
+    const request = indexedDb.deleteDatabase(databaseName);
+    const finish = (task: () => void): void => {
+      if (settled) return;
+      settled = true;
+      if (blockedTimer !== undefined) clearTimeout(blockedTimer);
+      task();
+    };
+    request.addEventListener("success", () => finish(resolve), { once: true });
+    request.addEventListener(
+      "blocked",
+      () => {
+        if (settled || blockedTimer !== undefined) return;
+        blockedTimer = setTimeout(() => {
+          finish(() =>
+            reject(
+              new Error(
+                "Yerel veri silme açık bir sekmenin kapanmasını beklerken zaman aşımına uğradı.",
+              ),
+            ),
+          );
+        }, blockedTimeoutMs);
+      },
+      { once: true },
+    );
+    request.addEventListener(
+      "error",
+      () =>
+        finish(() =>
+          reject(request.error ?? new Error("Yerel veritabanı silinemedi.")),
+        ),
+      { once: true },
+    );
+  });
+}
+
+async function assertIndexedDatabaseAbsent(
+  indexedDb: IDBFactory,
+  databaseName: string,
+): Promise<void> {
+  if (typeof indexedDb.databases !== "function") return;
+  const databases = await indexedDb.databases();
+  if (databases.some((database) => database.name === databaseName)) {
+    throw new Error("Yerel veritabanı silme sonrası hâlâ erişilebilir durumda.");
+  }
+}
+
+export async function cryptographicallyEraseIndexedDbData(
+  options: {
+    databaseName?: string;
+    indexedDb?: IDBFactory;
+    blockedTimeoutMs?: number;
+  } = {},
+): Promise<void> {
+  const databaseName = options.databaseName ?? DEFAULT_DATABASE_NAME;
+  const indexedDb = options.indexedDb ?? globalThis.indexedDB;
+  if (!indexedDb) throw new Error("IndexedDB bu ortamda kullanılamıyor.");
+  const blockedTimeoutMs = options.blockedTimeoutMs ?? 5_000;
+  if (!Number.isSafeInteger(blockedTimeoutMs) || blockedTimeoutMs < 1) {
+    throw new Error("Yerel veri silme zaman aşımı doğrulanamadı.");
+  }
+  const keyDatabaseName = studentSensitiveKeyDatabaseName(databaseName);
+  // Anahtar önce silinir: ikinci adım kesilse bile ana DB yalnız okunamaz
+  // ciphertext bırakır. Aynı sıra kısmi silme sonrası güvenle yinelenebilir.
+  try {
+    await deleteIndexedDatabase(indexedDb, keyDatabaseName, blockedTimeoutMs);
+    await assertIndexedDatabaseAbsent(indexedDb, keyDatabaseName);
+    await deleteIndexedDatabase(indexedDb, databaseName, blockedTimeoutMs);
+    await assertIndexedDatabaseAbsent(indexedDb, databaseName);
+    await assertIndexedDatabaseAbsent(indexedDb, keyDatabaseName);
+  } catch {
+    throw new Error(
+      "Yerel veri ve anahtar silme tamamlanamadı; diğer açık sekmeleri kapatıp aynı işlemi güvenle yeniden deneyin.",
+    );
+  }
+}
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,7 +163,10 @@ export interface IndexedDbDataStoreOptions {
   version?: number;
   onStatusChange?: (event: IndexedDbStatusEvent) => void;
   /** Test doubles may inject browser-compatible crypto/IDB implementations. */
-  sensitiveVault?: Pick<StudentSensitiveVaultOptions, "crypto" | "indexedDb">;
+  sensitiveVault?: Pick<
+    StudentSensitiveVaultOptions,
+    "crypto" | "indexedDb" | "onMigrationCheckpoint" | "migrationNow"
+  >;
 }
 
 const INDEXES_BY_COLLECTION: Partial<
@@ -267,6 +362,16 @@ function applyMigration(
   if (toVersion === 5 || toVersion === 6) {
     ensureCollectionStores(database);
     ensureCollectionIndexes(transaction);
+    return;
+  }
+  if (toVersion === 7) {
+    ensureCollectionStores(database);
+    ensureCollectionIndexes(transaction);
+    if (!database.objectStoreNames.contains(STUDENT_VAULT_STATE_STORE_NAME)) {
+      database.createObjectStore(STUDENT_VAULT_STATE_STORE_NAME, {
+        keyPath: "id",
+      });
+    }
     return;
   }
   throw new Error(`IndexedDB migration sürümü desteklenmiyor: ${toVersion}`);
@@ -465,7 +570,10 @@ export class IndexedDbDataStore
   private readonly version: number;
   private sensitiveVault: StudentSensitiveVault | undefined;
   private readonly sensitiveVaultOptions:
-    | Pick<StudentSensitiveVaultOptions, "crypto" | "indexedDb">
+    | Pick<
+        StudentSensitiveVaultOptions,
+        "crypto" | "indexedDb" | "onMigrationCheckpoint" | "migrationNow"
+      >
     | undefined;
   private readonly onStatusChange:
     | ((event: IndexedDbStatusEvent) => void)
@@ -732,17 +840,10 @@ export class IndexedDbDataStore
   async deleteRecoverySnapshot(id: string): Promise<void> {
     validUuid(id, "Kurtarma snapshot kimliği");
     const database = await this.openRecoveryDatabase();
-    const nativeTransaction = database.transaction(
-      RECOVERY_SNAPSHOT_STORE_NAME,
-      "readwrite",
-    );
-    const completion = transactionResult(nativeTransaction);
-    await requestResult(
-      nativeTransaction
-        .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
-        .delete(id),
-    );
-    await completion;
+    const baseline = await this.readRawRecoverySnapshots(database);
+    const final = baseline.filter((snapshot) => snapshot.id !== id);
+    if (final.length === baseline.length) return;
+    await this.commitRawCollections(database, [], {}, {}, { baseline, final });
   }
 
   async deleteRecoverySnapshotsContainingStudent(
@@ -750,37 +851,17 @@ export class IndexedDbDataStore
   ): Promise<number> {
     validUuid(studentId, "Öğrenci kimliği");
     const database = await this.openRecoveryDatabase();
-    const nativeTransaction = database.transaction(
-      RECOVERY_SNAPSHOT_STORE_NAME,
-      "readwrite",
-    );
-    const completion = transactionResult(nativeTransaction);
-    try {
-      const store = nativeTransaction.objectStore(
-        RECOVERY_SNAPSHOT_STORE_NAME,
-      );
-      const snapshots = await requestResult(
-        store.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
-      );
-      const matchingSnapshots = snapshots.filter((snapshot) =>
-        snapshot.envelope.payload.students.some(
+    const baseline = await this.readRawRecoverySnapshots(database);
+    const final = baseline.filter(
+      (snapshot) =>
+        !snapshot.envelope.payload.students.some(
           (student) => student.id === studentId,
         ),
-      );
-      for (const snapshot of matchingSnapshots) {
-        await requestResult(store.delete(snapshot.id));
-      }
-      await completion;
-      return matchingSnapshots.length;
-    } catch (error) {
-      try {
-        nativeTransaction.abort();
-      } catch {
-        // Tamamlanmış işlemin asıl hatasını koru.
-      }
-      await completion.catch(() => undefined);
-      throw error;
-    }
+    );
+    const deletedCount = baseline.length - final.length;
+    if (deletedCount === 0) return 0;
+    await this.commitRawCollections(database, [], {}, {}, { baseline, final });
+    return deletedCount;
   }
 
   async transactionWithStudentRecoveryPurge<T>(
@@ -848,6 +929,15 @@ export class IndexedDbDataStore
     this.sensitiveVault?.close();
     this.sensitiveVault = undefined;
     this.emitStatus({ status: "closed" });
+  }
+
+  async cryptographicallyEraseAllData(): Promise<void> {
+    this.close();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await cryptographicallyEraseIndexedDbData({
+      databaseName: this.databaseName,
+      indexedDb: this.sensitiveVaultOptions?.indexedDb ?? globalThis.indexedDB,
+    });
   }
 
   private emitStatus(event: IndexedDbStatusEvent): void {
@@ -979,9 +1069,22 @@ export class IndexedDbDataStore
     },
   ): Promise<void> {
     const scopedCollections = uniqueCollections(collections);
+    if (scopedCollections.includes("students")) {
+      await this.getSensitiveVault().prepareCommittedStudentRecordRetirements(
+        finalState.students ?? [],
+      );
+    }
+    if (recovery) {
+      await this.getSensitiveVault().prepareCommittedRecoverySnapshotRetirements(
+        recovery.final,
+      );
+    }
     const storeNames: string[] = [...scopedCollections];
     if (recovery) storeNames.push(RECOVERY_SNAPSHOT_STORE_NAME);
-    const nativeTransaction = database.transaction(storeNames, "readwrite");
+    const nativeTransaction = openLocalVaultReadwriteTransaction(
+      database,
+      storeNames,
+    ).transaction;
     const completion = transactionResult(nativeTransaction);
     try {
       const collectionReads = scopedCollections.map((collection) =>
@@ -1043,6 +1146,16 @@ export class IndexedDbDataStore
       }
       await Promise.all(writes);
       await completion;
+      if (scopedCollections.includes("students")) {
+        await this.getSensitiveVault().acceptCommittedStudentRecords(
+          finalState.students ?? [],
+        );
+      }
+      if (recovery) {
+        await this.getSensitiveVault().acceptCommittedRecoverySnapshots(
+          recovery.final,
+        );
+      }
     } catch (error) {
       try {
         nativeTransaction.abort();
@@ -1054,56 +1167,187 @@ export class IndexedDbDataStore
     }
   }
 
-  private async migrateLegacySensitiveData(
+  private async ensureStudentVaultV2(database: IDBDatabase): Promise<void> {
+    if (
+      !database.objectStoreNames.contains(STUDENT_VAULT_STATE_STORE_NAME) ||
+      !database.objectStoreNames.contains(RECOVERY_SNAPSHOT_STORE_NAME)
+    ) {
+      throw new Error(
+        "Öğrenci v2 kasası bu veritabanı sürümünde kullanılamıyor.",
+      );
+    }
+    await this.getSensitiveVault().ensureStudentVaultReady({
+      readState: () => this.readStudentVaultMigrationState(database),
+      commitCutover: (input) =>
+        this.commitStudentVaultCutover(database, input),
+    });
+  }
+
+  private async readStudentVaultMigrationState(
     database: IDBDatabase,
-  ): Promise<void> {
-    const includesRecovery = database.objectStoreNames.contains(
-      RECOVERY_SNAPSHOT_STORE_NAME,
-    );
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const baselineStudents = await this.readRawCollections(database, [
+  ): Promise<
+    StudentVaultMigrationState<{
+      students: StoredRecord[];
+      recovery: RecoverySnapshotRecord[];
+      readyState: unknown;
+    }>
+  > {
+    const transaction = database.transaction(
+      [
         "students",
-      ]);
-      const baselineRecovery = includesRecovery
-        ? await this.readRawRecoverySnapshots(database)
-        : [];
-      let changed = false;
-      const migratedStudents = await Promise.all(
-        (baselineStudents.students ?? []).map(async (student) => {
-          const migrated = await this.getSensitiveVault().migrateStudentRecord(
-            student,
-            studentSubject(student.id),
-          );
-          changed ||= migrated.changed;
-          return migrated.record;
-        }),
-      );
-      const migratedRecovery = await Promise.all(
-        baselineRecovery.map(async (snapshot) => {
-          const migrated =
-            await this.getSensitiveVault().migrateRecoverySnapshot(snapshot);
-          changed ||= migrated.changed;
-          return migrated.snapshot;
-        }),
-      );
-      if (!changed) return;
-      try {
-        await this.commitRawCollections(
-          database,
-          ["students"],
-          baselineStudents,
-          { students: migratedStudents },
-          includesRecovery
-            ? { baseline: baselineRecovery, final: migratedRecovery }
-            : undefined,
-        );
-        return;
-      } catch (error) {
-        const retryable =
-          error instanceof Error &&
-          error.message.includes("işlem sırasında değişti");
-        if (!retryable || attempt === 2) throw error;
+        RECOVERY_SNAPSHOT_STORE_NAME,
+        STUDENT_VAULT_STATE_STORE_NAME,
+      ],
+      "readonly",
+    );
+    const completion = transactionResult(transaction);
+    const [students, recovery, readyState] = await Promise.all([
+      requestResult(
+        transaction.objectStore("students").getAll() as IDBRequest<
+          StoredRecord[]
+        >,
+      ),
+      requestResult(
+        transaction
+          .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
+          .getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+      ),
+      requestResult(
+        transaction
+          .objectStore(STUDENT_VAULT_STATE_STORE_NAME)
+          .get(STUDENT_VAULT_READY_STATE_ID) as IDBRequest<unknown>,
+      ),
+    ]);
+    await completion;
+    const items: StudentVaultMigrationItem[] = students.map((student) => ({
+      itemId: `students\u0000${student.id}`,
+      collection: "students",
+      record: structuredClone(student),
+    }));
+    for (const snapshot of recovery) {
+      const snapshotStudents = snapshot?.envelope?.payload?.students;
+      if (!Array.isArray(snapshotStudents)) {
+        throw new Error("Kurtarma snapshot öğrenci yapısı doğrulanamadı.");
       }
+      for (const student of snapshotStudents) {
+        items.push({
+          itemId: `recovery\u0000${snapshot.id}\u0000${student.id}`,
+          collection: `recoverySnapshots/${snapshot.id}/students`,
+          record: structuredClone(student),
+        });
+      }
+    }
+    return {
+      readyState: structuredClone(readyState),
+      items,
+      baseline: {
+        students: structuredClone(students),
+        recovery: structuredClone(recovery),
+        readyState: structuredClone(readyState),
+      },
+    };
+  }
+
+  private async commitStudentVaultCutover(
+    database: IDBDatabase,
+    input: {
+      source: StudentVaultMigrationState<{
+        students: StoredRecord[];
+        recovery: RecoverySnapshotRecord[];
+        readyState: unknown;
+      }>;
+      sealedRecords: ReadonlyMap<string, LocalVaultSealedRecord>;
+      readyState: StudentVaultReadyState;
+    },
+  ): Promise<void> {
+    const transaction = openLocalVaultReadwriteTransaction(
+      database,
+      [
+        "students",
+        RECOVERY_SNAPSHOT_STORE_NAME,
+        STUDENT_VAULT_STATE_STORE_NAME,
+      ],
+    ).transaction;
+    const completion = transactionResult(transaction);
+    try {
+      const studentStore = transaction.objectStore("students");
+      const recoveryStore = transaction.objectStore(
+        RECOVERY_SNAPSHOT_STORE_NAME,
+      );
+      const stateStore = transaction.objectStore(
+        STUDENT_VAULT_STATE_STORE_NAME,
+      );
+      const [currentStudents, currentRecovery, currentReadyState] =
+        await Promise.all([
+          requestResult(studentStore.getAll() as IDBRequest<StoredRecord[]>),
+          requestResult(
+            recoveryStore.getAll() as IDBRequest<RecoverySnapshotRecord[]>,
+          ),
+          requestResult(
+            stateStore.get(STUDENT_VAULT_READY_STATE_ID) as IDBRequest<unknown>,
+          ),
+        ]);
+      if (
+        !recordsEqual(currentStudents, input.source.baseline.students) ||
+        !recordsEqual(currentRecovery, input.source.baseline.recovery) ||
+        !recordsEqual(
+          [currentReadyState ?? null],
+          [input.source.baseline.readyState ?? null],
+        )
+      ) {
+        throw new Error(
+          "Öğrenci kasası migration sırasında değişti; atomik cutover uygulanmadı.",
+        );
+      }
+
+      const expectedItemCount = input.source.items.length;
+      if (input.sealedRecords.size !== expectedItemCount) {
+        throw new Error(
+          "Öğrenci kasası migration gölge kapsamı doğrulanamadı.",
+        );
+      }
+      const finalStudents = input.source.baseline.students.map((student) => {
+        const sealed = input.sealedRecords.get(`students\u0000${student.id}`);
+        if (!sealed) {
+          throw new Error("Öğrenci kasası migration ana kaydı eksik.");
+        }
+        return structuredClone(sealed) as unknown as StoredRecord;
+      });
+      const finalRecovery = input.source.baseline.recovery.map((snapshot) => {
+        const migrated = structuredClone(snapshot);
+        migrated.envelope.payload.students =
+          migrated.envelope.payload.students.map((student) => {
+            const sealed = input.sealedRecords.get(
+              `recovery\u0000${snapshot.id}\u0000${student.id}`,
+            );
+            if (!sealed) {
+              throw new Error(
+                "Öğrenci kasası migration kurtarma kaydı eksik.",
+              );
+            }
+            return structuredClone(sealed) as unknown as StoredRecord;
+          });
+        return migrated;
+      });
+
+      await requestResult(studentStore.clear());
+      for (const student of finalStudents) {
+        await requestResult(studentStore.put(student));
+      }
+      await requestResult(recoveryStore.clear());
+      for (const snapshot of finalRecovery) {
+        await requestResult(recoveryStore.put(snapshot));
+      }
+      await requestResult(stateStore.put(structuredClone(input.readyState)));
+      await completion;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // Tamamlanan işlemin özgün güvenlik hatasını koru.
+      }
+      await completion.catch(() => undefined);
+      throw error;
     }
   }
 
@@ -1225,7 +1469,7 @@ export class IndexedDbDataStore
                   "Yeni veri sürümü için eski sekme bağlantısı güvenle kapatıldı.",
               });
             });
-            void this.migrateLegacySensitiveData(database).then(
+            void this.ensureStudentVaultV2(database).then(
               () => {
                 if (settled) {
                   database.close();
