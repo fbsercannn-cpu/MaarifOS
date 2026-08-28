@@ -96,8 +96,10 @@ export function SimpleClassroomScreen({
 
         {visibleStudents.length === 0 ? (
           <div className="simple-empty-state">
-            <strong>{hasActiveSearch ? "Eşleşen öğrenci yok" : "Henüz öğrenci eklenmedi"}</strong>
-            <p>{hasActiveSearch ? "Arama metnini değiştirin." : "İlk öğrenciyi ekleyerek sınıf dosyasını başlatın."}</p>
+            <div role="status" aria-live="polite" aria-atomic="true">
+              <strong>{hasActiveSearch ? "Eşleşen öğrenci yok" : "Henüz öğrenci eklenmedi"}</strong>
+              <p>{hasActiveSearch ? "Arama metnini değiştirin." : "İlk öğrenciyi ekleyerek sınıf dosyasını başlatın."}</p>
+            </div>
             {!hasActiveSearch ? <button type="button" onClick={onOpenAddStudent}><PlusIcon aria-hidden="true" /> İlk öğrenciyi ekle</button> : null}
           </div>
         ) : (
