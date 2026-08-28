@@ -10,6 +10,7 @@ import {
   type AttendanceEvent,
   type AttendanceStatus,
 } from "../../core/domain/attendance.ts";
+import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import type { StoredRecord } from "../../core/domain/model.ts";
 import {
   normalizeStudentProfile,
@@ -156,15 +157,301 @@ const observationFromRecord = (record: StoredRecord): DashboardObservation | nul
 };
 
 const readLegacyState = (): Partial<DashboardState> | null => {
+  if (typeof window === "undefined") return null;
+  let raw: string | null;
   try {
-    const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DashboardState>;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
   } catch {
-    return null;
+    throw new Error("Eski cihaz verisi güvenli biçimde okunamadı; cihaz kaydı korunmuştur.");
+  }
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid-legacy-root");
+    }
+    return parsed as Partial<DashboardState>;
+  } catch {
+    // Kaynak bozuksa yok sayıp silmek veri kaybıdır. İçerik veya ayrıntı
+    // hataya eklenmez; açık metin kaynak yerinde bırakılır.
+    throw new Error("Eski cihaz verisi doğrulanamadı; cihaz kaydı korunmuştur.");
   }
 };
+
+function removeVerifiedLegacyState(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    if (window.localStorage.getItem(LEGACY_STORAGE_KEY) !== null) {
+      throw new Error("Eski cihaz verisi kalıcı alandan kaldırılamadı.");
+    }
+  } catch {
+    // Açık metin v1 gölgesinin yokluğu kanıtlanamıyorsa uygulamayı
+    // fail-closed tut; normal yazmalar bu belirsizlikte yeniden açılmaz.
+    throw new Error("Eski cihaz verisi kalıcı alandan kaldırılamadı.");
+  }
+}
+
+function normalizedStudentVerificationView(
+  student: DashboardStudent,
+  currentCivilDate: string,
+) {
+  const profile = normalizeStudentProfile(
+    {
+      displayName: student.name,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      preferredName: student.preferredName,
+      birthDate: student.birthDate,
+      optionalCode: student.optionalCode,
+      nationalIdentityNumber: student.nationalIdentityNumber,
+      enrollmentYear: student.enrollmentYear,
+      homeLanguages: student.homeLanguages,
+      interests: student.interests,
+      strengths: student.strengths,
+      supportPreferences: student.supportPreferences,
+      contacts: student.contacts,
+      careDetails: student.careDetails,
+      profilePhotoDataUrl: student.profilePhotoDataUrl,
+    },
+    currentCivilDate,
+  );
+  return {
+    id: student.id,
+    name: profile.displayName,
+    firstName: profile.firstName,
+    lastName: profile.lastName ?? null,
+    preferredName: profile.preferredName ?? null,
+    birthDate: profile.birthDate ?? null,
+    optionalCode: profile.optionalCode ?? null,
+    nationalIdentityNumber: profile.nationalIdentityNumber ?? null,
+    enrollmentYear: profile.enrollmentYear ?? null,
+    homeLanguages: profile.homeLanguages ?? null,
+    interests: profile.interests ?? null,
+    strengths: profile.strengths ?? null,
+    supportPreferences: profile.supportPreferences ?? null,
+    contacts: profile.contacts ?? null,
+    careDetails: profile.careDetails ?? null,
+    profilePhotoDataUrl: profile.profilePhotoDataUrl ?? null,
+  };
+}
+
+function normalizedObservationVerificationView(
+  observation: DashboardObservation,
+) {
+  return {
+    id: observation.id,
+    studentId: observation.studentId,
+    rawText: observation.rawText,
+    createdAtUtc: observation.createdAtUtc,
+    requiresStudentReview: observation.requiresStudentReview === true,
+    legacyStudentId: observation.legacyStudentId ?? null,
+  };
+}
+
+function canonicalStudentProfileView(
+  student: DashboardStudent,
+  currentCivilDate: string,
+): string {
+  const view: Record<string, unknown> = {
+    ...normalizedStudentVerificationView(student, currentCivilDate),
+  };
+  delete view.id;
+  return canonicalJson(view);
+}
+
+function canonicalObservationContentView(
+  observation: DashboardObservation,
+): string {
+  const view: Record<string, unknown> = {
+    ...normalizedObservationVerificationView(observation),
+  };
+  delete view.id;
+  return canonicalJson(view);
+}
+
+function assertLegacyArchiveCanBeImported(
+  legacy: Partial<DashboardState> | null,
+): void {
+  if (!legacy || !("archivedStudents" in legacy)) return;
+  const archivedStudents = legacy.archivedStudents;
+  if (!Array.isArray(archivedStudents) || archivedStudents.length > 0) {
+    // V1 arşiv kaydı mevcut migrator tarafından kayıpsız temsil edilmiyor.
+    // Açık metin kaynak korunur; sessiz veri kaybı yerine hydration kapanır.
+    throw new Error(
+      "Eski arşiv kayıtları güvenli otomatik aktarıma uygun değil; cihaz kaydı korunmuştur.",
+    );
+  }
+}
+
+function isLegacyDashboardStudent(value: unknown): value is DashboardStudent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const student = value as Partial<DashboardStudent>;
+  return (
+    typeof student.id === "string" &&
+    student.id.trim().length > 0 &&
+    typeof student.name === "string" &&
+    student.name.trim().length > 0 &&
+    isAttendanceStatus(student.status) &&
+    (student.attendanceMarked === undefined ||
+      typeof student.attendanceMarked === "boolean") &&
+    (student.events === undefined || Array.isArray(student.events)) &&
+    !(student.attendanceMarked === false && student.events !== undefined)
+  );
+}
+
+function isLegacyDashboardObservation(
+  value: unknown,
+): value is DashboardObservation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const observation = value as Partial<DashboardObservation>;
+  const observedAt = typeof observation.createdAtUtc === "string"
+    ? new Date(observation.createdAtUtc)
+    : null;
+  return (
+    typeof observation.id === "string" &&
+    observation.id.trim().length > 0 &&
+    typeof observation.studentId === "string" &&
+    observation.studentId.trim().length > 0 &&
+    typeof observation.rawText === "string" &&
+    observedAt !== null &&
+    !Number.isNaN(observedAt.getTime()) &&
+    (observation.requiresStudentReview === undefined ||
+      typeof observation.requiresStudentReview === "boolean") &&
+    (observation.legacyStudentId === undefined ||
+      typeof observation.legacyStudentId === "string")
+  );
+}
+
+function strictLegacyCollection<T>(
+  legacy: Partial<DashboardState> | null,
+  field: "students" | "observations",
+  isItem: (value: unknown) => value is T,
+  errorMessage: string,
+): T[] | null {
+  if (!legacy || !(field in legacy)) return null;
+  const value: unknown = legacy[field];
+  if (!Array.isArray(value) || !value.every(isItem)) {
+    throw new Error(errorMessage);
+  }
+  return value as T[];
+}
+
+function assertUniqueLegacyIds(
+  items: readonly { id: string }[],
+  errorMessage: string,
+): void {
+  if (new Set(items.map((item) => item.id)).size !== items.length) {
+    throw new Error(errorMessage);
+  }
+}
+
+function legacyAttendanceContract(
+  legacy: Partial<DashboardState> | null,
+  fallback: DashboardState,
+): {
+  attendanceCivilDate: string;
+  attendanceCompleted: boolean;
+  hasAttendanceCompleted: boolean;
+} {
+  const hasLegacyAttendanceCivilDate = Boolean(
+    legacy && "attendanceCivilDate" in legacy,
+  );
+  const legacyAttendanceCivilDate = hasLegacyAttendanceCivilDate
+    ? legacy?.attendanceCivilDate
+    : undefined;
+  if (
+    hasLegacyAttendanceCivilDate &&
+    !isCivilDate(legacyAttendanceCivilDate)
+  ) {
+    throw new Error("Eski yoklama tarihi doğrulanamadı; cihaz kaydı korunmuştur.");
+  }
+  const attendanceCivilDate = isCivilDate(legacyAttendanceCivilDate)
+    ? legacyAttendanceCivilDate
+    : isCivilDate(fallback.attendanceCivilDate)
+      ? fallback.attendanceCivilDate
+      : civilDateInIstanbul(new Date());
+  const hasAttendanceCompleted = Boolean(
+    legacy && "attendanceCompleted" in legacy,
+  );
+  const attendanceCompleted = hasAttendanceCompleted
+    ? legacy?.attendanceCompleted
+    : fallback.attendanceCompleted;
+  if (typeof attendanceCompleted !== "boolean") {
+    throw new Error("Eski yoklama durumu doğrulanamadı; cihaz kaydı korunmuştur.");
+  }
+  return {
+    attendanceCivilDate,
+    attendanceCompleted,
+    hasAttendanceCompleted,
+  };
+}
+
+function assertLegacyImportVerified(
+  snapshot: Awaited<ReturnType<LocalDataStore["readSnapshot"]>>,
+  migrated: DashboardState,
+  options: { verifyAttendanceCompletion: boolean },
+): void {
+  const studentsById = new Map(snapshot.students.map((record) => [record.id, record]));
+  const observationsById = new Map(
+    snapshot.observations.map((record) => [record.id, record]),
+  );
+  const resolvedAttendance = resolveAttendanceRecords(snapshot.attendanceRecords);
+  const currentCivilDate = civilDateInIstanbul(new Date());
+  for (const student of migrated.students) {
+    const stored = studentsById.get(student.id);
+    const verified = stored ? studentFromRecord(stored) : null;
+    if (
+      !verified ||
+      canonicalJson(normalizedStudentVerificationView(verified, currentCivilDate)) !==
+        canonicalJson(normalizedStudentVerificationView(student, currentCivilDate))
+    ) {
+      throw new Error("Eski öğrenci kaydı güvenli depoya doğrulanarak aktarılamadı.");
+    }
+    const attendance = resolvedAttendance.latestByKey.get(
+      attendanceRecordKey(student.id, migrated.attendanceCivilDate),
+    );
+    if (student.attendanceMarked === false) {
+      if (attendance && typeof attendance.deletedAt !== "string") {
+        throw new Error("Eski yoklama kaydı güvenli depoya doğrulanarak aktarılamadı.");
+      }
+      continue;
+    }
+    if (
+      !attendance ||
+      typeof attendance.deletedAt === "string" ||
+      attendance.status !== student.status ||
+      (student.events !== undefined &&
+        canonicalJson(attendance.events ?? []) !== canonicalJson(student.events))
+    ) {
+      throw new Error("Eski yoklama kaydı güvenli depoya doğrulanarak aktarılamadı.");
+    }
+  }
+  for (const observation of migrated.observations) {
+    const stored = observationsById.get(observation.id);
+    const verified = stored ? observationFromRecord(stored) : null;
+    if (
+      !verified ||
+      canonicalJson(normalizedObservationVerificationView(verified)) !==
+        canonicalJson(normalizedObservationVerificationView(observation))
+    ) {
+      throw new Error("Eski gözlem kaydı güvenli depoya doğrulanarak aktarılamadı.");
+    }
+  }
+  if (options.verifyAttendanceCompletion) {
+    const completion = findAttendanceCompletionSetting(
+      snapshot.settings,
+      migrated.attendanceCivilDate,
+    );
+    if (
+      !completion ||
+      typeof completion.deletedAt === "string" ||
+      completion.attendanceCompleted !== migrated.attendanceCompleted
+    ) {
+      throw new Error("Eski yoklama durumu güvenli depoya doğrulanarak aktarılamadı.");
+    }
+  }
+}
 
 function requireActiveClassroomScope(
   snapshot: Awaited<ReturnType<LocalDataStore["readSnapshot"]>>,
@@ -333,25 +620,40 @@ export function migrateLegacyDashboardState(
   legacy: Partial<DashboardState> | null,
   fallback: DashboardState,
 ): DashboardState {
-  const legacyStudents = Array.isArray(legacy?.students)
-    ? legacy.students.filter(
-        (student): student is DashboardStudent =>
-          typeof student?.id === "string" &&
-          typeof student?.name === "string" &&
-          isAttendanceStatus(student?.status),
-      )
-    : [];
+  assertLegacyArchiveCanBeImported(legacy);
+  const attendanceContract = legacyAttendanceContract(legacy, fallback);
+  const legacyStudents = strictLegacyCollection(
+    legacy,
+    "students",
+    isLegacyDashboardStudent,
+    "Eski öğrenci kayıtları doğrulanamadı; cihaz kaydı korunmuştur.",
+  );
+  const legacyObservations = strictLegacyCollection(
+    legacy,
+    "observations",
+    isLegacyDashboardObservation,
+    "Eski gözlem kayıtları doğrulanamadı; cihaz kaydı korunmuştur.",
+  );
+  const studentsToMigrate = legacyStudents ?? [];
+  assertUniqueLegacyIds(
+    studentsToMigrate,
+    "Eski öğrenci kimlikleri mükerrer; cihaz kaydı korunmuştur.",
+  );
+  assertUniqueLegacyIds(
+    legacyObservations ?? [],
+    "Eski gözlem kimlikleri mükerrer; cihaz kaydı korunmuştur.",
+  );
   const migratedStudentIds = new Map(
-    legacyStudents.map((student) => [
+    studentsToMigrate.map((student) => [
       student.id,
       UUID_PATTERN.test(student.id) ? student.id : crypto.randomUUID(),
     ]),
   );
-  const migratedStudents = legacyStudents.length > 0
-    ? legacyStudents.map((student) => ({
+  const migratedStudents = legacyStudents !== null
+    ? studentsToMigrate.map((student) => ({
         ...student,
         id: migratedStudentIds.get(student.id)!,
-        attendanceMarked: true,
+        attendanceMarked: student.attendanceMarked !== false,
       }))
     : fallback.students;
   const migratedStudentIdSet = new Set(
@@ -360,14 +662,8 @@ export function migrateLegacyDashboardState(
   return {
     students: migratedStudents,
     archivedStudents: fallback.archivedStudents ?? [],
-    observations: Array.isArray(legacy?.observations)
-      ? legacy.observations.filter(
-          (observation): observation is DashboardObservation =>
-            typeof observation?.id === "string" &&
-            typeof observation?.studentId === "string" &&
-            typeof observation?.rawText === "string" &&
-            typeof observation?.createdAtUtc === "string",
-        ).map((observation) => {
+    observations: legacyObservations
+      ? legacyObservations.map((observation) => {
           const mappedStudentId = migratedStudentIds.get(observation.studentId);
           const resolvedStudentId =
             mappedStudentId ??
@@ -385,11 +681,281 @@ export function migrateLegacyDashboardState(
           };
         })
       : fallback.observations,
-    attendanceCompleted:
-      typeof legacy?.attendanceCompleted === "boolean"
-        ? legacy.attendanceCompleted
-        : fallback.attendanceCompleted,
-    attendanceCivilDate: fallback.attendanceCivilDate ?? civilDateInIstanbul(new Date()),
+    attendanceCompleted: attendanceContract.attendanceCompleted,
+    attendanceCivilDate: attendanceContract.attendanceCivilDate,
+  };
+}
+
+type LegacyReconciliation = {
+  state: DashboardState;
+  needsPersist: boolean;
+  verifyAttendanceCompletion: boolean;
+};
+
+function reconcileLegacyWithPopulatedSnapshot(
+  legacy: Partial<DashboardState>,
+  fallback: DashboardState,
+  snapshot: Awaited<ReturnType<LocalDataStore["readSnapshot"]>>,
+): LegacyReconciliation {
+  assertLegacyArchiveCanBeImported(legacy);
+  const attendanceContract = legacyAttendanceContract(legacy, fallback);
+  const legacyStudents = strictLegacyCollection(
+    legacy,
+    "students",
+    isLegacyDashboardStudent,
+    "Eski öğrenci kayıtları doğrulanamadı; cihaz kaydı korunmuştur.",
+  ) ?? [];
+  const legacyObservations = strictLegacyCollection(
+    legacy,
+    "observations",
+    isLegacyDashboardObservation,
+    "Eski gözlem kayıtları doğrulanamadı; cihaz kaydı korunmuştur.",
+  ) ?? [];
+  assertUniqueLegacyIds(
+    legacyStudents,
+    "Eski öğrenci kimlikleri mükerrer; cihaz kaydı korunmuştur.",
+  );
+  assertUniqueLegacyIds(
+    legacyObservations,
+    "Eski gözlem kimlikleri mükerrer; cihaz kaydı korunmuştur.",
+  );
+
+  const currentCivilDate = civilDateInIstanbul(new Date());
+  const studentRecordsById = new Map(
+    snapshot.students.map((record) => [record.id, record]),
+  );
+  const activeStudentCandidates = snapshot.students.flatMap((record) => {
+    if (
+      typeof record.deletedAt === "string" ||
+      record.enrollmentStatus === "left"
+    ) {
+      return [];
+    }
+    const student = studentFromRecord(record);
+    return student
+      ? [{
+          student,
+          profile: canonicalStudentProfileView(student, currentCivilDate),
+        }]
+      : [];
+  });
+  const activeStudentsById = new Map(
+    activeStudentCandidates.map((candidate) => [candidate.student.id, candidate]),
+  );
+  const mappedStudentIds = new Map<string, string>();
+  const usedStudentIds = new Set<string>();
+  let needsPersist = false;
+
+  const reconciledStudents = legacyStudents.map((legacyStudent) => {
+    const expectedProfile = canonicalStudentProfileView(
+      legacyStudent,
+      currentCivilDate,
+    );
+    let resolvedStudentId: string;
+    if (UUID_PATTERN.test(legacyStudent.id)) {
+      const existingRecord = studentRecordsById.get(legacyStudent.id);
+      if (existingRecord) {
+        const candidate = activeStudentsById.get(legacyStudent.id);
+        if (!candidate || candidate.profile !== expectedProfile) {
+          throw new Error(
+            "Eski öğrenci kaydı mevcut güvenli kayıtla çelişiyor; cihaz kaydı korunmuştur.",
+          );
+        }
+      } else {
+        needsPersist = true;
+      }
+      resolvedStudentId = legacyStudent.id;
+    } else {
+      const candidates = activeStudentCandidates.filter(
+        (candidate) =>
+          !usedStudentIds.has(candidate.student.id) &&
+          candidate.profile === expectedProfile,
+      );
+      if (candidates.length !== 1) {
+        throw new Error(
+          "Eski öğrenci kimliği güvenli kayıtla tekil eşleştirilemedi; cihaz kaydı korunmuştur.",
+        );
+      }
+      resolvedStudentId = candidates[0].student.id;
+    }
+    if (usedStudentIds.has(resolvedStudentId)) {
+      throw new Error(
+        "Eski öğrenci ilişkisi tekil değil; cihaz kaydı korunmuştur.",
+      );
+    }
+    usedStudentIds.add(resolvedStudentId);
+    mappedStudentIds.set(legacyStudent.id, resolvedStudentId);
+    return {
+      ...legacyStudent,
+      id: resolvedStudentId,
+      attendanceMarked: legacyStudent.attendanceMarked !== false,
+    };
+  });
+
+  const observationRecordsById = new Map(
+    snapshot.observations.map((record) => [record.id, record]),
+  );
+  const observationCandidates = snapshot.observations.flatMap((record) => {
+    if (typeof record.deletedAt === "string") return [];
+    const observation = observationFromRecord(record);
+    return observation ? [observation] : [];
+  });
+  const activeObservationsById = new Map(
+    observationCandidates.map((observation) => [observation.id, observation]),
+  );
+  const usedObservationIds = new Set<string>();
+
+  const reconciledObservations = legacyObservations.map((legacyObservation) => {
+    let resolvedStudentId = mappedStudentIds.get(legacyObservation.studentId);
+    if (
+      !resolvedStudentId &&
+      UUID_PATTERN.test(legacyObservation.studentId) &&
+      activeStudentsById.has(legacyObservation.studentId)
+    ) {
+      resolvedStudentId = legacyObservation.studentId;
+    }
+
+    if (!resolvedStudentId) {
+      const orphanCandidates = observationCandidates.filter((candidate) => {
+        if (usedObservationIds.has(candidate.id)) return false;
+        if (
+          UUID_PATTERN.test(legacyObservation.id) &&
+          candidate.id !== legacyObservation.id
+        ) {
+          return false;
+        }
+        const expected: DashboardObservation = {
+          ...legacyObservation,
+          id: candidate.id,
+          studentId: candidate.studentId,
+          requiresStudentReview: true,
+          legacyStudentId: legacyObservation.studentId,
+        };
+        return canonicalObservationContentView(candidate) ===
+          canonicalObservationContentView(expected);
+      });
+      if (orphanCandidates.length !== 1) {
+        throw new Error(
+          "Eski gözlem ilişkisi güvenli kayıtla tekil eşleştirilemedi; cihaz kaydı korunmuştur.",
+        );
+      }
+      const candidate = orphanCandidates[0];
+      usedObservationIds.add(candidate.id);
+      return {
+        ...legacyObservation,
+        id: candidate.id,
+        studentId: candidate.studentId,
+        requiresStudentReview: true,
+        legacyStudentId: legacyObservation.studentId,
+      };
+    }
+
+    const expectedContent: DashboardObservation = {
+      ...legacyObservation,
+      studentId: resolvedStudentId,
+    };
+    let resolvedObservationId: string;
+    if (UUID_PATTERN.test(legacyObservation.id)) {
+      const existingRecord = observationRecordsById.get(legacyObservation.id);
+      if (existingRecord) {
+        const candidate = activeObservationsById.get(legacyObservation.id);
+        if (
+          !candidate ||
+          canonicalObservationContentView(candidate) !==
+            canonicalObservationContentView(expectedContent)
+        ) {
+          throw new Error(
+            "Eski gözlem kaydı mevcut güvenli kayıtla çelişiyor; cihaz kaydı korunmuştur.",
+          );
+        }
+      } else {
+        needsPersist = true;
+      }
+      resolvedObservationId = legacyObservation.id;
+    } else {
+      const candidates = observationCandidates.filter(
+        (candidate) =>
+          !usedObservationIds.has(candidate.id) &&
+          canonicalObservationContentView(candidate) ===
+            canonicalObservationContentView(expectedContent),
+      );
+      if (candidates.length !== 1) {
+        throw new Error(
+          "Eski gözlem kimliği güvenli kayıtla tekil eşleştirilemedi; cihaz kaydı korunmuştur.",
+        );
+      }
+      resolvedObservationId = candidates[0].id;
+    }
+    if (usedObservationIds.has(resolvedObservationId)) {
+      throw new Error(
+        "Eski gözlem ilişkisi tekil değil; cihaz kaydı korunmuştur.",
+      );
+    }
+    usedObservationIds.add(resolvedObservationId);
+    return {
+      ...expectedContent,
+      id: resolvedObservationId,
+    };
+  });
+
+  const resolvedAttendance = resolveAttendanceRecords(snapshot.attendanceRecords);
+  for (const student of reconciledStudents) {
+    const attendance = resolvedAttendance.latestByKey.get(
+      attendanceRecordKey(student.id, attendanceContract.attendanceCivilDate),
+    );
+    if (student.attendanceMarked === false) {
+      if (attendance && typeof attendance.deletedAt !== "string") {
+        throw new Error(
+          "Eski yoklama kaydı mevcut güvenli kayıtla çelişiyor; cihaz kaydı korunmuştur.",
+        );
+      }
+      continue;
+    }
+    if (!attendance) {
+      needsPersist = true;
+      continue;
+    }
+    if (
+      typeof attendance.deletedAt === "string" ||
+      attendance.status !== student.status ||
+      (student.events !== undefined &&
+        canonicalJson(attendance.events ?? []) !== canonicalJson(student.events))
+    ) {
+      throw new Error(
+        "Eski yoklama kaydı mevcut güvenli kayıtla çelişiyor; cihaz kaydı korunmuştur.",
+      );
+    }
+  }
+
+  const existingCompletion = findAttendanceCompletionSetting(
+    snapshot.settings,
+    attendanceContract.attendanceCivilDate,
+  );
+  if (attendanceContract.hasAttendanceCompleted) {
+    if (!existingCompletion || typeof existingCompletion.deletedAt === "string") {
+      needsPersist = true;
+    } else if (
+      existingCompletion.attendanceCompleted !==
+        attendanceContract.attendanceCompleted
+    ) {
+      throw new Error(
+        "Eski yoklama durumu mevcut güvenli kayıtla çelişiyor; cihaz kaydı korunmuştur.",
+      );
+    }
+  }
+
+  return {
+    state: {
+      students: reconciledStudents,
+      archivedStudents: [],
+      observations: reconciledObservations,
+      attendanceCompleted: attendanceContract.hasAttendanceCompleted
+        ? attendanceContract.attendanceCompleted
+        : existingCompletion?.attendanceCompleted ?? false,
+      attendanceCivilDate: attendanceContract.attendanceCivilDate,
+    },
+    needsPersist,
+    verifyAttendanceCompletion: attendanceContract.hasAttendanceCompleted,
   };
 }
 
@@ -405,24 +971,51 @@ export async function loadDashboardState(
     ? fallback.attendanceCivilDate
     : civilDateInIstanbul(new Date());
 
-  if (snapshot.students.length === 0) {
-    const legacy = readLegacyState();
-    const migrated = migrateLegacyDashboardState(legacy, fallback);
-    if (
-      migrated.students.length > 0 ||
-      migrated.observations.length > 0 ||
-      migrated.attendanceCompleted
-    ) {
-      await persistDashboardState(store, migrated);
-      await migrateLegacyClassroomScopes(store);
-      snapshot = await store.readSnapshot();
-    }
-    try {
-      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-    } catch {
-      // Node tabanlı sözleşme testlerinde window bulunmaz.
+  const legacy = readLegacyState();
+  if (legacy) {
+    const hasPersistedDashboardContent =
+      snapshot.students.length > 0 ||
+      snapshot.observations.length > 0 ||
+      snapshot.attendanceRecords.length > 0 ||
+      snapshot.settings.some(
+        (record) => typeof record.attendanceCompleted === "boolean",
+      );
+    if (!hasPersistedDashboardContent) {
+      const attendanceContract = legacyAttendanceContract(legacy, fallback);
+      const migrated = migrateLegacyDashboardState(legacy, fallback);
+      const shouldPersist =
+        migrated.students.length > 0 ||
+        migrated.observations.length > 0 ||
+        attendanceContract.hasAttendanceCompleted;
+      if (shouldPersist) {
+        await persistDashboardState(store, migrated);
+        await migrateLegacyClassroomScopes(store);
+        snapshot = await store.readSnapshot();
+        assertLegacyImportVerified(snapshot, migrated, {
+          verifyAttendanceCompletion: true,
+        });
+      }
+    } else {
+      const reconciliation = reconcileLegacyWithPopulatedSnapshot(
+        legacy,
+        fallback,
+        snapshot,
+      );
+      if (reconciliation.needsPersist) {
+        await persistDashboardState(store, reconciliation.state);
+        await migrateLegacyClassroomScopes(store);
+        snapshot = await store.readSnapshot();
+      }
+      assertLegacyImportVerified(snapshot, reconciliation.state, {
+        verifyAttendanceCompletion:
+          reconciliation.verifyAttendanceCompletion,
+      });
     }
   }
+
+  // V2/IndexedDB hydration ve legacy içeriğin tam kanonik karşılığı
+  // doğrulanmadan tarayıcıdaki açık metin v1 gölgesine dokunulmaz.
+  removeVerifiedLegacyState();
 
   return dashboardStateFromSnapshot(snapshot, attendanceCivilDate);
 }
