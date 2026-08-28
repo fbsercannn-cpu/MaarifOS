@@ -7,7 +7,10 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
-import { verifyPremiumEntitlement } from "../../src/features/premium-access/entitlement.ts";
+import {
+  createSharedBuiltInAccess,
+  verifyPremiumEntitlement,
+} from "../../src/features/premium-access/entitlement.ts";
 import { curriculumTargetsForProfile } from "../../src/features/curriculum/curriculum-catalog.ts";
 import { TYMM_2024_CATALOG_METADATA } from "../../src/features/curriculum/tymm-2024-catalog.ts";
 import {
@@ -17,6 +20,10 @@ import {
   createPlanWithActivity,
 } from "../../src/features/evidence/evidence-flow.ts";
 import { parsePremiumContentPack } from "../../src/features/premium-plans/content-repository.ts";
+import {
+  builtInPackReferenceFromInstalledPlan,
+  loadBuiltInMaarifPlanPackForSnapshot,
+} from "../../src/features/premium-plans/built-in-maarif-content.ts";
 import {
   createPremiumDailyFlowDraft,
   premiumContentPackSnapshot,
@@ -87,6 +94,43 @@ async function valuesPack() {
     "utf8",
   ));
   return parsePremiumContentPack(raw);
+}
+
+const BUILT_IN_SOURCE_BY_PATH = new Map([
+  [
+    "/assets/maarif-content/tymm-6072-2026-09-v2.json",
+    new URL("../../../premium-content/releases/tymm-6072/2026-09/content.v2.json", import.meta.url),
+  ],
+  [
+    "/assets/maarif-content/tymm-6072-2026-09-v3.json",
+    new URL("../../../premium-content/releases/tymm-6072/2026-09/content.v3.json", import.meta.url),
+  ],
+  [
+    "/assets/maarif-content/tymm-6072-2026-09-manifest-v3.json",
+    new URL("../../../premium-content/releases/tymm-6072/2026-09/manifest.v3.json", import.meta.url),
+  ],
+  [
+    "/assets/maarif-content/values-pedagogy-constitution.v1.json",
+    new URL("../../src/features/values/values-pedagogy-constitution.v1.json", import.meta.url),
+  ],
+  [
+    "/assets/maarif-content/official-preschool-value-actions.v1.json",
+    new URL("../../src/features/values/official-preschool-value-actions.v1.json", import.meta.url),
+  ],
+]);
+
+async function exactBuiltInSourceFetcher(input) {
+  const path = new URL(String(input), "https://maarifos.test/").pathname;
+  const source = BUILT_IN_SOURCE_BY_PATH.get(path);
+  if (!source) return new Response("not found", { status: 404 });
+  const bytes = await readFile(source);
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      "content-length": String(bytes.byteLength),
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
 }
 
 class MemoryStore {
@@ -270,9 +314,18 @@ test("kurulmuş legacy v2 planı read-model üzerinden okunur ve geriye dönük 
     teacherPreferredLensId: "guided-play",
     now: new Date("2026-09-07T05:00:00.000Z"),
   });
+  const installedSnapshot = await store.readSnapshot();
+  const annualRecord = installedSnapshot.plans.find(
+    (record) => record.id === installed.annualPlanId,
+  );
+  assert.ok(annualRecord);
+  const resolvedPack = await loadBuiltInMaarifPlanPackForSnapshot(
+    builtInPackReferenceFromInstalledPlan(annualRecord),
+    { fetcher: exactBuiltInSourceFetcher },
+  );
   const source = await loadInstalledPremiumPlanExportSource(
     store,
-    content,
+    resolvedPack,
     installed.annualPlanId,
   );
   assert.equal(source.valuesMappingStatus, "legacy-unmapped");
@@ -280,6 +333,41 @@ test("kurulmuş legacy v2 planı read-model üzerinden okunur ve geriye dönük 
     source.weeks.flatMap((week) => week.activitySnapshots)
       .every((activity) => activity.valuesDesign === null),
   );
+});
+
+test("kurulu v3 provider planı ortak built-in erişimle production-safe belge kaynağına dönüşür", async () => {
+  const store = activeStore();
+  const content = await valuesPack();
+  const installed = await installPremiumPlanBoard(store, {
+    pack: content,
+    curriculumProfile: profile,
+    teacherPreferredLensId: "guided-play",
+    now: new Date("2026-09-07T05:00:00.000Z"),
+  });
+  const installedSnapshot = await store.readSnapshot();
+  const annualRecord = installedSnapshot.plans.find(
+    (record) => record.id === installed.annualPlanId,
+  );
+  assert.ok(annualRecord);
+  const resolvedPack = await loadBuiltInMaarifPlanPackForSnapshot(
+    builtInPackReferenceFromInstalledPlan(annualRecord),
+    { fetcher: exactBuiltInSourceFetcher },
+  );
+  const source = await loadInstalledPremiumPlanExportSource(
+    store,
+    resolvedPack,
+    installed.annualPlanId,
+  );
+  const document = preparePremiumPlanExportDocument(
+    resolvedPack,
+    source,
+    createSharedBuiltInAccess(resolvedPack),
+    "word",
+  );
+
+  assert.equal(source.contentPackSnapshot.id, resolvedPack.id);
+  assert.equal(document.contentPackVersion, "3.0.0");
+  assert.equal(document.activities.length, 12);
 });
 
 test("Word çıktısı geçerli DOCX kabını ve Türkçe plan metnini üretir", async () => {

@@ -35,7 +35,11 @@ import {
 } from "../feedback/teacher-feedback.ts";
 import type { TeacherWorkCycleWorkspace } from "../teacher-cycle/teacher-work-cycle.ts";
 import type { PremiumContentPack } from "../premium-plans/domain.ts";
-import { loadPremiumPilotPreviewPack } from "../premium-plans/content-repository.ts";
+import {
+  builtInPackReferenceFromInstalledPlan,
+  loadBuiltInMaarifPlanPackForSnapshot,
+  type BuiltInMaarifPlanPackReference,
+} from "../premium-plans/built-in-maarif-content.ts";
 import {
   loadInstalledPremiumPlanExportSource,
   type InstalledPremiumPlanExportSource,
@@ -50,6 +54,7 @@ import {
   type TeacherOwnedPlanDocumentContext,
   type TeacherOwnedPlanDocumentScope,
 } from "./teacher-owned-plan-document.ts";
+import { generateTeacherOwnedMonthlyEvaluationExportFile } from "./teacher-owned-monthly-evaluation-export.ts";
 import {
   loadTeacherOwnedPlanGraph,
   loadTeacherOwnedPlanStarterDraft,
@@ -87,7 +92,10 @@ export interface TeacherOwnedPlanScreenProps {
   educationalWriteNotice?: string | null;
   documentContext?: TeacherOwnedPlanDocumentContext;
   onClose(): void;
-  onOpenProviderLibrary?(): void;
+  onOpenProviderLibrary?(
+    initialSection?: "overview" | "weekly" | "monthly",
+    builtInPackReference?: BuiltInMaarifPlanPackReference,
+  ): void;
   showProviderLibrary?: boolean;
   onViewDailyPlan(plan: ScheduledPlanSummary): void;
   onEditDailyPlan(plan: ScheduledPlanSummary): void;
@@ -201,6 +209,7 @@ export function TeacherOwnedPlanScreen({
   const [busy, setBusy] = useState(true);
   const [saveBusy, setSaveBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState<PremiumPlanExportFormat | null>(null);
+  const [ek18ExportBusy, setEk18ExportBusy] = useState<string | null>(null);
   const [documentScopeKind, setDocumentScopeKind] = useState<
     TeacherOwnedPlanDocumentScope["kind"]
   >("combined");
@@ -276,6 +285,8 @@ export function TeacherOwnedPlanScreen({
   useEffect(() => {
     let active = true;
     setBusy(true);
+    setSource(null);
+    if (!contentPack) setPack(null);
     void Promise.all([
       loadTeacherOwnedPlanGraph(store),
       loadTeacherOwnedPlanStarterDraft(store, { civilDate: workspace.civilDate }),
@@ -287,7 +298,20 @@ export function TeacherOwnedPlanScreen({
         const annualPlanId = workspace.annual?.id;
         if (!graph && annualPlanId) {
           try {
-            const resolvedPack = contentPack ?? await loadPremiumPilotPreviewPack();
+            const snapshot = await store.readSnapshot();
+            const annualPlan = snapshot.plans.find(
+              (record) => record.id === annualPlanId && record.planType === "annual",
+            );
+            if (!annualPlan) {
+              throw new Error("Kurulu sağlayıcı yıllık planı yeniden okunamadı.");
+            }
+            const resolvedPack = await loadBuiltInMaarifPlanPackForSnapshot(
+              builtInPackReferenceFromInstalledPlan({
+                contentPackId: annualPlan.contentPackId,
+                contentPackVersion: annualPlan.contentPackVersion,
+                contentPackSnapshot: annualPlan.contentPackSnapshot,
+              }),
+            );
             const resolvedSource = await loadInstalledPremiumPlanExportSource(
               store,
               resolvedPack,
@@ -298,7 +322,7 @@ export function TeacherOwnedPlanScreen({
             setSource(resolvedSource);
           } catch {
             if (!active) return;
-            setPack(contentPack);
+            setPack(null);
             setSource(null);
           }
         }
@@ -351,6 +375,19 @@ export function TeacherOwnedPlanScreen({
     );
     return fullYearMonthDrafts.filter((month) => !existing.has(month.monthKey));
   }, [fullYearMonthDrafts, teacherGraph]);
+  const sourceBuiltInPackReference = useMemo<
+    BuiltInMaarifPlanPackReference | null
+  >(
+    () =>
+      source
+        ? Object.freeze({
+            id: source.contentPackSnapshot.id,
+            version: source.contentPackSnapshot.version,
+            manifestDigest: source.contentPackSnapshot.manifestDigest,
+          })
+        : null,
+    [source],
+  );
 
   useEffect(() => {
     if (!teacherGraph) {
@@ -953,6 +990,36 @@ export function TeacherOwnedPlanScreen({
     }
   };
 
+  const exportTeacherOwnedEk18 = async (
+    monthlyPlanId: string,
+    evaluationId: string,
+    format: PremiumPlanExportFormat,
+  ) => {
+    if (ek18ExportBusy) return;
+    const operationId = `${evaluationId}:${format}`;
+    setEk18ExportBusy(operationId);
+    clearOperationFeedback();
+    try {
+      const file = await generateTeacherOwnedMonthlyEvaluationExportFile(
+        store,
+        monthlyPlanId,
+        { kind: "exact", evaluationId },
+        format,
+      );
+      downloadFile(file);
+      setMessage(
+        `Ek 18 ${format === "pdf" ? "PDF" : "Word"} belgesi seçili aylık değerlendirmeden hazırlandı.`,
+      );
+    } catch (reason) {
+      reportOperationError(
+        reason,
+        "Ek 18 hazırlanamadı. Aylık plan ve değerlendirme kayıtlarınız değiştirilmedi.",
+      );
+    } finally {
+      setEk18ExportBusy(null);
+    }
+  };
+
   const weeklyFormBlockers = reviewContext
     ? weeklyReviewFormBlockers({
         domainEligible: reviewContext.readiness.eligible,
@@ -1019,6 +1086,7 @@ export function TeacherOwnedPlanScreen({
         }
       : null;
   const exportReady =
+    !busy &&
     (teacherGraph !== null || (pack !== null && source !== null)) &&
     teacherDocumentSelectionIsReady;
   return (
@@ -1191,7 +1259,8 @@ export function TeacherOwnedPlanScreen({
             </article>
             {teacherGraph.months.map(({ monthly, weeks }) => {
               const expanded = expandedMonthId === monthly.id;
-              const evaluationCount = monthly.monthlyEvaluations?.length ?? 0;
+              const monthlyEvaluations = monthly.monthlyEvaluations ?? [];
+              const evaluationCount = monthlyEvaluations.length;
               const monthPanelId = `teacher-owned-month-${monthly.id}`;
               return (
               <article
@@ -1266,6 +1335,65 @@ export function TeacherOwnedPlanScreen({
                         : "Ayı üç yönden değerlendir"}
                     </button>
                   </div>
+                  {monthlyEvaluations.length > 0 ? (
+                    <details className="teacher-owned-plan-ek18">
+                      <summary>
+                        Ek 18 PDF ve Word çıktıları ({monthlyEvaluations.length})
+                      </summary>
+                      <p>
+                        Çıktı, seçtiğiniz değişmez aylık değerlendirmeyi kullanır.
+                        Öğretmenin kendi planında resmî bileşen kanıtı yoksa çizelgeye
+                        işaret uydurulmaz.
+                      </p>
+                      <div>
+                        {monthlyEvaluations.map((evaluation, index) => {
+                          const isLatest = index === monthlyEvaluations.length - 1;
+                          return (
+                            <article key={evaluation.id}>
+                              <span>
+                                <strong>
+                                  {isLatest ? "Son değerlendirme" : "Geçmiş değerlendirme"}
+                                </strong>
+                                <small>{formatCivilDate(evaluation.createdAt.slice(0, 10))}</small>
+                              </span>
+                              <div>
+                                <button
+                                  type="button"
+                                  aria-label={`${monthly.title} ${isLatest ? "son" : "geçmiş"} değerlendirmesinden Ek 18 PDF hazırla`}
+                                  disabled={ek18ExportBusy !== null}
+                                  onClick={() => void exportTeacherOwnedEk18(
+                                    monthly.id,
+                                    evaluation.id,
+                                    "pdf",
+                                  )}
+                                >
+                                  <DownloadIcon aria-hidden="true" />
+                                  {ek18ExportBusy === `${evaluation.id}:pdf`
+                                    ? "PDF hazırlanıyor…"
+                                    : "PDF"}
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`${monthly.title} ${isLatest ? "son" : "geçmiş"} değerlendirmesinden Ek 18 Word hazırla`}
+                                  disabled={ek18ExportBusy !== null}
+                                  onClick={() => void exportTeacherOwnedEk18(
+                                    monthly.id,
+                                    evaluation.id,
+                                    "word",
+                                  )}
+                                >
+                                  <FileTextIcon aria-hidden="true" />
+                                  {ek18ExportBusy === `${evaluation.id}:word`
+                                    ? "Word hazırlanıyor…"
+                                    : "Word"}
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ) : null}
                   {monthly.nextMonthDecisionContext ? (
                     <div
                       className={`teacher-owned-plan-carry is-${monthly.nextMonthDecisionContext.applicationStatus}`}
@@ -2189,6 +2317,21 @@ export function TeacherOwnedPlanScreen({
               <h2 id="teacher-plan-legacy-title">{source.annualPlan.teacherTitle}</h2>
               <p>{source.monthlyPlan.teacherTitle} · {source.weeks.length} hafta</p>
             </div>
+            {showProviderLibrary && onOpenProviderLibrary ? (
+              <button
+                type="button"
+                className="teacher-owned-plan-legacy-ek18"
+                onClick={() =>
+                  onOpenProviderLibrary(
+                    "monthly",
+                    sourceBuiltInPackReference ?? undefined,
+                  )
+                }
+              >
+                <FileTextIcon aria-hidden="true" />
+                Aylık değerlendirme ve Ek 18'i aç
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -2341,8 +2484,17 @@ export function TeacherOwnedPlanScreen({
         </section>
 
         {showProviderLibrary && onOpenProviderLibrary ? (
-          <button type="button" className="teacher-owned-plan-library" onClick={onOpenProviderLibrary}>
-            Hazır içerik ve sağlayıcı şablonlarına git <ChevronRightIcon aria-hidden="true" />
+          <button
+            type="button"
+            className="teacher-owned-plan-library"
+            onClick={() =>
+              onOpenProviderLibrary(
+                "overview",
+                sourceBuiltInPackReference ?? undefined,
+              )
+            }
+          >
+            Hazır Maarif içeriklerini aç <ChevronRightIcon aria-hidden="true" />
           </button>
         ) : null}
       </main>

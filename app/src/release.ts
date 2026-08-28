@@ -65,12 +65,17 @@ const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
   version: "0.20.0",
   releasedOn: "2026-08-28",
-  title: "Bütüncül TYMM grafiği ve kesintisiz gözlem akışı",
+  title: "Bütüncül TYMM, hızlı günlük akış ve erişilebilir belgeler",
   notes: Object.freeze([
+    "438579 ortak erişim anahtarıyla giriş yapan her kullanıcı; cihaz kotası, deneme veya ücretli üyelik kapısı olmadan uygulamanın bütün öğretmen işlevlerini kullanır.",
     "Resmî okul öncesi PDF'sinden üretilen sürümlü TYMM grafiği; 210 öğrenme çıktısını süreç, beceri ve program bileşenleriyle kaynak sayfası ve içerik özeti üzerinden bağlar.",
     "Grafik ve 357 etkinlik-yaş ile 30 yaş-ay inceleme kaydı, iki bağımsız okul öncesi uzmanı onaylayana kadar açıkça insan incelemesi bekliyor olarak kalır.",
     "Yeni resmî planlar seçilen bütüncül graf düğümlerini değişmez kompakt referansla plan, etkinlik, gözlem ve değerlendirme zincirinde korur.",
+    "Bugün ekranı sıradaki tek işi öne çıkarır; mevcut günlük plan varken ikinci plan oluşturmaz ve uygulanan etkinliği aynı plan ile gözlem zincirine bağlar.",
+    "Planlar ekranındaki hazır Maarif kütüphanesi dört Eylül haftasını, 12 etkinliği, plan belgelerini ve Ek 18 akışını doğrulanmış v3 kaynağından açar; eski v2 kayıtları kendi değişmez kaynağıyla okunur.",
     "Program bağlantısından sonra yarım bırakılan gözlem artık kaybolmaz; öğrenci profilinden değerlendirme adımına geri dönülür.",
+    "Plan, sınıf listesi, anekdot ve Ek 18 çıktıları ortak seçilebilir Türkçe metin ve semantik etiket altyapısıyla PDF üretir; PDF/UA ve fiziksel ekran okuyucu kabulü ayrıca beklemektedir.",
+    "Öğrenci kayıtlarının tamamı için yeni yerel şifreli kasa pilotu devrededir; bu güvenlik dilimi diğer yerel koleksiyonların tamamlandığı anlamına gelmez.",
     "Elle girilen program hedefleri resmî katalog hedefi gibi saklanamaz; plan günü kaynak tarihi güvenli biçimde otomatik eşitlenir ve uyarılar kararlı destek kodları taşır.",
   ]),
 });

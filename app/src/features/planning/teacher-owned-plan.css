@@ -174,6 +174,66 @@
   color: #245f55;
   font-weight: 750;
 }
+.teacher-owned-plan-ek18 {
+  padding: 0 10px 10px;
+  border: 1px solid #c9d8d3;
+  border-radius: 12px;
+  background: #f7faf9;
+}
+.teacher-owned-plan-ek18 > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: #245f55;
+  font-weight: 800;
+}
+.teacher-owned-plan-ek18 > p {
+  margin: 0 0 9px;
+  color: #566478;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.teacher-owned-plan-ek18 > div {
+  display: grid;
+  gap: 8px;
+}
+.teacher-owned-plan-ek18 article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid #dde6e3;
+  border-radius: 11px;
+  background: #fff;
+}
+.teacher-owned-plan-ek18 article > span,
+.teacher-owned-plan-ek18 article strong,
+.teacher-owned-plan-ek18 article small {
+  display: block;
+}
+.teacher-owned-plan-ek18 article > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.teacher-owned-plan-ek18 article button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid #b9cbc6;
+  border-radius: 10px;
+  background: #fff;
+  color: #245f55;
+  font-weight: 800;
+}
+.teacher-owned-plan-ek18 article button:disabled {
+  color: #7c8794;
+  opacity: .72;
+}
 .teacher-owned-plan-tree > article.is-focused { border-color: #2b8a7a; background: #f0f8f5; }
 .teacher-owned-plan-tree > article:focus { outline: 3px solid rgb(43 138 122 / 28%); outline-offset: 2px; }
 .teacher-owned-plan-tree > article[tabindex="-1"] { scroll-margin-top: 76px; }
@@ -187,6 +247,18 @@
   background: #fff;
   color: #245f55;
   font-weight: 750;
+}
+.teacher-owned-plan-legacy-ek18 {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #b9cbc6;
+  border-radius: 11px;
+  background: #fff;
+  color: #245f55;
+  font-weight: 800;
 }
 
 .teacher-owned-plan-weeks { display: grid; gap: 8px; margin-top: 10px; }
@@ -359,6 +431,7 @@
 
 @media (max-width: 390px) {
   .teacher-owned-plan-month-actions { grid-template-columns: 1fr; }
+  .teacher-owned-plan-ek18 article { grid-template-columns: 1fr; }
 }
 
 .teacher-owned-plan-carry {

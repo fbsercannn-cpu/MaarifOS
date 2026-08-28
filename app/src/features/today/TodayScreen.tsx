@@ -1133,11 +1133,11 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
             <StarIcon />
           </span>
           <span className="teacher-control-premium-copy">
-            <small>Premium · yıllık · aylık · haftalık · günlük</small>
-            <strong id="premium-entry-title">Plan Kütüphanesi</strong>
+            <small>Hazır Maarif planları · yıllık · aylık · haftalık · günlük</small>
+            <strong id="premium-entry-title">Hazır Maarif içerikleri</strong>
           </span>
           <button type="button" onClick={() => actions.onOpenPremiumPlans()}>
-            Planları aç <ChevronRightIcon aria-hidden="true" />
+            Hazır içerikleri aç <ChevronRightIcon aria-hidden="true" />
           </button>
         </section>
       ) : null}

@@ -187,4 +187,6 @@ test("istemci kaynağı kodu plaintext taşımaz ve erişim yüzeyi KeyboardInpu
   assert.match(screenSource, /<KeyboardInput/);
   assert.doesNotMatch(screenSource, /<input\b/);
   assert.match(screenSource, /setCode\(""\)[\s\S]*?grantLocalSharedAccess/);
+  assert.match(screenSource, /Bu kod ortak uygulama erişim anahtarıdır/u);
+  assert.doesNotMatch(screenSource, /pilot davet kapısı/u);
 });

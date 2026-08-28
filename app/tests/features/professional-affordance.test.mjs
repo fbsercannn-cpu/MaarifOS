@@ -79,6 +79,31 @@ test("Bugün ilk katı tek satırlı tarih ve gerçek kilit ikonları kullanır"
   assert.match(styles, /\.today-priority-card:disabled[\s\S]{0,240}opacity: 1/);
 });
 
+test("Bugün hazır Maarif kartı ortak erişimde ticari veya kilitli ürün dili taşımaz", () => {
+  const start = todaySource.indexOf(
+    "{configuredClassroom !== null && premiumPlanCenterEnabled ? (",
+  );
+  const end = todaySource.indexOf(
+    "{configuredClassroom !== null && planEvidenceDetailsEnabled",
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+  const readyContentCard = todaySource.slice(start, end);
+  const visibleStringLiterals = [...readyContentCard.matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/gu)]
+    .map((match) => match[1])
+    .filter((value) => !value.includes("teacher-control-") && value !== "premium-entry-title");
+
+  assert.match(readyContentCard, /Hazır Maarif planları · yıllık · aylık · haftalık · günlük/u);
+  assert.match(readyContentCard, /Hazır Maarif içerikleri/u);
+  assert.match(readyContentCard, /Hazır içerikleri aç/u);
+  for (const visibleText of visibleStringLiterals) {
+    assert.doesNotMatch(
+      visibleText,
+      /premium|demo|deneme|kurucu|satın alma|cihaz hakkı|lisans|kilit/iu,
+    );
+  }
+});
+
 test("hazırlık modunda dönem kartları sıradaki işi tekrarlamaz; etkin dönemde dört düzey kompakt kalır", () => {
   assert.match(
     todaySource,

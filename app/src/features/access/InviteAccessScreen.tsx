@@ -108,7 +108,8 @@ export function InviteAccessScreen({
             <ArrowRightIcon aria-hidden="true" />
           </button>
           <small id="maarifos-invite-note">
-            Bu kod pilot davet kapısıdır; öğretmen hesabı veya çocuk verisi kilidi değildir.
+            Bu kod ortak uygulama erişim anahtarıdır; öğretmen hesabı veya çocuk
+            verisi kilidi değildir.
           </small>
           <p
             id="maarifos-invite-error"

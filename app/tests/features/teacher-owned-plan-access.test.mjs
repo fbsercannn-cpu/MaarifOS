@@ -211,7 +211,7 @@ test("öğretmenin sıfırdan yazdığı plan grafiği sağlayıcı paketi olmad
   assert.doesNotMatch(text, /contentPack|entitlement|premiumAnnualPlan/);
 });
 
-test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı kütüphanesi ayrı kalır", async () => {
+test("temel öğretmen planı export'u entitlement istemez; hazır Maarif kütüphanesi ortak erişime bağlanır", async () => {
   const [documentSource, screenSource, prototypeSource, serviceSource] = await Promise.all([
     readFile(new URL("../../src/features/planning/teacher-owned-plan-document.ts", import.meta.url), "utf8"),
     readFile(new URL("../../src/features/planning/TeacherOwnedPlanScreen.tsx", import.meta.url), "utf8"),
@@ -224,6 +224,18 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.match(screenSource, /Planlarınız bu cihazda size aittir/);
   assert.match(screenSource, /onOpenProviderLibrary/);
   assert.match(screenSource, /showProviderLibrary && onOpenProviderLibrary/);
+  assert.match(screenSource, /Hazır Maarif içeriklerini aç/u);
+  assert.match(
+    screenSource,
+    /onOpenProviderLibrary\(\s*"monthly",\s*sourceBuiltInPackReference \?\? undefined,\s*\)/u,
+  );
+  assert.match(screenSource, /source\.contentPackSnapshot\.manifestDigest/u);
+  assert.match(screenSource, /setBusy\(true\);\s*setSource\(null\);/u);
+  assert.match(screenSource, /const exportReady =\s*!busy/u);
+  assert.match(screenSource, /Aylık değerlendirme ve Ek 18'i aç/u);
+  assert.match(screenSource, /loadBuiltInMaarifPlanPackForSnapshot/u);
+  assert.match(screenSource, /builtInPackReferenceFromInstalledPlan/u);
+  assert.doesNotMatch(screenSource, /loadPremiumPilotPreviewPack/u);
   assert.match(screenSource, /Yıl → ay → hafta planını oluştur/);
   assert.match(screenSource, /starter\.nextWeekTitle/);
   assert.match(screenSource, /starter\.nextMonthTitle/);
@@ -239,6 +251,12 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.match(screenSource, /Tek tıkla çıktı/);
   assert.match(screenSource, /Görsel PDF hazırla/);
   assert.match(screenSource, /Word hazırla/);
+  assert.match(screenSource, /generateTeacherOwnedMonthlyEvaluationExportFile/u);
+  assert.match(screenSource, /Ek 18 PDF ve Word çıktıları/u);
+  assert.match(screenSource, /Öğretmenin kendi planında resmî bileşen kanıtı yoksa/u);
+  assert.match(screenSource, /kind: "exact", evaluationId/u);
+  assert.match(screenSource, /Ek 18 PDF hazırla/u);
+  assert.match(screenSource, /Ek 18 Word hazırla/u);
   assert.doesNotMatch(screenSource, /documentApproved/);
   assert.doesNotMatch(screenSource, /Belgeyi önizle/);
   assert.match(screenSource, /teacher-owned-plan-week-coverage/);
@@ -271,6 +289,14 @@ test("temel öğretmen planı export'u premium entitlement istemez; sağlayıcı
   assert.match(prototypeSource, /appendTeacherOwnedPlanMonths/);
   assert.match(prototypeSource, /reviseTeacherOwnedPlan/);
   assert.match(prototypeSource, /reviewTeacherWeeklyCarry/);
+  assert.match(
+    prototypeSource,
+    /setPremiumPlanBuiltInReference\(builtInPackReference\)/u,
+  );
+  assert.match(
+    prototypeSource,
+    /sharedBuiltInPackReference=\{premiumPlanBuiltInReference\}/u,
+  );
   assert.match(
     prototypeSource,
     /allowPreparationForCivilDate: planToRevise\.periodStart/,

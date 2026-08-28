@@ -16,8 +16,14 @@ import {
   assertPremiumPackActionAccess,
   canPerformPremiumPackAction,
   createDevelopmentPreviewAccess,
+  createSharedBuiltInAccess,
   type VerifiedPremiumAccess,
 } from "../premium-access/entitlement.ts";
+import {
+  loadBuiltInMaarifPlanPack,
+  loadBuiltInMaarifPlanPackForSnapshot,
+  type BuiltInMaarifPlanPackReference,
+} from "./built-in-maarif-content.ts";
 import { loadPremiumPilotPreviewPack } from "./content-repository.ts";
 import type {
   PremiumContentPack,
@@ -178,12 +184,39 @@ export interface PremiumPlanCenterScreenProps {
   contentPack?: PremiumContentPack | null;
   internalStaffExportEnabled?: boolean;
   premiumAccess?: VerifiedPremiumAccess | null;
+  sharedBuiltInAccess?: boolean;
+  sharedBuiltInPackReference?: BuiltInMaarifPlanPackReference | null;
   valueEvidenceWritesDisabled?: boolean;
   initialSection?: "overview" | "weekly" | "monthly";
   onRecordsChanged?: () => void | Promise<void>;
   onClose: () => void;
   onOpenTeacherMonth: (monthKey: string) => void;
   onUseActivity: (selection: PremiumDailyTemplateSelection) => void;
+}
+
+interface SharedBuiltInPackLoaders {
+  loadCurrent(): Promise<PremiumContentPack>;
+  loadSnapshot(
+    reference: BuiltInMaarifPlanPackReference,
+  ): Promise<PremiumContentPack>;
+}
+
+const defaultSharedBuiltInPackLoaders: SharedBuiltInPackLoaders = {
+  loadCurrent: loadBuiltInMaarifPlanPack,
+  loadSnapshot: loadBuiltInMaarifPlanPackForSnapshot,
+};
+
+/**
+ * Kurulu eski bir plan kaydından gelindiyse onun exact snapshot kimliğini
+ * korur; doğrudan kütüphane girişinde ise güncel yerleşik sürümü açar.
+ */
+export function loadSharedBuiltInMaarifPlanPack(
+  reference: BuiltInMaarifPlanPackReference | null = null,
+  loaders: SharedBuiltInPackLoaders = defaultSharedBuiltInPackLoaders,
+): Promise<PremiumContentPack> {
+  return reference
+    ? loaders.loadSnapshot(reference)
+    : loaders.loadCurrent();
 }
 
 export function PremiumPlanCenterScreen({
@@ -193,6 +226,8 @@ export function PremiumPlanCenterScreen({
   contentPack = null,
   internalStaffExportEnabled = false,
   premiumAccess = null,
+  sharedBuiltInAccess = false,
+  sharedBuiltInPackReference = null,
   valueEvidenceWritesDisabled = false,
   initialSection = "overview",
   onRecordsChanged,
@@ -274,9 +309,11 @@ export function PremiumPlanCenterScreen({
 
   useEffect(() => {
     let active = true;
-    void (contentPack
-      ? Promise.resolve(contentPack)
-      : loadPremiumPilotPreviewPack())
+    void (sharedBuiltInAccess
+      ? loadSharedBuiltInMaarifPlanPack(sharedBuiltInPackReference)
+      : contentPack
+        ? Promise.resolve(contentPack)
+        : loadPremiumPilotPreviewPack())
       .then(async (loadedPack) => {
         const [installation, legacyPlans] = await Promise.all([
           loadInstalledPremiumPlan(store, loadedPack),
@@ -309,13 +346,19 @@ export function PremiumPlanCenterScreen({
       })
       .catch((reason: unknown) => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : "Premium paket açılamadı.");
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : sharedBuiltInAccess
+              ? "Hazır Maarif içeriği açılamadı."
+              : "Premium paket açılamadı.",
+        );
         setBusy(false);
       });
     return () => {
       active = false;
     };
-  }, [contentPack, store]);
+  }, [contentPack, sharedBuiltInAccess, sharedBuiltInPackReference, store]);
 
   useEffect(() => {
     if (!pack) return undefined;
@@ -374,6 +417,13 @@ export function PremiumPlanCenterScreen({
     return names.every((name): name is string => Boolean(name)) ? names : null;
   }, [monthlyReviewContext, monthlySelectedCoverage]);
   const effectivePremiumAccess = useMemo(() => {
+    if (sharedBuiltInAccess && pack) {
+      try {
+        return createSharedBuiltInAccess(pack);
+      } catch {
+        return null;
+      }
+    }
     if (premiumAccess) return premiumAccess;
     if (!pack || !internalStaffExportEnabled) return null;
     return createDevelopmentPreviewAccess({
@@ -384,7 +434,7 @@ export function PremiumPlanCenterScreen({
       manifestDigest: pack.manifestDigest,
       academicRelease: pack.academicRelease,
     });
-  }, [internalStaffExportEnabled, pack, premiumAccess]);
+  }, [internalStaffExportEnabled, pack, premiumAccess, sharedBuiltInAccess]);
   useEffect(() => {
     if (!effectivePremiumAccess) return undefined;
     const expiryMs = effectivePremiumAccess.decisionExpiresAtEpochSeconds * 1000;
@@ -406,14 +456,46 @@ export function PremiumPlanCenterScreen({
     canPerformPremiumPackAction(effectivePremiumAccess, pack, "export"),
   );
   const readOnlyPresentation = useMemo(
-    () =>
-      premiumPlanReadOnlyPresentation(
-        effectivePremiumAccess,
-        premiumContentAllowed,
-      ),
-    [effectivePremiumAccess, premiumContentAllowed],
+    () => sharedBuiltInAccess
+      ? premiumContentAllowed
+        ? {
+            mutationsBlocked: false,
+            canReadExistingTeacherPlans: true,
+            title: "Hazır Maarif içeriği kullanıma açık",
+            reason:
+              "Kaynak kimliği ve sürüm bütünlüğü doğrulandı; öğretmen seçimleri bu cihazda kaydedilebilir.",
+          }
+        : {
+            mutationsBlocked: true,
+            canReadExistingTeacherPlans: true,
+            title: "Hazır Maarif içeriği doğrulanamadı",
+            reason:
+              "Kaynak kimliği doğrulanana kadar yeni kayıt oluşturulmaz; mevcut öğretmen planları korunur.",
+          }
+      : premiumPlanReadOnlyPresentation(
+          effectivePremiumAccess,
+          premiumContentAllowed,
+        ),
+    [effectivePremiumAccess, premiumContentAllowed, sharedBuiltInAccess],
   );
   const accessPresentation = useMemo(() => {
+    if (sharedBuiltInAccess) {
+      return premiumContentAllowed
+        ? {
+            header: "ortak içerik",
+            title: "Hazır Maarif planları kullanıma açık",
+            detail:
+              "Doğrulanmış yıllık omurga, Eylül planı, oyun ve etkinlik taslakları bütün öğretmenlerin kullanımına açıktır.",
+            access: "Ortak erişimde açık",
+          }
+        : {
+            header: "kaynak doğrulaması",
+            title: "Hazır Maarif kaynağı doğrulanıyor",
+            detail:
+              "Kaynak kimliği doğrulanmadan içerik kurulmaz veya belge hazırlanmaz.",
+            access: "Doğrulama bekliyor",
+          };
+    }
     if (effectivePremiumAccess?.source === "development-preview") {
       return {
         header: "içerik erişimi",
@@ -464,7 +546,12 @@ export function PremiumPlanCenterScreen({
       detail: "İçeriği kullanmak için bu cihazda geçerli bir premium erişim gerekir.",
       access: "Kilitli",
     };
-  }, [effectivePremiumAccess, readOnlyPresentation]);
+  }, [
+    effectivePremiumAccess,
+    premiumContentAllowed,
+    readOnlyPresentation,
+    sharedBuiltInAccess,
+  ]);
 
   const install = async () => {
     if (!pack || busy) return;
@@ -576,7 +663,13 @@ export function PremiumPlanCenterScreen({
         }),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Premium etkinlik açılamadı.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : sharedBuiltInAccess
+            ? "Hazır Maarif etkinliği açılamadı."
+            : "Premium etkinlik açılamadı.",
+      );
     }
   };
 
@@ -933,10 +1026,15 @@ export function PremiumPlanCenterScreen({
           <ArrowLeftIcon aria-hidden="true" />
         </button>
         <div>
-          <span>MaarifOS Premium · {accessPresentation.header}</span>
-          <h1>Plan Kütüphanesi</h1>
+          <span>
+            {sharedBuiltInAccess ? "MaarifOS · " : "MaarifOS Premium · "}
+            {accessPresentation.header}
+          </span>
+          <h1>{sharedBuiltInAccess ? "Hazır Maarif planları" : "Plan Kütüphanesi"}</h1>
         </div>
-        <LockClosedIcon aria-hidden="true" />
+        {sharedBuiltInAccess
+          ? <ReaderIcon aria-hidden="true" />
+          : <LockClosedIcon aria-hidden="true" />}
       </header>
 
       <main className="premium-plan-scroll">
@@ -1041,7 +1139,11 @@ export function PremiumPlanCenterScreen({
               <section className="premium-legacy-plans" aria-labelledby="premium-legacy-title">
                 <div>
                   <span>Korunan eski planlar</span>
-                  <h2 id="premium-legacy-title">V2 kayıtları salt okunur ve legacy-unmapped</h2>
+                  <h2 id="premium-legacy-title">
+                    {sharedBuiltInAccess
+                      ? "V2 kayıtları salt okunur; sonradan değer eşlemesi yapılmaz"
+                      : "V2 kayıtları salt okunur ve legacy-unmapped"}
+                  </h2>
                   <p>Bu planlara sonradan değer eşlemesi eklenmez; kaynak snapshot&apos;ları aynen korunur.</p>
                 </div>
                 <ul>
@@ -1452,7 +1554,11 @@ export function PremiumPlanCenterScreen({
                         <div>
                           <span>Öğretmen değerlendirmesi</span>
                           <h4>{reviewContext.observations.length} bağlı ham gözlem</h4>
-                          <p>Yalnız bu haftanın premium günlük planlarından gelen değişmez gözlemler kullanılabilir.</p>
+                          <p>
+                            Yalnız bu haftanın {sharedBuiltInAccess
+                              ? "kurulu hazır içerik günlük planlarından"
+                              : "premium günlük planlarından"} gelen değişmez gözlemler kullanılabilir.
+                          </p>
                         </div>
                         {reviewContext.observations.length > 0 ? (
                           <div className="premium-review-observations" role="group" aria-label="Değerlendirmeye alınacak gözlemler">
@@ -2154,8 +2260,9 @@ export function PremiumPlanCenterScreen({
                 </div>
                 {!premiumExportAllowed ? (
                   <small>
-                    Ek 18 çıktısı doğrulanmış satın alma veya Kurucu Premium
-                    erişimi olmadan açılmaz; deneme erişiminde kapalıdır.
+                    {sharedBuiltInAccess
+                      ? "Ek 18 çıktısı yalnız doğrulanmış yerleşik kaynak ve kalıcı aylık değerlendirmeyle hazırlanır."
+                      : "Ek 18 çıktısı doğrulanmış satın alma veya Kurucu Premium erişimi olmadan açılmaz; deneme erişiminde kapalıdır."}
                   </small>
                 ) : null}
                 {monthlyExportMessage ? (
@@ -2191,8 +2298,14 @@ export function PremiumPlanCenterScreen({
                 </button>
               </div>
               {!installed ? <small>Çıktı için önce seçili paketi sınıfa ekleyin.</small> : null}
-              {!premiumExportAllowed ? <small>Belge çıktısı doğrulanmış satın alma veya Kurucu Premium yetkisi bağlanana kadar kapalıdır.</small> : null}
-              {effectivePremiumAccess?.grant.accessMode === "trial" ? (
+              {!premiumExportAllowed ? (
+                <small>
+                  {sharedBuiltInAccess
+                    ? "Belge çıktısı yalnız doğrulanmış yerleşik kaynakla hazırlanır."
+                    : "Belge çıktısı doğrulanmış satın alma veya Kurucu Premium yetkisi bağlanana kadar kapalıdır."}
+                </small>
+              ) : null}
+              {!sharedBuiltInAccess && effectivePremiumAccess?.grant.accessMode === "trial" ? (
                 <small>Deneme erişiminde görsel PDF ve düzenlenebilir Word çıktısı kapalıdır.</small>
               ) : null}
               {exportMessage ? <p className="premium-export-message" role="status">{exportMessage}</p> : null}

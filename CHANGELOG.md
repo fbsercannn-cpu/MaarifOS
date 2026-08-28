@@ -4,6 +4,66 @@ Bu projedeki önemli değişiklikler bu dosyada tutulur. Biçim, Keep a Changelo
 ilkelerine; sürümler SemVer 2.0.0'a dayanır. MaarifOS uygulaması ile ayrı dağıtılan
 private lisans Worker'ı bağımsız sürümlenir.
 
+## [0.20.0] - 2026-08-28
+
+### Eklendi
+
+- Resmî okul öncesi program PDF'sinin exact SHA-256 kaynağına bağlı bütüncül
+  TYMM grafiği eklendi. Öğrenme çıktısı, süreç, beceri ve programlar arası
+  bileşen referansları plan → etkinlik → gözlem → değerlendirme zincirinde
+  değişmez kimlikle korunur; insan uzman onayı bekleyen eşlemeler resmî kabul
+  gibi gösterilmez.
+- `438579` ortak erişim anahtarını doğrulayan bütün tarayıcı ve telefon
+  profillerine aynı öğretmen işlevleri açıldı. Ücretli üyelik, deneme, kurucu
+  veya cihaz kotası ortak kullanıcı akışından çıkarıldı.
+- `60–72 ay` için Eylül v3 hazır planı; exact içerik, manifest ve değer kaynağı
+  zinciriyle yerleşik Maarif kütüphanesine eklendi. Eski v2 kayıtlar yalnız
+  kendi exact snapshot'ıyla açılır. `36–48` ve `48–60` ay için yayımlanmamış
+  tam paket uydurulmaz; ana eylem yaşa uygun etkinlik bankasına gider.
+- Öğretmenin kendi aylık değerlendirmesinden son veya exact geçmiş kayıtla
+  Ek 18 PDF/DOCX üretimi eklendi. Doğrulanmış resmî plan bileşeni yoksa çizelge
+  boş ve `verified-no-components` kalır; öğretmen metninden işaret türetilmez.
+  Değerlendirme exact plan revizyonuna bağlanır; ilişkili plan, etkinlik,
+  gözlem veya program bağı sonradan değişmişse eski kayıttan resmî çıktı
+  fail-closed kapanır. Kaynak revizyonu ve kanıt değişim politikası DOCX
+  manifestine yazılır.
+
+### Değiştirildi
+
+- Bugün ekranı sıradaki tek işi öne çıkaracak, mevcut günlük plan varken ikinci
+  plan oluşturmayacak ve etkinlikten gözleme aynı kaynak kimliğiyle ilerleyecek
+  biçimde sadeleştirildi.
+- Plan, sınıf listesi, anekdot ve Ek 18 PDF'leri ortak semantik belge motoruna
+  taşındı: seçilebilir Türkçe metin, gömülü CID font/`ToUnicode`, `tr-TR`,
+  başlık, liste, tablo, şekil ve okuma sırası etiketleri üretir. PDF/UA ve
+  fiziksel yardımcı teknoloji kabulü ayrı kapı olarak açık kalır.
+- Kayıtlı sağlayıcı planı dışa aktarımı geliştirme ortamı fallback'i yerine
+  exact yerleşik v2/v3 resolver kullanır. Planlar ve kayıtlı öğretmen planı
+  uygun yaş bandında hazır kütüphaneye doğrudan bağlanır; eski v2 kaydındaki
+  Ek 18 geçişi aynı snapshot referansını merkeze taşıdığı için v3'e sıçramaz.
+
+### Güvenlik
+
+- Öğrenci koleksiyonunun bütün kanonik kayıt gövdesi AES-256-GCM v2 zarfına;
+  kalıcı nonce/nesil ledger'ı, uzunluk çerçeveli AAD, migration journal/fence,
+  replay/tombstone ve iki aşamalı kriptografik silme ile taşındı.
+- Eski açık veri göçü tam öğrenci profili doğrulamalı ve idempotent kılındı.
+  Anahtar kaybı kurtarma ekranı çözülmüş yedek payload'ını veya parolayı React
+  state'inde tutmaz; restore anında şifreli kaynak ve makbuz yeniden doğrulanır.
+- Bu güvenlik dilimi yalnız öğrenci koleksiyonunu kapsar. Diğer yerel
+  koleksiyonlar, OS keystore, aynı-origin XSS, fiziksel secure-wipe ve bağımsız
+  kriptografi kabulü tamamlanmadığı için gerçek çocuk verili pilot `NO-GO`dur.
+
+### Doğrulama
+
+- Ortak erişim, exact v2/v3 kaynak, sağlayıcı export'u ve görünür ticari dil
+  negatifleri; öğretmene ait Ek 18 tamper/kanıt zinciri; üç yaş bandında ölü CTA
+  bulunmaması, TypeScript, politika lint'i ve 36 dosyalık runtime bütünlüğü
+  odak testlerinde geçti.
+- Otomatik mühendislik kanıtı bütünsel pedagojik veya fiziksel kabul değildir:
+  774 çift-uzman eşleme onayı, PDF/UA + VoiceOver/TalkBack, gerçek iOS/Android
+  yazdırma/paylaşma ve Emine Öğretmen saha pilotu açık kalır.
+
 ## [0.19.0] - 2026-08-27
 
 ### Eklendi

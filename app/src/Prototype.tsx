@@ -218,6 +218,7 @@ import {
   type TeacherOwnedDailyFlowCopySource,
 } from "./features/planning/scheduled-plan-workspace.ts";
 import type { PremiumDailyTemplateSelection } from "./features/premium-plans/domain.ts";
+import type { BuiltInMaarifPlanPackReference } from "./features/premium-plans/built-in-maarif-content.ts";
 import type {
   PremiumFounderActivationErrorPresentation,
   PremiumFounderAccessResult,
@@ -3258,6 +3259,8 @@ export default function Prototype() {
   const [premiumPlanOpen, setPremiumPlanOpen] = useState(false);
   const [premiumPlanInitialSection, setPremiumPlanInitialSection] =
     useState<"overview" | "weekly" | "monthly">("overview");
+  const [premiumPlanBuiltInReference, setPremiumPlanBuiltInReference] =
+    useState<BuiltInMaarifPlanPackReference | null>(null);
   const [premiumGateOpen, setPremiumGateOpen] = useState(false);
   const [premiumGateMounted, setPremiumGateMounted] = useState(false);
   const [premiumFounderAccess, setPremiumFounderAccess] =
@@ -7267,20 +7270,41 @@ export default function Prototype() {
     setPlanFlowOpen(true);
   };
 
-  const premiumPlanEntryEnabled = false;
+  const premiumPlanEntryEnabled = true;
 
   const openPremiumPlans = (
     initialSection: "overview" | "weekly" | "monthly" = "overview",
+    builtInPackReference: BuiltInMaarifPlanPackReference | null = null,
   ) => {
-    if (!premiumLegacyRequested) {
-      setPremiumGateOpen(false);
-      setPremiumPlanOpen(false);
-      navigate("plans");
-      setAnnouncement("Maarif Modeli planları açıldı.");
-      return;
-    }
     setTeacherPlanRecordsOpen(false);
     setPremiumPlanInitialSection(initialSection);
+    setPremiumPlanBuiltInReference(builtInPackReference);
+    if (!premiumLegacyRequested) {
+      if (!configuredClassroom?.curriculumProfile) {
+        setClassroomOpen(true);
+        setAnnouncement(
+          "Hazır Maarif içerikleri için önce sınıf program profilini tamamlayın.",
+        );
+        return;
+      }
+      if (currentClassTymmAgeBand !== "60-72") {
+        navigate("plans");
+        setAnnouncement(
+          currentClassTymmAgeBand
+            ? `${currentClassTymmAgeBand.replace("-", "–")} ay için öğretmen planı ve yaşa uygun etkinlik bankası açık; hazır tam plan paketi yalnız 60–72 ay için yayımlandı.`
+            : "Hazır içerik için önce sınıfın resmî yaş bandını seçin.",
+        );
+        return;
+      }
+      setProfileOpen(false);
+      setPlansOpen(false);
+      setSelectedPlanDayWorkspace(null);
+      setPremiumGateOpen(false);
+      surfaceTransitionRef.current = "premium-plans";
+      setPremiumPlanOpen(true);
+      setAnnouncement("Hazır Maarif planları açıldı.");
+      return;
+    }
     const verifiedAccess = premiumFounderAccess?.access;
     const canUsePremiumPlans =
       verifiedAccess?.status === "active" &&
@@ -9377,6 +9401,7 @@ export default function Prototype() {
                     setAnnouncement("Çıktılar.");
                   }}
                   onOpenActivityStudio={openCaptureEntry}
+                  onOpenBuiltInMaarifLibrary={() => openPremiumPlans("overview")}
                   onOpenAgeBandSetup={() => {
                     setClassroomSetupSection("period");
                     setClassroomOpen(true);
@@ -9562,7 +9587,8 @@ export default function Prototype() {
                 updateVersion: displayedUpdateVersion,
                 pendingObservationCount: evidenceWorkspace.pendingObservations.length,
                 planEvidenceDetailsEnabled: isCapabilityEnabled("planEvidenceDetails"),
-                premiumPlanCenterEnabled: premiumPlanEntryEnabled,
+                premiumPlanCenterEnabled:
+                  premiumPlanEntryEnabled && currentClassTymmAgeBand === "60-72",
                 teacherCycle: {
                   ...teacherWorkCycle,
                   documents: {
@@ -13572,6 +13598,19 @@ export default function Prototype() {
                   ageGroup: configuredClassroom?.ageGroup,
                   curriculumProgram: CURRICULUM_PROGRAM_LABELS.tymm,
                 }}
+                showProviderLibrary={
+                  premiumPlanEntryEnabled && currentClassTymmAgeBand === "60-72"
+                }
+                onOpenProviderLibrary={(
+                  initialSection = "overview",
+                  builtInPackReference,
+                ) => {
+                  setTeacherPlanRecordsOpen(false);
+                  openPremiumPlans(
+                    initialSection,
+                    builtInPackReference ?? null,
+                  );
+                }}
                 onClose={() => setTeacherPlanRecordsOpen(false)}
                 onViewDailyPlan={(plan) => {
                   setTeacherPlanRecordsOpen(false);
@@ -13818,22 +13857,24 @@ export default function Prototype() {
         </Dialog.Root>
       ) : null}
 
-      {premiumLegacyRequested &&
-      premiumPlanOpen &&
+      {premiumPlanOpen &&
       premiumPlanEntryEnabled &&
       configuredClassroom?.curriculumProfile ? (
         <Dialog.Root
           open
           onOpenChange={(open) => {
-            if (!open) setPremiumPlanOpen(false);
+            if (!open) {
+              setPremiumPlanOpen(false);
+              setPremiumPlanBuiltInReference(null);
+            }
           }}
         >
           <Dialog.Overlay className="d1-flow-overlay" />
           <Dialog.Content className="d1-flow-layer" key="premium-plan-center">
             <Dialog.Title className="sr-only">Plan Kütüphanesi</Dialog.Title>
             <Dialog.Description className="sr-only">
-              Yıllık, aylık, haftalık ve günlük premium planlar; pedagojik yaklaşım,
-              değerlendirme ve belge çıktıları.
+              Yıllık, aylık, haftalık ve günlük hazır Maarif planları; pedagojik
+              yaklaşım, değerlendirme ve belge çıktıları.
             </Dialog.Description>
             <Suspense fallback={<div className="premium-loading">Plan Kütüphanesi açılıyor…</div>}>
               <PremiumPlanCenterScreen
@@ -13843,6 +13884,8 @@ export default function Prototype() {
                 contentPack={premiumFounderAccess?.pack ?? null}
                 internalStaffExportEnabled={internalStaffExportEnabled}
                 premiumAccess={premiumFounderAccess?.access ?? null}
+                sharedBuiltInAccess={!premiumLegacyRequested}
+                sharedBuiltInPackReference={premiumPlanBuiltInReference}
                 valueEvidenceWritesDisabled={
                   writesBlocked || educationalWritesDisabled
                 }
@@ -13854,7 +13897,10 @@ export default function Prototype() {
                     );
                   });
                 }}
-                onClose={() => setPremiumPlanOpen(false)}
+                onClose={() => {
+                  setPremiumPlanOpen(false);
+                  setPremiumPlanBuiltInReference(null);
+                }}
                 onOpenTeacherMonth={(monthKey) => {
                   setPremiumPlanOpen(false);
                   openTeacherPlanRecords("monthly", monthKey);

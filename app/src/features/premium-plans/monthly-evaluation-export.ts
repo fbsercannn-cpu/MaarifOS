@@ -40,6 +40,12 @@ export interface MonthlyEvaluationExportManifest {
   generatedAt: string;
   monthlyPlanId: string;
   monthlyEvaluationId: string;
+  /** Öğretmen planı çıktılarında değerlendirmeyi exact plan revizyonuna bağlar. */
+  sourcePlanRevisionNumber?: number;
+  /** Seçili kanıt zincirinin değerlendirmeden önceki son değişim zamanı. */
+  evidenceLastModifiedAt?: string;
+  /** Kanıt değerlendirmeden sonra değişirse dışa aktarımın davranışı. */
+  evidenceMutationPolicy?: "fail-closed-after-evaluation";
   observationIds: readonly string[];
   curriculumLinkIds: readonly string[];
   mappedOfficialRowIds: readonly string[];
@@ -1289,7 +1295,10 @@ function customManifestXml(manifest: MonthlyEvaluationExportManifest): string {
     name: string,
     components: readonly { referenceCode: string; referenceTitle: string }[],
   ) => `<maarifos:${name}>${components.map((component) => `<maarifos:component><maarifos:referenceCode>${xmlEscape(component.referenceCode)}</maarifos:referenceCode><maarifos:referenceTitle>${xmlEscape(component.referenceTitle)}</maarifos:referenceTitle></maarifos:component>`).join("")}</maarifos:${name}>`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><maarifos:monthlyEvaluationExportManifest xmlns:maarifos="https://maarifos.local/schema/monthly-evaluation-export/2"><maarifos:schemaVersion>2</maarifos:schemaVersion><maarifos:documentType>${manifest.documentType}</maarifos:documentType><maarifos:renderingMode>${manifest.renderingMode}</maarifos:renderingMode><maarifos:officialSourceFormPageCount>${manifest.officialSourceFormPageCount}</maarifos:officialSourceFormPageCount><maarifos:outputPagination>${manifest.outputPagination}</maarifos:outputPagination><maarifos:generatedAt>${xmlEscape(manifest.generatedAt)}</maarifos:generatedAt><maarifos:monthlyPlanId>${xmlEscape(manifest.monthlyPlanId)}</maarifos:monthlyPlanId><maarifos:monthlyEvaluationId>${xmlEscape(manifest.monthlyEvaluationId)}</maarifos:monthlyEvaluationId>${idElements("observationIds", manifest.observationIds)}${idElements("curriculumLinkIds", manifest.curriculumLinkIds)}<maarifos:programComponentEvidenceStatus>${manifest.programComponentEvidenceStatus}</maarifos:programComponentEvidenceStatus>${programComponents("persistedProgramComponents", manifest.persistedProgramComponents)}<maarifos:mappedOfficialRowIds>${manifest.mappedOfficialRowIds.map((id) => `<maarifos:id>${xmlEscape(id)}</maarifos:id>`).join("")}</maarifos:mappedOfficialRowIds>${programComponents("unmappedPlanComponents", manifest.unmappedPlanComponents)}<maarifos:officialSource authority="${xmlEscape(manifest.officialSource.authority)}" version="${manifest.officialSource.version}" evaluationPages="${manifest.officialSource.evaluationPages}" annexPages="${manifest.officialSource.annexPages}">${xmlEscape(manifest.officialSource.annex)}</maarifos:officialSource></maarifos:monthlyEvaluationExportManifest>`;
+  const teacherOwnedIntegrity = manifest.sourcePlanRevisionNumber === undefined
+    ? ""
+    : `<maarifos:sourcePlanRevisionNumber>${manifest.sourcePlanRevisionNumber}</maarifos:sourcePlanRevisionNumber><maarifos:evidenceLastModifiedAt>${xmlEscape(manifest.evidenceLastModifiedAt ?? "")}</maarifos:evidenceLastModifiedAt><maarifos:evidenceMutationPolicy>${manifest.evidenceMutationPolicy ?? "fail-closed-after-evaluation"}</maarifos:evidenceMutationPolicy>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><maarifos:monthlyEvaluationExportManifest xmlns:maarifos="https://maarifos.local/schema/monthly-evaluation-export/2"><maarifos:schemaVersion>2</maarifos:schemaVersion><maarifos:documentType>${manifest.documentType}</maarifos:documentType><maarifos:renderingMode>${manifest.renderingMode}</maarifos:renderingMode><maarifos:officialSourceFormPageCount>${manifest.officialSourceFormPageCount}</maarifos:officialSourceFormPageCount><maarifos:outputPagination>${manifest.outputPagination}</maarifos:outputPagination><maarifos:generatedAt>${xmlEscape(manifest.generatedAt)}</maarifos:generatedAt><maarifos:monthlyPlanId>${xmlEscape(manifest.monthlyPlanId)}</maarifos:monthlyPlanId><maarifos:monthlyEvaluationId>${xmlEscape(manifest.monthlyEvaluationId)}</maarifos:monthlyEvaluationId>${teacherOwnedIntegrity}${idElements("observationIds", manifest.observationIds)}${idElements("curriculumLinkIds", manifest.curriculumLinkIds)}<maarifos:programComponentEvidenceStatus>${manifest.programComponentEvidenceStatus}</maarifos:programComponentEvidenceStatus>${programComponents("persistedProgramComponents", manifest.persistedProgramComponents)}<maarifos:mappedOfficialRowIds>${manifest.mappedOfficialRowIds.map((id) => `<maarifos:id>${xmlEscape(id)}</maarifos:id>`).join("")}</maarifos:mappedOfficialRowIds>${programComponents("unmappedPlanComponents", manifest.unmappedPlanComponents)}<maarifos:officialSource authority="${xmlEscape(manifest.officialSource.authority)}" version="${manifest.officialSource.version}" evaluationPages="${manifest.officialSource.evaluationPages}" annexPages="${manifest.officialSource.annexPages}">${xmlEscape(manifest.officialSource.annex)}</maarifos:officialSource></maarifos:monthlyEvaluationExportManifest>`;
 }
 
 export function createMonthlyEvaluationDocx(
@@ -1899,6 +1908,24 @@ export async function createMonthlyEvaluationPdf(
           value: String(document.manifest.officialSourceFormPageCount),
         },
         { key: "output-pagination", value: document.manifest.outputPagination },
+        ...(document.manifest.sourcePlanRevisionNumber === undefined
+          ? []
+          : [
+              {
+                key: "source-plan-revision-number",
+                value: String(document.manifest.sourcePlanRevisionNumber),
+              },
+              {
+                key: "evidence-last-modified-at",
+                value: document.manifest.evidenceLastModifiedAt ?? "",
+              },
+              {
+                key: "evidence-mutation-policy",
+                value:
+                  document.manifest.evidenceMutationPolicy ??
+                  "fail-closed-after-evaluation",
+              },
+            ]),
       ],
       nodes,
     },

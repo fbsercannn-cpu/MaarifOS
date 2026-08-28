@@ -232,7 +232,7 @@ test("eski EÇE sınıfı aynı dönemde arşivlenerek yeni TYMM kapsamına taş
   assert.match(prototypeSource, /<details className="classroom-calendar-details">/u);
 });
 
-test("Emine ana akışı ortak davet erişimini kullanır ve geçmiş ücretli yüzeyi açmaz", () => {
+test("Emine ana akışı ortak kodla hazır Maarif içeriklerini kapısız açar", () => {
   assert.match(
     prototypeSource,
     /import\("\.\/features\/access\/InviteAccessScreen\.tsx"\)/u,
@@ -252,9 +252,27 @@ test("Emine ana akışı ortak davet erişimini kullanır ve geçmiş ücretli y
   assert.match(prototypeSource, /onAccessGranted=\{\(\) => setSharedInviteGranted\(true\)\}/u);
   assert.match(prototypeSource, /\{premiumLegacyRequested \? \(/u);
   assert.doesNotMatch(todaySource, /onOpenPremiumPlans/u);
-  assert.doesNotMatch(plansSource, /onOpenPlanLibrary/u);
+  assert.match(plansSource, /onOpenBuiltInMaarifLibrary/u);
+  assert.match(plansSource, /built-in-maarif-library-entry/u);
+  assert.match(plansSource, /const builtInMaarifPlanEligible = ageBand === "60-72"/u);
+  assert.match(plansSource, /Kaynak bütünlüğü doğrulanmış içerikler/u);
+  assert.match(plansSource, /Hazır tam plan paketi yalnız 60–72 ay için yayımlandı/u);
+  assert.match(plansSource, /\? onOpenAgeBandSetup[\s\S]{0,120}\? onOpenBuiltInMaarifLibrary[\s\S]{0,120}onOpenActivityStudio/u);
+  assert.match(prototypeSource, /onOpenBuiltInMaarifLibrary=\{\(\) => openPremiumPlans\("overview"\)\}/u);
+  assert.match(prototypeSource, /showProviderLibrary=\{\s*premiumPlanEntryEnabled && currentClassTymmAgeBand === "60-72"/u);
+  assert.match(
+    prototypeSource,
+    /onOpenProviderLibrary=\{\(\s*initialSection = "overview",\s*builtInPackReference,\s*\) =>/u,
+  );
+  assert.match(
+    prototypeSource,
+    /openPremiumPlans\(\s*initialSection,\s*builtInPackReference \?\? null,\s*\)/u,
+  );
+  assert.match(prototypeSource, /sharedBuiltInAccess=\{!premiumLegacyRequested\}/u);
+  assert.match(prototypeSource, /const premiumPlanEntryEnabled = true;/u);
+  assert.match(prototypeSource, /if \(currentClassTymmAgeBand !== "60-72"\)/u);
   assert.doesNotMatch(
     prototypeSource,
-    /onOpenProviderLibrary=|showProviderLibrary=/u,
+    /Yıllık, aylık, haftalık ve günlük premium planlar/u,
   );
 });

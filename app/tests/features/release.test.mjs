@@ -41,7 +41,7 @@ test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata ta�
   assert.equal(CURRENT_RELEASE.releasedOn, "2026-08-28");
   assert.equal(
     CURRENT_RELEASE.title,
-    "Bütüncül TYMM grafiği ve kesintisiz gözlem akışı",
+    "Bütüncül TYMM, hızlı günlük akış ve erişilebilir belgeler",
   );
   assert.ok(CURRENT_RELEASE.notes.length >= 4);
   assert.ok(CURRENT_RELEASE.notes.every((note) => note.trim().length >= 20));

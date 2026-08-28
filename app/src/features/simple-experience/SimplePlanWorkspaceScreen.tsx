@@ -47,6 +47,7 @@ export interface SimplePlanWorkspaceScreenProps
   ageBand: ActivityStudioAgeBand | null;
   civilDate: string;
   onOpenActivityStudio(options?: ActivityStudioOpenOptions): void;
+  onOpenBuiltInMaarifLibrary(): void;
   onOpenAgeBandSetup(): void;
 }
 
@@ -110,6 +111,7 @@ export function SimplePlanWorkspaceScreen({
   onOpenCalendar,
   onOpenDocuments,
   onOpenActivityStudio,
+  onOpenBuiltInMaarifLibrary,
   onOpenAgeBandSetup,
   ageBand,
   civilDate,
@@ -129,6 +131,7 @@ export function SimplePlanWorkspaceScreen({
   const coverageMatrix = ageBand
     ? createPedagogicalCoverageMatrix(ageBand)
     : [];
+  const builtInMaarifPlanEligible = ageBand === "60-72";
   const openLevel = (levelId: (typeof presentation.levels)[number]["id"]) => {
     if (levelId === "daily" && !ageBand) {
       onOpenAgeBandSetup();
@@ -173,6 +176,39 @@ export function SimplePlanWorkspaceScreen({
           <span>{presentation.linkedLevelCount}/4 kayıtlı</span>
         </div>
         <div className="simple-action-list">
+          <button
+            type="button"
+            data-testid="built-in-maarif-library-entry"
+            onClick={!ageBand
+              ? onOpenAgeBandSetup
+              : builtInMaarifPlanEligible
+                ? onOpenBuiltInMaarifLibrary
+                : () => onOpenActivityStudio()}
+            disabled={dataBusy}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true"><ReaderIcon /></span>
+            <span>
+              <small>{builtInMaarifPlanEligible
+                ? "60–72 AY · HAZIR MAARİF İÇERİĞİ"
+                : ageBand
+                  ? `${ageBand.replace("-", "–")} AY · YAŞA UYGUN ETKİNLİKLER`
+                  : "YAŞ BANDI GEREKLİ"}</small>
+              <strong>{builtInMaarifPlanEligible
+                ? "Kaynak bütünlüğü doğrulanmış içerikler"
+                : ageBand
+                  ? "Bu yaş bandının etkinlik bankasını aç"
+                  : "Önce sınıfın resmî yaş bandını seç"}</strong>
+              <em>{builtInMaarifPlanEligible
+                ? "Eylül için dört hafta ve 12 etkinliği inceleyip planınıza ekleyin."
+                : ageBand
+                  ? "Hazır tam plan paketi yalnız 60–72 ay için yayımlandı; bu yaş bandında öğretmen planı ve çevrimdışı etkinlikler açıktır."
+                  : "Yanlış yaşa ait plan veya etkinlik gösterilmez."}</em>
+            </span>
+            <span className={`simple-state ${ageBand ? "is-ready" : ""}`.trim()}>
+              {ageBand ? "Aç" : "Tamamla"}
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
           {presentation.levels.map((level) => {
             const copy = PLAN_COPY[level.id];
             const Icon = copy.icon;

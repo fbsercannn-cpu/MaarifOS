@@ -96,3 +96,48 @@ test("erişim kapanınca düzenleme kontrolleri fail-closed olurken kurulu plan 
     "premium ekran içindeki değer kanıtı yazım editörü erişim kapanınca unmount edilmeli",
   );
 });
+
+test("ortak built-in mod exact kaynak erişimini kullanır ve görünür kopyası ticari dil taşımaz", () => {
+  assert.match(screenSource, /sharedBuiltInAccess\?: boolean/u);
+  assert.match(screenSource, /createSharedBuiltInAccess\(pack\)/u);
+  assert.match(
+    screenSource,
+    /sharedBuiltInAccess\s*\? loadSharedBuiltInMaarifPlanPack\(sharedBuiltInPackReference\)/u,
+  );
+  assert.match(
+    screenSource,
+    /reference\s*\? loaders\.loadSnapshot\(reference\)\s*:\s*loaders\.loadCurrent\(\)/u,
+  );
+  assert.match(
+    screenSource,
+    /sharedBuiltInAccess \? "MaarifOS · " : "MaarifOS Premium · "/u,
+  );
+  assert.match(
+    screenSource,
+    /sharedBuiltInAccess[\s\S]{0,120}<ReaderIcon aria-hidden="true" \/>[\s\S]{0,120}<LockClosedIcon/u,
+  );
+  assert.match(
+    screenSource,
+    /!sharedBuiltInAccess && effectivePremiumAccess\?\.grant\.accessMode === "trial"/u,
+  );
+
+  const sharedPresentation = sourceBetween(
+    "if (sharedBuiltInAccess) {",
+    'if (effectivePremiumAccess?.source === "development-preview")',
+  );
+  const visibleStringLiterals = [...sharedPresentation.matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/gu)]
+    .map((match) => match[1]);
+  assert.ok(visibleStringLiterals.length >= 8);
+  for (const visibleText of visibleStringLiterals) {
+    assert.doesNotMatch(
+      visibleText,
+      /premium|demo|deneme|kurucu|satın alma|cihaz hakkı|lisans|kilit/iu,
+    );
+  }
+  assert.match(sharedPresentation, /Hazır Maarif planları kullanıma açık/u);
+  assert.match(sharedPresentation, /Ortak erişimde açık/u);
+  assert.match(
+    screenSource,
+    /Makine doğrulaması tamamlandı; erken çocukluk[\s\S]{0,220}insan uzman incelemeleri bekliyor/u,
+  );
+});
