@@ -49,6 +49,7 @@ import {
   activityStudioDrawingPadMode,
   type ActivityDrawingPadEvidence,
 } from "./drawing-pad-model.ts";
+import type { ActivityStudioApplicationIdentity } from "./activity-studio-application.ts";
 import {
   PARTICIPATION_ROUTES,
   PEDAGOGICAL_SCENARIOS,
@@ -60,6 +61,10 @@ import { KeyboardInput } from "../../mobile";
 import "./activity-studio.css";
 
 type ControllerResult = void | Promise<void>;
+type ApplicationControllerResult =
+  | ActivityStudioApplicationIdentity
+  | void
+  | Promise<ActivityStudioApplicationIdentity | void>;
 
 export interface ActivityStudioContext {
   readonly ageBand: ActivityStudioAgeBand;
@@ -83,6 +88,7 @@ export interface ActivityStudioChildChoiceRequest
 export interface ActivityStudioObservationRequest
   extends ActivityStudioContext {
   readonly activity: ActivityStudioItem;
+  readonly application: ActivityStudioApplicationIdentity | null;
   readonly session: ActivityStudioChildSession;
   readonly choice: ActivityStudioChildChoice | null;
   readonly drawingEvidence: ActivityDrawingPadEvidence | null;
@@ -100,7 +106,7 @@ export interface ActivityStudioProps {
   onApply(
     activity: ActivityStudioItem,
     context: ActivityStudioContext,
-  ): ControllerResult;
+  ): ApplicationControllerResult;
   onPrint(request: ActivityStudioPrintRequest): ControllerResult;
   onChildChoice?(request: ActivityStudioChildChoiceRequest): ControllerResult;
   onWriteObservation?(request: ActivityStudioObservationRequest): ControllerResult;
@@ -158,6 +164,8 @@ export function ActivityStudio({
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [drawingEvidence, setDrawingEvidence] =
     useState<ActivityDrawingPadEvidence | null>(null);
+  const [activeApplication, setActiveApplication] =
+    useState<ActivityStudioApplicationIdentity | null>(null);
   const [observationReturnActivityId, setObservationReturnActivityId] =
     useState<string | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
@@ -264,7 +272,8 @@ export function ActivityStudio({
           printable: renderActivityStudioPrintable(activity, ageBand),
         });
       } else {
-        await onApply(activity, context);
+        const application = await onApply(activity, context);
+        setActiveApplication(application ?? null);
         setSelectedChoiceId(null);
         setDrawingEvidence(null);
         setChildActivityId(activity.id);
@@ -308,6 +317,7 @@ export function ActivityStudio({
           null;
         await onWriteObservation?.({
           activity: childActivity,
+          application: activeApplication,
           session: childSession,
           choice: selectedChoice,
           drawingEvidence,
@@ -320,6 +330,7 @@ export function ActivityStudio({
       setChildActivityId(null);
       setSelectedChoiceId(null);
       setDrawingEvidence(null);
+      setActiveApplication(null);
     } catch (error) {
       setErrorMessage(messageFromError(error));
     } finally {

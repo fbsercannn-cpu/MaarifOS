@@ -129,6 +129,13 @@ export function SimplePlanWorkspaceScreen({
   const coverageMatrix = ageBand
     ? createPedagogicalCoverageMatrix(ageBand)
     : [];
+  const openLevel = (levelId: (typeof presentation.levels)[number]["id"]) => {
+    if (levelId === "daily" && !ageBand) {
+      onOpenAgeBandSetup();
+      return;
+    }
+    onOpenLevel(levelId);
+  };
 
   return (
     <main className="simple-workspace" aria-labelledby="simple-plans-title">
@@ -137,6 +144,25 @@ export function SimplePlanWorkspaceScreen({
         <h1 id="simple-plans-title" data-route-heading tabIndex={-1}>Planlar</h1>
         <p>Plan türünü seçin; kaydedin veya tek dokunuşla çıktı alın.</p>
       </header>
+
+      <section
+        className="simple-workspace__priority"
+        aria-labelledby="simple-plan-priority-title"
+      >
+        <span>{presentation.priority.eyebrow}</span>
+        <h2 id="simple-plan-priority-title">{presentation.priority.title}</h2>
+        <p>{presentation.priority.detail}</p>
+        <button
+          type="button"
+          onClick={() => openLevel(presentation.priority.levelId)}
+          disabled={dataBusy}
+        >
+          {presentation.priority.levelId === "daily" && !ageBand
+            ? "Yaş bandını tamamla"
+            : presentation.priority.actionLabel}
+          <ChevronRightIcon aria-hidden="true" />
+        </button>
+      </section>
 
       <section className="simple-workspace__section" aria-labelledby="simple-plan-types">
         <div className="simple-workspace__heading">
@@ -154,9 +180,7 @@ export function SimplePlanWorkspaceScreen({
               <button
                 type="button"
                 key={level.id}
-                onClick={level.id === "daily" && !ageBand
-                  ? onOpenAgeBandSetup
-                  : () => onOpenLevel(level.id)}
+                onClick={() => openLevel(level.id)}
                 disabled={dataBusy}
               >
                 <span className="simple-action-list__icon" aria-hidden="true"><Icon /></span>

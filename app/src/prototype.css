@@ -1609,6 +1609,10 @@ button {
   cursor: pointer;
 }
 
+.activity-row.is-static {
+  cursor: default;
+}
+
 .plans-create-button:disabled {
   color: #5f6b68;
   background: #e6eae8;

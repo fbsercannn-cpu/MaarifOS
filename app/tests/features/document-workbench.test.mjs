@@ -88,14 +88,20 @@ test("Çıktılar navigasyonu kalıcı route açar ve tek dokunuş handler'ları
   assert.match(prototypeSource, /navigate\("documents"\)/);
   assert.match(prototypeSource, /route\.id === "documents"/);
   assert.match(prototypeSource, /openDocumentWorkspaceItem/);
-  assert.match(screenSource, /TEK DOKUNUŞLA HAZIRLA/);
+  assert.match(screenSource, /HIZLA HAZIRLA/);
   assert.match(screenSource, /Sınıf listesi/);
   assert.match(screenSource, /onDownloadClassRoster/);
   assert.match(screenSource, /onDownloadPlan/);
   assert.match(screenSource, /state === "needs-setup"/);
   assert.match(screenSource, /onOpenSetup\(\)/);
   assert.match(prototypeSource, /onOpenSetup=\{\(\) =>/);
+  assert.match(screenSource, /await onPrepareOutput\(id\);/u);
+  assert.match(
+    screenSource,
+    /id !== "roster" && state !== "ready"/u,
+  );
   assert.match(screenSource, /else await onDownloadPlan\(id\);/u);
+  assert.match(prototypeSource, /onPrepareOutput=\{\(id\) =>/u);
   assert.match(
     screenSource,
     /Hassas veri onayından sonra sınıf listesi paylaşım ekranına gönderildi\./u,

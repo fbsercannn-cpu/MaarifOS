@@ -28,6 +28,7 @@ import {
   MagicWandIcon,
   PersonIcon,
   Pencil1Icon,
+  PlayIcon,
   PlusIcon,
   QuoteIcon,
   ReaderIcon,
@@ -135,6 +136,7 @@ import {
 import {
   emptyTeacherWorkCycle,
   loadTeacherWorkCycle,
+  resolveSimpleDailyDocumentReadiness,
   type TeacherWorkCycleWorkspace,
 } from "./features/teacher-cycle/teacher-work-cycle.ts";
 import {
@@ -170,7 +172,6 @@ import {
 } from "./features/evidence/quick-observation";
 import { ensureSpontaneousObservationContext } from "./features/evidence/spontaneous-observation";
 import { resolveObservationContext } from "./features/evidence/observation-context";
-import { verifyCommittedObservationRefresh } from "./features/evidence/observation-commit-refresh";
 import {
   createObservationCurriculumLinkCommand,
   OBSERVATION_WORKFLOW_STATUS_LABELS,
@@ -977,6 +978,19 @@ type ObservationRefreshNotice = {
   observationCount: number;
   reason: "read-failed" | "committed-record-missing";
 };
+
+async function verifyCommittedObservationRefresh(
+  committedObservationIds: readonly string[],
+  loadWorkspace: () => Promise<EvidenceWorkspace>,
+) {
+  const refreshModule = await import(
+    "./features/evidence/observation-commit-refresh.ts"
+  );
+  return refreshModule.verifyCommittedObservationRefresh(
+    committedObservationIds,
+    loadWorkspace,
+  );
+}
 
 type AppSurface =
   | "capture-menu"
@@ -3604,6 +3618,17 @@ export default function Prototype() {
   const displayedPlanWorkspace = selectedPlanDayWorkspace ?? todayWorkspace;
   const displayedPlanIsToday =
     displayedPlanWorkspace.civilDate === attendanceCivilDate;
+  const displayedPlanPrimaryActivity = displayedPlanIsToday
+    ? displayedPlanWorkspace.planItems.find(
+        (item) =>
+          Boolean(item.activityId && item.canCaptureEvidence) &&
+          item.status !== "completed",
+      ) ??
+      displayedPlanWorkspace.planItems.find((item) =>
+        Boolean(item.activityId && item.canCaptureEvidence),
+      ) ??
+      null
+    : null;
   const displayedScheduledPlan = scheduledPlanWorkspace.plans.find(
     (plan) => plan.civilDate === displayedPlanWorkspace.civilDate,
   ) ?? null;
@@ -8737,15 +8762,17 @@ export default function Prototype() {
   const incompleteRosterStudents = students.filter(
     (student) => classroomRosterDocumentMissingFields(student).length > 0,
   );
+  const dailyDocumentReadiness =
+    resolveSimpleDailyDocumentReadiness(teacherWorkCycle);
   const simpleDocumentOutputStates = {
     roster: !documentIdentityReady
       ? "needs-setup"
       : students.length > 0
         ? incompleteRosterStudents.length > 0 ? "incomplete" : "ready"
         : "needs-content",
-    observations: !documentIdentityReady || students.length === 0
+    observations: !documentIdentityReady
       ? "needs-setup"
-      : allEvidenceObservations.length > 0
+      : students.length > 0 && allEvidenceObservations.length > 0
         ? "ready"
         : "needs-content",
     monthly: !documentIdentityReady
@@ -8755,7 +8782,7 @@ export default function Prototype() {
         : "needs-content",
     daily: !documentIdentityReady
       ? "needs-setup"
-      : teacherWorkCycle.daily.planId
+      : dailyDocumentReadiness.ready
         ? "ready"
         : "needs-content",
     weekly: !documentIdentityReady
@@ -8807,8 +8834,33 @@ export default function Prototype() {
         });
         void openPlanFlow(undefined, contextualTitle, provenance);
       }}
-      onApply={(activity) => {
-        setAnnouncement(`${activity.title} için gözetimli Çocuk Modu açıldı.`);
+      onApply={async (activity, context) => {
+        const { ensureActivityStudioApplication } = await import(
+          "./features/activity-studio/activity-studio-application.ts"
+        );
+        const application = await enqueuePersistence(
+          () =>
+            ensureActivityStudioApplication(store, {
+              activity,
+              civilDate: attendanceCivilDate,
+              ageBand: context.ageBand,
+              scenarioId: context.scenarioId,
+              participationRouteId: context.participationRouteId,
+            }),
+          {
+            educationalWrite: {},
+            failureDetail:
+              "Etkinlik uygulama oturumu bu cihaza kaydedilemedi. Çocuk Modu açılmadı.",
+            successDetail: `${activity.title} uygulama oturumu kaydedildi.`,
+          },
+        );
+        await refreshD1Workspaces();
+        setAnnouncement(
+          application.created
+            ? `${activity.title} için izlenebilir uygulama oturumu ve gözetimli Çocuk Modu açıldı.`
+            : `${activity.title} için bugünkü uygulama oturumu yeniden açıldı.`,
+        );
+        return application.identity;
       }}
       onPrint={async (request) => {
         const { openHtmlPrintWindow } = await import(
@@ -8832,13 +8884,35 @@ export default function Prototype() {
             : "Çocuk seçim yapmadan geri döndü; kayıt oluşturulmadı.",
         );
       }}
-      onWriteObservation={(request) =>
-        openStudentObservation(
+      onWriteObservation={async (request) => {
+        if (
+          !request.application ||
+          request.application.sourceActivityId !== request.activity.id
+        ) {
+          throw new Error(
+            "Etkinlik uygulama kimliği doğrulanamadı; gözlem başka bir etkinliğe bağlanmadı.",
+          );
+        }
+        const liveEvidence = await loadEvidenceWorkspace(store, {
+          now: new Date(),
+        });
+        setEvidenceWorkspace(liveEvidence);
+        const exactActivity = liveEvidence.activities.find(
+          (item) => item.id === request.application?.activityId,
+        );
+        if (!exactActivity) {
+          throw new Error(
+            "Uygulanan etkinlik bağlamı yeniden açılamadı; gözlem başka bir plana bağlanmadı.",
+          );
+        }
+        await openActivityEvidence(
+          exactActivity.id,
           students.length === 1 ? students[0]?.id : undefined,
+          exactActivity,
           createActivityStudioObservationSeed(request),
           "preserve",
-        )
-      }
+        );
+      }}
       onChildModeChange={setActivityChildModeOpen}
       emptyStateAction={
         !currentClassTymmAgeBand ? (
@@ -9075,6 +9149,16 @@ export default function Prototype() {
                 studentCount={students.length}
                 observationCount={allEvidenceObservations.length}
                 outputStates={simpleDocumentOutputStates}
+                outputRequirements={{
+                  ...(dailyDocumentReadiness.ready
+                    ? {}
+                    : { daily: dailyDocumentReadiness.requirement }),
+                  ...(students.length === 0
+                    ? { observations: "Gözlem çıktısı için önce ilk çocuğu ekleyin." }
+                    : allEvidenceObservations.length === 0
+                      ? { observations: "İlk gözlemi kaydedin; ardından veli veya idare özetini alın." }
+                      : {}),
+                }}
                 incompleteRosterStudentCount={incompleteRosterStudents.length}
                 schoolNameReady={Boolean(configuredClassroom?.schoolName?.trim())}
                 teacherNameReady={Boolean(configuredClassroom?.teacherName?.trim())}
@@ -9089,6 +9173,34 @@ export default function Prototype() {
                 onDownloadClassRoster={downloadSimpleClassRoster}
                 onShareClassRoster={shareSimpleClassRoster}
                 onDownloadPlan={downloadSimplePlan}
+                onPrepareOutput={(id) => {
+                  if (id === "observations") {
+                    if (students.length === 0) {
+                      navigatePrimaryRoute("classroom");
+                      setStudentAddOpen(true);
+                      setAnnouncement("Gözlem için ilk çocuk kaydı alanı açıldı.");
+                      return;
+                    }
+                    void openStudentObservation();
+                    setAnnouncement(
+                      "İlk gözlemi yazın; kaydettiğinizde çıktı hazır olacak.",
+                    );
+                    return;
+                  }
+                  if (id === "annual" || !teacherWorkCycle.annual) {
+                    openTeacherPlanRecords("annual");
+                    return;
+                  }
+                  if (id === "monthly" || !teacherWorkCycle.monthly) {
+                    openTeacherPlanRecords("monthly");
+                    return;
+                  }
+                  if (id === "weekly" || !teacherWorkCycle.weekly) {
+                    openTeacherPlanRecords("weekly");
+                    return;
+                  }
+                  openPlanWorkbenchLevel("daily");
+                }}
                 onOpenObservationOutput={() => {
                   if (!documentIdentityReady) {
                     setClassroomSetupSection("period");
@@ -9096,24 +9208,20 @@ export default function Prototype() {
                     setAnnouncement(
                       "Gözlem çıktısı için okul ve öğretmen adını bir kez yazın.",
                     );
-                    throw new Error(
-                      "Gözlem çıktısı için okul ve öğretmen adını tamamlayın.",
-                    );
+                    return;
                   }
                   if (students.length === 0) {
                     navigatePrimaryRoute("classroom");
                     setStudentAddOpen(true);
                     setAnnouncement("Gözlem için önce ilk çocuğu ekleyin.");
-                    throw new Error("Gözlem için önce ilk çocuğu ekleyin.");
+                    return;
                   }
                   if (allEvidenceObservations.length === 0) {
                     void openStudentObservation();
                     setAnnouncement(
                       "İlk gözlemi yazın; ardından veli veya idare özetini alın.",
                     );
-                    throw new Error(
-                      "İlk gözlem alanı açıldı; kaydettikten sonra çıktıyı alın.",
-                    );
+                    return;
                   }
                   setSimpleObservationOutputOpen(true);
                   setAnnouncement("Veli veya idare gözlem özeti alanı açıldı.");
@@ -10326,7 +10434,9 @@ export default function Prototype() {
             <Pencil1Icon aria-hidden="true" /> Gelecek planı düzenle
           </button>
         ) : null}
-        {displayedPlanIsToday ? (
+        {displayedPlanIsToday &&
+        !teacherWorkCycle.daily.planId &&
+        displayedPlanWorkspace.planItems.length === 0 ? (
           <>
             {planWritesDisabled ? (
               <div
@@ -10380,58 +10490,88 @@ export default function Prototype() {
             </button>
           </>
         ) : null}
+        {displayedPlanIsToday &&
+        teacherWorkCycle.daily.planId &&
+        displayedPlanPrimaryActivity?.activityId ? (
+          <button
+            className="sheet-primary plans-create-button"
+            type="button"
+            onClick={() =>
+              void openActivityEvidence(displayedPlanPrimaryActivity.activityId!)
+            }
+            disabled={dataBusy || educationalWritesDisabled}
+          >
+            <PlayIcon aria-hidden="true" />
+            {displayedPlanPrimaryActivity.status === "planned"
+              ? "Sıradaki etkinliği başlat"
+              : "Sıradaki etkinliğe gözlem ekle"}
+          </button>
+        ) : null}
         {displayedPlanWorkspace.planItems.length > 0 ? (
           <div className="activity-list">
-            {displayedPlanWorkspace.planItems.map((item, index) => (
-              <button
-                className={`activity-row is-${item.flowBlockStatus === "skipped" ? "skipped is-next" : item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`}
-                type="button"
-                key={item.id}
-                onClick={() => {
-                  if (displayedPlanIsToday && item.activityId && item.canCaptureEvidence) {
-                    void openActivityEvidence(item.activityId);
-                    return;
-                  }
-                  setAnnouncement(
-                    `${item.title}: ${item.purpose ?? "Günlük akış adımı"}`,
-                  );
-                }}
-                disabled={
-                  (Boolean(item.activityId && item.canCaptureEvidence) &&
-                    educationalWritesDisabled) ||
-                  (!displayedPlanIsToday && Boolean(item.activityId))
-                }
-              >
-                <span className="activity-marker" aria-hidden="true">{item.status === "completed" && item.flowBlockStatus !== "skipped" ? <CheckCircledIcon /> : index + 1}</span>
-                <span className="activity-copy">
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.startTime ?? (item.durationMinutes ? `${item.durationMinutes} dk` : "Akış sırası")} · <b>{todayPlanItemStatusLabel(item)}</b>
-                  </small>
-                  {item.activityTitle && item.activityTitle !== item.title ? (
-                    <small>Etkinlik: {item.activityTitle}</small>
-                  ) : null}
-                  {item.purpose ? <small>{item.purpose}</small> : null}
-                  {item.transitionNote ? (
-                    <small>Geçiş: {item.transitionNote}</small>
-                  ) : null}
-                  {item.teacherNote ? (
-                    <small>Öğretmen notu: {item.teacherNote}</small>
-                  ) : null}
-                </span>
-                <span className="activity-evidence">
-                  {displayedPlanIsToday && item.activityId && item.canCaptureEvidence
-                    ? item.status === "planned"
-                      ? "Başlat"
-                      : "Gözlem ekle"
-                    : item.activityId
-                      ? "Planlı etkinlik"
-                    : item.flowBlockStatus === "skipped"
-                      ? "Atlandı"
-                      : "Akış adımı"}
-                </span>
-              </button>
-            ))}
+            {displayedPlanWorkspace.planItems.map((item, index) => {
+              const actionable = Boolean(
+                displayedPlanIsToday &&
+                  item.activityId &&
+                  item.canCaptureEvidence,
+              );
+              const className = `activity-row is-${item.flowBlockStatus === "skipped" ? "skipped is-next" : item.status === "in_progress" ? "current" : item.status === "completed" ? "completed" : "next"}`;
+              const content = (
+                <>
+                  <span className="activity-marker" aria-hidden="true">{item.status === "completed" && item.flowBlockStatus !== "skipped" ? <CheckCircledIcon /> : index + 1}</span>
+                  <span className="activity-copy">
+                    <strong>{item.title}</strong>
+                    <small>
+                      {item.startTime ?? (item.durationMinutes ? `${item.durationMinutes} dk` : "Akış sırası")} · <b>{todayPlanItemStatusLabel(item)}</b>
+                    </small>
+                    {item.activityTitle && item.activityTitle !== item.title ? (
+                      <small>Etkinlik: {item.activityTitle}</small>
+                    ) : null}
+                    {item.purpose ? <small>{item.purpose}</small> : null}
+                    {item.transitionNote ? (
+                      <small>Geçiş: {item.transitionNote}</small>
+                    ) : null}
+                    {item.teacherNote ? (
+                      <small>Öğretmen notu: {item.teacherNote}</small>
+                    ) : null}
+                  </span>
+                  <span className="activity-evidence">
+                    {actionable
+                      ? item.status === "planned"
+                        ? "Başlat"
+                        : "Gözlem ekle"
+                      : item.activityId
+                        ? "Planlı etkinlik"
+                        : item.flowBlockStatus === "skipped"
+                          ? "Atlandı"
+                          : "Akış adımı"}
+                  </span>
+                </>
+              );
+              if (!actionable) {
+                return (
+                  <article
+                    className={`${className} is-static`}
+                    key={item.id}
+                    data-plan-item-actionable="false"
+                  >
+                    {content}
+                  </article>
+                );
+              }
+              return (
+                <button
+                  className={className}
+                  type="button"
+                  key={item.id}
+                  data-plan-item-actionable="true"
+                  onClick={() => void openActivityEvidence(item.activityId!)}
+                  disabled={educationalWritesDisabled}
+                >
+                  {content}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="empty-work">

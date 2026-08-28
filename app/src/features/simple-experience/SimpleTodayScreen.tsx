@@ -121,6 +121,26 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
   const assistantReasons = [assistantBrief.rationale, ...assistantBrief.evidence]
     .filter((reason, index, reasons) => reason && reasons.indexOf(reason) === index)
     .slice(0, 2);
+  const assistantOwnsObservationAction =
+    (model.pendingObservationCount > 0 &&
+      assistantBrief.action.kind === "pending-observation") ||
+    (model.students.length === 0 &&
+      assistantBrief.action.kind === "setup" &&
+      assistantBrief.action.stepId === "students");
+  const contextualObservationAction = model.students.length === 0
+    ? {
+        label: "İlk çocuğu ekle",
+        run: () => actions.onOpenSetupStep("students"),
+      }
+    : model.pendingObservationCount > 0
+      ? {
+          label: "Program bağını tamamla",
+          run: actions.onOpenPendingObservation,
+        }
+      : {
+          label: "Hızlı gözlem",
+          run: actions.onOpenQuickObservation,
+        };
   const dailyPlanReady = model.teacherCycle.daily.planId !== null;
   const suggestedAgeBand = resolveActivityAgeBand(classroom?.ageGroup);
   const dailySuggestions = suggestedAgeBand
@@ -272,15 +292,17 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         </h1>
         <div className="simple-today__brief-bar">
           <p className="simple-today__brief-label">Bugün için kısa özet</p>
-          <button
-            type="button"
-            className="simple-today__brief-action"
-            onClick={actions.onOpenQuickObservation}
-            disabled={model.dataBusy}
-          >
-            <Pencil1Icon aria-hidden="true" />
-            Hızlı gözlem
-          </button>
+          {!assistantOwnsObservationAction ? (
+            <button
+              type="button"
+              className="simple-today__brief-action"
+              onClick={contextualObservationAction.run}
+              disabled={model.dataBusy}
+            >
+              <Pencil1Icon aria-hidden="true" />
+              {contextualObservationAction.label}
+            </button>
+          ) : null}
         </div>
         <ul aria-label="Önerinin nedenleri">
           {assistantReasons.map((reason) => (
@@ -355,11 +377,6 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
                   : "Önce resmî yaş bandını seçin"}</small>
               </p>
               <b>{suggestedAgeBand ? "Aç" : "Tamamla"}</b>
-            </button>
-            <button type="button" onClick={actions.onOpenQuickObservation} disabled={model.dataBusy}>
-              <span className="is-observation" aria-hidden="true"><Pencil1Icon /></span>
-              <p><strong>Gözlem</strong><small>{model.pendingObservationCount > 0 ? `${model.pendingObservationCount} bağlantı bekliyor` : "Hızlı not veya etkinlik gözlemi"}</small></p>
-              <b>Yaz</b>
             </button>
           </div>
         </section>

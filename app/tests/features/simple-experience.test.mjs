@@ -67,6 +67,8 @@ test("kişisel asistan ana ekranı tek gerekçeli eylem ve yinelenmeyen öğretm
   assert.match(todaySource, /void actions\.onOpenCalendar\(\)/);
   assert.match(todaySource, /onOpenQuickObservation/);
   assert.match(todaySource, /Hızlı gözlem/);
+  assert.equal(todaySource.match(/Hızlı gözlem/gu)?.length, 1);
+  assert.match(todaySource, /assistantOwnsObservationAction/u);
   assert.match(todaySource, /simple-today__brief-action/);
   assert.match(todaySource, /ÖĞRETMEN MASASI/);
   assert.match(todaySource, /Bugünün işi tek yerde/);
@@ -114,6 +116,8 @@ test("planlar yalnız Maarif Modelini ve okulun manuel etkinliklerini öne çık
   assert.match(plansSource, /Planı kaydetmeden önce/);
   assert.match(plansSource, /Gelişmiş plan desteğini aç/);
   assert.match(plansSource, /advancedSupportOpen/);
+  assert.match(plansSource, /simple-workspace__priority/u);
+  assert.match(plansSource, /presentation\.priority\.levelId/u);
   assert.match(plansSource, /collectionItemCount/);
   assert.doesNotMatch(plansSource, /premium|EÇE|onay kutusu/iu);
 });
@@ -165,6 +169,9 @@ test("uygulama yönlendiricisi sade ekranları ana gezinmeye bağlar", () => {
   assert.match(prototypeSource, /downloadSimpleObservation/);
   assert.match(prototypeSource, /onOpenQuickObservation: \(\) =>/u);
   assert.match(prototypeSource, /createActivityStudioObservationSeed\(request\)/u);
+  assert.match(prototypeSource, /ensureActivityStudioApplication/u);
+  assert.match(prototypeSource, /request\.application\.sourceActivityId !== request\.activity\.id/u);
+  assert.match(prototypeSource, /data-plan-item-actionable="false"/u);
   assert.match(
     prototypeSource,
     /initialStudentId === undefined \|\| initialStudentId === nextStudentId/u,

@@ -13,6 +13,7 @@ import {
   createTeacherFeedback,
   type TeacherFeedback,
 } from "../feedback/teacher-feedback.ts";
+import { resolveSimpleDailyDocumentReadiness } from "../teacher-cycle/teacher-work-cycle.ts";
 import "./simple-workspaces.css";
 
 export type SimplePlanOutputKind = "annual" | "monthly" | "weekly" | "daily";
@@ -29,6 +30,9 @@ export interface SimpleDocumentWorkspaceScreenProps
   onShareClassRoster(): Promise<"shared" | "downloaded" | "cancelled">;
   onDownloadPlan(kind: SimplePlanOutputKind): void | Promise<void>;
   onOpenObservationOutput(): void;
+  onPrepareOutput(
+    id: Exclude<SimpleDocumentOutputId, "roster">,
+  ): void | Promise<void>;
   onOpenSetup(): void;
   onOpenRosterRequirements(): void;
   outputStates?: Partial<Record<SimpleDocumentOutputId, SimpleDocumentOutputState>>;
@@ -97,10 +101,14 @@ function defaultOutputState(
   if (options.workspace.status === "not-configured") return "needs-setup";
   if (id === "roster") return options.studentCount > 0 ? "ready" : "needs-content";
   if (id === "observations") {
-    if (options.studentCount === 0) return "needs-setup";
+    if (options.studentCount === 0) return "needs-content";
     return options.observationCount > 0 ? "ready" : "needs-content";
   }
-  if (id === "daily") return options.workspace.daily.planId ? "ready" : "needs-content";
+  if (id === "daily") {
+    return resolveSimpleDailyDocumentReadiness(options.workspace).ready
+      ? "ready"
+      : "needs-content";
+  }
   if (id === "weekly") return options.workspace.weekly ? "ready" : "needs-content";
   if (id === "monthly") return options.workspace.monthly ? "ready" : "needs-content";
   if (!options.workspace.annual) return "needs-content";
@@ -131,6 +139,7 @@ export function SimpleDocumentWorkspaceScreen({
   onShareClassRoster,
   onDownloadPlan,
   onOpenObservationOutput,
+  onPrepareOutput,
   onOpenSetup,
   onOpenRosterRequirements,
   onOpenPreparationCenter,
@@ -172,6 +181,18 @@ export function SimpleDocumentWorkspaceScreen({
       if (id === "roster" && state !== "ready") {
         onOpenRosterRequirements();
         setMessage(outputRequirements?.roster ?? rosterRequirement ?? "Sınıf listesi için eksik öğrenci bilgileri açıldı.");
+        return;
+      }
+      if (id !== "roster" && state !== "ready") {
+        await onPrepareOutput(id);
+        setMessage(
+          outputRequirements?.[id] ??
+            (id === "observations"
+              ? studentCount === 0
+                ? "İlk çocuk kaydı alanı açıldı."
+                : "İlk gözlem alanı açıldı; kaydettikten sonra çıktınız hazır olacak."
+              : "Eksik plan adımı açıldı; kaydettiğinizde çıktı hazır olacak."),
+        );
         return;
       }
       if (id === "roster") await onDownloadClassRoster();
@@ -247,7 +268,7 @@ export function SimpleDocumentWorkspaceScreen({
   return (
     <main className="simple-workspace" aria-labelledby="simple-documents-title">
       <header className="simple-workspace__hero">
-        <span>TEK DOKUNUŞLA HAZIRLA</span>
+        <span>HIZLA HAZIRLA</span>
         <h1 id="simple-documents-title" data-route-heading tabIndex={-1}>Çıktılar</h1>
         <p>Belgeyi seçin; okul, sınıf ve öğretmen bilgileri kendiliğinden yerleşsin.</p>
         <div className="simple-workspace__facts" aria-label="Kayıt özeti">

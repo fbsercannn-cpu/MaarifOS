@@ -295,6 +295,9 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
   await dialog.getByLabel("Plan tarihi").fill(FUTURE_PLAN_DATE);
   await dialog.getByRole("button", { name: "Planı kaydet" }).click();
   await expect(dialog).toBeHidden();
+  await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeHidden();
 
   const saved = await readSavedPlan(page);
   expect(saved.planId).not.toBeNull();
@@ -302,6 +305,51 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
   expect(saved.activityTitle).toBe("Batar mı, yüzer mi?");
   expect(saved.teacherOwnedFlowCount).toBe(10);
   expect(saved.targetCodes).toHaveLength(1);
+
+  await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await page
+    .locator(".simple-today__desk-grid")
+    .getByRole("button", { name: /Günün planı/u })
+    .click();
+  const planSheet = page.getByRole("dialog", { name: "Gün planı" });
+  await expect(planSheet).toBeVisible();
+  await expect(
+    planSheet.getByRole("button", { name: /Günlük plan oluştur/u }),
+  ).toHaveCount(0);
+  const staticFlowRows = planSheet.locator(
+    '[data-plan-item-actionable="false"]',
+  );
+  await expect(staticFlowRows.first()).toBeVisible();
+  expect(await staticFlowRows.first().evaluate((element) => element.tagName)).toBe(
+    "ARTICLE",
+  );
+  await expect(staticFlowRows.getByRole("button")).toHaveCount(0);
+
+  const countsBeforeContinuation = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    return {
+      plans: snapshot.plans.length,
+      activities: snapshot.activities.length,
+    };
+  });
+  await planSheet
+    .getByRole("button", { name: /Sıradaki etkinli/u })
+    .click();
+  await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+  const countsAfterContinuation = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    return {
+      plans: snapshot.plans.length,
+      activities: snapshot.activities.length,
+    };
+  });
+  expect(countsAfterContinuation).toEqual(countsBeforeContinuation);
 });
 
 test("geçmiş kaynak hafta bugünün hızlı planına bağlanmaz", async ({ page }) => {

@@ -71,7 +71,10 @@ test("temiz cihaz tek kurulum odağını korur, sınıf kurulunca ilk öğrenciy
   const teacherDesk = page.locator(".simple-today__desk-grid");
   await expect(nextTask).toBeVisible();
   await expect(nextTask).toContainText("İlk çocuğu ekleyin");
-  await expect(teacherDesk.getByRole("button")).toHaveCount(4);
+  await expect(teacherDesk.getByRole("button")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Hızlı gözlem", exact: true }),
+  ).toHaveCount(0);
 
   const layout = await today.evaluate((screen) => {
     const focus = screen.querySelector<HTMLElement>(".simple-today__focus");
@@ -106,6 +109,9 @@ test("temiz cihaz tek kurulum odağını korur, sınıf kurulunca ilk öğrenciy
     expect(responsiveLayout.scrollWidth).toBeLessThanOrEqual(responsiveLayout.clientWidth);
     expect(responsiveLayout.focusTop).toBeLessThan(viewport.height);
   }
+
+  await nextTask.click();
+  await expect(page.getByRole("dialog", { name: "Çocuk ekle" })).toBeVisible();
 });
 
 test("Bugün ekranındaki tek dokunuşlu Hızlı gözlem mevcut güvenli akışı açar", async ({
@@ -114,27 +120,30 @@ test("Bugün ekranındaki tek dokunuşlu Hızlı gözlem mevcut güvenli akış�
   await page.goto("/", { waitUntil: "networkidle" });
   await configureExistingClassroom(page, "active");
 
-  const quickObservation = page.getByRole("button", {
-    name: "Hızlı gözlem",
-    exact: true,
-  });
-  await expect(quickObservation).toBeVisible();
-  const target = await quickObservation.evaluate((button) => {
-    const rect = button.getBoundingClientRect();
-    return { width: rect.width, height: rect.height };
-  });
-  expect(target.width).toBeGreaterThanOrEqual(44);
-  expect(target.height).toBeGreaterThanOrEqual(44);
-
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Hızlı gözlem", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "İlk çocuğu ekle", exact: true })
+    .click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill("Hızlı Gözlem Çocuğu");
   await addStudent.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
   await expect(addStudent).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
-  await page.getByRole("button", { name: "Hızlı gözlem", exact: true }).click();
+  const quickObservation = page.getByRole("button", {
+    name: "Hızlı gözlem",
+    exact: true,
+  });
+  await expect(quickObservation).toHaveCount(1);
+  const target = await quickObservation.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  });
+  expect(target.width).toBeGreaterThanOrEqual(44);
+  expect(target.height).toBeGreaterThanOrEqual(44);
+  await quickObservation.click();
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
   const child = page
     .getByRole("region", { name: "Gözlem yapılacak çocuk" })

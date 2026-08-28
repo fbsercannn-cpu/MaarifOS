@@ -69,6 +69,62 @@ export interface TeacherWorkCycleDocumentCounts {
   anecdoteReadyCount: number;
 }
 
+export type SimpleDailyDocumentReadiness =
+  | { readonly ready: true; readonly requirement: null }
+  | { readonly ready: false; readonly requirement: string };
+
+/**
+ * A daily PDF is ready only when the selected day belongs to the same
+ * teacher-owned year -> month -> week chain used by the export service.
+ */
+export function resolveSimpleDailyDocumentReadiness(
+  workspace: TeacherWorkCycleWorkspace,
+): SimpleDailyDocumentReadiness {
+  if (workspace.status !== "ready") {
+    return {
+      ready: false,
+      requirement: "Önce okul, sınıf ve eğitim yılı kurulumunu tamamlayın.",
+    };
+  }
+  if (!workspace.annual) {
+    return {
+      ready: false,
+      requirement: "Günlük çıktı için önce yıllık plan omurgasını oluşturun.",
+    };
+  }
+  if (!workspace.monthly) {
+    return {
+      ready: false,
+      requirement: "Günlük çıktı için bugünü kapsayan aylık planı oluşturun.",
+    };
+  }
+  if (!workspace.weekly) {
+    return {
+      ready: false,
+      requirement: "Günlük çıktı için bugünü kapsayan haftalık akışı oluşturun.",
+    };
+  }
+  if (workspace.daily.status === "conflict") {
+    return {
+      ready: false,
+      requirement: "Aynı güne bağlı plan çakışmasını inceleyin.",
+    };
+  }
+  if (workspace.daily.status === "chain-mismatch") {
+    return {
+      ready: false,
+      requirement: "Günlük planın haftalık plan bağını tamamlayın.",
+    };
+  }
+  if (workspace.daily.status !== "ready" || !workspace.daily.planId) {
+    return {
+      ready: false,
+      requirement: "Bugünün günlük planını kaydedin.",
+    };
+  }
+  return { ready: true, requirement: null };
+}
+
 const EMPTY_DOCUMENT_COUNTS: TeacherWorkCycleDocumentCounts = Object.freeze({
   anecdoteIncompleteCount: 0,
   anecdoteReviewRequiredCount: 0,

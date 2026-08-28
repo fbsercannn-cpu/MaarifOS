@@ -123,7 +123,7 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
   });
 });
 
-test("etkinlik baskısı gerçek pencere açar; seçim ve çizim öğretmen taslağına taşınır", async ({
+test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi başka canlı plana bağlanmaz", async ({
   page,
 }) => {
   // Açılır pencere, canvas, gerçek indirme ve IndexedDB bağlam çözümünü birlikte
@@ -144,6 +144,63 @@ test("etkinlik baskısı gerçek pencere açar; seçim ve çizim öğretmen tasl
   const activity = page.locator("article.activity-card").first();
   const activityTitle = (await activity.getByRole("heading").textContent())?.trim() ?? "";
   expect(activityTitle).not.toBe("");
+
+  const unrelatedActivityId = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const attendance = await import("/src/core/domain/attendance.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    const classroom = snapshot.classrooms.find(
+      (record) => typeof record.deletedAt !== "string",
+    );
+    const year = snapshot.academicYears.find(
+      (record) => record.id === classroom?.academicYearId,
+    );
+    if (!classroom || !year) throw new Error("Test sınıfı bulunamadı.");
+    const civilDate = attendance.civilDateInIstanbul(new Date());
+    const timestamp = new Date().toISOString();
+    const planId = crypto.randomUUID();
+    const activityId = crypto.randomUUID();
+    await store.transaction(
+      "readwrite",
+      ["plans", "activities"],
+      async (transaction) => {
+        await transaction.putMany("plans", [{
+          id: planId,
+          planType: "daily",
+          title: "İlişkisiz canlı plan A",
+          academicYearId: year.id,
+          classroomId: classroom.id,
+          curriculumProfileSnapshot: classroom.curriculumProfileSnapshot,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        }]);
+        await transaction.putMany("activities", [{
+          id: activityId,
+          planId,
+          title: "İlişkisiz canlı etkinlik A",
+          startTime: "09:00",
+          status: "in_progress",
+          assignmentMode: "whole-class",
+          studentIds: [],
+          curriculumProfileSnapshot: classroom.curriculumProfileSnapshot,
+          curriculumTargets: [],
+          academicYearId: year.id,
+          classroomId: classroom.id,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        }]);
+      },
+    );
+    store.close();
+    return activityId;
+  });
 
   const popupPromise = page.waitForEvent("popup");
   await activity.getByRole("button", { name: /materyalini yazdır$/u }).click();
@@ -189,22 +246,31 @@ test("etkinlik baskısı gerçek pencere açar; seçim ve çizim öğretmen tasl
   await expect(observationText).toHaveValue(new RegExp(choiceLabel, "u"));
   await expect(observationText).toHaveValue(/4 çizgi/u);
 
-  const savedObservationCount = await page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<number>((resolve, reject) => {
-        const transaction = database.transaction("observations", "readonly");
-        const request = transaction.objectStore("observations").count();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    } finally {
-      database.close();
-    }
+  await page.getByRole("button", { name: "Gözlemi kaydet", exact: true }).click();
+
+  const savedLineage = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    const applicationActivity = snapshot.activities.find(
+      (record) => record.activityKind === "activity-studio-application",
+    );
+    const observation = snapshot.observations.at(-1);
+    return {
+      observationCount: snapshot.observations.length,
+      observationActivityId: observation?.activityId ?? null,
+      observationPlanId: observation?.planId ?? null,
+      applicationActivityId: applicationActivity?.id ?? null,
+      applicationPlanId: applicationActivity?.planId ?? null,
+      sourceActivityId: applicationActivity?.sourceActivityId ?? null,
+    };
   });
-  expect(savedObservationCount).toBe(0);
+  expect(savedLineage.observationCount).toBe(1);
+  expect(savedLineage.applicationActivityId).not.toBe(unrelatedActivityId);
+  expect(savedLineage.observationActivityId).toBe(
+    savedLineage.applicationActivityId,
+  );
+  expect(savedLineage.observationPlanId).toBe(savedLineage.applicationPlanId);
+  expect(savedLineage.sourceActivityId).toBeTruthy();
 });
