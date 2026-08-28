@@ -308,12 +308,7 @@ import {
 import { COLLECTION_NAMES } from "./core/domain/model";
 import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-provenance.ts";
 import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
-import { createActivityStudioObservationSeed } from "./features/activity-studio/activity-observation-seed.ts";
 import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
-import {
-  PARTICIPATION_ROUTES,
-  PEDAGOGICAL_SCENARIOS,
-} from "./features/pedagogical-os/pedagogical-orchestrator.ts";
 
 const ClassroomScreen = lazy(() =>
   import("./features/simple-experience/SimpleClassroomScreen.tsx").then((module) => ({
@@ -8805,6 +8800,9 @@ export default function Prototype() {
       initialScenarioId={studioOpenOptionsRef.current.scenarioId ?? "balanced"}
       initialCollection={studioOpenOptionsRef.current.collection ?? "tumu"}
       onAddToPlan={async (activity, context) => {
+        const { PARTICIPATION_ROUTES, PEDAGOGICAL_SCENARIOS } = await import(
+          "./features/pedagogical-os/pedagogical-orchestrator.ts"
+        );
         const scenario = PEDAGOGICAL_SCENARIOS.find(
           (item) => item.id === context.scenarioId,
         );
@@ -8905,6 +8903,9 @@ export default function Prototype() {
             "Uygulanan etkinlik bağlamı yeniden açılamadı; gözlem başka bir plana bağlanmadı.",
           );
         }
+        const { createActivityStudioObservationSeed } = await import(
+          "./features/activity-studio/activity-observation-seed.ts"
+        );
         await openActivityEvidence(
           exactActivity.id,
           students.length === 1 ? students[0]?.id : undefined,
