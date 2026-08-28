@@ -7101,6 +7101,139 @@ fieldset.student-contact-permissions legend {
   font-weight: 800;
 }
 
+.persistence-gate-card:has(.vault-recovery-shell) {
+  max-height: calc(100dvh - max(40px, var(--app-safe-top)) - var(--app-bottom-inset));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.vault-recovery-shell,
+.vault-recovery-steps,
+.vault-reset-fallback {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-recovery-shell {
+  padding-top: 4px;
+  border-top: 1px solid var(--maarif-line);
+}
+
+.vault-recovery-shell h3,
+.vault-recovery-shell p {
+  margin: 0;
+  text-align: left;
+}
+
+.vault-recovery-shell h3 {
+  color: var(--maarif-navy);
+  font-size: 17px;
+}
+
+.vault-recovery-shell label {
+  display: grid;
+  gap: 6px;
+  color: var(--maarif-navy);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.vault-recovery-shell input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  color: var(--maarif-ink);
+  background: var(--maarif-white);
+  border: 1px solid #cfd6dc;
+  border-radius: 9px;
+}
+
+.vault-recovery-shell button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--maarif-white);
+  background: var(--maarif-teal);
+  border: 0;
+  border-radius: 10px;
+  font-weight: 800;
+}
+
+.vault-recovery-shell button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vault-recovery-file-button {
+  width: 100%;
+}
+
+.vault-recovery-steps {
+  padding: 12px;
+  background: var(--maarif-teal-soft);
+  border: 1px solid rgba(31, 139, 128, 0.24);
+  border-radius: 12px;
+}
+
+.vault-recovery-steps > strong {
+  overflow-wrap: anywhere;
+}
+
+.vault-recovery-verified {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  color: #075b56 !important;
+  background: var(--maarif-white);
+  border-radius: 9px;
+  font-weight: 750;
+}
+
+.vault-recovery-confirm-button {
+  background: var(--maarif-navy) !important;
+}
+
+.vault-reset-fallback {
+  padding-top: 4px;
+}
+
+.vault-reset-fallback summary {
+  min-height: 44px;
+  padding: 10px 0;
+  color: #8d2d22;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.vault-reset-fallback button {
+  background: #8d2d22;
+}
+
+@media (max-width: 360px) {
+  .persistence-gate:has(.vault-recovery-shell) {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .persistence-gate-card:has(.vault-recovery-shell) {
+    padding: 18px;
+  }
+
+  .vault-recovery-steps {
+    padding: 10px;
+  }
+
+  .vault-recovery-shell button {
+    width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
 .official-calendar-applied svg {
   width: 17px;
   height: 17px;

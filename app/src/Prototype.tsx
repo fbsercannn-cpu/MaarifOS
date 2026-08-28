@@ -60,6 +60,7 @@ import {
   type AppLockConfig,
 } from "./core/security/app-lock";
 import { DATA_SCHEMA_VERSION } from "./core/backup/schema-version";
+import { canonicalJson } from "./core/backup/canonical-json";
 import { isEncryptedBackupEnvelope } from "./core/backup/encrypted-backup";
 import type { BackupEnvelope, RestoreMode } from "./core/backup/schema";
 import { IndexedDbDataStore } from "./core/repository/indexed-db";
@@ -113,6 +114,7 @@ import {
 import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type AuthState } from "./auth";
 import {
   dashboardAttendanceCounts,
+  LEGACY_STORAGE_KEY,
   loadDashboardState,
   persistAttendanceUpdate,
   persistStudentRosterChange,
@@ -305,7 +307,6 @@ import {
   inspectCurrentRelease,
   PWA_UPDATE_READY_EVENT,
 } from "./release";
-import { COLLECTION_NAMES } from "./core/domain/model";
 import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-provenance.ts";
 import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
 import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
@@ -576,10 +577,18 @@ function describeHydrationFailure(reason: unknown): {
   supportCode: string;
   step: HydrationStepId | "unknown";
   kind: string;
+  recoveryRequired: boolean;
 } {
   const step = reason instanceof HydrationStepError ? reason.step : "unknown";
   const rootReason = reason instanceof HydrationStepError ? reason.reason : reason;
   const classification = classifyApplicationError(rootReason);
+  const rootCode =
+    typeof rootReason === "object" &&
+    rootReason !== null &&
+    "code" in rootReason &&
+    typeof rootReason.code === "string"
+      ? rootReason.code
+      : null;
   const supportCode =
     step === "unknown" ? "HYD-UNKNOWN" : HYDRATION_SUPPORT_CODES[step];
   const detail =
@@ -597,6 +606,7 @@ function describeHydrationFailure(reason: unknown): {
     supportCode,
     step,
     kind: classification.kind,
+    recoveryRequired: rootCode === "LOCAL_VAULT_RECOVERY_REQUIRED",
   };
 }
 
@@ -954,6 +964,16 @@ type EvidenceFlowRequest = {
   assessmentTarget?: CurriculumTargetSnapshot;
   initialStudentId?: string;
   initialDraft?: EvidenceCaptureSeed;
+};
+
+type VaultRecoveryBackup = {
+  fileName: string;
+  source: string;
+  receipt: {
+    encryptedSourceChecksum: string;
+    payloadChecksum: string;
+    entityCounts: BackupEnvelope["manifest"]["entityCounts"];
+  } | null;
 };
 
 type EvidenceActivityStartPolicy = "start-if-planned" | "preserve";
@@ -3040,6 +3060,10 @@ export default function Prototype() {
     return backupServicePromiseRef.current;
   }, [store]);
   const restoreFileRef = useRef<HTMLInputElement>(null);
+  const vaultRecoveryFileRef = useRef<HTMLInputElement>(null);
+  const vaultRecoveryFileButtonRef = useRef<HTMLButtonElement>(null);
+  const vaultRecoveryFileFocusListenerRef = useRef<(() => void) | null>(null);
+  const vaultRecoveryRestorePasswordRef = useRef<HTMLInputElement>(null);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingWriteCountRef = useRef(0);
   const persistenceReadyRef = useRef(false);
@@ -3298,6 +3322,16 @@ export default function Prototype() {
     useState<string | null>(null);
   const [aiWorkspacePrompt, setAiWorkspacePrompt] = useState("");
   const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
+  const [localVaultRecoveryRequired, setLocalVaultRecoveryRequired] =
+    useState(false);
+  const [vaultRecoveryBackup, setVaultRecoveryBackup] =
+    useState<VaultRecoveryBackup | null>(null);
+  const [vaultRecoveryPassword, setVaultRecoveryPassword] = useState("");
+  const [vaultRecoveryConfirmation, setVaultRecoveryConfirmation] =
+    useState("");
+  const [vaultResetConfirmation, setVaultResetConfirmation] = useState("");
+  const [vaultRecoveryError, setVaultRecoveryError] = useState("");
+  const [vaultRecoveryBusy, setVaultRecoveryBusy] = useState(false);
   const [recoverySnapshots, setRecoverySnapshots] = useState<
     RecoverySnapshotMetadata[]
   >([]);
@@ -3358,6 +3392,42 @@ export default function Prototype() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [classroomOpen]);
+  useEffect(
+    () => () => {
+      const listener = vaultRecoveryFileFocusListenerRef.current;
+      if (listener) window.removeEventListener("focus", listener);
+      vaultRecoveryFileFocusListenerRef.current = null;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (
+      !localVaultRecoveryRequired ||
+      !vaultRecoveryBackup?.receipt ||
+      vaultRecoveryBusy
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      vaultRecoveryRestorePasswordRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    localVaultRecoveryRequired,
+    vaultRecoveryBackup?.receipt,
+    vaultRecoveryBusy,
+  ]);
+  useEffect(() => {
+    if (!localVaultRecoveryRequired) return;
+    const input = vaultRecoveryFileRef.current;
+    if (!input) return;
+    const handleCancel = () => {
+      clearVaultRecoveryFileFocusListener();
+      focusVaultRecoveryFileButton();
+    };
+    input.addEventListener("cancel", handleCancel);
+    return () => input.removeEventListener("cancel", handleCancel);
+  }, [localVaultRecoveryRequired]);
   const authView = useMemo(() => deriveWelcomeViewModel(authState), [authState]);
   const dataHydrated =
     persistenceState.phase === "ready" || persistenceState.phase === "pending";
@@ -4125,6 +4195,7 @@ export default function Prototype() {
 
   useEffect(() => {
     let cancelled = false;
+    setLocalVaultRecoveryRequired(false);
     persistenceReadyRef.current = false;
     pendingWriteCountRef.current = 0;
     applyPersistenceState({
@@ -4260,6 +4331,7 @@ export default function Prototype() {
             supportCode: diagnostic.supportCode,
           });
         }
+        setLocalVaultRecoveryRequired(diagnostic.recoveryRequired);
         markPersistenceFailure(diagnostic.detail);
         setAnnouncement(
           `Cihaz verileri açılamadı. Destek kodu: ${diagnostic.supportCode}.`,
@@ -4758,32 +4830,257 @@ export default function Prototype() {
     }
   };
 
+  const closeAndDeleteLocalVault = async () => {
+    backupServicePromiseRef.current = null;
+    await store.cryptographicallyEraseAllData();
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    if (window.localStorage.getItem(LEGACY_STORAGE_KEY) !== null) {
+      throw new Error("Eski cihaz verisi kalıcı alandan kaldırılamadı.");
+    }
+  };
+
+  const focusVaultRecoveryFileButton = () => {
+    window.requestAnimationFrame(() => {
+      vaultRecoveryFileButtonRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  const clearVaultRecoveryFileFocusListener = () => {
+    const listener = vaultRecoveryFileFocusListenerRef.current;
+    if (!listener) return;
+    window.removeEventListener("focus", listener);
+    vaultRecoveryFileFocusListenerRef.current = null;
+  };
+
+  const openVaultRecoveryFilePicker = () => {
+    if (vaultRecoveryBusy) return;
+    const input = vaultRecoveryFileRef.current;
+    if (!input) {
+      focusVaultRecoveryFileButton();
+      return;
+    }
+    clearVaultRecoveryFileFocusListener();
+    const restoreFocus = () => {
+      clearVaultRecoveryFileFocusListener();
+      window.setTimeout(focusVaultRecoveryFileButton, 0);
+    };
+    vaultRecoveryFileFocusListenerRef.current = restoreFocus;
+    window.addEventListener("focus", restoreFocus, { once: true });
+    try {
+      input.click();
+    } catch {
+      clearVaultRecoveryFileFocusListener();
+      focusVaultRecoveryFileButton();
+    }
+  };
+
   const wipeAllLocalData = async () => {
     if (wipeConfirmation !== "TÜM VERİLERİ SİL" || dataBusy) return;
     setDataBusy(true);
     setSecureBackupError("");
     try {
       await flushPendingWrites();
-      await store.transaction("readwrite", COLLECTION_NAMES, async (transaction) => {
-        for (const collection of COLLECTION_NAMES) {
-          await transaction.clear(collection);
-        }
-      });
-      const snapshots = await store.listRecoverySnapshots();
-      for (const snapshot of snapshots) {
-        await store.deleteRecoverySnapshot(snapshot.id);
-      }
+      markPersistenceFailure(
+        "Cihaz verileri kalıcı silme için kapatıldı. İşlem tamamlanana kadar yeni kayıt yapılamaz.",
+      );
+      await closeAndDeleteLocalVault();
       setWipeConfirmation("");
-      setAnnouncement("Bu cihazdaki tüm MaarifOS verileri kalıcı olarak silindi.");
-      store.close();
+      setAnnouncement(
+        "Ana veritabanı ve şifreleme anahtarı kalıcı olarak silindi.",
+      );
       window.location.reload();
-    } catch (reason) {
+    } catch {
+      markPersistenceFailure(
+        "Cihaz verilerinin tamamı silinemedi. Yeni kayıtlar güvenlik için durduruldu; diğer MaarifOS sekmelerini kapatıp yeniden deneyin.",
+      );
       setSecureBackupError(
-        reason instanceof Error
-          ? reason.message
-          : "Cihaz verileri kalıcı olarak silinemedi.",
+        "Cihaz kasası kalıcı olarak silinemedi. Diğer MaarifOS sekmelerini kapatıp yeniden deneyin.",
       );
       setDataBusy(false);
+    }
+  };
+
+  const inspectVaultRecoveryFile = async (file: File | undefined) => {
+    if (!file || !localVaultRecoveryRequired || vaultRecoveryBusy) return;
+    setVaultRecoveryBusy(true);
+    setVaultRecoveryBackup(null);
+    setVaultRecoveryPassword("");
+    setVaultRecoveryConfirmation("");
+    setVaultRecoveryError("");
+    try {
+      if (file.size > 32 * 1024 * 1024) {
+        throw new Error("RECOVERY_FILE_TOO_LARGE");
+      }
+      const source = await file.text();
+      let candidate: unknown;
+      try {
+        candidate = JSON.parse(source);
+      } catch {
+        throw new Error("RECOVERY_FILE_INVALID");
+      }
+      if (!isEncryptedBackupEnvelope(candidate)) {
+        throw new Error("RECOVERY_FILE_NOT_ENCRYPTED");
+      }
+      setVaultRecoveryBackup({
+        fileName: file.name,
+        source,
+        receipt: null,
+      });
+      setAnnouncement("Şifreli kurtarma dosyası seçildi; parola bekleniyor.");
+    } catch {
+      setVaultRecoveryError(
+        "Yalnız en fazla 32 MB boyutunda, parola korumalı .maarifos yedeği kullanılabilir.",
+      );
+    } finally {
+      setVaultRecoveryBusy(false);
+      clearVaultRecoveryFileFocusListener();
+      if (vaultRecoveryFileRef.current) {
+        vaultRecoveryFileRef.current.value = "";
+      }
+      focusVaultRecoveryFileButton();
+    }
+  };
+
+  const unlockVaultRecoveryBackup = async () => {
+    if (
+      !vaultRecoveryBackup ||
+      vaultRecoveryBackup.receipt ||
+      vaultRecoveryPassword.length < 10 ||
+      vaultRecoveryBusy
+    ) {
+      return;
+    }
+    const recovery = vaultRecoveryBackup;
+    const passphrase = vaultRecoveryPassword;
+    setVaultRecoveryPassword("");
+    setVaultRecoveryBusy(true);
+    setVaultRecoveryError("");
+    try {
+      const backupService = await getBackupService();
+      const envelope = await backupService.parseAndDecryptBackup(
+        recovery.source,
+        passphrase,
+      );
+      const encryptedSourceChecksum = await sha256Hex(recovery.source);
+      setVaultRecoveryBackup((current) =>
+        current && current.source === recovery.source
+          ? {
+              ...current,
+              receipt: {
+                encryptedSourceChecksum,
+                payloadChecksum: envelope.manifest.payloadChecksum,
+                entityCounts: structuredClone(envelope.manifest.entityCounts),
+              },
+            }
+          : null,
+      );
+      setAnnouncement(
+        "Şifreli yedek doğrulandı; parola tekrarı ve açık onay bekleniyor.",
+      );
+    } catch {
+      setVaultRecoveryError(
+        "Yedek açılamadı. Dosyanın değişmediğini ve parolanın doğru olduğunu kontrol edin.",
+      );
+    } finally {
+      setVaultRecoveryBusy(false);
+    }
+  };
+
+  const restoreVaultFromEncryptedBackup = async () => {
+    if (
+      !localVaultRecoveryRequired ||
+      !vaultRecoveryBackup?.receipt ||
+      vaultRecoveryPassword.length < 10 ||
+      vaultRecoveryConfirmation !== "KASAYI GERİ YÜKLE" ||
+      vaultRecoveryBusy
+    ) {
+      return;
+    }
+    const recovery = vaultRecoveryBackup;
+    const receipt = vaultRecoveryBackup.receipt;
+    const passphrase = vaultRecoveryPassword;
+    setVaultRecoveryPassword("");
+    setVaultRecoveryConfirmation("");
+    setVaultRecoveryBusy(true);
+    setVaultRecoveryError("");
+    try {
+      const verificationService = await getBackupService();
+      const verified = await verificationService.parseAndDecryptBackup(
+        recovery.source,
+        passphrase,
+      );
+      if (
+        (await sha256Hex(recovery.source)) !==
+          receipt.encryptedSourceChecksum ||
+        verified.manifest.payloadChecksum !== receipt.payloadChecksum ||
+        canonicalJson(verified.manifest.entityCounts) !==
+          canonicalJson(receipt.entityCounts)
+      ) {
+        throw new Error("RECOVERY_REVERIFY_FAILED");
+      }
+
+      await closeAndDeleteLocalVault();
+      const restoreService = await getBackupService();
+      await restoreService.restoreEncryptedBackup(recovery.source, passphrase, {
+        mode: "replace",
+        createRecoverySnapshot: false,
+      });
+      const restoredSnapshot = await store.readSnapshot();
+      for (const [collectionName, expectedCount] of Object.entries(
+        verified.manifest.entityCounts,
+      )) {
+        const collection =
+          restoredSnapshot[collectionName as keyof typeof restoredSnapshot];
+        if (!Array.isArray(collection) || collection.length !== expectedCount) {
+          throw new Error("RECOVERY_COUNT_MISMATCH");
+        }
+      }
+      recordSuccessfulRestoreDrill(window.localStorage, {
+        sourceChecksum: await sha256Hex(recovery.source),
+        restoredAt: new Date(),
+        mode: "replace",
+      });
+      setAnnouncement(
+        "Yerel kasa yeniden oluşturuldu ve şifreli yedek yerine yüklendi.",
+      );
+      window.location.reload();
+    } catch {
+      markPersistenceFailure(
+        "Yerel kasa kurtarma tamamlanamadı. Yeni kayıtlar durdurulmaya devam ediyor.",
+      );
+      setLocalVaultRecoveryRequired(true);
+      setVaultRecoveryError(
+        "Kurtarma tamamlanamadı. Aynı şifreli yedeği ve parolayı yeniden doğrulayın; diğer MaarifOS sekmeleri açıksa kapatın.",
+      );
+      setVaultRecoveryBusy(false);
+    }
+  };
+
+  const resetVaultWithoutBackup = async () => {
+    if (
+      !localVaultRecoveryRequired ||
+      vaultResetConfirmation !== "BU CİHAZI SIFIRLA" ||
+      vaultRecoveryBusy
+    ) {
+      return;
+    }
+    setVaultRecoveryBusy(true);
+    setVaultRecoveryError("");
+    try {
+      await closeAndDeleteLocalVault();
+      setAnnouncement(
+        "Erişilemeyen yerel kasa ve anahtarı silindi; boş cihaz kurulumu açılıyor.",
+      );
+      window.location.reload();
+    } catch {
+      markPersistenceFailure(
+        "Cihaz sıfırlanamadı. Yeni kayıtlar güvenlik için durdurulmaya devam ediyor.",
+      );
+      setLocalVaultRecoveryRequired(true);
+      setVaultRecoveryError(
+        "Cihaz sıfırlanamadı. Diğer MaarifOS sekmelerini kapatıp yeniden deneyin.",
+      );
+      setVaultRecoveryBusy(false);
     }
   };
 
@@ -8686,7 +8983,7 @@ export default function Prototype() {
   ]);
 
   const retryPersistence = () => {
-    if (persistenceState.phase !== "error") return;
+    if (persistenceState.phase !== "error" || dataBusy) return;
     setAnnouncement("Cihaz verilerine yeniden bağlanılıyor.");
     setHydrationAttempt((current) => current + 1);
   };
@@ -13729,9 +14026,195 @@ export default function Prototype() {
                 <p aria-live="assertive">{persistenceState.detail}</p>
               </Dialog.Description>
               {persistenceState.phase === "error" ? (
-                <button type="button" onClick={retryPersistence} autoFocus>
-                  Cihaz verilerine yeniden bağlan
-                </button>
+                localVaultRecoveryRequired ? (
+                  <section
+                    className="vault-recovery-shell"
+                    aria-labelledby="vault-recovery-heading"
+                    aria-busy={vaultRecoveryBusy}
+                  >
+                    <div>
+                      <h3 id="vault-recovery-heading">
+                        Şifreli yedekten kurtar
+                      </h3>
+                      <p>
+                        Bu kasanın cihaz anahtarı bulunamadı. Normal kayıtlar
+                        kapalı kalır; yalnız doğrulanmış şifreli yedek yeni bir
+                        kasaya, yerine yükleme modunda aktarılabilir.
+                      </p>
+                    </div>
+                    <button
+                      ref={vaultRecoveryFileButtonRef}
+                      type="button"
+                      className="vault-recovery-file-button"
+                      onClick={openVaultRecoveryFilePicker}
+                      disabled={vaultRecoveryBusy}
+                      autoFocus
+                    >
+                      <UploadIcon aria-hidden="true" />
+                      Şifreli .maarifos yedeği seç
+                    </button>
+                    <input
+                      ref={vaultRecoveryFileRef}
+                      className="restore-file-input"
+                      type="file"
+                      accept=".maarifos,application/json"
+                      hidden
+                      tabIndex={-1}
+                      disabled={vaultRecoveryBusy}
+                      aria-label="Kasa kurtarma için şifreli MaarifOS yedeği seç"
+                      onChange={(event) =>
+                        void inspectVaultRecoveryFile(event.target.files?.[0])
+                      }
+                    />
+
+                    {vaultRecoveryBackup ? (
+                      <div className="vault-recovery-steps">
+                        <strong>{vaultRecoveryBackup.fileName}</strong>
+                        {!vaultRecoveryBackup.receipt ? (
+                          <>
+                            <label htmlFor="vault-recovery-password">
+                              Yedek parolası
+                              <KeyboardInput
+                                id="vault-recovery-password"
+                                type="password"
+                                value={vaultRecoveryPassword}
+                                onChange={(event) =>
+                                  setVaultRecoveryPassword(event.target.value)
+                                }
+                                minLength={10}
+                                maxLength={1024}
+                                autoComplete="current-password"
+                                disabled={vaultRecoveryBusy}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => void unlockVaultRecoveryBackup()}
+                              disabled={
+                                vaultRecoveryBusy ||
+                                vaultRecoveryPassword.length < 10
+                              }
+                            >
+                              {vaultRecoveryBusy
+                                ? "Doğrulanıyor…"
+                                : "Yedeği bellekte aç ve doğrula"}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="vault-recovery-verified" role="status">
+                              <CheckCircledIcon aria-hidden="true" />
+                              Yedek doğrulandı ·{" "}
+                              {Object.values(
+                                vaultRecoveryBackup.receipt.entityCounts,
+                              ).reduce((total, count) => total + count, 0)}{" "}
+                              kayıt
+                            </p>
+                            <label htmlFor="vault-recovery-restore-password">
+                              Yedek parolasını yeniden girin
+                              <KeyboardInput
+                                ref={vaultRecoveryRestorePasswordRef}
+                                id="vault-recovery-restore-password"
+                                type="password"
+                                value={vaultRecoveryPassword}
+                                onChange={(event) =>
+                                  setVaultRecoveryPassword(event.target.value)
+                                }
+                                minLength={10}
+                                maxLength={1024}
+                                autoComplete="current-password"
+                                disabled={vaultRecoveryBusy}
+                              />
+                            </label>
+                            <label htmlFor="vault-recovery-confirmation">
+                              Onaylamak için KASAYI GERİ YÜKLE yazın
+                              <KeyboardInput
+                                id="vault-recovery-confirmation"
+                                value={vaultRecoveryConfirmation}
+                                onChange={(event) =>
+                                  setVaultRecoveryConfirmation(
+                                    event.target.value.toLocaleUpperCase(
+                                      "tr-TR",
+                                    ),
+                                  )
+                                }
+                                autoComplete="off"
+                                disabled={vaultRecoveryBusy}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="vault-recovery-confirm-button"
+                              onClick={() =>
+                                void restoreVaultFromEncryptedBackup()
+                              }
+                              disabled={
+                                vaultRecoveryBusy ||
+                                vaultRecoveryPassword.length < 10 ||
+                                vaultRecoveryConfirmation !==
+                                  "KASAYI GERİ YÜKLE"
+                              }
+                            >
+                              {vaultRecoveryBusy
+                                ? "Kasa yeniden oluşturuluyor…"
+                                : "Kasayı sil, yeniden kur ve yedeği yükle"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {vaultRecoveryError ? (
+                      <p className="security-inline-error" role="alert">
+                        {vaultRecoveryError}
+                      </p>
+                    ) : null}
+
+                    <details className="vault-reset-fallback">
+                      <summary>Şifreli yedeğim yok</summary>
+                      <p>
+                        Erişilemeyen kayıtlar kurtarılamaz. Bu seçenek ana
+                        veritabanını, kasa anahtarını ve eski v1 verisini silip
+                        boş kurulum açar.
+                      </p>
+                      <label htmlFor="vault-reset-confirmation">
+                        Onaylamak için BU CİHAZI SIFIRLA yazın
+                        <KeyboardInput
+                          id="vault-reset-confirmation"
+                          value={vaultResetConfirmation}
+                          onChange={(event) =>
+                            setVaultResetConfirmation(
+                              event.target.value.toLocaleUpperCase("tr-TR"),
+                            )
+                          }
+                          autoComplete="off"
+                          disabled={vaultRecoveryBusy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void resetVaultWithoutBackup()}
+                        disabled={
+                          vaultRecoveryBusy ||
+                          vaultResetConfirmation !== "BU CİHAZI SIFIRLA"
+                        }
+                      >
+                        Erişilemeyen kasayı kalıcı sil
+                      </button>
+                    </details>
+                  </section>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={retryPersistence}
+                    disabled={dataBusy}
+                    autoFocus
+                  >
+                    {dataBusy
+                      ? "Kalıcı cihaz işlemi tamamlanıyor…"
+                      : "Cihaz verilerine yeniden bağlan"}
+                  </button>
+                )
               ) : null}
             </div>
           </Dialog.Content>

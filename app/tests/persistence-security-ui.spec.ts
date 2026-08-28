@@ -37,6 +37,83 @@ async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
+type EncryptedBackupFixture = {
+  name: string;
+  mimeType: string;
+  buffer: Buffer;
+};
+
+async function createEncryptedBackupFile(
+  page: Page,
+  passphrase: string,
+): Promise<EncryptedBackupFixture> {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
+  const settings = page.getByRole("dialog", {
+    name: "Hesap ve veri güvenliği",
+  });
+  await settings.getByLabel("Yedek parolası").first().fill(passphrase);
+  await settings.getByLabel("Parolayı doğrula").fill(passphrase);
+  const downloadPromise = page.waitForEvent("download");
+  await settings
+    .getByRole("button", { name: /Şifreli yedek oluştur/ })
+    .click();
+  const backupDownload = await downloadPromise;
+  const source = await backupDownload.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of source) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return {
+    name: backupDownload.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: Buffer.concat(chunks),
+  };
+}
+
+async function openMissingKeyRecoveryGate(page: Page) {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(
+        "maarifos-local--maarifos-student-sensitive-keys",
+      );
+      request.addEventListener("success", () => resolve(), { once: true });
+      request.addEventListener(
+        "error",
+        () => reject(request.error ?? new Error("Kurgu anahtar silme hatası")),
+        { once: true },
+      );
+    });
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  const gate = page.getByRole("dialog", {
+    name: "Yeni kayıtlar güvenlik için durduruldu",
+  });
+  await expect(gate).toBeVisible();
+  return gate;
+}
+
+async function verifyRecoveryBackup(
+  page: Page,
+  backupFile: EncryptedBackupFixture,
+  passphrase: string,
+) {
+  const gate = page.getByRole("dialog", {
+    name: "Yeni kayıtlar güvenlik için durduruldu",
+  });
+  await gate
+    .getByLabel("Kasa kurtarma için şifreli MaarifOS yedeği seç")
+    .setInputFiles(backupFile);
+  await gate.getByLabel("Yedek parolası", { exact: true }).fill(passphrase);
+  await gate
+    .getByRole("button", { name: "Yedeği bellekte aç ve doğrula" })
+    .click();
+  await expect(gate.getByText(/Yedek doğrulandı/)).toBeVisible();
+  await expect(gate.getByLabel("Yedek parolasını yeniden girin")).toBeFocused();
+  return gate;
+}
+
 test("sınıf kurulumu dört açık bilgiyi ister ve güvenli çalışma varsayılanını gösterir", async ({
   page,
 }) => {
@@ -250,4 +327,417 @@ test("Ana menü etkinlik, plan ve çıktı merkezlerini kalıcı gösterir, AI v
   await expect(navigation.getByRole("button", { name: "Planlar", exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Çıktılar", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Çıktılar" })).toHaveCount(0);
+});
+
+test("doğrulanmış IndexedDB hydration açık metin legacy v1 gölgesini kaldırır", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "maarifos-akis-pusulasi-v1",
+      JSON.stringify({
+        students: [
+          {
+            id: "legacy-browser-student",
+            name: "Tarayıcı Kurgu Öğrencisi",
+            status: "present",
+          },
+        ],
+        observations: [],
+        attendanceCompleted: false,
+      }),
+    );
+  });
+  await page.goto("/", { waitUntil: "networkidle" });
+  await expect(page.getByTestId("persistence-gate")).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("maarifos-akis-pusulasi-v1"),
+      ),
+    )
+    .toBeNull();
+});
+
+test("tüm verileri sil ana DB, kasa anahtarı, vault state ve legacy v1 gölgesini kriptografik olarak yeniler", async ({
+  page,
+}) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  const originalInstanceId = await page.evaluate(async () => {
+    const readRequest = <T,>(request: IDBRequest<T>) =>
+      new Promise<T>((resolve, reject) => {
+        request.addEventListener("success", () => resolve(request.result), {
+          once: true,
+        });
+        request.addEventListener(
+          "error",
+          () => reject(request.error ?? new Error("Kurgu IDB okuma hatası")),
+          { once: true },
+        );
+      });
+    const database = await readRequest(
+      indexedDB.open("maarifos-local--maarifos-student-sensitive-keys"),
+    );
+    const transaction = database.transaction("metadata", "readonly");
+    const metadata = await readRequest<Record<string, unknown> | undefined>(
+      transaction.objectStore("metadata").get("database-instance-v2"),
+    );
+    database.close();
+    localStorage.setItem(
+      "maarifos-akis-pusulasi-v1",
+      JSON.stringify({ students: [{ name: "Silinecek Kurgu PII" }] }),
+    );
+    return String(metadata?.databaseInstanceId ?? "");
+  });
+  expect(originalInstanceId).not.toBe("");
+
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
+  const advanced = page
+    .getByRole("dialog", { name: "Hesap ve veri güvenliği" })
+    .locator("details")
+    .filter({ hasText: "Gelişmiş cihaz işlemleri" });
+  await advanced.locator("summary").click();
+  await advanced.getByLabel("Tüm verileri silme onayı").fill("TÜM VERİLERİ SİL");
+  await Promise.all([
+    page.waitForEvent("framenavigated"),
+    advanced
+      .getByRole("button", {
+        name: "Bu cihazdaki tüm verileri kalıcı sil",
+      })
+      .click(),
+  ]);
+  await expect(
+    page.getByRole("dialog", { name: "Sınıfını hazırla" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("persistence-gate")).toBeHidden();
+
+  const resetState = await page.evaluate(async () => {
+    const readRequest = <T,>(request: IDBRequest<T>) =>
+      new Promise<T>((resolve, reject) => {
+        request.addEventListener("success", () => resolve(request.result), {
+          once: true,
+        });
+        request.addEventListener(
+          "error",
+          () => reject(request.error ?? new Error("Kurgu IDB okuma hatası")),
+          { once: true },
+        );
+      });
+    const keyDatabase = await readRequest(
+      indexedDB.open("maarifos-local--maarifos-student-sensitive-keys"),
+    );
+    const keyTransaction = keyDatabase.transaction("metadata", "readonly");
+    const metadata = await readRequest<Record<string, unknown> | undefined>(
+      keyTransaction.objectStore("metadata").get("database-instance-v2"),
+    );
+    keyDatabase.close();
+    const mainDatabase = await readRequest(indexedDB.open("maarifos-local"));
+    const mainTransaction = mainDatabase.transaction(
+      ["students", "__maarifosRecoverySnapshots", "__maarifosVaultState"],
+      "readonly",
+    );
+    const [students, recovery, vaultState] = await Promise.all([
+      readRequest(mainTransaction.objectStore("students").getAll()),
+      readRequest(
+        mainTransaction.objectStore("__maarifosRecoverySnapshots").getAll(),
+      ),
+      readRequest(mainTransaction.objectStore("__maarifosVaultState").getAll()),
+    ]);
+    mainDatabase.close();
+    return {
+      instanceId: String(metadata?.databaseInstanceId ?? ""),
+      studentCount: students.length,
+      recoveryCount: recovery.length,
+      vaultStateCount: vaultState.length,
+      legacy: localStorage.getItem("maarifos-akis-pusulasi-v1"),
+    };
+  });
+  expect(resetState.instanceId).not.toBe("");
+  expect(resetState.instanceId).not.toBe(originalInstanceId);
+  expect(resetState.studentCount).toBe(0);
+  expect(resetState.recoveryCount).toBe(0);
+  expect(resetState.vaultStateCount).toBe(1);
+  expect(resetState.legacy).toBeNull();
+});
+
+test("kayıp kasa anahtarı yalnız doğrulanmış şifreli yedek ve açık onayla replace kurtarılır", async ({
+  page,
+}) => {
+  const passphrase = "Kurgu-Kasa-Kurtarma-2026!";
+  const backupFile = await createEncryptedBackupFile(page, passphrase);
+  const gate = await openMissingKeyRecoveryGate(page);
+  await expect(gate.getByRole("heading", { name: "Şifreli yedekten kurtar" })).toBeVisible();
+  await gate
+    .getByLabel("Kasa kurtarma için şifreli MaarifOS yedeği seç")
+    .setInputFiles({
+      name: "duz-metin-yedek.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify({ payload: "şifreli-değil" })),
+    });
+  await expect(
+    gate.getByText(/Yalnız en fazla 32 MB boyutunda, parola korumalı/),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(async () =>
+      (await indexedDB.databases()).some(
+        (database) => database.name === "maarifos-local",
+      ),
+    ),
+  ).toBe(true);
+  await gate
+    .getByLabel("Kasa kurtarma için şifreli MaarifOS yedeği seç")
+    .setInputFiles(backupFile);
+  await gate.getByLabel("Yedek parolası", { exact: true }).fill(passphrase);
+  await gate
+    .getByRole("button", { name: "Yedeği bellekte aç ve doğrula" })
+    .click();
+  await expect(gate.getByText(/Yedek doğrulandı/)).toBeVisible();
+  await expect(gate.getByLabel("Yedek parolasını yeniden girin")).toHaveValue("");
+  await gate.getByLabel("Yedek parolasını yeniden girin").fill(passphrase);
+  await gate
+    .getByLabel("Onaylamak için KASAYI GERİ YÜKLE yazın")
+    .fill("KASAYI GERİ YÜKLE");
+  await Promise.all([
+    page.waitForEvent("framenavigated"),
+    gate
+      .getByRole("button", {
+        name: "Kasayı sil, yeniden kur ve yedeği yükle",
+      })
+      .click(),
+  ]);
+  await expect(page.getByTestId("persistence-gate")).toBeHidden();
+  await expect(
+    page.getByRole("main", { name: /Günaydın Güvenli Öğretmen/ }),
+  ).toBeVisible();
+});
+
+test("blocked kriptografik silme hiçbir legacy gölgeyi erken kaldırmaz ve yazmayı fail-closed tutar", async ({
+  page,
+}) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  await page.evaluate(async () => {
+    const testWindow = window as Window & {
+      __maarifEraseBlocker?: IDBDatabase;
+    };
+    testWindow.__maarifEraseBlocker = await new Promise<IDBDatabase>(
+      (resolve, reject) => {
+        const request = indexedDB.open("maarifos-local");
+        request.addEventListener("success", () => resolve(request.result), {
+          once: true,
+        });
+        request.addEventListener(
+          "error",
+          () => reject(request.error ?? new Error("Kurgu blocker açılamadı")),
+          { once: true },
+        );
+      },
+    );
+    localStorage.setItem(
+      "maarifos-akis-pusulasi-v1",
+      JSON.stringify({ students: [{ name: "Blocked Silme Kurgu PII" }] }),
+    );
+  });
+
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
+  const advanced = page
+    .getByRole("dialog", { name: "Hesap ve veri güvenliği" })
+    .locator("details")
+    .filter({ hasText: "Gelişmiş cihaz işlemleri" });
+  await advanced.locator("summary").click();
+  await advanced.getByLabel("Tüm verileri silme onayı").fill("TÜM VERİLERİ SİL");
+  await advanced
+    .getByRole("button", { name: "Bu cihazdaki tüm verileri kalıcı sil" })
+    .click();
+
+  const gate = page.getByRole("dialog", {
+    name: "Yeni kayıtlar güvenlik için durduruldu",
+  });
+  await expect(gate).toBeVisible();
+  await expect(gate).toContainText("tamamı silinemedi", { timeout: 12_000 });
+  await expect(
+    gate.getByRole("button", { name: "Cihaz verilerine yeniden bağlan" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("maarifos-akis-pusulasi-v1"),
+    ),
+  ).not.toBeNull();
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __maarifEraseBlocker?: IDBDatabase;
+    };
+    testWindow.__maarifEraseBlocker?.close();
+    delete testWindow.__maarifEraseBlocker;
+  });
+});
+
+test("silme sonrası restore yazma hatası kapıyı açık tutar ve aynı receipt ile güvenli yeniden deneme yapılır", async ({
+  page,
+}) => {
+  const passphrase = "Kurgu-Restore-Yeniden-2026!";
+  const backupFile = await createEncryptedBackupFile(page, passphrase);
+  await openMissingKeyRecoveryGate(page);
+  const gate = await verifyRecoveryBackup(page, backupFile, passphrase);
+  await gate.getByLabel("Yedek parolasını yeniden girin").fill(passphrase);
+  await gate
+    .getByLabel("Onaylamak için KASAYI GERİ YÜKLE yazın")
+    .fill("KASAYI GERİ YÜKLE");
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __maarifOriginalRestorePut?: typeof IDBObjectStore.prototype.put;
+    };
+    testWindow.__maarifOriginalRestorePut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function forcedRestoreWriteFailure() {
+      throw new DOMException("Kurgu restore yazma hatası", "UnknownError");
+    };
+  });
+  await gate
+    .getByRole("button", { name: "Kasayı sil, yeniden kur ve yedeği yükle" })
+    .click();
+
+  await expect(gate).toBeVisible();
+  await expect(gate.getByText(/Kurtarma tamamlanamadı/)).toBeVisible();
+  await expect(gate.getByText(/Yedek doğrulandı/)).toBeVisible();
+  await expect(gate.getByLabel("Yedek parolasını yeniden girin")).toHaveValue("");
+  await expect(
+    gate.getByLabel("Onaylamak için KASAYI GERİ YÜKLE yazın"),
+  ).toHaveValue("");
+  await expect(
+    gate.getByRole("button", { name: "Kasayı sil, yeniden kur ve yedeği yükle" }),
+  ).toBeDisabled();
+  expect(
+    await page.evaluate(async () => {
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open("maarifos-local");
+        request.addEventListener("success", () => resolve(request.result), {
+          once: true,
+        });
+        request.addEventListener(
+          "error",
+          () => reject(request.error ?? new Error("Kurgu DB açılamadı")),
+          { once: true },
+        );
+      });
+      const studentCount = await new Promise<number>((resolve, reject) => {
+        const request = database
+          .transaction("students", "readonly")
+          .objectStore("students")
+          .count();
+        request.addEventListener("success", () => resolve(request.result), {
+          once: true,
+        });
+        request.addEventListener(
+          "error",
+          () => reject(request.error ?? new Error("Kurgu count alınamadı")),
+          { once: true },
+        );
+      });
+      database.close();
+      return studentCount;
+    }),
+  ).toBe(0);
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __maarifOriginalRestorePut?: typeof IDBObjectStore.prototype.put;
+    };
+    if (testWindow.__maarifOriginalRestorePut) {
+      IDBObjectStore.prototype.put = testWindow.__maarifOriginalRestorePut;
+      delete testWindow.__maarifOriginalRestorePut;
+    }
+  });
+  await gate.getByLabel("Yedek parolasını yeniden girin").fill(passphrase);
+  await gate
+    .getByLabel("Onaylamak için KASAYI GERİ YÜKLE yazın")
+    .fill("KASAYI GERİ YÜKLE");
+  await Promise.all([
+    page.waitForEvent("framenavigated"),
+    gate
+      .getByRole("button", { name: "Kasayı sil, yeniden kur ve yedeği yükle" })
+      .click(),
+  ]);
+  await expect(page.getByTestId("persistence-gate")).toBeHidden();
+});
+
+test("kurtarma kapısı 320 px'de taşmaz, görünmez input odağı almaz ve yedeksiz reset açık onay ister", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  const gate = await openMissingKeyRecoveryGate(page);
+  const fileButton = gate.getByRole("button", {
+    name: "Şifreli .maarifos yedeği seç",
+  });
+  const fileInput = gate.getByLabel(
+    "Kasa kurtarma için şifreli MaarifOS yedeği seç",
+  );
+  const resetDetails = gate
+    .locator("details")
+    .filter({ hasText: "Şifreli yedeğim yok" });
+  const resetSummary = resetDetails.locator("summary");
+
+  await expect(fileButton).toBeFocused();
+  await expect(fileInput).toBeHidden();
+  await expect(fileInput).toHaveAttribute("tabindex", "-1");
+  await page.keyboard.press("Tab");
+  await expect(resetSummary).toBeFocused();
+  await fileInput.setInputFiles({
+    name: "gecersiz-kurtarma.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ encrypted: false })),
+  });
+  await expect(fileButton).toBeFocused();
+  await resetSummary.focus();
+  await fileInput.dispatchEvent("cancel");
+  await expect(fileButton).toBeFocused();
+
+  const reflow = await page.evaluate(() => {
+    const card = document.querySelector<HTMLElement>(".persistence-gate-card");
+    const targets = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".vault-recovery-shell button, .vault-recovery-shell summary",
+      ),
+    ].filter((target) => target.getClientRects().length > 0);
+    const rectangle = card?.getBoundingClientRect();
+    return {
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      cardLeft: rectangle?.left ?? -1,
+      cardRight: rectangle?.right ?? window.innerWidth + 1,
+      minimumTargetHeight: Math.min(
+        ...targets.map((target) => target.getBoundingClientRect().height),
+      ),
+    };
+  });
+  expect(reflow.documentWidth).toBeLessThanOrEqual(reflow.viewportWidth);
+  expect(reflow.cardLeft).toBeGreaterThanOrEqual(0);
+  expect(reflow.cardRight).toBeLessThanOrEqual(reflow.viewportWidth);
+  expect(reflow.minimumTargetHeight).toBeGreaterThanOrEqual(44);
+
+  await resetSummary.click();
+  const confirmation = resetDetails.getByLabel(
+    "Onaylamak için BU CİHAZI SIFIRLA yazın",
+  );
+  const resetButton = resetDetails.getByRole("button", {
+    name: "Erişilemeyen kasayı kalıcı sil",
+  });
+  await confirmation.fill("YANLIŞ ONAY");
+  await expect(resetButton).toBeDisabled();
+  await expect
+    .poll(async () => (await resetButton.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(44);
+  await confirmation.fill("BU CİHAZI SIFIRLA");
+  await expect(resetButton).toBeEnabled();
+  await Promise.all([
+    page.waitForEvent("framenavigated"),
+    resetButton.click(),
+  ]);
+  await expect(
+    page.getByRole("dialog", { name: "Sınıfını hazırla" }),
+  ).toBeVisible();
 });
