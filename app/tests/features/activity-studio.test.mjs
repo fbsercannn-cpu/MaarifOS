@@ -280,6 +280,48 @@ test("telefon CSS'i 320 pikselde sayfa taşmasını önler ve dokunma hedeflerin
   assert.doesNotMatch(component, /<img|<svg|emoji|https?:\/\//iu);
 });
 
+test("hazırlık döneminde Çocuk Modu kalıcı kanıt yazmadan açılır ve gözlem gerekçeli kilitlenir", async () => {
+  const component = await readFile(
+    new URL("../../src/features/activity-studio/ActivityStudio.tsx", import.meta.url),
+    "utf8",
+  );
+  const prototype = await readFile(
+    new URL("../../src/Prototype.tsx", import.meta.url),
+    "utf8",
+  );
+  const css = await readFile(
+    new URL("../../src/features/activity-studio/activity-studio.css", import.meta.url),
+    "utf8",
+  );
+
+  const applyStart = prototype.indexOf("onApply={async (activity, context) => {");
+  const persistenceStart = prototype.indexOf(
+    "ensureActivityStudioApplication(store",
+    applyStart,
+  );
+  const previewGuard = prototype.indexOf(
+    "if (educationalWriteNotice)",
+    applyStart,
+  );
+  assert.ok(applyStart >= 0);
+  assert.ok(previewGuard > applyStart && previewGuard < persistenceStart);
+  assert.match(
+    prototype.slice(previewGuard, persistenceStart),
+    /uygulama oturumu ve kanıt oluşturulmadı/u,
+  );
+  assert.match(component, /childModeObservationUnavailableReason\?: string/u);
+  assert.match(
+    component,
+    /busyAction !== null \|\| Boolean\(childModeObservationUnavailableReason\)/u,
+  );
+  assert.match(component, /aria-describedby=\{/u);
+  assert.match(component, /className="activity-child-mode__recording-note"/u);
+  assert.match(
+    css,
+    /activity-child-mode__observation-button:disabled[\s\S]*opacity: 1/u,
+  );
+});
+
 test("plan koleksiyonları ve orkestra adımları stüdyoyu doğru bağlamla açar", async () => {
   const source = await readFile(
     new URL("../../src/features/simple-experience/SimplePlanWorkspaceScreen.tsx", import.meta.url),

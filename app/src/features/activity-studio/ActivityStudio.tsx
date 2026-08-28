@@ -110,6 +110,7 @@ export interface ActivityStudioProps {
   onPrint(request: ActivityStudioPrintRequest): ControllerResult;
   onChildChoice?(request: ActivityStudioChildChoiceRequest): ControllerResult;
   onWriteObservation?(request: ActivityStudioObservationRequest): ControllerResult;
+  childModeObservationUnavailableReason?: string;
   onChildModeChange?(open: boolean): void;
   emptyStateAction?: ReactNode;
 }
@@ -139,12 +140,14 @@ export function ActivityStudio({
   onPrint,
   onChildChoice,
   onWriteObservation,
+  childModeObservationUnavailableReason,
   onChildModeChange,
   emptyStateAction,
 }: ActivityStudioProps) {
   const componentId = useId();
   const headingId = `${componentId}-heading`;
   const statusId = `${componentId}-status`;
+  const childObservationNoticeId = `${componentId}-child-observation-notice`;
   const [ageBand, setAgeBand] =
     useState<ActivityStudioAgeBand>(initialAgeBand ?? ACTIVITY_STUDIO_AGE_BANDS[0]);
   const [category, setCategory] =
@@ -455,11 +458,28 @@ export function ActivityStudio({
           </p>
         ) : null}
 
+        {childModeObservationUnavailableReason ? (
+          <p
+            className="activity-child-mode__recording-note"
+            id={childObservationNoticeId}
+            role="status"
+          >
+            {childModeObservationUnavailableReason}
+          </p>
+        ) : null}
+
         <footer className="activity-child-mode__footer">
           <button
             type="button"
             className="activity-child-mode__observation-button"
-            disabled={busyAction !== null}
+            disabled={
+              busyAction !== null || Boolean(childModeObservationUnavailableReason)
+            }
+            aria-describedby={
+              childModeObservationUnavailableReason
+                ? childObservationNoticeId
+                : undefined
+            }
             onClick={() => void leaveChildMode(true)}
           >
             <Pencil1Icon aria-hidden="true" />

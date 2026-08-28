@@ -149,6 +149,7 @@ test("320 pikselde öğretmen masası kartları kırpılmaz", async ({
     const titles = [...region.querySelectorAll("button strong")];
     return {
       buttonCount: region.querySelectorAll(":scope > button").length,
+      titles: titles.map((title) => title.textContent?.trim() ?? ""),
       horizontalOverflow: region.scrollWidth > region.clientWidth + 1,
       clippedTitles: titles
         .filter((title) => title.scrollHeight > title.clientHeight + 1)
@@ -156,7 +157,8 @@ test("320 pikselde öğretmen masası kartları kırpılmaz", async ({
     };
   });
 
-  expect(layout.buttonCount).toBe(4);
+  expect(layout.buttonCount).toBe(3);
+  expect(layout.titles).toEqual(["Yoklama", "Günün planı", "Etkinlik bankası"]);
   expect(layout.horizontalOverflow).toBe(false);
   expect(layout.clippedTitles).toEqual([]);
 });
@@ -335,14 +337,64 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
   await expect(page.getByRole("navigation", { name: "Ana menü" })).toHaveCount(0);
   await expect(page.locator(".mobile-scroll")).toHaveJSProperty("scrollTop", 0);
 
+  const previewWrites = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    const snapshot = await store.readSnapshot();
+    store.close();
+    return {
+      applicationPlans: snapshot.plans.filter(
+        (record) => record.planType === "activity-studio-application",
+      ).length,
+      applicationActivities: snapshot.activities.filter(
+        (record) => record.activityKind === "activity-studio-application",
+      ).length,
+    };
+  });
+  expect(previewWrites).toEqual({
+    applicationPlans: 0,
+    applicationActivities: 0,
+  });
+
+  const addDot = childMode.getByRole("button", { name: "Nokta ekle", exact: true });
+  await expect(addDot).toBeEnabled();
+  await addDot.click();
+  await expect(childMode.locator(".activity-drawing-pad__status")).toHaveText(
+    "Nokta çizime eklendi.",
+  );
+
   for (const label of ["PNG indir", "Yazdır"] as const) {
     const target = childMode.getByRole("button", { name: label, exact: true });
     await target.scrollIntoViewIfNeeded();
     await expect(target).toBeVisible();
     await expect(target).toBeInViewport();
+    await expect(target).toBeEnabled();
   }
 
   const footer = childMode.locator(".activity-child-mode__footer");
+  const observationAction = footer.getByRole("button", {
+    name: "Bu etkinlik için gözlem yaz",
+    exact: true,
+  });
+  const recordingNotice = childMode.locator(
+    ".activity-child-mode__recording-note",
+  );
+  await expect(recordingNotice).toContainText("Çalışmayı bugün başlat");
+  await expect(recordingNotice).toContainText("kalıcı kanıt oluşturmaz");
+  await expect(observationAction).toBeDisabled();
+  const recordingNoticeId = await recordingNotice.getAttribute("id");
+  expect(recordingNoticeId).toBeTruthy();
+  await expect(observationAction).toHaveAttribute(
+    "aria-describedby",
+    recordingNoticeId!,
+  );
+  await expect(
+    footer.getByRole("button", { name: "Pas geç", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    footer.getByRole("button", { name: "Öğretmene dön", exact: true }),
+  ).toBeEnabled();
+
   for (const label of [
     "Bu etkinlik için gözlem yaz",
     "Pas geç",

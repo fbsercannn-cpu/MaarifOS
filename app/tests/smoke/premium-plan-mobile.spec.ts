@@ -28,7 +28,16 @@ test("premiumPilot sorgusu dar telefonda sade TYMM plan ekranını değiştirmez
   await expect(plans).toBeVisible();
   await expect(plans).toContainText("Yalnız Türkiye Yüzyılı Maarif Modeli");
   const planTypes = plans.getByRole("region", { name: "Neyi hazırlayacaksınız?" });
-  await expect(planTypes.getByRole("button")).toHaveCount(4);
+  await expect(planTypes.getByRole("button")).toHaveCount(5);
+  const builtInMaarifLibrary = planTypes.getByTestId(
+    "built-in-maarif-library-entry",
+  );
+  await expect(builtInMaarifLibrary).toContainText(
+    "60–72 AY · HAZIR MAARİF İÇERİĞİ",
+  );
+  await expect(builtInMaarifLibrary).toContainText(
+    "Kaynak bütünlüğü doğrulanmış içerikler",
+  );
 
   const layout = await plans.evaluate((element) => ({
     scrollWidth: element.scrollWidth,
@@ -39,6 +48,22 @@ test("premiumPilot sorgusu dar telefonda sade TYMM plan ekranını değiştirmez
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
   expect(layout.clippedTitles).toEqual([]);
+
+  await builtInMaarifLibrary.click();
+  const builtInMaarifPlans = page.getByTestId("premium-plan-center");
+  await expect(
+    builtInMaarifPlans.getByRole("heading", {
+      name: "Hazır Maarif planları",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    builtInMaarifPlans.getByTestId("premium-install-panel"),
+  ).toBeVisible();
+  await builtInMaarifPlans
+    .getByRole("button", { name: "Plan Kütüphanesi’ni kapat" })
+    .click();
+  await expect(builtInMaarifPlans).toBeHidden();
 
   await planTypes
     .getByRole("button", { name: /Yıllık planlama panosu/i })

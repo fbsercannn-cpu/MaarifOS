@@ -9154,6 +9154,12 @@ export default function Prototype() {
         void openPlanFlow(undefined, contextualTitle, provenance);
       }}
       onApply={async (activity, context) => {
+        if (educationalWriteNotice) {
+          setAnnouncement(
+            `${activity.title} için gözetimli Çocuk Modu önizlemesi açıldı; eğitim yılı gerçek kayıt kullanımına açık olmadığı için uygulama oturumu ve kanıt oluşturulmadı.`,
+          );
+          return;
+        }
         const { ensureActivityStudioApplication } = await import(
           "./features/activity-studio/activity-studio-application.ts"
         );
@@ -9181,6 +9187,13 @@ export default function Prototype() {
         );
         return application.identity;
       }}
+      childModeObservationUnavailableReason={
+        educationalWriteNotice
+          ? configuredClassroom?.operationalStatus === "preparation"
+            ? "Gözlem kaydı için öğretmen ekranına dönün ve “Çalışmayı bugün başlat” ile eğitim yılını gerçek kayıt kullanımına açın. Çizim ve çocuk seçimleri bu önizlemede kalıcı kanıt oluşturmaz."
+            : educationalWriteNotice
+          : undefined
+      }
       onPrint={async (request) => {
         const { openHtmlPrintWindow } = await import(
           "./features/printing/open-html-print-window.ts"

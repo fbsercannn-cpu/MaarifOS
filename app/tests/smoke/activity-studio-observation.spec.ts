@@ -247,6 +247,9 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
   await expect(observationText).toHaveValue(/4 çizgi/u);
 
   await page.getByRole("button", { name: "Gözlemi kaydet", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
+  ).toBeHidden();
 
   const savedLineage = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");

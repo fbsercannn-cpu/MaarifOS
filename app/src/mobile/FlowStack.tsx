@@ -159,6 +159,7 @@ export function FlowStack({ initial }: { initial: FlowScreen }) {
       }
     },
     {
+      enabled: controls.canGoBack,
       axis: "x",
       filterTaps: true,
       pointer: { touch: true },
