@@ -614,3 +614,34 @@ test("yıllık plan bacağı ve bulunmayan tarihsel revizyon tamperi Ek 18'i kap
     );
   }
 });
+
+test("ikinci context okumasından sonra değişen metadata snapshot yarışı fail-closed kalır", async () => {
+  const { store, monthly } = await createMonthlyFixture();
+  const evaluation = await recordEvaluation(
+    store,
+    monthly.id,
+    new Date("2026-09-30T15:00:00.000Z"),
+    "Snapshot yarışı",
+  );
+  const originalReadSnapshot = store.readSnapshot.bind(store);
+  let readCount = 0;
+  store.readSnapshot = async () => {
+    readCount += 1;
+    const result = await originalReadSnapshot();
+    if (readCount === 3) {
+      store.snapshot.activities[0].environment = "Eşzamanlı değişen ortam";
+      store.snapshot.activities[0].updatedAt = "2026-10-01T06:00:00.000Z";
+    }
+    return result;
+  };
+
+  await assert.rejects(
+    () => generateTeacherOwnedMonthlyEvaluationExportFile(
+      store,
+      monthly.id,
+      { kind: "exact", evaluationId: evaluation.id },
+      "word",
+    ),
+    /yerel veri snapshot'ı değişti/u,
+  );
+});

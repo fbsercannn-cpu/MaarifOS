@@ -306,11 +306,17 @@ export async function loadTeacherOwnedMonthlyEvaluationExportSource(
   const reviewContext = await loadTeacherMonthlyReviewContext(store, monthlyPlanId);
   const snapshot = await store.readSnapshot();
   const confirmedContext = await loadTeacherMonthlyReviewContext(store, monthlyPlanId);
+  const confirmedSnapshot = await store.readSnapshot();
   if (canonicalJson(reviewContext) !== canonicalJson(confirmedContext)) {
     fail("Ek 18 hazırlanırken kanıt zinciri değişti; güncel kayıt yeniden açılmalıdır.");
   }
+  if (canonicalJson(snapshot) !== canonicalJson(confirmedSnapshot)) {
+    fail(
+      "Ek 18 hazırlanırken yerel veri snapshot'ı değişti; güncel kayıt yeniden açılmalıdır.",
+    );
+  }
   const persisted = assertUniqueRecords(
-    snapshot.plans,
+    confirmedSnapshot.plans,
     monthlyPlanId,
     "Ek 18 aylık planı",
   );
@@ -323,7 +329,7 @@ export async function loadTeacherOwnedMonthlyEvaluationExportSource(
   }
   const source = deepFreeze({
     reviewContext: structuredClone(confirmedContext),
-    observationMetadata: observationMetadata(snapshot, confirmedContext),
+    observationMetadata: observationMetadata(confirmedSnapshot, confirmedContext),
   });
   verifiedSources.add(source);
   return source;

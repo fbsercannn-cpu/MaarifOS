@@ -25,8 +25,9 @@ private lisans Worker'ı bağımsız sürümlenir.
   boş ve `verified-no-components` kalır; öğretmen metninden işaret türetilmez.
   Değerlendirme exact plan revizyonuna bağlanır; ilişkili plan, etkinlik,
   gözlem veya program bağı sonradan değişmişse eski kayıttan resmî çıktı
-  fail-closed kapanır. Kaynak revizyonu ve kanıt değişim politikası DOCX
-  manifestine yazılır.
+  fail-closed kapanır. İki doğrulama okuması arasında metadata değişirse bütün
+  snapshot yarışı da reddedilir. Kaynak revizyonu ve kanıt değişim politikası
+  DOCX manifestine yazılır.
 
 ### Değiştirildi
 
