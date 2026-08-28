@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
@@ -19,6 +24,12 @@ const yearId = "00000000-0000-4000-8000-000000008101";
 const classroomId = "00000000-0000-4000-8000-000000008102";
 const otherClassroomId = "00000000-0000-4000-8000-000000008103";
 const generatedAt = "2026-08-21T10:30:00.000Z";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const pdfFontBytes = new Uint8Array(readFileSync(path.resolve(
+  testDirectory,
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+)));
+const hasPdfToText = !spawnSync("pdftotext", ["-v"], { encoding: "utf8" }).error;
 
 function record(id, fields = {}) {
   return {
@@ -59,46 +70,18 @@ function create(snapshot) {
   });
 }
 
-function fakePdfRuntime() {
-  const drawnText = [];
-  const context = {
-    fillStyle: "#000000",
-    strokeStyle: "#000000",
-    font: "",
-    textAlign: "left",
-    textBaseline: "alphabetic",
-    lineWidth: 1,
-    fillRect() {},
-    strokeRect() {},
-    beginPath() {},
-    moveTo() {},
-    lineTo() {},
-    stroke() {},
-    measureText(value) {
-      return { width: [...String(value)].length * 9 };
-    },
-    fillText(value) {
-      drawnText.push(String(value));
-    },
-  };
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43, 0xff, 0xd9]);
-  const canvas = {
-    width: 0,
-    height: 0,
-    getContext(kind) {
-      return kind === "2d" ? context : null;
-    },
-    toDataURL() {
-      return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-    },
-  };
-  return {
-    drawnText,
-    runtime: {
-      createCanvas: () => canvas,
-      waitForFonts: async () => {},
-    },
-  };
+function extractPdfText(bytes) {
+  if (!hasPdfToText) return "";
+  const directory = mkdtempSync(path.join(tmpdir(), "maarifos-roster-pdf-"));
+  try {
+    const pdfPath = path.join(directory, "roster.pdf");
+    const textPath = path.join(directory, "roster.txt");
+    writeFileSync(pdfPath, bytes);
+    execFileSync("pdftotext", ["-layout", "-enc", "UTF-8", pdfPath, textPath]);
+    return readFileSync(textPath, "utf8").replaceAll("\r", "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 test("sınıf listesi yalnız aktif sınıf öğrencilerini kapsar", () => {
@@ -362,10 +345,9 @@ for (const studentCount of [1, 15, 30, 40]) {
 }
 
 for (const studentCount of [1, 15, 30, 40]) {
-  test(`${studentCount} öğrencilik gerçek PDF magic byte, A4 sayfa ve Türkçe çizim sözleşmesini korur`, async () => {
+  test(`${studentCount} öğrencilik PDF etiketli, aranabilir ve A4 içinde kayıpsız üretilir`, async () => {
     const snapshot = fixture();
     addRosterStudents(snapshot, studentCount, { verbose: studentCount === 40 });
-    const { runtime, drawnText } = fakePdfRuntime();
     const file = await createClassRosterPdfDocument(
       {
         scope: { academicYearId: yearId, classroomId },
@@ -374,7 +356,7 @@ for (const studentCount of [1, 15, 30, 40]) {
         teacherName: "Emine Nur Akış Özdemir",
         generatedAt,
       },
-      { runtime },
+      { runtime: { fontBytes: pdfFontBytes } },
     );
     const output = classRosterPdfDocumentOutputContract(file);
     const blob = classRosterPdfDocumentBlob(file);
@@ -403,14 +385,49 @@ for (const studentCount of [1, 15, 30, 40]) {
       Buffer.from(file.bytes).toString("latin1"),
       new RegExp(`/Count ${file.pageCount}\\b`, "u"),
     );
+    const decoded = Buffer.from(file.bytes).toString("latin1");
+    assert.match(decoded, /\/Lang \(tr-TR\)/u);
+    assert.match(decoded, /\/StructTreeRoot\b/u);
+    assert.match(decoded, /\/FontFile2\b/u);
+    assert.match(decoded, /\/ToUnicode\b/u);
+    assert.match(decoded, /\/S \/Table\b/u);
+    assert.match(decoded, /\/S \/TH\b/u);
+    assert.match(decoded, /\/Scope \/Column\b/u);
+    assert.match(decoded, /\/Scope \/Row\b/u);
+    assert.doesNotMatch(decoded, /\/Subtype \/Image\b/u);
+    const xmp = new TextDecoder().decode(file.bytes)
+      .match(/<x:xmpmeta[\s\S]+?<\/x:xmpmeta>/u)?.[0] ?? "";
+    assert.doesNotMatch(xmp, /Kurgu Öğrenci|Nurbanu Nazlıcan|10000000146|0555 000 00 00|\+90 \(532\)/u);
     if (studentCount <= 15) assert.equal(file.pageCount, 1);
     if (studentCount >= 30) assert.ok(file.pageCount >= 2);
-    assert.ok(drawnText.includes("SINIF LİSTESİ"));
-    assert.ok(drawnText.includes("Emine Nur Akış Özdemir"));
-    assert.ok(
-      drawnText.some((line) => line.includes("Öğrenci") || line.includes("Öğretmenler")),
-      "Türkçe karakterli metin canvas çizim katmanına kayıpsız ulaşmalı",
-    );
+    const extracted = extractPdfText(file.bytes);
+    if (hasPdfToText) {
+      assert.match(extracted, /SINIF LİSTESİ/u);
+      assert.match(extracted, /Emine Nur Akış Özdemir/u);
+      assert.match(extracted, /10000000146/u);
+      assert.match(extracted, /Çınaroğlu|Kahramanoğlu/u);
+      assert.match(extracted, new RegExp(`(?:^|\\s)${studentCount}(?:\\s|$)`, "u"));
+      const pages = extracted.replaceAll("\r", "").split("\f").filter((page) => page.trim());
+      assert.equal(
+        pages.filter((page) => page.includes("Kişisel veri içerir · Yetkisiz paylaşmayınız.")).length,
+        file.pageCount,
+        "kişisel veri uyarısı her PDF sayfasında artifact olarak görünmeli",
+      );
+      if (studentCount === 40) {
+        for (const page of pages) {
+          const danglingTail = page.indexOf("yetkili teslim kişisi)");
+          if (danglingTail < 0) continue;
+          const firstStudent = [page.indexOf("Kurgu Öğrenci"), page.indexOf("Nurbanu Nazlıcan")]
+            .filter((index) => index >= 0)
+            .sort((left, right) => left - right)[0] ?? -1;
+          assert.ok(
+            firstStudent >= 0 && firstStudent < danglingTail,
+            "sayfa öğrenci kimliği olmadan önceki satırın veli artığıyla başlamamalı",
+          );
+        }
+        assert.doesNotMatch(extracted, /Devam —/u, "taze sayfaya sığan öğrenci satırı bölünmemeli");
+      }
+    }
     assert.equal((await blob.arrayBuffer()).byteLength, file.bytes.byteLength);
   });
 }
@@ -420,7 +437,6 @@ test("kalıcı snapshot yeniden yüklendiğinde PDF aynı öğrenci ve kapsamı 
   addRosterStudents(snapshot, 15);
   snapshot.students[7].displayName = "İpek Çağrı Öztürk";
   const restoredSnapshot = JSON.parse(JSON.stringify(snapshot));
-  const { runtime, drawnText } = fakePdfRuntime();
 
   const file = await createClassRosterPdfDocument(
     {
@@ -430,11 +446,11 @@ test("kalıcı snapshot yeniden yüklendiğinde PDF aynı öğrenci ve kapsamı 
       teacherName: "Emine Akış",
       generatedAt,
     },
-    { runtime },
+    { runtime: { fontBytes: pdfFontBytes } },
   );
 
   assert.equal(file.rowCount, 15);
-  assert.ok(drawnText.includes("İpek Çağrı Öztürk"));
+  if (hasPdfToText) assert.match(extractPdfText(file.bytes), /İpek Çağrı Öztürk/u);
   assert.deepEqual(file.scope, { academicYearId: yearId, classroomId });
   assert.equal(file.generatedCivilDate, "2026-08-21");
 });

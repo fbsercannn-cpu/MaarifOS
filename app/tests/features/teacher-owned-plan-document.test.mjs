@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
@@ -10,6 +11,11 @@ import {
 const annualId = "00000000-0000-4000-8000-000000000a03";
 const monthlyId = "00000000-0000-4000-8000-000000000a04";
 const weeklyId = "00000000-0000-4000-8000-000000000a05";
+const dailyId = "00000000-0000-4000-8000-000000000a06";
+const pdfFontBytes = new Uint8Array(readFileSync(new URL(
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+  import.meta.url,
+)));
 
 const base = {
   planOrigin: "teacher-authored",
@@ -90,6 +96,38 @@ const emptyStore = {
   },
 };
 
+const planStore = {
+  async readSnapshot() {
+    const snapshot = createEmptySnapshot();
+    snapshot.plans.push({
+      ...base,
+      id: dailyId,
+      planType: "daily",
+      title: "9 Eylül Günlük Öğretmen Planı",
+      civilDate: "2026-09-09",
+      periodStart: "2026-09-09",
+      periodEnd: "2026-09-09",
+      sourceAnnualPlanId: annualId,
+      sourceMonthlyPlanId: monthlyId,
+      sourceWeeklyPlanId: weeklyId,
+      teacherContent: { narrative: "Gölge izleri ve özgür oyun" },
+    });
+    snapshot.activities.push({
+      ...base,
+      id: "00000000-0000-4000-8000-000000000a07",
+      planId: dailyId,
+      title: "Gölge izleri",
+      status: "planned",
+      civilDate: "2026-09-09",
+      sourceAnnualPlanId: annualId,
+      sourceMonthlyPlanId: monthlyId,
+      sourceWeeklyPlanId: weeklyId,
+      curriculumTargets: [],
+    });
+    return snapshot;
+  },
+};
+
 const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 test("tek tık Word çıktısı kurum, öğretmen ve imza bağlamını taşır; standart belgede UUID göstermez", async () => {
@@ -147,6 +185,7 @@ test("tek tık PDF çıktısı haftalık/yıllık kapsamı destek belgesi diye d
       "pdf",
       { kind: "weekly", weeklyPlanId: weeklyId },
       context,
+      { fontBytes: pdfFontBytes },
     );
     const text = file.paragraphs.map((paragraph) => paragraph.text).join("\n");
     assert.equal(new TextDecoder().decode(file.bytes.slice(0, 4)), "%PDF");
@@ -164,6 +203,33 @@ test("tek tık PDF çıktısı haftalık/yıllık kapsamı destek belgesi diye d
   } finally {
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
+  }
+});
+
+test("günlük, haftalık, aylık ve birleşik planların tamamı semantik PDF çekirdeğini kullanır", async () => {
+  const cases = [
+    [{ kind: "daily", dailyPlanId: dailyId }, /Gunluk_2026-09-09\.pdf$/u],
+    [{ kind: "weekly", weeklyPlanId: weeklyId }, /Haftalik_2026-09-07\.pdf$/u],
+    [{ kind: "monthly", monthlyPlanId: monthlyId }, /Aylik_2026-09\.pdf$/u],
+    [{ kind: "combined" }, /Birlesik\.pdf$/u],
+  ];
+  for (const [scope, fileNamePattern] of cases) {
+    const file = await generateStandaloneTeacherOwnedPlanExportFile(
+      syntheticGraph(),
+      planStore,
+      "pdf",
+      scope,
+      context,
+      { fontBytes: pdfFontBytes },
+    );
+    const bytesAsLatin1 = Buffer.from(file.bytes).toString("latin1");
+    assert.match(file.fileName, fileNamePattern);
+    assert.match(bytesAsLatin1, /\/Lang \(tr-TR\)/u);
+    assert.match(bytesAsLatin1, /\/StructTreeRoot\b/u);
+    assert.match(bytesAsLatin1, /\/MarkInfo << \/Marked true/u);
+    assert.match(bytesAsLatin1, /\/FontFile2\b/u);
+    assert.match(bytesAsLatin1, /\/ToUnicode\b/u);
+    assert.doesNotMatch(bytesAsLatin1, /\/Subtype \/Image\b/u);
   }
 });
 

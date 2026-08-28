@@ -9,6 +9,7 @@ import {
   type PremiumPlanExportParagraph,
 } from "../premium-plans/export-document.ts";
 import type { InstalledPremiumPlanExportSource } from "../premium-plans/export-read-model.ts";
+import type { SemanticTaggedPdfRuntime } from "../documents/semantic-tagged-pdf.ts";
 import type {
   TeacherOwnedPlanGraph,
   TeacherOwnedPlanRecord,
@@ -1030,6 +1031,7 @@ export async function generateStandaloneTeacherOwnedPlanExportFile(
   format: PremiumPlanExportFormat,
   scope: TeacherOwnedPlanDocumentScope = { kind: "combined" },
   context: TeacherOwnedPlanDocumentContext = {},
+  pdfRuntime: SemanticTaggedPdfRuntime = {},
 ): Promise<StandaloneTeacherOwnedPlanExportFile> {
   if (format !== "pdf" && format !== "word") {
     throw new Error("Dışa aktarma biçimi PDF veya Word olmalıdır.");
@@ -1048,7 +1050,7 @@ export async function generateStandaloneTeacherOwnedPlanExportFile(
   );
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
-    : await createPremiumPlanPdf(paragraphs);
+    : await createPremiumPlanPdf(paragraphs, pdfRuntime);
   return {
     format,
     fileName: `MaarifOS_Ogretmen_Plani_${source.fileLabel}.${format === "pdf" ? "pdf" : "docx"}`,
@@ -1136,6 +1138,7 @@ export async function generateTeacherOwnedPlanExportFile(
   source: InstalledPremiumPlanExportSource,
   format: PremiumPlanExportFormat,
   context: TeacherOwnedPlanDocumentContext = {},
+  pdfRuntime: SemanticTaggedPdfRuntime = {},
 ): Promise<PremiumPlanExportFile> {
   const document = prepareTeacherOwnedPlanExportDocument(pack, source, format, context);
   const generatedParagraphs = buildPremiumPlanExportParagraphs(document);
@@ -1153,7 +1156,7 @@ export async function generateTeacherOwnedPlanExportFile(
       ]);
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
-    : await createPremiumPlanPdf(paragraphs);
+    : await createPremiumPlanPdf(paragraphs, pdfRuntime);
   return {
     format,
     fileName: document.fileName,

@@ -6,6 +6,12 @@ import {
   createA4ImagePdf,
   jpegDataUrlBytes,
 } from "../documents/canvas-image-pdf.ts";
+import {
+  createSemanticTaggedPdf,
+  semanticTaggedPdfPageCount,
+  type SemanticPdfNode,
+  type SemanticTaggedPdfRuntime,
+} from "../documents/semantic-tagged-pdf.ts";
 
 export const CLASS_ROSTER_DOCUMENT_FORMAT = "html" as const;
 export const CLASS_ROSTER_DOCUMENT_MIME_TYPE = "text/html;charset=utf-8" as const;
@@ -61,7 +67,7 @@ export interface ClassRosterDocumentFile {
   readonly scope: ActiveClassroomScope;
 }
 
-export interface ClassRosterPdfRuntime {
+export interface ClassRosterPdfRuntime extends SemanticTaggedPdfRuntime {
   readonly createCanvas?: () => HTMLCanvasElement;
   readonly waitForFonts?: () => Promise<void>;
 }
@@ -1281,9 +1287,9 @@ function drawClassRosterPdfPage(
 }
 
 /**
- * Aynı doğrulanmış snapshot'tan HTML önizleme ve gerçek A4 PDF baytlarını
- * birlikte üretir. PDF, tarayıcının Türkçe glifleri çizdiği JPEG sayfalarını
- * taşır; bu nedenle haricî font veya PDF kütüphanesi gerektirmez.
+ * Aynı doğrulanmış snapshot'tan HTML önizleme ve etiketli, seçilebilir metinli
+ * gerçek A4 PDF baytlarını birlikte üretir. Öğrenci/veli verisi yalnız görünür
+ * belge gövdesinde kalır; PDF üstverisine taşınmaz.
  */
 export async function createClassRosterPdfDocument(
   input: ClassRosterDocumentInput,
@@ -1291,44 +1297,76 @@ export async function createClassRosterPdfDocument(
 ): Promise<ClassRosterPdfDocumentFile> {
   const resolved = resolveClassRosterDocumentInput(input);
   const { html } = buildHtml({ ...resolved });
-  if (!options.runtime?.createCanvas && typeof document === "undefined") {
-    throw new Error(
-      "Sınıf listesi PDF'si yalnız belge üretimini destekleyen uygulama ortamında hazırlanabilir.",
-    );
-  }
-  if (options.runtime?.waitForFonts) {
-    await options.runtime.waitForFonts();
-  } else if (typeof document !== "undefined") {
-    await document.fonts?.ready;
-  }
-  const canvas = options.runtime?.createCanvas
-    ? options.runtime.createCanvas()
-    : document.createElement("canvas");
-  canvas.width = A4_PDF_CANVAS_WIDTH;
-  canvas.height = A4_PDF_CANVAS_HEIGHT;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Sınıf listesi PDF sayfa yüzeyi hazırlanamadı.");
-
-  const layouts = resolved.rows.map((row, index) =>
-    pdfRosterRowLayout(context, row, index + 1),
+  const tableRows = resolved.rows.map((row, index) => [
+    String(index + 1),
+    row.studentNumber,
+    row.fullName,
+    row.nationalIdentityNumber,
+    row.contacts.length > 0
+      ? row.contacts.map((contact) => contact.label).join("\n")
+      : "—",
+    row.contacts.length > 0
+      ? row.contacts.map((contact) => contact.phone).join("\n")
+      : "—",
+  ] as const);
+  const nodes: SemanticPdfNode[] = [
+    { kind: "heading", level: 1, text: "SINIF LİSTESİ" },
+    {
+      kind: "paragraph",
+      tone: "meta",
+      text: `Okul: ${resolved.schoolName} · ${resolved.rows.length} öğrenci`,
+    },
+    {
+      kind: "table",
+      summary: "Sınıf, eğitim yılı, öğretmen ve belge tarihi bilgileri",
+      headers: ["Belge alanı", "Değer"],
+      columnWeights: [1, 3],
+      rowHeaderColumn: 0,
+      rows: [
+        ["Sınıf", resolved.classroomName],
+        ["Eğitim yılı", resolved.academicYearLabel],
+        ["Öğretmen", resolved.teacherName],
+        ["Belge tarihi", resolved.displayDate],
+      ],
+    },
+    ...(resolved.rows.length === 0
+      ? [{ kind: "paragraph" as const, text: "Bu sınıfta kayıtlı öğrenci bulunmuyor." }]
+      : []),
+    {
+      kind: "table",
+      summary: "Aktif sınıf öğrencileri ve veli iletişim bilgileri",
+      headers: [
+        "Sıra",
+        "Öğrenci No",
+        "Adı Soyadı",
+        "T.C. Kimlik No",
+        "Veli / Yakın",
+        "Telefon",
+      ],
+      columnWeights: [0.55, 0.9, 2.8, 1.35, 2.4, 1.8],
+      rowHeaderColumn: 2,
+      continuationContextColumns: [0, 1, 2, 3],
+      rows: tableRows,
+    },
+    { kind: "heading", level: 2, text: "Kişisel veri ve imza" },
+    {
+      kind: "paragraph",
+      text: "Bu belge kişisel veri içerir. Yalnız eğitim ve sınıf yönetimi amacıyla güvenli biçimde saklayınız.",
+    },
+    { kind: "paragraph", text: `Sınıf öğretmeni: ${resolved.teacherName}` },
+    { kind: "paragraph", tone: "meta", text: "İmza: ______________________________" },
+  ];
+  const bytes = await createSemanticTaggedPdf(
+    {
+      title: "MaarifOS Sınıf Listesi",
+      language: "tr-TR",
+      creator: "MaarifOS",
+      artifactFooterText: "Kişisel veri içerir · Yetkisiz paylaşmayınız.",
+      nodes,
+    },
+    options.runtime,
   );
-  const pages = paginatePdfRosterRows(layouts);
-  const images: Uint8Array[] = [];
-  pages.forEach((pageRows, pageIndex) => {
-    drawClassRosterPdfPage(
-      context,
-      resolved,
-      pageRows,
-      pageIndex,
-      pages.length,
-      pageIndex === pages.length - 1,
-    );
-    images.push(jpegDataUrlBytes(canvas.toDataURL("image/jpeg", 0.94)));
-  });
-  const bytes = createA4ImagePdf(images, {
-    title: "MaarifOS Sinif Listesi",
-    creator: "MaarifOS",
-  });
+  const pageCount = semanticTaggedPdfPageCount(bytes);
   const baseName = `MaarifOS_Sinif_Listesi_${safeFileSegment(resolved.classroomName)}_${safeFileSegment(resolved.academicYearLabel)}`;
   return {
     documentKind: CLASS_ROSTER_DOCUMENT_KIND,
@@ -1339,7 +1377,7 @@ export async function createClassRosterPdfDocument(
     html,
     htmlFileName: `${baseName}.html`,
     rowCount: resolved.rows.length,
-    pageCount: pages.length,
+    pageCount,
     containsSensitiveData: true,
     capabilities: CLASS_ROSTER_PDF_CAPABILITIES,
     generatedAt: resolved.generatedAt,

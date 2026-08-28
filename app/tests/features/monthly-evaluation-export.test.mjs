@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   ACTIVE_CLASSROOM_SETTING_ID,
@@ -24,6 +29,7 @@ import {
   PREMIUM_MONTHLY_TEACHER_CRITERIA,
 } from "../../src/features/premium-plans/plan-service.ts";
 import { createSignedEntitlementFixture } from "../helpers/premium-entitlement.mjs";
+import { semanticTaggedPdfPageCount } from "../../src/features/documents/semantic-tagged-pdf.ts";
 
 class MemoryStore {
   constructor(snapshot = createEmptySnapshot()) {
@@ -64,6 +70,12 @@ class MemoryStore {
 const yearId = "00000000-0000-4000-8000-000000008101";
 const classroomId = "00000000-0000-4000-8000-000000008102";
 const studentId = "00000000-0000-4000-8000-000000008103";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const pdfFontBytes = new Uint8Array(readFileSync(path.resolve(
+  testDirectory,
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+)));
+const hasPdfToText = !spawnSync("pdftotext", ["-v"], { encoding: "utf8" }).error;
 const profile = {
   framework: "tymm",
   programLabel: CURRICULUM_PROGRAM_LABELS.tymm,
@@ -72,6 +84,20 @@ const profile = {
   referenceOrigin: "official-catalog",
   officialCatalogVerified: true,
 };
+
+function extractPdfText(bytes) {
+  if (!hasPdfToText) return "";
+  const directory = mkdtempSync(path.join(tmpdir(), "maarifos-ek18-pdf-"));
+  try {
+    const pdfPath = path.join(directory, "ek18.pdf");
+    const textPath = path.join(directory, "ek18.txt");
+    writeFileSync(pdfPath, bytes);
+    execFileSync("pdftotext", ["-raw", "-enc", "UTF-8", pdfPath, textPath]);
+    return readFileSync(textPath, "utf8").replaceAll("\r", "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 
 function activeStore() {
   const snapshot = createEmptySnapshot();
@@ -391,7 +417,7 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
   assert.doesNotMatch(visibleXml, new RegExp(evaluation.id));
   assert.match(manifestXml, new RegExp(installed.monthlyPlanId));
   assert.match(manifestXml, new RegExp(evaluation.id));
-  assert.match(manifestXml, /source-structured-visual-reproduction/);
+  assert.match(manifestXml, /source-structured-word-reproduction/);
   assert.doesNotMatch(manifestXml, /accessible-reproduction/);
   assert.match(manifestXml, /persistedProgramComponents/);
   assert.match(manifestXml, /annexPages="344-349"/);
@@ -402,7 +428,9 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
     6,
     "Altı resmî sayfa ve bir ayrı öğretmen eki tam yedi sayfa için altı açık sayfa sonu taşımalı.",
   );
-  assert.equal(document.manifest.officialFormPageCount, 6);
+  assert.equal(document.manifest.schemaVersion, 2);
+  assert.equal(document.manifest.officialSourceFormPageCount, 6);
+  assert.equal(document.manifest.outputPagination, "six-source-pages-plus-appendix");
   assert.ok(
     visibleXml.indexOf("DEĞERLER") < visibleXml.indexOf("OKURYAZARLIK BECERİLERİ"),
     "Ek 18 s. 348'de Değerler üstte, Okuryazarlık Becerileri altta kalmalı.",
@@ -501,7 +529,7 @@ test("trial, revoked ve kalıcı program bileşeni kurcalamasını fail-closed r
   );
 });
 
-test("PDF resmi alanları çizer ve kaynak kimliklerini görünür sayfaya değil manifest metadata'ya yazar", async () => {
+test("Ek 18 PDF çok sayfalı semantik tabloları, güvenli manifesti ve kayıpsız uzun eki taşır", async () => {
   const content = await pack();
   const store = activeStore();
   const { installed, evaluation } = await installAndEvaluate(store, content);
@@ -514,106 +542,66 @@ test("PDF resmi alanları çizer ve kaynak kimliklerini görünür sayfaya deği
     "pdf",
     { exportedAt: "2026-10-01T08:00:00.000Z" },
   );
-  const drawnText = [];
-  const drawnCoordinates = [];
-  let rasterizedPageCount = 0;
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
-  const canvas = {
-    width: 0,
-    height: 0,
-    toDataURL: () => {
-      rasterizedPageCount += 1;
-      return `data:image/jpeg;base64,${jpeg}`;
-    },
-  };
-  const context = {
-    canvas,
-    fillStyle: "",
-    strokeStyle: "",
-    font: "",
-    textAlign: "left",
-    textBaseline: "alphabetic",
-    lineWidth: 1,
-    save() {},
-    restore() {},
-    fillRect() {},
-    strokeRect() {},
-    translate() {},
-    rotate() {},
-    fillText(text, _x, y) {
-      drawnText.push(String(text));
-      drawnCoordinates.push({
-        page: rasterizedPageCount + 1,
-        text: String(text),
-        y: Number(y),
-      });
-    },
-    measureText(text) {
-      return { width: String(text).length * 8 };
-    },
-  };
-  canvas.getContext = () => context;
-  const previousWindow = globalThis.window;
-  const previousDocument = globalThis.document;
-  globalThis.window = {};
-  globalThis.document = {
-    fonts: { ready: Promise.resolve() },
-    createElement: () => canvas,
-  };
-  try {
-    const pdf = await createMonthlyEvaluationPdf(document);
-    assert.equal(Buffer.from(pdf).subarray(0, 8).toString("latin1"), "%PDF-1.4");
-    assert.match(Buffer.from(pdf).toString("latin1"), /maarifos-manifest-base64:/);
-  } finally {
-    globalThis.window = previousWindow;
-    globalThis.document = previousDocument;
+  const pdf = await createMonthlyEvaluationPdf(document, {
+    runtime: { fontBytes: pdfFontBytes },
+  });
+  const decoded = Buffer.from(pdf).toString("latin1");
+  const pageCount = semanticTaggedPdfPageCount(pdf);
+  const xmp = new TextDecoder().decode(pdf)
+    .match(/<x:xmpmeta[\s\S]+?<\/x:xmpmeta>/u)?.[0] ?? "";
+  assert.equal(decoded.startsWith("%PDF-1.7"), true);
+  assert.ok(pageCount >= 7, "altı resmî kaynak bölümü ve ayrı öğretmen eki çok sayfalı kalmalı");
+  assert.match(decoded, /\/Lang \(tr-TR\)/u);
+  assert.match(decoded, /\/StructTreeRoot\b/u);
+  assert.match(decoded, /\/FontFile2\b/u);
+  assert.match(decoded, /\/ToUnicode\b/u);
+  assert.match(decoded, /\/S \/H1\b/u);
+  assert.match(decoded, /\/S \/H4\b/u);
+  assert.match(decoded, /\/S \/Table\b/u);
+  assert.match(decoded, /\/S \/TR\b/u);
+  assert.match(decoded, /\/S \/TH\b/u);
+  assert.match(decoded, /\/S \/TD\b/u);
+  assert.match(decoded, /\/Scope \/Column\b/u);
+  assert.match(decoded, /\/Scope \/Row\b/u);
+  assert.doesNotMatch(decoded, /\/Subtype \/Image\b/u);
+  assert.match(xmp, /semantic-accessible-reflow/u);
+  assert.match(xmp, /content-dependent/u);
+  assert.doesNotMatch(xmp, /maarifos-manifest-base64:/u);
+  assert.doesNotMatch(xmp, /Kurgu Çocuk|10000000146|05\d{9}/u);
+  assert.doesNotMatch(xmp, new RegExp(`${installed.monthlyPlanId}|${evaluation.id}`, "u"));
+  assert.equal(document.manifest.renderingMode, "semantic-accessible-reflow");
+  assert.equal(document.manifest.officialSourceFormPageCount, 6);
+  assert.equal(document.manifest.outputPagination, "content-dependent");
+  assert.match(decoded, new RegExp(`/Count ${pageCount}\\b`, "u"));
+  if (hasPdfToText) {
+    const extracted = extractPdfText(pdf);
+    const normalized = extracted.replace(/\s+/gu, " ");
+    assert.match(extracted, /EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ/u);
+    assert.match(extracted, /GENEL DEĞERLENDİRME/u);
+    assert.match(extracted, /ÖĞRETMEN DEĞERLENDİRME EKİ/u);
+    assert.match(normalized, /Sürdürülebilir ve sürdürülebilir olmayan sistemleri anlama/u);
+    assert.doesNotMatch(extracted, new RegExp(installed.monthlyPlanId, "u"));
+    assert.doesNotMatch(extracted, new RegExp(evaluation.id, "u"));
+    assert.doesNotMatch(extracted, /(?:^|\s)—(?:\s|$)/u);
   }
-  assert.ok(drawnText.includes("EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ"));
-  assert.ok(drawnText.includes("GENEL DEĞERLENDİRME"));
-  assert.ok(drawnText.includes("ÖĞRETMEN DEĞERLENDİRME EKİ"));
-  assert.equal(rasterizedPageCount, 7);
-  assert.equal(drawnText.some((text) => /Bağlam \/ ne sırasında\?|Çocuğun sözü/.test(text)), false);
-  assert.equal(drawnText.some((text) => text.includes(installed.monthlyPlanId)), false);
-  assert.equal(drawnText.some((text) => text.includes(evaluation.id)), false);
 
-  drawnText.length = 0;
-  drawnCoordinates.length = 0;
-  rasterizedPageCount = 0;
   const longDocument = structuredClone(document);
   longDocument.evaluation.program.narrative = programNarrativeAtLimit();
-  globalThis.window = {};
-  globalThis.document = {
-    fonts: { ready: Promise.resolve() },
-    createElement: () => canvas,
-  };
-  let longPdf;
-  try {
-    longPdf = await createMonthlyEvaluationPdf(longDocument);
-  } finally {
-    globalThis.window = previousWindow;
-    globalThis.document = previousDocument;
+  const longPdf = await createMonthlyEvaluationPdf(longDocument, {
+    runtime: { fontBytes: pdfFontBytes },
+  });
+  assert.ok(semanticTaggedPdfPageCount(longPdf) >= pageCount);
+  if (hasPdfToText) {
+    const longText = extractPdfText(longPdf);
+    assert.match(
+      longText,
+      /Metnin devamı ayrı Öğretmen Değerlendirme Eki'ndedir/u,
+    );
+    assert.match(longText, /PROGRAM_METNI_SONU/u);
+    assert.ok(
+      longText.indexOf("Metnin devamı ayrı Öğretmen Değerlendirme Eki'ndedir")
+        < longText.indexOf("PROGRAM_METNI_SONU"),
+      "resmî bölümdeki devam notu, eksiksiz öğretmen ekinden önce okunmalı",
+    );
   }
-  const continuationCall = drawnCoordinates.find(
-    (call) =>
-      call.page === 6 &&
-      call.text.includes("Metnin devamı ayrı Öğretmen Değerlendirme Eki'ndedir"),
-  );
-  assert.ok(continuationCall, "Uzun Genel Değerlendirme s. 349'da açık devam notu taşımalı.");
-  assert.ok(continuationCall.y <= 1_580, "Devam notu resmî Genel Değerlendirme kutusunu aşmamalı.");
-  assert.ok(
-    drawnCoordinates.some(
-      (call) => call.page >= 7 && call.text.includes("PROGRAM_METNI_SONU"),
-    ),
-    "2.000 karakterlik metnin sonu ayrı öğretmen ekinde eksiksiz görünmeli.",
-  );
-  assert.equal(
-    drawnCoordinates.every((call) => Number.isFinite(call.y) && call.y <= 1_715),
-    true,
-    "PDF'deki hiçbir metin footer/canvas sınırının dışına taşmamalı.",
-  );
-  assert.ok(rasterizedPageCount >= 7);
-  assert.match(
-    Buffer.from(longPdf).toString("latin1"),
-    new RegExp(`/Count ${rasterizedPageCount}\\b`),
-  );
 });

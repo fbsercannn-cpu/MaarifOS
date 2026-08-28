@@ -5,6 +5,11 @@ import {
   assertAnecdoteFormReadyForExport,
   type AnecdoteFormReadModel,
 } from "./anecdote-form.ts";
+import {
+  createSemanticTaggedPdf,
+  type SemanticPdfNode,
+  type SemanticTaggedPdfRuntime,
+} from "../documents/semantic-tagged-pdf.ts";
 
 export type AnecdoteExportFormat = "pdf" | "word";
 
@@ -17,7 +22,7 @@ export interface AnecdoteExportFile {
   exportedAt: string;
 }
 
-export interface AnecdotePdfRuntime {
+export interface AnecdotePdfRuntime extends SemanticTaggedPdfRuntime {
   createCanvas?: () => HTMLCanvasElement;
   waitForFonts?: () => Promise<void>;
 }
@@ -488,178 +493,60 @@ export async function createAnecdotePdf(
   options: { exportedAt?: string; runtime?: AnecdotePdfRuntime } = {},
 ): Promise<Uint8Array> {
   assertAnecdoteFormReadyForExport(model);
-  const exportedAt = options.exportedAt ?? new Date().toISOString();
-  if (!options.runtime?.createCanvas && typeof document === "undefined") {
-    throw new Error("PDF yalnız belge üretimini destekleyen uygulama ortamında hazırlanabilir.");
-  }
-  if (options.runtime?.waitForFonts) {
-    await options.runtime.waitForFonts();
-  } else if (typeof document !== "undefined") {
-    await document.fonts?.ready;
-  }
-  const canvas = options.runtime?.createCanvas
-    ? options.runtime.createCanvas()
-    : document.createElement("canvas");
-  canvas.width = A4_CANVAS_WIDTH;
-  canvas.height = A4_CANVAS_HEIGHT;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("PDF sayfa yüzeyi hazırlanamadı.");
-  const images: Uint8Array[] = [];
-  const pageMargin = 76;
-  const contentWidth = canvas.width - pageMargin * 2;
-  const pageBottom = canvas.height - 72;
-  const borderColor = "#b7b7b7";
-  const peach = "#f2dcd3";
-  let y = pageMargin;
-  let pageStarted = false;
-
-  const beginPage = (first: boolean) => {
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.textAlign = "left";
-    y = pageMargin;
-    context.fillStyle = "#f04b13";
-    context.font = '700 30px Arial, sans-serif';
-    context.textAlign = "center";
-    context.fillText(ANECDOTE_FORM_OFFICIAL_TITLE, canvas.width / 2, y + 24);
-    context.textAlign = "left";
-    y += 66;
-    if (first) {
-      context.fillStyle = "#242424";
-      context.font = '700 21px Arial, sans-serif';
-      context.fillText("Sayın Öğretmen,", pageMargin, y + 20);
-      y += 48;
-      context.font = '400 19px Arial, sans-serif';
-      const intro =
-        "Günlük plan kapsamında etkinlikler gerçekleştirildikten sonra günlük, haftalık ve/veya özel bir durum gözlemlendiğinde anekdot kaydı tutmanız beklenmektedir. Bu form olumlu ya da olumsuz özel durumların ortaya çıkması durumunda öğretmen tarafından istenildiği zaman doldurulabilir.";
-      const lines = wrapCanvasText(context, intro, contentWidth);
-      for (const line of lines) {
-        context.fillText(line, pageMargin, y + 20);
-        y += 28;
-      }
-      y += 28;
-    }
-    pageStarted = true;
-  };
-  const finishPage = () => {
-    images.push(base64Bytes(canvas.toDataURL("image/jpeg", 0.94)));
-    pageStarted = false;
-  };
-  const ensureSpace = (height: number) => {
-    if (!pageStarted) beginPage(images.length === 0);
-    if (y + height <= pageBottom) return;
-    finishPage();
-    beginPage(false);
-  };
-  const drawBorder = (x: number, top: number, width: number, height: number) => {
-    context.strokeStyle = borderColor;
-    context.lineWidth = 1;
-    context.strokeRect(x, top, width, height);
-  };
-  const drawMetadataRow = (label: string, value: string) => {
-    context.font = '400 20px Arial, sans-serif';
-    const valueLines = wrapCanvasText(context, value, contentWidth - 300);
-    const height = Math.max(64, valueLines.length * 28 + 24);
-    ensureSpace(height);
-    const labelWidth = 250;
-    drawBorder(pageMargin, y, labelWidth, height);
-    drawBorder(pageMargin + labelWidth, y, contentWidth - labelWidth, height);
-    context.fillStyle = "#242424";
-    context.font = '700 20px Arial, sans-serif';
-    context.fillText(label, pageMargin + 14, y + 37);
-    context.font = '400 20px Arial, sans-serif';
-    valueLines.forEach((line, index) => {
-      context.fillText(
-        line,
-        pageMargin + labelWidth + 14,
-        y + 32 + index * 28,
-      );
-    });
-    y += height;
-  };
-  const drawSectionHeader = (label: string, note?: string) => {
-    const height = note ? 80 : 58;
-    ensureSpace(height + 80);
-    context.fillStyle = peach;
-    context.fillRect(pageMargin, y, contentWidth, height);
-    drawBorder(pageMargin, y, contentWidth, height);
-    context.fillStyle = "#242424";
-    context.font = '700 20px Arial, sans-serif';
-    context.fillText(label, pageMargin + 14, y + 30);
-    if (note) {
-      context.font = '400 18px Arial, sans-serif';
-      context.fillText(note, pageMargin + 14, y + 58);
-    }
-    y += height;
-  };
-  const drawSection = (
-    label: string,
-    value: string,
-    minimumHeight: number,
-    note?: string,
-    valueFill?: string,
-  ) => {
-    context.font = '400 19px Arial, sans-serif';
-    const lines = wrapCanvasText(context, value, contentWidth - 28);
-    let lineIndex = 0;
-    let firstChunk = true;
-    while (lineIndex < lines.length || firstChunk) {
-      drawSectionHeader(label, note);
-      const availableHeight = pageBottom - y;
-      const maximumLines = Math.max(1, Math.floor((availableHeight - 28) / 27));
-      const chunk = lines.slice(lineIndex, lineIndex + maximumLines);
-      const hasMore = lineIndex + chunk.length < lines.length;
-      const desiredHeight = Math.max(
-        firstChunk && !hasMore ? minimumHeight : 70,
-        chunk.length * 27 + 28,
-      );
-      const height = Math.min(availableHeight, desiredHeight);
-      if (valueFill) {
-        context.fillStyle = valueFill;
-        context.fillRect(pageMargin, y, contentWidth, height);
-      }
-      drawBorder(pageMargin, y, contentWidth, height);
-      context.fillStyle = "#242424";
-      context.font = '400 19px Arial, sans-serif';
-      chunk.forEach((line, index) => {
-        context.fillText(line, pageMargin + 14, y + 28 + index * 27);
-      });
-      y += height;
-      lineIndex += chunk.length;
-      firstChunk = false;
-      if (lineIndex < lines.length) {
-        finishPage();
-        beginPage(false);
-      }
-    }
-  };
-
-  beginPage(true);
-  drawMetadataRow("Çocuğun Adı Soyadı", model.childFullName);
-  drawMetadataRow("Tarih", turkishDate(model.civilDate));
-  drawMetadataRow("Gözlenen Mekân", model.observedLocation);
-  drawSection(
-    "Gözlenen Durum",
-    model.observedSituation,
-    210,
-    "(Bu formu doldurmanıza neden olan durumu açıklamanız beklenmektedir.)",
+  const intro =
+    "Günlük plan kapsamında etkinlikler gerçekleştirildikten sonra günlük, haftalık ve/veya özel bir durum gözlemlendiğinde anekdot kaydı tutulabilir. Bu form, gözlenen özel durumu ve öğretmenin değerlendirmesini ayrı kanıt katmanlarında korur.";
+  const nodes: SemanticPdfNode[] = [
+    { kind: "heading", level: 1, text: ANECDOTE_FORM_OFFICIAL_TITLE },
+    { kind: "heading", level: 2, text: "Sayın Öğretmen" },
+    { kind: "paragraph", text: intro },
+    {
+      kind: "table",
+      summary: "Çocuk, tarih ve gözlem mekânı bilgileri",
+      headers: ["Form alanı", "Kayıt"],
+      columnWeights: [1, 3],
+      rowHeaderColumn: 0,
+      rows: [
+        ["Çocuğun Adı Soyadı", model.childFullName],
+        ["Tarih", turkishDate(model.civilDate)],
+        ["Gözlenen Mekân", model.observedLocation],
+      ],
+    },
+    { kind: "heading", level: 2, text: "Gözlenen Durum — ham gözlem ve çocuğun sözü" },
+    {
+      kind: "paragraph",
+      tone: "meta",
+      text: "Aşağıdaki metin ham gözlem kaydıdır; çocuğun doğrudan sözü yorum eklenmeden bu kayıt içinde korunur.",
+    },
+    { kind: "paragraph", text: model.observedSituation },
+    { kind: "heading", level: 2, text: "Gözlenen Beceriler" },
+    {
+      kind: "list",
+      items: model.observedSkills.map(
+        (skill) => `${skill.referenceCode} - ${skill.referenceTitle}`,
+      ),
+    },
+    {
+      kind: "heading",
+      level: 2,
+      text: "Gözlemcinin Genel Değerlendirmesi — öğretmen yorumu",
+    },
+    { kind: "paragraph", text: model.observerGeneralAssessment },
+    { kind: "heading", level: 2, text: "Kaynak" },
+    {
+      kind: "paragraph",
+      tone: "meta",
+      text: `${ANECDOTE_FORM_OFFICIAL_SOURCE} · ${ANECDOTE_FORM_OFFICIAL_SOURCE_URL}`,
+    },
+  ];
+  return createSemanticTaggedPdf(
+    {
+      title: ANECDOTE_FORM_OFFICIAL_TITLE,
+      language: "tr-TR",
+      creator: "MaarifOS",
+      nodes,
+    },
+    options.runtime,
   );
-  drawSection(
-    "Gözlenen Beceriler",
-    skillsText(model),
-    235,
-  );
-  drawSection(
-    "Gözlemcinin Genel Değerlendirmesi",
-    model.observerGeneralAssessment,
-    270,
-  );
-  if (pageStarted) finishPage();
-  return createImagePdf(images, {
-    observationId: model.observationId,
-    sourceVersions: model.programSourceVersions,
-    exportedAt,
-  });
 }
 
 export async function generateAnecdoteExportFile(

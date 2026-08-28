@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { canonicalJson } from "../../src/core/backup/canonical-json.ts";
@@ -34,6 +35,11 @@ import {
   updateTeacherOwnedDailyFlow,
 } from "../../src/features/planning/teacher-owned-plan-service.ts";
 import { resolvePlanDayWorkspace } from "../../src/features/today/today-data.ts";
+
+const pdfFontBytes = new Uint8Array(readFileSync(new URL(
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+  import.meta.url,
+)));
 
 class MemoryStore {
   constructor(snapshot = createEmptySnapshot()) {
@@ -533,6 +539,7 @@ test("DOCX ve PDF aynı düzenlenmiş 10 akış bloğunu kimlik, tür, sıra ve 
       "pdf",
       { kind: "combined" },
       { includeAuditAppendix: true },
+      { fontBytes: pdfFontBytes },
     );
     assert.equal(new TextDecoder().decode(pdf.bytes.slice(0, 4)), "%PDF");
     assert.deepEqual(pdf.paragraphs, word.paragraphs);

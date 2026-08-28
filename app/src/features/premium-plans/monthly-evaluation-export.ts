@@ -15,14 +15,20 @@ import {
   assertVerifiedPremiumAccess,
   type VerifiedPremiumAccess,
 } from "../premium-access/entitlement.ts";
+import {
+  createSemanticTaggedPdf,
+  type SemanticPdfNode,
+  type SemanticTaggedPdfRuntime,
+} from "../documents/semantic-tagged-pdf.ts";
 
 export type MonthlyEvaluationExportFormat = "pdf" | "word";
 
 export interface MonthlyEvaluationExportManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   documentType: "meb-2024-ek18-monthly-plan-control";
-  renderingMode: "source-structured-visual-reproduction";
-  officialFormPageCount: 6;
+  renderingMode: "semantic-accessible-reflow" | "source-structured-word-reproduction";
+  officialSourceFormPageCount: 6;
+  outputPagination: "content-dependent" | "six-source-pages-plus-appendix";
   officialSource: {
     authority: "T.C. Millî Eğitim Bakanlığı";
     program: "Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı";
@@ -108,6 +114,8 @@ export interface MonthlyEvaluationExportFile {
   bytes: Uint8Array;
   document: MonthlyEvaluationExportDocument;
 }
+
+export interface MonthlyEvaluationPdfRuntime extends SemanticTaggedPdfRuntime {}
 
 interface Ek18Row {
   id: string;
@@ -859,10 +867,15 @@ export function prepareMonthlyEvaluationExportDocument(
   );
   const extension = format === "pdf" ? "pdf" : "docx";
   const manifest: MonthlyEvaluationExportManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     documentType: "meb-2024-ek18-monthly-plan-control",
-    renderingMode: "source-structured-visual-reproduction",
-    officialFormPageCount: 6,
+    renderingMode: format === "pdf"
+      ? "semantic-accessible-reflow"
+      : "source-structured-word-reproduction",
+    officialSourceFormPageCount: 6,
+    outputPagination: format === "pdf"
+      ? "content-dependent"
+      : "six-source-pages-plus-appendix",
     officialSource: structuredClone(OFFICIAL_SOURCE),
     generatedAt,
     monthlyPlanId: context.monthlyPlanId,
@@ -1276,7 +1289,7 @@ function customManifestXml(manifest: MonthlyEvaluationExportManifest): string {
     name: string,
     components: readonly { referenceCode: string; referenceTitle: string }[],
   ) => `<maarifos:${name}>${components.map((component) => `<maarifos:component><maarifos:referenceCode>${xmlEscape(component.referenceCode)}</maarifos:referenceCode><maarifos:referenceTitle>${xmlEscape(component.referenceTitle)}</maarifos:referenceTitle></maarifos:component>`).join("")}</maarifos:${name}>`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><maarifos:monthlyEvaluationExportManifest xmlns:maarifos="https://maarifos.local/schema/monthly-evaluation-export/1"><maarifos:schemaVersion>1</maarifos:schemaVersion><maarifos:documentType>${manifest.documentType}</maarifos:documentType><maarifos:renderingMode>${manifest.renderingMode}</maarifos:renderingMode><maarifos:officialFormPageCount>${manifest.officialFormPageCount}</maarifos:officialFormPageCount><maarifos:generatedAt>${xmlEscape(manifest.generatedAt)}</maarifos:generatedAt><maarifos:monthlyPlanId>${xmlEscape(manifest.monthlyPlanId)}</maarifos:monthlyPlanId><maarifos:monthlyEvaluationId>${xmlEscape(manifest.monthlyEvaluationId)}</maarifos:monthlyEvaluationId>${idElements("observationIds", manifest.observationIds)}${idElements("curriculumLinkIds", manifest.curriculumLinkIds)}<maarifos:programComponentEvidenceStatus>${manifest.programComponentEvidenceStatus}</maarifos:programComponentEvidenceStatus>${programComponents("persistedProgramComponents", manifest.persistedProgramComponents)}<maarifos:mappedOfficialRowIds>${manifest.mappedOfficialRowIds.map((id) => `<maarifos:id>${xmlEscape(id)}</maarifos:id>`).join("")}</maarifos:mappedOfficialRowIds>${programComponents("unmappedPlanComponents", manifest.unmappedPlanComponents)}<maarifos:officialSource authority="${xmlEscape(manifest.officialSource.authority)}" version="${manifest.officialSource.version}" evaluationPages="${manifest.officialSource.evaluationPages}" annexPages="${manifest.officialSource.annexPages}">${xmlEscape(manifest.officialSource.annex)}</maarifos:officialSource></maarifos:monthlyEvaluationExportManifest>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><maarifos:monthlyEvaluationExportManifest xmlns:maarifos="https://maarifos.local/schema/monthly-evaluation-export/2"><maarifos:schemaVersion>2</maarifos:schemaVersion><maarifos:documentType>${manifest.documentType}</maarifos:documentType><maarifos:renderingMode>${manifest.renderingMode}</maarifos:renderingMode><maarifos:officialSourceFormPageCount>${manifest.officialSourceFormPageCount}</maarifos:officialSourceFormPageCount><maarifos:outputPagination>${manifest.outputPagination}</maarifos:outputPagination><maarifos:generatedAt>${xmlEscape(manifest.generatedAt)}</maarifos:generatedAt><maarifos:monthlyPlanId>${xmlEscape(manifest.monthlyPlanId)}</maarifos:monthlyPlanId><maarifos:monthlyEvaluationId>${xmlEscape(manifest.monthlyEvaluationId)}</maarifos:monthlyEvaluationId>${idElements("observationIds", manifest.observationIds)}${idElements("curriculumLinkIds", manifest.curriculumLinkIds)}<maarifos:programComponentEvidenceStatus>${manifest.programComponentEvidenceStatus}</maarifos:programComponentEvidenceStatus>${programComponents("persistedProgramComponents", manifest.persistedProgramComponents)}<maarifos:mappedOfficialRowIds>${manifest.mappedOfficialRowIds.map((id) => `<maarifos:id>${xmlEscape(id)}</maarifos:id>`).join("")}</maarifos:mappedOfficialRowIds>${programComponents("unmappedPlanComponents", manifest.unmappedPlanComponents)}<maarifos:officialSource authority="${xmlEscape(manifest.officialSource.authority)}" version="${manifest.officialSource.version}" evaluationPages="${manifest.officialSource.evaluationPages}" annexPages="${manifest.officialSource.annexPages}">${xmlEscape(manifest.officialSource.annex)}</maarifos:officialSource></maarifos:monthlyEvaluationExportManifest>`;
 }
 
 export function createMonthlyEvaluationDocx(
@@ -1339,7 +1352,7 @@ export function createMonthlyEvaluationDocx(
     { name: "customXml/item1.xml", contents: customManifestXml(document.manifest) },
     {
       name: "customXml/itemProps1.xml",
-      contents: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><ds:datastoreItem ds:itemID="{6D35C4A8-361F-4E63-A282-3D5189F27A84}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="https://maarifos.local/schema/monthly-evaluation-export/1"/></ds:schemaRefs></ds:datastoreItem>',
+      contents: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><ds:datastoreItem ds:itemID="{6D35C4A8-361F-4E63-A282-3D5189F27A84}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="https://maarifos.local/schema/monthly-evaluation-export/2"/></ds:schemaRefs></ds:datastoreItem>',
     },
     {
       name: "customXml/_rels/item1.xml.rels",
@@ -1808,98 +1821,89 @@ function drawAppendixCanvases(
 
 export async function createMonthlyEvaluationPdf(
   document: MonthlyEvaluationExportDocument,
+  options: { readonly runtime?: MonthlyEvaluationPdfRuntime } = {},
 ): Promise<Uint8Array> {
-  if (typeof window === "undefined" || typeof globalThis.document === "undefined") {
-    throw new Error("Ek 18 PDF yalnız uygulamanın belge üretim ortamında hazırlanabilir.");
-  }
-  await globalThis.document.fonts?.ready;
-  const canvas = globalThis.document.createElement("canvas");
-  canvas.width = 1240;
-  canvas.height = 1754;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Ek 18 PDF sayfa yüzeyi hazırlanamadı.");
-  const images: Uint8Array[] = [];
+  const marked = new Set(document.mappedOfficialRowIds);
+  const nodes: SemanticPdfNode[] = [
+    { kind: "heading", level: 1, text: "EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ" },
+    { kind: "heading", level: 2, text: "Sayın Öğretmen" },
+    {
+      kind: "paragraph",
+      text: "Aylık Plan Kontrol Çizelgesinde Türkiye Yüzyılı Maarif Modeli kapsamındaki alan becerileri, sosyal duygusal öğrenme becerileri, değerler, kavramsal beceriler, okuryazarlık becerileri ile eğilimler yer almaktadır. Aylık planda ele alınan program bileşenlerinin form üzerinde işaretlenmesi beklenmektedir. Bu sayede sonraki aylık planların hazırlanma süreci kolaylaşacak, yıl boyunca çocuklara kazandırılması planlanan becerilerin bütüncül olarak görülmesi mümkün olacaktır.",
+    },
+  ];
   EK18_PAGES.forEach((page, pageIndex) => {
-    beginCanvasPage(context);
-    let y = 78;
-    if (page.intro) {
-      context.fillStyle = "#f4511e";
-      context.font = '700 31px Arial, sans-serif';
-      context.textAlign = "center";
-      context.textBaseline = "alphabetic";
-      context.fillText("EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ", 620, y);
-      y += 72;
-      context.fillStyle = "#333333";
-      context.font = '19px Arial, sans-serif';
-      context.textAlign = "left";
-      context.fillText("Sayın Öğretmen,", 85, y);
-      y += 48;
-      context.font = '18px Arial, sans-serif';
-      y = drawWrappedText(
-        context,
-        "Aylık Plan Kontrol Çizelgesinde Türkiye Yüzyılı Maarif Modeli kapsamındaki alan becerileri, sosyal duygusal öğrenme becerileri, değerler, kavramsal beceriler, okuryazarlık becerileri ile eğilimler yer almaktadır. Aylık planda ele alınan program bileşenlerinin form üzerinde işaretlenmesi beklenmektedir. Bu sayede sonraki aylık planların hazırlanma süreci kolaylaşacak, yıl boyunca çocuklara kazandırılması planlanan becerilerin bütüncül olarak görülmesi mümkün olacaktır.",
-        85,
-        y,
-        1070,
-        27,
-      ) + 35;
-    }
-    const remainingTableCount = page.tables.length;
-    const tableGap = remainingTableCount > 1 ? 24 : 0;
-    const availableForTables = 1585 - y - tableGap * (remainingTableCount - 1) - (page.generalEvaluation ? 240 : 0);
-    const tableWeights = page.tables.map((table) =>
-      table.groups.reduce((sum, group) => sum + group.rows.length, 0) + 2,
-    );
-    const totalWeight = tableWeights.reduce((sum, weight) => sum + weight, 0);
-    page.tables.forEach((table, tableIndex) => {
-      const height = availableForTables * (tableWeights[tableIndex]! / totalWeight);
-      y = drawTableCanvas(context, table, document, y, height);
-      if (tableIndex < page.tables.length - 1) y += tableGap;
+    nodes.push({
+      kind: "heading",
+      level: 2,
+      text: `Ek 18 · Resmî kaynak sayfası ${344 + pageIndex}`,
+      pageBreakBefore: pageIndex > 0,
+      forcePageBreakBefore: pageIndex > 0,
+    });
+    page.tables.forEach((table) => {
+      nodes.push({ kind: "heading", level: 3, text: table.title });
+      table.groups.forEach((group) => {
+        nodes.push({ kind: "heading", level: 4, text: group.label });
+        nodes.push({
+          kind: "table",
+          summary: `${table.title} — ${group.label} aylık program bileşeni işaretleme çizelgesi`,
+          headers: ["Program bileşeni", ...MONTHS.map((month) => month.label)],
+          columnWeights: [3.5, ...MONTHS.map(() => 1)],
+          cellPadding: 2,
+          rowHeaderColumn: 0,
+          continuationContextColumns: [0],
+          rows: group.rows.map((row) => [
+            row.label,
+            ...MONTHS.map((_, monthIndex) => (
+              marked.has(row.id) && monthIndex === document.monthColumnIndex ? "X" : ""
+            )),
+          ]),
+        });
+      });
     });
     if (page.generalEvaluation) {
-      y += 26;
-      context.fillStyle = "#f4511e";
-      context.fillRect(55, y, 1130, 48);
-      context.fillStyle = "#ffffff";
-      context.font = '20px Arial, sans-serif';
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText("GENEL DEĞERLENDİRME", 620, y + 24);
-      y += 48;
-      context.fillStyle = "#ffffff";
-      context.fillRect(55, y, 1130, 175);
-      context.strokeStyle = "#f4511e";
-      context.lineWidth = 2;
-      context.strokeRect(55, y, 1130, 175);
-      context.fillStyle = "#242424";
-      context.textAlign = "left";
-      context.textBaseline = "alphabetic";
-      const generalEvaluationLayout = layoutOfficialGeneralEvaluationCanvas(
-        context,
-        document.evaluation.program.narrative,
-        1096,
-        175,
-      );
-      context.font = `${generalEvaluationLayout.fontSize}px Arial, sans-serif`;
-      generalEvaluationLayout.lines.forEach((line, lineIndex) =>
-        context.fillText(
-          line,
-          72,
-          y + 30 + lineIndex * generalEvaluationLayout.lineHeight,
-        ),
-      );
+      nodes.push({ kind: "heading", level: 3, text: "GENEL DEĞERLENDİRME" });
+      nodes.push({
+        kind: "paragraph",
+        text: officialGeneralEvaluationDocxText(document.evaluation.program.narrative),
+      });
     }
-    context.save();
-    context.fillStyle = "#777777";
-    context.font = '15px Arial, sans-serif';
-    context.textAlign = "center";
-    context.textBaseline = "alphabetic";
-    context.fillText(`MEB 2024 · Ek 18 · s. ${344 + pageIndex}`, 620, 1715);
-    context.restore();
-    images.push(base64Bytes(canvas.toDataURL("image/jpeg", 0.94)));
   });
-  images.push(...drawAppendixCanvases(canvas, context, document));
-  return createImagePdf(images, document.manifest);
+  nodes.push({
+    kind: "heading",
+    level: 2,
+    text: "ÖĞRETMEN DEĞERLENDİRME EKİ",
+    pageBreakBefore: true,
+    forcePageBreakBefore: true,
+  });
+  nodes.push({
+    kind: "paragraph",
+    tone: "meta",
+    text: "Resmî Ek 18'in parçası değildir.",
+  });
+  appendixBlocks(document).forEach((block) => {
+    nodes.push({ kind: "heading", level: 3, text: block.heading });
+    block.paragraphs.forEach((paragraph) => {
+      nodes.push({ kind: "paragraph", text: paragraph });
+    });
+  });
+  return createSemanticTaggedPdf(
+    {
+      title: "Ek 18 - Aylık Plan Kontrol Çizelgesi",
+      language: "tr-TR",
+      creator: "MaarifOS",
+      technicalMetadata: [
+        { key: "rendering-mode", value: document.manifest.renderingMode },
+        {
+          key: "official-source-form-pages",
+          value: String(document.manifest.officialSourceFormPageCount),
+        },
+        { key: "output-pagination", value: document.manifest.outputPagination },
+      ],
+      nodes,
+    },
+    options.runtime,
+  );
 }
 
 export async function generateMonthlyEvaluationExportFile(
@@ -1908,7 +1912,10 @@ export async function generateMonthlyEvaluationExportFile(
   access: VerifiedPremiumAccess,
   evaluationId: string,
   format: MonthlyEvaluationExportFormat,
-  options: { exportedAt?: string } = {},
+  options: {
+    exportedAt?: string;
+    pdfRuntime?: MonthlyEvaluationPdfRuntime;
+  } = {},
 ): Promise<MonthlyEvaluationExportFile> {
   const exportDocument = prepareMonthlyEvaluationExportDocument(
     pack,
@@ -1920,7 +1927,9 @@ export async function generateMonthlyEvaluationExportFile(
   );
   const bytes = format === "word"
     ? createMonthlyEvaluationDocx(exportDocument)
-    : await createMonthlyEvaluationPdf(exportDocument);
+    : await createMonthlyEvaluationPdf(exportDocument, {
+        runtime: options.pdfRuntime,
+      });
   return {
     format,
     fileName: exportDocument.fileName,

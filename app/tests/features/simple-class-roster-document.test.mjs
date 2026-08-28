@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
@@ -14,6 +17,11 @@ import {
 
 const yearId = "00000000-0000-4000-8000-000000009101";
 const classroomId = "00000000-0000-4000-8000-000000009102";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const pdfFontBytes = new Uint8Array(readFileSync(path.resolve(
+  testDirectory,
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+)));
 
 function record(id, fields = {}) {
   return {
@@ -76,34 +84,7 @@ function create() {
 }
 
 function pdfRuntime() {
-  const context = {
-    fillStyle: "",
-    strokeStyle: "",
-    font: "",
-    textAlign: "left",
-    textBaseline: "alphabetic",
-    lineWidth: 1,
-    fillRect() {},
-    strokeRect() {},
-    beginPath() {},
-    moveTo() {},
-    lineTo() {},
-    stroke() {},
-    fillText() {},
-    measureText(value) {
-      return { width: [...String(value)].length * 9 };
-    },
-  };
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64");
-  return {
-    createCanvas: () => ({
-      width: 0,
-      height: 0,
-      getContext: () => context,
-      toDataURL: () => `data:image/jpeg;base64,${jpeg}`,
-    }),
-    waitForFonts: async () => {},
-  };
+  return { fontBytes: pdfFontBytes };
 }
 
 test("sınıf listesi şablon 2.0 üstverisi ve görünür sürüm izi taşır", () => {

@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   ACTIVE_CLASSROOM_SETTING_ID,
@@ -78,6 +83,12 @@ const planId = "00000000-0000-4000-8000-000000007104";
 const activityId = "00000000-0000-4000-8000-000000007105";
 const observationId = "00000000-0000-4000-8000-000000007106";
 const assessmentDraftId = "00000000-0000-4000-8000-000000007107";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const pdfFontBytes = new Uint8Array(readFileSync(path.resolve(
+  testDirectory,
+  "../../public/assets/fonts/MaarifOSSans-Regular.ttf",
+)));
+const hasPdfToText = !spawnSync("pdftotext", ["-v"], { encoding: "utf8" }).error;
 const rawObservation =
   "  Deniz, iki farklı kaptaki su seviyesini yan yana getirdi ve ‘İnce olan daha yukarı çıktı.’ dedi.  ";
 const assessmentText =
@@ -246,36 +257,22 @@ function unzipStoredEntries(bytes) {
   return entries;
 }
 
-function mockPdfRuntime(renderedText) {
-  const context = {
-    fillStyle: "#000000",
-    strokeStyle: "#000000",
-    lineWidth: 1,
-    font: "",
-    textAlign: "left",
-    fillRect() {},
-    strokeRect() {},
-    fillText(text) {
-      renderedText.push(String(text));
-    },
-    measureText(text) {
-      return { width: [...String(text)].length * 9 };
-    },
-  };
-  return {
-    createCanvas() {
-      return {
-        width: 0,
-        height: 0,
-        getContext() {
-          return context;
-        },
-        toDataURL() {
-          return "data:image/jpeg;base64,/9j/2Q==";
-        },
-      };
-    },
-  };
+function mockPdfRuntime() {
+  return { fontBytes: pdfFontBytes };
+}
+
+function extractPdfText(bytes) {
+  if (!hasPdfToText) return "";
+  const directory = mkdtempSync(path.join(tmpdir(), "maarifos-anecdote-pdf-"));
+  try {
+    const pdfPath = path.join(directory, "anecdote.pdf");
+    const textPath = path.join(directory, "anecdote.txt");
+    writeFileSync(pdfPath, bytes);
+    execFileSync("pdftotext", ["-layout", "-enc", "UTF-8", pdfPath, textPath]);
+    return readFileSync(textPath, "utf8").replaceAll("\r", "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 test("anekdot read-modeli ham gözlemden çocuk/tarih/durumu alır, eksikleri uydurmaz ve dışa aktarımı kapatır", async () => {
@@ -598,34 +595,53 @@ test("DOCX resmî alan sırasını, A4 geometriyi ve görünmez izlenebilirlik m
   assert.match(customXml, new RegExp(exportedAt.replaceAll(".", "\\.")));
 });
 
-test("PDF üretimi aynı resmî sırayı çizer ve kaynak kimliği/sürüm/zaman metadata'sını taşır", async () => {
+test("PDF ham çocuk sözünü öğretmen yorumundan ayırır; etiket ve kişisel verisiz metadata taşır", async () => {
   const { form } = await readyFixture();
-  const renderedText = [];
   const file = await generateAnecdoteExportFile(form, "pdf", {
     exportedAt,
-    pdfRuntime: mockPdfRuntime(renderedText),
+    pdfRuntime: mockPdfRuntime(),
   });
-  const decoded = new TextDecoder().decode(file.bytes);
-  const rendered = renderedText.join("\n");
+  const decoded = Buffer.from(file.bytes).toString("latin1");
+  const xmp = new TextDecoder().decode(file.bytes)
+    .match(/<x:xmpmeta[\s\S]+?<\/x:xmpmeta>/u)?.[0] ?? "";
 
-  assert.equal(decoded.startsWith("%PDF-1.4"), true);
-  assert.match(decoded, new RegExp(observationId));
-  assert.match(decoded, new RegExp(profile.sourceVersion.replaceAll(".", "\\.")));
-  assert.match(decoded, /2026-09-08T12:30:00\.000Z/);
+  assert.equal(decoded.startsWith("%PDF-1.7"), true);
+  assert.match(decoded, /\/Lang \(tr-TR\)/u);
+  assert.match(decoded, /\/StructTreeRoot\b/u);
+  assert.match(decoded, /\/FontFile2\b/u);
+  assert.match(decoded, /\/ToUnicode\b/u);
+  assert.match(decoded, /\/S \/H1\b/u);
+  assert.match(decoded, /\/S \/H2\b/u);
+  assert.match(decoded, /\/S \/Table\b/u);
+  assert.match(decoded, /\/Scope \/Row\b/u);
+  assert.match(decoded, /\/S \/L\b/u);
+  assert.doesNotMatch(decoded, /\/Subtype \/Image\b/u);
+  assert.doesNotMatch(xmp, /Deniz Yılmaz|İnce olan daha yukarı çıktı|kap biçimi ile sıvı seviyesinin görünümü/u);
+  assert.doesNotMatch(xmp, new RegExp(observationId));
+  assert.doesNotMatch(xmp, /observation-id|source-versions|exported-at|2026-09-08T12:30:00\.000Z/u);
+  if (!hasPdfToText) return;
+  const extracted = extractPdfText(file.bytes);
   const labels = [
     "Çocuğun Adı Soyadı",
     "Tarih",
     "Gözlenen Mekân",
-    "Gözlenen Durum",
+    "Gözlenen Durum — ham gözlem ve çocuğun sözü",
     "Gözlenen Beceriler",
-    "Gözlemcinin Genel Değerlendirmesi",
+    "Gözlemcinin Genel Değerlendirmesi — öğretmen yorumu",
   ];
   let cursor = -1;
   for (const label of labels) {
-    const next = rendered.indexOf(label);
-    assert.ok(next > cursor, `${label} PDF çizim sırasında olmalı`);
+    const next = extracted.indexOf(label);
+    assert.ok(next > cursor, `${label} PDF okuma sırasında olmalı`);
     cursor = next;
   }
+  assert.match(extracted, /İnce olan daha yukarı çıktı/u);
+  assert.match(extracted, /kap biçimi ile sıvı seviyesinin görünümü/u);
+  assert.ok(
+    extracted.indexOf("İnce olan daha yukarı çıktı")
+      < extracted.indexOf("kap biçimi ile sıvı seviyesinin görünümü"),
+    "ham çocuk sözü öğretmen yorumundan önce ve ayrı bölümde okunmalı",
+  );
 });
 
 test("onaylı anekdot yerel snapshot/JSON turunda kayıpsız yeniden yüklenir", async () => {

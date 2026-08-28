@@ -28,6 +28,11 @@ import {
   type PremiumMonthlyEvaluation,
   type PremiumWeeklyEvaluation,
 } from "./plan-service.ts";
+import {
+  createSemanticTaggedPdf,
+  type SemanticPdfNode,
+  type SemanticTaggedPdfRuntime,
+} from "../documents/semantic-tagged-pdf.ts";
 
 export type PremiumPlanExportFormat = "pdf" | "word";
 export type PremiumPlanExportAccess = VerifiedPremiumAccess;
@@ -715,49 +720,6 @@ export function createPremiumPlanDocx(
   ]);
 }
 
-function base64Bytes(dataUrl: string): Uint8Array {
-  const binary = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function createImagePdf(images: readonly Uint8Array[]): Uint8Array {
-  const objects: { id: number; bytes: Uint8Array }[] = [];
-  const pageIds = images.map((_, index) => 3 + index * 3);
-  objects.push({ id: 1, bytes: encoder.encode("<< /Type /Catalog /Pages 2 0 R >>") });
-  objects.push({
-    id: 2,
-    bytes: encoder.encode(`<< /Type /Pages /Count ${images.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`),
-  });
-  images.forEach((image, index) => {
-    const pageId = pageIds[index];
-    const imageId = pageId + 1;
-    const contentId = pageId + 2;
-    const content = encoder.encode("q\n595.28 0 0 841.89 0 0 cm\n/Im0 Do\nQ");
-    objects.push({ id: pageId, bytes: encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`) });
-    objects.push({ id: imageId, bytes: joinBytes([encoder.encode(`<< /Type /XObject /Subtype /Image /Width 1240 /Height 1754 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.length} >>\nstream\n`), image, encoder.encode("\nendstream")]) });
-    objects.push({ id: contentId, bytes: joinBytes([encoder.encode(`<< /Length ${content.length} >>\nstream\n`), content, encoder.encode("\nendstream")]) });
-  });
-  objects.sort((left, right) => left.id - right.id);
-  const parts: Uint8Array[] = [encoder.encode("%PDF-1.4\n")];
-  const offsets = new Map<number, number>();
-  let offset = parts[0].length;
-  objects.forEach((object) => {
-    const prefix = encoder.encode(`${object.id} 0 obj\n`);
-    const suffix = encoder.encode("\nendobj\n");
-    offsets.set(object.id, offset);
-    parts.push(prefix, object.bytes, suffix);
-    offset += prefix.length + object.bytes.length + suffix.length;
-  });
-  const xrefOffset = offset;
-  const maxId = objects.at(-1)?.id ?? 0;
-  const xref = [`xref\n0 ${maxId + 1}\n`, "0000000000 65535 f \n"];
-  for (let id = 1; id <= maxId; id += 1) {
-    xref.push(`${String(offsets.get(id) ?? 0).padStart(10, "0")} 00000 n \n`);
-  }
-  parts.push(encoder.encode(`${xref.join("")}trailer\n<< /Size ${maxId + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`));
-  return joinBytes(parts);
-}
-
 const PREMIUM_PLAN_PDF_TEXT_STYLES: Readonly<
   Record<PremiumPlanExportParagraph["style"], PremiumPlanPdfTextStyle>
 > = {
@@ -974,64 +936,83 @@ export function paginatePremiumPlanExportParagraphs(
   return pages.length > 0 ? pages : [{ items: [], usedHeight: 0 }];
 }
 
+export function premiumPlanParagraphsToSemanticNodes(
+  paragraphs: readonly PremiumPlanExportParagraph[],
+): SemanticPdfNode[] {
+  const nodes: SemanticPdfNode[] = [];
+  let bulletItems: string[] = [];
+  let bulletPageBreakBefore = false;
+  const flushBullets = () => {
+    if (bulletItems.length === 0) return;
+    nodes.push({
+      kind: "list",
+      items: bulletItems,
+      ...(bulletPageBreakBefore ? { pageBreakBefore: true } : {}),
+    });
+    bulletItems = [];
+    bulletPageBreakBefore = false;
+  };
+
+  paragraphs.forEach((paragraph) => {
+    if (paragraph.style === "bullet") {
+      if (bulletItems.length === 0) {
+        bulletPageBreakBefore = paragraph.pageBreakBefore === true;
+      }
+      bulletItems.push(paragraph.text);
+      return;
+    }
+    flushBullets();
+    if (paragraph.style === "title") {
+      nodes.push({
+        kind: "heading",
+        level: 1,
+        text: paragraph.text,
+        pageBreakBefore: paragraph.pageBreakBefore,
+        forcePageBreakBefore: paragraph.forcePageBreakBefore,
+      });
+      return;
+    }
+    if (paragraph.style === "heading1" || paragraph.style === "heading2") {
+      nodes.push({
+        kind: "heading",
+        level: paragraph.style === "heading1" ? 2 : 3,
+        text: paragraph.text,
+        pageBreakBefore: paragraph.pageBreakBefore,
+        forcePageBreakBefore: paragraph.forcePageBreakBefore,
+      });
+      return;
+    }
+    nodes.push({
+      kind: "paragraph",
+      text: paragraph.text,
+      tone: paragraph.style === "meta" ? "meta" : "body",
+      pageBreakBefore: paragraph.pageBreakBefore,
+    });
+  });
+  flushBullets();
+  return nodes;
+}
+
+/**
+ * Günlük, haftalık, aylık ve birleşik planlar için ortak semantik PDF hattı.
+ * Çıktı etiketlidir; nihai PDF/UA uygunluğu harici doğrulama bekler.
+ */
 export async function createPremiumPlanPdf(
   paragraphs: readonly PremiumPlanExportParagraph[],
+  runtime: SemanticTaggedPdfRuntime = {},
 ): Promise<Uint8Array> {
-  if (typeof document === "undefined") {
-    throw new Error("PDF dosyası yalnız uygulamanın belge üretim ortamında hazırlanabilir.");
-  }
-  await document.fonts?.ready;
-  const canvas = document.createElement("canvas");
-  canvas.width = 1240;
-  canvas.height = 1754;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("PDF sayfa yüzeyi hazırlanamadı.");
-  const images: Uint8Array[] = [];
-  const margin = 100;
-  const bottomContentLimit = canvas.height - 170;
-  const contentWidth = canvas.width - margin * 2;
-  let pageNumber = 1;
-
-  const beginPage = () => {
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#5c4085";
-    context.fillRect(0, 0, canvas.width, 24);
-  };
-  const finishPage = () => {
-    context.fillStyle = "#6b6470";
-    context.font = '22px "Premium Export Roboto", Arial, sans-serif';
-    context.textAlign = "center";
-    context.fillText(`MaarifOS · ${pageNumber}`, canvas.width / 2, canvas.height - 48);
-    context.textAlign = "left";
-    images.push(base64Bytes(canvas.toDataURL("image/jpeg", 0.9)));
-    pageNumber += 1;
-  };
-
-  const pages = paginatePremiumPlanExportParagraphs(
-    paragraphs,
-    (text, font) => {
-      context.font = font;
-      return context.measureText(text).width;
+  const title = paragraphs.find((paragraph) => paragraph.style === "title")?.text
+    ?? paragraphs[0]?.text
+    ?? "MaarifOS öğretmen planı";
+  return createSemanticTaggedPdf(
+    {
+      title,
+      language: "tr-TR",
+      creator: "MaarifOS",
+      nodes: premiumPlanParagraphsToSemanticNodes(paragraphs),
     },
-    contentWidth,
-    bottomContentLimit - margin,
+    runtime,
   );
-  pages.forEach((page) => {
-    beginPage();
-    let y = margin;
-    page.items.forEach((item) => {
-      context.font = item.font;
-      context.fillStyle = item.color;
-      item.lines.forEach((line) => {
-        context.fillText(line, margin, y);
-        y += item.lineHeight;
-      });
-      y += item.gap;
-    });
-    finishPage();
-  });
-  return createImagePdf(images);
 }
 
 export async function generatePremiumPlanExportFile(
@@ -1039,6 +1020,7 @@ export async function generatePremiumPlanExportFile(
   source: InstalledPremiumPlanExportSource,
   access: PremiumPlanExportAccess,
   format: PremiumPlanExportFormat,
+  pdfRuntime: SemanticTaggedPdfRuntime = {},
 ): Promise<PremiumPlanExportFile> {
   const exportDocument = preparePremiumPlanExportDocument(
     pack,
@@ -1049,7 +1031,7 @@ export async function generatePremiumPlanExportFile(
   const paragraphs = buildPremiumPlanExportParagraphs(exportDocument);
   const bytes = format === "word"
     ? createPremiumPlanDocx(paragraphs)
-    : await createPremiumPlanPdf(paragraphs);
+    : await createPremiumPlanPdf(paragraphs, pdfRuntime);
   return {
     format,
     fileName: exportDocument.fileName,
