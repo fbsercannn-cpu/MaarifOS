@@ -1,9 +1,12 @@
+import { HOME_GAME_CARD_KEYS, HOME_GAME_CARD_SETTING_TYPE, isHomeGameCardRecord, assertHomeGameCardRelationships } from "../../features/home-game-cards/home-game-card-model.ts";
+import {STUDENT_ERASURE_TYPE,isStudentErasure} from '../domain/student-erasure.ts';
 import {
   COLLECTION_NAMES,
   type CollectionName,
   type DataSnapshot,
   type StoredRecord,
 } from "../domain/model";
+import { DOCUMENT_VERSION_KEYS, DOCUMENT_VERSION_SETTING_TYPE, isDocumentVersionRecord } from "../domain/document-history.ts";
 import {
   ATTENDANCE_COMPLETION_SETTING_TYPE,
   isAttendanceCompletionSetting,
@@ -14,6 +17,16 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
   isClassroomRecord,
 } from "../domain/classroom";
+import { TEACHER_FOLLOWUP_KEYS, TEACHER_FOLLOWUP_SETTING_TYPE, isTeacherFollowupRecord, assertTeacherFollowupRelationships } from "../domain/teacher-followup.ts";
+import { CONSENT_TRIP_KEYS, CONSENT_TRIP_SETTING_TYPE, isConsentTripRecord, assertConsentTripRelationships } from "../domain/consent-trips.ts";
+import { CLASSROOM_ADMIN_KEYS, CLASSROOM_ADMIN_SETTING_TYPE, isClassroomAdminRecord, assertClassroomAdminRelationships } from "../domain/classroom-admin.ts";
+import { GROWTH_MEASUREMENT_RECORD_KEYS, GROWTH_MEASUREMENT_SETTING_TYPE, isGrowthMeasurementRecord, assertGrowthMeasurementSnapshotRelations } from "../domain/growth-measurements.ts";
+import { LEARNING_CENTER_KEYS, LEARNING_CENTER_SETTING_TYPE, isLearningCenterRecord, assertLearningCenterRelationships } from "../domain/learning-centers.ts";
+import {CLASS_DUTY_SETTING_TYPE,isClassDutyRecord,assertClassDutyRelationships} from "../domain/class-duty-schedule.ts";
+import {TEACHER_HOME_PREFERENCES_SETTING_TYPE,isTeacherHomePreferencesRecord} from "../../features/simple-experience/teacher-home-preferences.ts";
+import { FAMILY_ENGAGEMENT_KEYS, FAMILY_ENGAGEMENT_SETTING_TYPE, isFamilyEngagementRecord, assertFamilyEngagementRelationships } from "../domain/family-engagement.ts";
+import { SCHOOL_DOCUMENT_TEMPLATE_KEYS, SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE, isSchoolDocumentTemplateRecord, assertSchoolDocumentTemplateRelationships } from "../domain/school-document-template.ts";
+import { DAILY_ROUTINE_CARD_KEYS, DAILY_ROUTINE_CARD_SETTING_TYPE, isDailyRoutineCardRecord, assertDailyRoutineCardRelationships } from "../domain/daily-routine-cards.ts";
 import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   type ActiveClassroomScope,
@@ -38,6 +51,7 @@ import {
   composeStudentDisplayName,
   isStudentProfilePhotoDataUrl,
   isValidStudentNationalIdentityNumber,
+  isStudentSpreadsheetImportReview,
   normalizeStudentCareDetails,
   normalizeStudentContacts,
   studentContactsFromRecord,
@@ -50,6 +64,8 @@ import {
 } from "../security/app-lock";
 import { assertEntityRecord } from "../repository/entities";
 import { canonicalJson } from "./canonical-json";
+import { DEVELOPMENT_REPORT_KEYS, DEVELOPMENT_REPORT_SETTING_TYPE, isDevelopmentReportRecord } from "../../features/development/development-report-model";
+import { assertDevelopmentReportRelationships } from "../../features/development/development-report-sources";
 import {
   parsePremiumActivityValueDesignSnapshot,
   parsePremiumValuesContentPackSnapshot,
@@ -70,6 +86,14 @@ import {
   LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
 } from "../../features/evidence/local-teacher-identity";
 import {
+  isDevelopmentObservationSelection,
+  parseDevelopmentObservationSelection,
+} from "../../features/evidence/development-observation-presets";
+import {
+  assertDevelopmentObservationContext,
+  isDevelopmentObservationCurriculumLink,
+} from "../../features/evidence/development-observation-record";
+import {
   ANECDOTE_FORM_LEGACY_SCHEMA_VERSION,
   ANECDOTE_FORM_REPORT_TYPE,
   ANECDOTE_FORM_SCHEMA_VERSION,
@@ -85,21 +109,43 @@ import {
   teacherDayCarryForwardSourceIdentity,
 } from "../../features/day-closure/teacher-day-closure";
 import {
+  OFFICIAL_APPOINTMENT_TRANSITION_KEYS,
+  OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE,
+  assertOfficialAppointmentCompletionRelationships,
+  isOfficialAppointmentCompletionRecord,
+} from "../../features/family-engagement/official-appointment-transition.ts";
+import {
+  PLAY_FAMILY_CYCLE_KEYS,
+  PLAY_FAMILY_CYCLE_SETTING_TYPE,
+  assertPlayFamilyCycleRelationships,
+  isPlayFamilyCycleRecord,
+} from "../../features/planning/play-family-cycle.ts";
+import {
+  CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION,
   DATA_SCHEMA_VERSION,
   IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
   LEGACY_DATA_SCHEMA_VERSION,
   PREVIOUS_DATA_SCHEMA_VERSION,
   SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
   VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
+  PRE_DEVELOPMENT_DATA_SCHEMA_VERSION,
+  DEVELOPMENT_DATA_SCHEMA_VERSION,
+  PRE_WORKFLOW_DATA_SCHEMA_VERSION,
+  TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION,
 } from "./schema-version";
 
 export {
+  CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION,
   DATA_SCHEMA_VERSION,
   IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
   LEGACY_DATA_SCHEMA_VERSION,
   PREVIOUS_DATA_SCHEMA_VERSION,
   SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
   VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
+  PRE_DEVELOPMENT_DATA_SCHEMA_VERSION,
+  DEVELOPMENT_DATA_SCHEMA_VERSION,
+  PRE_WORKFLOW_DATA_SCHEMA_VERSION,
+  TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION,
 } from "./schema-version";
 
 export const BACKUP_FORMAT = "maarifos-json";
@@ -113,6 +159,11 @@ export interface BackupManifest {
     | typeof PREVIOUS_DATA_SCHEMA_VERSION
     | typeof IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION
     | typeof VALUE_EVIDENCE_DATA_SCHEMA_VERSION
+    | typeof PRE_DEVELOPMENT_DATA_SCHEMA_VERSION
+    | typeof DEVELOPMENT_DATA_SCHEMA_VERSION
+    | typeof PRE_WORKFLOW_DATA_SCHEMA_VERSION
+    | typeof TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION
+    | typeof CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION
     | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
   createdAt: string;
@@ -214,6 +265,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "careDetails",
     "profilePhotoDataUrl",
     "profileSchemaVersion",
+    "spreadsheetImportReview",
     "profileMediaId",
     "active",
     "notes",
@@ -259,6 +311,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "observationType",
     "observationTaxonomyVersion",
     "observationCategories",
+    "developmentSelection",
     "workflowStatus",
     "batchId",
     "captureScope",
@@ -448,6 +501,8 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "targetSourcePage",
     "targetSourceSha256",
     "holisticGraphReference",
+    "developmentSelection",
+    "targetSnapshot",
   ],
   valueEvidenceLinks: [
     ...BASE_RECORD_KEYS,
@@ -550,6 +605,20 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "scope",
   ],
   settings: [
+    "erasedStudentHash",
+    ...DOCUMENT_VERSION_KEYS,
+    ...HOME_GAME_CARD_KEYS,
+    ...OFFICIAL_APPOINTMENT_TRANSITION_KEYS,
+    ...PLAY_FAMILY_CYCLE_KEYS,
+    ...GROWTH_MEASUREMENT_RECORD_KEYS,
+    ...LEARNING_CENTER_KEYS,
+    ...FAMILY_ENGAGEMENT_KEYS,
+    ...SCHOOL_DOCUMENT_TEMPLATE_KEYS,
+    ...DAILY_ROUTINE_CARD_KEYS,
+    ...CLASSROOM_ADMIN_KEYS,
+    ...CONSENT_TRIP_KEYS,
+    ...TEACHER_FOLLOWUP_KEYS,
+    ...DEVELOPMENT_REPORT_KEYS,
     ...BASE_RECORD_KEYS,
     ...SCOPE_RECORD_KEYS,
     "settingType",
@@ -562,6 +631,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "childQuote",
     "observationType",
     "categoryIds",
+    "developmentSelection",
     "observationTaxonomyVersion",
     "batchId",
     "captureScope",
@@ -1090,6 +1160,14 @@ function validateCollectionRecordSemantics(
   }
 
   if (collection === "settings") {
+    if (record.settingType === HOME_GAME_CARD_SETTING_TYPE) {
+      if (!isHomeGameCardRecord(record)) throw new Error("Ev oyunu kartı kayıt sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === DOCUMENT_VERSION_SETTING_TYPE) {
+      if (!isDocumentVersionRecord(record)) throw new Error("Belge sürümü kayıt sözleşmesi geçersiz.");
+      return;
+    }
     if (!isNonEmptyText(record.settingType, 120)) {
       throw new Error(`settings/${record.id} ayar türü geçersiz.`);
     }
@@ -1106,6 +1184,53 @@ function validateCollectionRecordSemantics(
       "settingType",
       ...SCOPE_RECORD_KEYS,
     ];
+    if (record.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+      if (!isDevelopmentReportRecord(record)) throw new Error(`settings/${record.id} öğretmen gözlem özeti sözleşmesi geçersiz.`);
+      return;
+    }
+    if (record.settingType === TEACHER_FOLLOWUP_SETTING_TYPE) {
+      if (!isTeacherFollowupRecord(record)) throw new Error("Öğretmen takip kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === CONSENT_TRIP_SETTING_TYPE) {
+      if (!isConsentTripRecord(record)) throw new Error("Veli izni/gezi kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === CLASSROOM_ADMIN_SETTING_TYPE) {
+      if (!isClassroomAdminRecord(record)) throw new Error("Sınıf malzeme/devir kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === GROWTH_MEASUREMENT_SETTING_TYPE) {
+      if (!isGrowthMeasurementRecord(record)) throw new Error("Boy/kilo ölçüm kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === LEARNING_CENTER_SETTING_TYPE) {
+      if (!isLearningCenterRecord(record)) throw new Error("Öğrenme merkezi kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if(record.settingType===STUDENT_ERASURE_TYPE){if(!isStudentErasure(record))throw new Error("Çocuk silme izi geçersiz.");return;}
+    if(record.settingType===CLASS_DUTY_SETTING_TYPE){if(!isClassDutyRecord(record))throw new Error("Sınıf görev çizelgesi sözleşmesi geçersiz.");return;}
+    if(record.settingType===TEACHER_HOME_PREFERENCES_SETTING_TYPE){if(!isTeacherHomePreferencesRecord(record))throw new Error("Öğretmenin sade ekran tercihi sözleşmesi geçersiz.");return;}
+    if (record.settingType === FAMILY_ENGAGEMENT_SETTING_TYPE) {
+      if (!isFamilyEngagementRecord(record)) throw new Error("Aile randevu/iletişim kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE) {
+      if (!isSchoolDocumentTemplateRecord(record)) throw new Error("Okul belge şablonu sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === DAILY_ROUTINE_CARD_SETTING_TYPE) {
+      if (!isDailyRoutineCardRecord(record)) throw new Error("Görsel rutin kartı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE) {
+      if (!isOfficialAppointmentCompletionRecord(record)) throw new Error("Resmî randevu işlem kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === PLAY_FAMILY_CYCLE_SETTING_TYPE) {
+      if (!isPlayFamilyCycleRecord(record)) throw new Error("Oyun ve aile zinciri kayıt sözleşmesi geçersiz.");
+      return;
+    }
     if (record.settingType === APP_LOCK_SETTING_TYPE) {
       assertObjectAllowedKeys(
         record,
@@ -1208,6 +1333,7 @@ function validateCollectionRecordSemantics(
           "childQuote",
           "observationType",
           "categoryIds",
+          "developmentSelection",
           "observationTaxonomyVersion",
           "batchId",
           "captureScope",
@@ -1595,6 +1721,10 @@ function validateStudentProfile(
   student: StoredRecord,
   currentCivilDate: string,
 ): void {
+  if (student.spreadsheetImportReview !== undefined &&
+    !isStudentSpreadsheetImportReview(student.spreadsheetImportReview, student)) {
+    throw new Error("Öğrenci Excel aktarımı mükerrer inceleme kaydı geçersiz.");
+  }
   if (
     typeof student.displayName !== "string" ||
     !student.displayName.trim() ||
@@ -1608,7 +1738,9 @@ function validateStudentProfile(
     student.profileSchemaVersion === 5 ||
     student.profileSchemaVersion === 6 ||
     student.profileSchemaVersion === 7 ||
-    student.profileSchemaVersion === 8
+    student.profileSchemaVersion === 8 ||
+    student.profileSchemaVersion === 9 ||
+    student.profileSchemaVersion === 10
   ) {
     if (typeof student.firstName !== "string" || !student.firstName.trim()) {
       throw new Error(`students/${student.id} adı eksik veya geçersiz.`);
@@ -1716,6 +1848,7 @@ function validateStudentProfile(
             source.kind === contact.kind &&
             source.relationship === contact.relationship &&
             source.name === contact.name &&
+            source.occupation === contact.occupation &&
             source.phone === contact.phone &&
             source.isPrimary === contact.isPrimary &&
             (source.isEmergencyContact === true) ===
@@ -1732,7 +1865,9 @@ function validateStudentProfile(
       student.profileSchemaVersion !== 5 &&
       student.profileSchemaVersion !== 6 &&
       student.profileSchemaVersion !== 7 &&
-      student.profileSchemaVersion !== 8
+      student.profileSchemaVersion !== 8 &&
+      student.profileSchemaVersion !== 9 &&
+      student.profileSchemaVersion !== 10
     ) {
       const legacyContacts = studentContactsFromRecord(sourceContacts);
       contactsMatch =
@@ -1745,6 +1880,7 @@ function validateStudentProfile(
             source.kind === contact.kind &&
             source.relationship === contact.relationship &&
             source.name === contact.name &&
+            source.occupation === contact.occupation &&
             source.phone === contact.phone &&
             source.isPrimary === contact.isPrimary &&
             (source.isEmergencyContact === true) ===
@@ -1776,7 +1912,9 @@ function validateStudentProfile(
       Object.keys(sourceCareDetails).length !==
         Object.keys(normalizedCareDetails).length ||
       Object.entries(normalizedCareDetails).some(
-        ([key, value]) => sourceCareDetails[key] !== value,
+        ([key, value]) => key === "homeAddressParts"
+          ? canonicalJson(sourceCareDetails[key]) !== canonicalJson(value)
+          : sourceCareDetails[key] !== value,
       )
     ) {
       throw new Error(`students/${student.id} sağlık ve güvenlik bilgileri geçersiz.`);
@@ -1796,7 +1934,9 @@ function validateStudentProfile(
     student.profileSchemaVersion !== 5 &&
     student.profileSchemaVersion !== 6 &&
     student.profileSchemaVersion !== 7 &&
-    student.profileSchemaVersion !== 8
+    student.profileSchemaVersion !== 8 &&
+    student.profileSchemaVersion !== 9 &&
+    student.profileSchemaVersion !== 10
   ) {
     throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
   }
@@ -1836,6 +1976,11 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     manifest.dataSchemaVersion !== PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== VALUE_EVIDENCE_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== PRE_DEVELOPMENT_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== DEVELOPMENT_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== PRE_WORKFLOW_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
   ) {
     throw new Error("Yedek veri şeması bu uygulama sürümüyle uyumlu değil.");
@@ -1933,6 +2078,23 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     const identifiers = new Set<string>();
     for (const record of records) {
       assertStoredRecord(record, collection);
+      if (Number(manifest.dataSchemaVersion) < DEVELOPMENT_DATA_SCHEMA_VERSION &&
+        (record.developmentSelection !== undefined || record.targetSnapshot !== undefined)) {
+        throw new Error("Maarif gelişim seçimi ve kaynak snapshot'ı en az V7 yedek şeması gerektirir.");
+      }
+      if (Number(manifest.dataSchemaVersion) < 8 && record.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+        throw new Error("Öğretmen gözlem özeti en az V8 yedek şeması gerektirir.");
+      }
+      if (Number(manifest.dataSchemaVersion) < 9 && record.settingType === TEACHER_FOLLOWUP_SETTING_TYPE) throw new Error("Öğretmen takip kaydı en az V9 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === CONSENT_TRIP_SETTING_TYPE) throw new Error("Veli izni/gezi kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === CLASSROOM_ADMIN_SETTING_TYPE) throw new Error("Sınıf malzeme/devir kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === GROWTH_MEASUREMENT_SETTING_TYPE) throw new Error("Boy/kilo ölçüm kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === LEARNING_CENTER_SETTING_TYPE) throw new Error("Öğrenme merkezi kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === FAMILY_ENGAGEMENT_SETTING_TYPE) throw new Error("Aile randevu/iletişim kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE) throw new Error("Okul belge şablonu en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === DAILY_ROUTINE_CARD_SETTING_TYPE) throw new Error("Görsel rutin kartı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 11 && record.settingType === OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE) throw new Error("Resmî randevu işlem kaydı en az V11 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 11 && record.settingType === PLAY_FAMILY_CYCLE_SETTING_TYPE) throw new Error("Oyun ve aile zinciri en az V11 yedek şeması gerektirir.");
       if (identifiers.has(record.id)) {
         throw new Error(`${collection} koleksiyonunda mükerrer UUID var: ${record.id}`);
       }
@@ -4183,6 +4345,8 @@ function assertBackupRelationships(
         typeof observation.childQuote !== "string") ||
       (observation.observationType !== undefined &&
         !isQuickObservationType(observation.observationType)) ||
+      (observation.developmentSelection !== undefined &&
+        !isDevelopmentObservationSelection(observation.developmentSelection)) ||
       (observationCategories !== undefined &&
         (!Array.isArray(observationCategories) ||
           !observationCategories.every(isQuickObservationCategory) ||
@@ -4229,6 +4393,7 @@ function assertBackupRelationships(
     const profileProvenance = profile
       ? validatedCurriculumProvenance(profile, `plans/${plan?.id ?? "bilinmeyen"}`)
       : null;
+    const developmentLink = isDevelopmentObservationCurriculumLink(link);
     if (
       !observation ||
       !linkScope ||
@@ -4257,20 +4422,44 @@ function assertBackupRelationships(
         )) ||
       !profile ||
       profile.framework !== link.framework ||
-      profile.catalogId !== link.catalogId ||
-      profile.sourceVersion !== link.sourceVersion ||
-      !profileProvenance ||
-      (linkProvenance.referenceOrigin === "official-catalog" &&
-        (profileProvenance.referenceOrigin !== "official-catalog" ||
-          profileProvenance.officialCatalogVerified !== true))
+      (!developmentLink && (
+        profile.catalogId !== link.catalogId ||
+        profile.sourceVersion !== link.sourceVersion ||
+        !profileProvenance ||
+        (linkProvenance.referenceOrigin === "official-catalog" &&
+          (profileProvenance.referenceOrigin !== "official-catalog" ||
+            profileProvenance.officialCatalogVerified !== true))
+      ))
     ) {
       throw new Error(
         `evidenceCurriculumLinks/${link.id} öğretmen onaylı program bağı geçersiz.`,
       );
     }
+    if (developmentLink) {
+      if (!sameCanonicalSnapshot(observation.developmentSelection, link.developmentSelection)) {
+        throw new Error(`evidenceCurriculumLinks/${link.id} gözlenen davranış seçimi kaynak gözlemle uyuşmuyor.`);
+      }
+      assertDevelopmentObservationContext({
+        selection: parseDevelopmentObservationSelection(link.developmentSelection),
+        observation,
+        classrooms: payload.classrooms,
+        plans: payload.plans,
+        activities: payload.activities,
+        validateCurrentAgeBand: false,
+      });
+    }
     const group = linksByObservation.get(observation.id) ?? [];
     group.push(link);
     linksByObservation.set(observation.id, group);
+  }
+
+  for (const observation of payload.observations) {
+    if (observation.developmentSelection === undefined) continue;
+    const developmentLinks = (linksByObservation.get(observation.id) ?? [])
+      .filter((link) => isDevelopmentObservationCurriculumLink(link));
+    if (developmentLinks.length !== 1) {
+      throw new Error(`observations/${observation.id} gelişim gözleminin tek bir kaynaklı program bağı bulunmalıdır.`);
+    }
   }
 
   const valueEvidenceLinksById = new Map(
@@ -4956,12 +5145,9 @@ function assertBackupRelationships(
       typeof draft.teacherAssessmentText !== "string" ||
       draft.teacherAssessmentText.trim().length === 0 ||
       !periodAndObservationsValid ||
-      draft.status !== "teacher-review-required" ||
       draft.authoredBy !== "teacher" ||
-      draft.teacherReviewRequired !== true ||
-      draft.reviewStatus !== "pending" ||
-      draft.reviewedByUserId !== null ||
-      draft.reviewedAt !== null ||
+      !((draft.status === "teacher-review-required" && draft.teacherReviewRequired === true && draft.reviewStatus === "pending" && draft.reviewedByUserId === null && draft.reviewedAt === null) ||
+        (draft.status === "teacher-saved" && draft.teacherReviewRequired === false && draft.reviewStatus === "teacher-saved" && isUuid(draft.reviewedByUserId) && typeof draft.reviewedAt === "string" && UTC_ISO_PATTERN.test(draft.reviewedAt) && draft.reviewedAt === draft.updatedAt)) ||
       draft.generationMode !== "teacher-authored-cited-draft" ||
       (storedVerificationStatus !== "official-catalog-verified" &&
         storedVerificationStatus !== "teacher-declared-unverified") ||
@@ -5380,7 +5566,28 @@ function assertBackupRelationships(
     );
   }
 
+  assertTeacherFollowupRelationships(payload);
+  assertConsentTripRelationships(payload);
+  assertClassroomAdminRelationships(payload);
+  assertGrowthMeasurementSnapshotRelations(payload);
+  assertLearningCenterRelationships(payload);
+  assertClassDutyRelationships(payload);
+  assertFamilyEngagementRelationships(payload);
+  assertSchoolDocumentTemplateRelationships(payload);
+  assertDailyRoutineCardRelationships(payload);
+  assertOfficialAppointmentCompletionRelationships(payload);
+  assertPlayFamilyCycleRelationships(payload);
+  assertHomeGameCardRelationships(payload);
   for (const setting of payload.settings) {
+    if (setting.settingType === DOCUMENT_VERSION_SETTING_TYPE) {
+      if (!isDocumentVersionRecord(setting)) throw new Error("Belge sürümü kayıt sözleşmesi geçersiz.");
+      validatedRecordScope(setting, "settings", classroomsById);
+      if (setting.studentIds.some(id => !studentIds.has(id))) throw new Error("Belge sürümü bilinmeyen öğrenciye bağlı.");
+    }
+    if (setting.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+      if (!isDevelopmentReportRecord(setting)) throw new Error("Öğretmen gözlem özeti kayıt sözleşmesi geçersiz.");
+      assertDevelopmentReportRelationships(payload, setting);
+    }
     if (setting.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
       if (!isQuickObservationDraftRecord(setting)) {
         throw new Error(`settings/${setting.id} hızlı gözlem taslağı geçersiz.`);
@@ -5427,6 +5634,16 @@ function assertBackupRelationships(
         throw new Error(
           `settings/${setting.id} hızlı gözlem taslağı ilişkileri geçersiz.`,
         );
+      }
+      if (setting.developmentSelection !== undefined) {
+        assertDevelopmentObservationContext({
+          selection: setting.developmentSelection,
+          observation: setting,
+          classrooms: payload.classrooms,
+          plans: payload.plans,
+          activities: payload.activities,
+          validateCurrentAgeBand: false,
+        });
       }
     }
     if (
@@ -5487,6 +5704,14 @@ function assertBackupRelationships(
       validatedRecordScope(setting, "settings", classroomsById);
     }
   }
+}
+
+/** Applies the backup verifier's canonical relationship gate before a live write. */
+export function assertDataSnapshotRelationships(
+  payload: DataSnapshot,
+  currentCivilDate: string,
+): void {
+  assertBackupRelationships(payload, currentCivilDate);
 }
 
 export function assertBackupEnvelope(value: unknown): asserts value is BackupEnvelope {

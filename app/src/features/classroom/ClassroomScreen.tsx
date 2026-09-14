@@ -50,12 +50,15 @@ export interface ClassroomScreenProps {
   getObservationCount: (studentId: string) => number;
   getAgeLabel: (student: ClassroomStudentViewModel) => string;
   renderAvatar?: (student: ClassroomStudentViewModel) => ReactNode;
+  developmentCoverage?: ReactNode;
+  followupInbox?: ReactNode;
   onSearchQueryChange: (value: string) => void;
   onOpenAddStudent: () => void;
   onOpenAttendance: () => void;
   onOpenExport: () => void;
   onOpenProfile: ClassroomProfileAction;
   onOpenObservation: ClassroomAction;
+  onOpenQuickObservation?: () => void | Promise<void>;
   onToggleStudentActions: (studentId: string) => void;
   onArchiveStudent: ClassroomAction;
   onRestoreStudent: ClassroomAction;
@@ -485,9 +488,9 @@ export function ClassroomScreen({
                         type="button"
                         onClick={() => void onArchiveStudent(student.id)}
                         disabled={isBusy}
-                        aria-label={`${student.name} çocuğunu sınıftan ayır`}
+                        aria-label={`${student.name} öğrencisini sil`}
                       >
-                        Arşivle
+                        Öğrenciyi sil
                       </button>
                     </div>
                   ) : null}
@@ -519,7 +522,7 @@ export function ClassroomScreen({
       {archivedStudents.length > 0 ? (
         <details className="roster-archive">
           <summary>
-            <span>Sınıftan ayrılanlar / arşivlenenler · geri al veya kalıcı sil</span>
+            <span>Silinen / ayrılan öğrenciler · geri al veya kalıcı sil</span>
             <strong>{archivedStudents.length}</strong>
             <ChevronDownIcon aria-hidden="true" />
           </summary>

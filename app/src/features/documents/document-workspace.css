@@ -7,7 +7,8 @@
 
 .document-workspace-hero,
 .document-workspace-readiness,
-.document-workspace-history {
+.document-workspace-history,
+.document-workspace-use-policy {
   border: 1px solid rgba(23, 49, 93, 0.12);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.95);
@@ -52,6 +53,13 @@
 .document-workspace-score em { margin-top: 3px; color: #9a5d26; font-size: 0.62rem; font-style: normal; font-weight: 900; }
 
 .document-workspace-readiness { padding: 18px; }
+.document-workspace-use-policy { padding: 18px; background: linear-gradient(145deg,#f1fbf8,#fffaf0); }
+.document-workspace-use-policy ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: use-step; }
+.document-workspace-use-policy li { display: grid; grid-template-columns: minmax(86px,.28fr) minmax(0,1fr); gap: 10px; align-items: start; padding: 10px; border: 1px solid rgba(36,110,101,.16); border-radius: 13px; background: rgba(255,255,255,.86); counter-increment: use-step; }
+.document-workspace-use-policy li strong::before { content: counter(use-step) ". "; color: #246e65; }
+.document-workspace-use-policy li strong { font-size: .78rem; }
+.document-workspace-use-policy li p { margin: 0; color: #526b70; font-size: .74rem; line-height: 1.4; }
+.document-workspace-channel-notice { margin: 10px 0 0; padding: 10px 12px; border-left: 4px solid #d9812b; border-radius: 8px; background: #fff; color: #4f5660; font-size: .73rem; line-height: 1.45; }
 .document-workspace-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .document-workspace-heading h2 { margin: 4px 0 0; font-size: 1.08rem; }
 .document-workspace-heading > small { color: #7a8492; font-size: 0.68rem; text-align: right; }
@@ -93,4 +101,8 @@
   .document-workspace-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .document-workspace-history { grid-template-columns: 42px minmax(0, 1fr) minmax(220px, 0.35fr); align-items: center; }
   .document-workspace-history button { grid-column: auto; }
+}
+
+@media (max-width: 420px) {
+  .document-workspace-use-policy li { grid-template-columns: minmax(0,1fr); gap: 4px; }
 }

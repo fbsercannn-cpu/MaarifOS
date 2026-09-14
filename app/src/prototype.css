@@ -2033,6 +2033,162 @@ button {
   line-height: 1.4;
 }
 
+.quick-date-choice {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--maarif-white);
+  border: 1px solid var(--maarif-line-soft);
+  border-radius: 14px;
+}
+
+.quick-date-choice > div:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quick-date-choice > div:first-child strong {
+  color: var(--maarif-navy);
+  font-size: 13px;
+}
+
+.quick-date-choice > div:first-child small {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.quick-date-choice > div[role="group"] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.quick-date-choice button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 9px;
+  color: var(--maarif-teal-dark);
+  background: #f5f8f7;
+  border: 1px solid #cbdad6;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quick-date-choice button[aria-pressed="true"] {
+  color: var(--maarif-white);
+  background: var(--maarif-teal-dark);
+  border-color: var(--maarif-teal-dark);
+}
+
+.quick-date-choice button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.quick-date-choice > label {
+  display: grid;
+  gap: 5px;
+  color: var(--maarif-navy);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.quick-date-choice input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  color: var(--maarif-navy);
+  background: var(--maarif-white);
+  border: 1px solid #b9cec8;
+  border-radius: 11px;
+  font: inherit;
+}
+
+.quick-date-choice > p {
+  margin: 0;
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.quick-prepared-observations {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 12px;
+  background: #eef8f5;
+  border: 1px solid #b9ddd4;
+  border-radius: 15px;
+}
+
+.quick-prepared-observations > header {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.quick-prepared-observations > header strong {
+  color: var(--maarif-navy);
+  font-size: 13px;
+}
+
+.quick-prepared-observations > header small {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.quick-prepared-observations > div {
+  display: grid;
+  gap: 7px;
+}
+
+.quick-prepared-observations button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  gap: 3px;
+  padding: 9px 10px;
+  color: var(--maarif-navy);
+  background: var(--maarif-white);
+  border: 1px solid #c3dcd5;
+  border-radius: 11px;
+  font: inherit;
+  text-align: left;
+}
+
+.quick-prepared-observations button strong {
+  color: var(--maarif-teal-dark);
+  font-size: 12px;
+}
+
+.quick-prepared-observations button small {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.quick-prepared-observations button[aria-pressed="true"] {
+  background: var(--maarif-teal-soft);
+  box-shadow: inset 0 0 0 1px var(--maarif-teal-dark);
+}
+
+.quick-prepared-observations button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .quick-observation-guide {
   display: grid;
   gap: 9px;
@@ -2243,7 +2399,7 @@ button {
 }
 
 .quick-details {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .quick-observation-page h1:focus,
@@ -2284,8 +2440,13 @@ button {
 
 .quick-context-banner small {
   color: var(--maarif-muted);
+  display: -webkit-box;
+  overflow: hidden;
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .classroom-form-simple-intro {
@@ -2536,6 +2697,11 @@ button {
   padding: 12px 14px;
   cursor: pointer;
   list-style: none;
+}
+
+.quick-details > summary:focus {
+  outline: 3px solid #075b56;
+  outline-offset: 3px;
 }
 
 .quick-details summary::-webkit-details-marker {
@@ -4874,6 +5040,11 @@ button {
   clip: rect(0 0 0 0);
 }
 
+.student-photo-actions label:focus-within {
+  outline: 3px solid #075b56;
+  outline-offset: 3px;
+}
+
 .student-profile-undo {
   display: flex;
   min-height: 44px;
@@ -4890,7 +5061,7 @@ button {
 }
 
 .student-profile-undo button {
-  min-height: 36px;
+  min-height: 44px;
   flex: 0 0 auto;
   padding: 6px 10px;
   color: #6f430e;
@@ -4904,12 +5075,11 @@ button {
   position: sticky;
   z-index: 3;
   top: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  overflow: visible;
   background: rgba(245, 247, 247, 0.96);
   border: 1px solid var(--maarif-line);
   border-radius: 14px;
@@ -4917,21 +5087,28 @@ button {
 }
 
 .student-profile-tabs button {
-  flex: 1 0 68px;
+  min-width: 0;
   min-height: 44px;
-  padding: 7px 9px;
+  padding: 7px 2px;
   color: var(--maarif-muted);
   background: transparent;
   border: 0;
   border-radius: 10px;
   font-size: 12px;
   font-weight: 760;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .student-profile-tabs button[aria-current="page"] {
   color: var(--maarif-white);
   background: var(--maarif-teal);
   box-shadow: 0 5px 12px rgba(11, 118, 110, 0.17);
+}
+
+@media (max-width: 360px) {
+  .student-profile-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .student-profile-tabs button { overflow-wrap: normal; word-break: normal; }
 }
 
 .student-observation-archive {
@@ -6780,9 +6957,7 @@ fieldset.student-contact-permissions legend {
   }
 
   .student-profile-tabs button {
-    padding-right: 4px;
-    padding-left: 4px;
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .student-observation-month-folders {
@@ -7060,6 +7235,183 @@ fieldset.student-contact-permissions legend {
   gap: 3px;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.classroom-form.is-transition {
+  gap: 10px;
+}
+
+.academic-year-transition-compact {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  color: var(--maarif-navy);
+  background: linear-gradient(145deg, var(--maarif-teal-soft), #fffdf8);
+  border: 1px solid #b9dcd4;
+  border-radius: 16px;
+}
+
+.academic-year-transition-compact header {
+  display: grid;
+  gap: 3px;
+}
+
+.academic-year-transition-compact h3 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.academic-year-transition-compact__flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.academic-year-transition-compact__flow > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--maarif-line-soft);
+  border-radius: 11px;
+}
+
+.academic-year-transition-compact__flow > div.is-next {
+  background: #fff;
+  border-color: #8cc9be;
+}
+
+.academic-year-transition-compact__flow > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--maarif-teal);
+}
+
+.academic-year-transition-compact__flow small,
+.academic-year-transition-compact__flow span {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.academic-year-transition-compact__flow strong {
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.academic-year-transition-compact .academic-year-transition-confirm {
+  min-height: 64px;
+  padding: 11px;
+  cursor: pointer;
+  background: #fff8e8;
+}
+
+.academic-year-transition-compact .academic-year-transition-confirm small {
+  color: #74420d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.classroom-form.is-transition .classroom-form-navigation {
+  padding-top: 0;
+}
+
+.classroom-setup-edit-details {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--maarif-line);
+  border-radius: 13px;
+}
+
+.classroom-setup-edit-details > summary {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.classroom-setup-edit-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.classroom-setup-edit-details > summary span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.classroom-setup-edit-details > summary small {
+  color: var(--maarif-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.classroom-setup-edit-details > summary > svg {
+  flex: 0 0 auto;
+  transition: transform 160ms ease;
+}
+
+.classroom-setup-edit-details[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.classroom-setup-edit-details__content {
+  display: grid;
+  gap: 14px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--maarif-line-soft);
+}
+
+.classroom-setup-edit-details__content > .classroom-form-section:first-child {
+  margin-top: 12px;
+}
+
+@media (max-width: 359px) {
+  .academic-year-transition-compact__flow {
+    gap: 5px;
+  }
+
+  .academic-year-transition-compact__flow > div {
+    padding: 7px;
+  }
+}
+
+@media (max-height: 620px) {
+  .classroom-form.is-transition {
+    gap: 8px;
+  }
+
+  .academic-year-transition-compact {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .academic-year-transition-compact h3 {
+    font-size: 17px;
+  }
+
+  .academic-year-transition-compact__flow > div {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .academic-year-transition-compact .academic-year-transition-confirm {
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .classroom-form.is-transition .classroom-form-navigation > .sheet-primary {
+    min-height: 48px;
+  }
 }
 
 .plans-calendar-button,
@@ -7593,6 +7945,25 @@ fieldset.student-contact-permissions legend {
 
 .student-delete-confirm:disabled {
   opacity: 0.45;
+}
+
+.student-delete-sheet .student-delete-consent {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  min-height: 44px;
+  padding: 12px;
+  gap: 12px;
+  border: 1px solid var(--maarif-line);
+  border-radius: 12px;
+  line-height: 1.5;
+}
+.student-delete-sheet .student-delete-consent input {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  accent-color: var(--maarif-coral);
 }
 
 .student-share-trigger {
@@ -11174,7 +11545,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-guide-entry-heading small {
   color: var(--maarif-teal-dark);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.035em;
 }
@@ -11226,7 +11597,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-guide-entry-ages small {
   color: var(--maarif-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .tymm-guide-entry > button,
@@ -11293,7 +11664,7 @@ fieldset.student-contact-permissions legend {
 .tymm-official-notice small,
 .tymm-source-link small {
   color: inherit;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   opacity: 0.82;
 }
@@ -11318,7 +11689,7 @@ fieldset.student-contact-permissions legend {
   border-radius: 13px;
 }
 
-.tymm-age-tabs button[aria-selected="true"] {
+.tymm-age-tabs button[aria-pressed="true"] {
   color: #fff;
   background: var(--maarif-teal);
   border-color: var(--maarif-teal);
@@ -11331,7 +11702,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-age-tabs small {
   color: inherit;
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.82;
 }
 
@@ -11356,6 +11727,15 @@ fieldset.student-contact-permissions legend {
   font-size: 19px;
 }
 
+.tymm-guide-summary__editorial-label {
+  display: block;
+  margin-top: 8px;
+  color: var(--maarif-plum);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .tymm-guide-summary p {
   margin-top: 6px;
   color: var(--maarif-muted);
@@ -11377,9 +11757,162 @@ fieldset.student-contact-permissions legend {
 
 .tymm-guide-summary > strong small {
   margin-top: 4px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 750;
   line-height: 1.1;
+}
+
+.tymm-official-examples {
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #cfe0dc;
+  border-radius: 16px;
+}
+
+.tymm-official-examples > summary {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--maarif-teal-dark);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tymm-official-examples > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tymm-official-examples > summary > span,
+.tymm-official-examples__links a > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tymm-official-examples > summary strong,
+.tymm-official-examples__links a strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.tymm-official-examples > summary small,
+.tymm-official-examples__links a small {
+  color: var(--maarif-muted);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tymm-official-examples > summary > svg,
+.tymm-official-examples__links a > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.tymm-official-examples[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.tymm-official-examples__content {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.tymm-official-examples__content > p {
+  margin: 0;
+  color: var(--maarif-muted);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tymm-official-examples__content code {
+  font-size: 12px;
+}
+
+.tymm-official-examples__links {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.tymm-official-examples__links a {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  color: var(--maarif-teal-dark);
+  text-decoration: none;
+  border-top: 1px solid var(--maarif-line-soft);
+}
+
+.tymm-program-details {
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--maarif-line);
+  border-radius: 18px;
+}
+
+.tymm-program-details > summary {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  color: var(--maarif-navy);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tymm-program-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tymm-program-details > summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tymm-program-details > summary strong {
+  font-size: 14px;
+}
+
+.tymm-program-details > summary small {
+  color: var(--maarif-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tymm-program-details > summary > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.tymm-program-details[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.tymm-program-details > .tymm-domain-section {
+  border: 0;
+  border-top: 1px solid var(--maarif-line-soft);
+  border-radius: 0;
 }
 
 .tymm-domain-section,
@@ -11411,7 +11944,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-section-heading small {
   color: var(--maarif-teal);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.035em;
 }
@@ -11447,7 +11980,7 @@ fieldset.student-contact-permissions legend {
   border-radius: 11px;
 }
 
-.tymm-domain-tabs button[aria-selected="true"] {
+.tymm-domain-tabs button[aria-pressed="true"] {
   color: var(--maarif-teal-dark);
   background: var(--maarif-teal-soft);
   border-color: #86c5bb;
@@ -11455,7 +11988,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-domain-tabs span {
   min-width: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 760;
   line-height: 1.2;
 }
@@ -11468,7 +12001,7 @@ fieldset.student-contact-permissions legend {
   color: inherit;
   background: #fff;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .tymm-outcome-list {
@@ -11487,7 +12020,7 @@ fieldset.student-contact-permissions legend {
   padding: 10px 12px;
   color: var(--maarif-navy);
   background: #f1eee8;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .tymm-outcome-list > p span {
@@ -11516,7 +12049,7 @@ fieldset.student-contact-permissions legend {
 .tymm-outcome-list li > span {
   grid-row: 1 / span 2;
   color: var(--maarif-plum);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -11527,13 +12060,13 @@ fieldset.student-contact-permissions legend {
 
 .tymm-outcome-list li p {
   color: #35413e;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .tymm-outcome-list li small {
   color: var(--maarif-muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .tymm-source-link {
@@ -11568,7 +12101,7 @@ fieldset.student-contact-permissions legend {
   color: #52416f;
   background: #f4f0fb;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -11626,7 +12159,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-template-grid small {
   color: var(--maarif-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.3;
 }
 
@@ -11647,7 +12180,7 @@ fieldset.student-contact-permissions legend {
 
 .tymm-student-select small {
   color: var(--maarif-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .tymm-student-select select {
@@ -11668,7 +12201,7 @@ fieldset.student-contact-permissions legend {
   background: #fff2df;
   border: 1px solid #efc895;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -11680,12 +12213,15 @@ fieldset.student-contact-permissions legend {
 .tymm-child-launch {
   width: 100%;
   min-height: 52px;
-  background: var(--maarif-plum);
+  color: #4c367c;
+  background: #fff;
+  border: 1px solid #9f8acb;
 }
 
 .tymm-child-launch:disabled {
   color: #747b79;
   background: #e5e8e7;
+  border-color: #ced3d1;
 }
 
 .tymm-child-overlay {
@@ -12045,6 +12581,9 @@ fieldset.student-contact-permissions legend {
 .tymm-template-grid button:focus-visible,
 .tymm-student-select select:focus-visible,
 .tymm-source-link:focus-visible,
+.tymm-program-details > summary:focus-visible,
+.tymm-official-examples > summary:focus-visible,
+.tymm-official-examples__links a:focus-visible,
 .tymm-child-layer button:focus-visible {
   outline: 3px solid rgba(8, 127, 120, 0.34);
   outline-offset: 2px;
@@ -12098,7 +12637,7 @@ fieldset.student-contact-permissions legend {
   }
 
   .tymm-guide-entry-ages strong {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .tymm-guide-summary {

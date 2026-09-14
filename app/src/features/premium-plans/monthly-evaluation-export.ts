@@ -1,3 +1,4 @@
+import { wordDocumentStyles, wordRunningHeader, wordRunningFooter } from "../documents/word-document-design.ts";
 import type { PremiumContentPack } from "./domain.ts";
 import {
   PREMIUM_MONTHLY_PROGRAM_CRITERIA,
@@ -20,6 +21,7 @@ import {
   type SemanticPdfNode,
   type SemanticTaggedPdfRuntime,
 } from "../documents/semantic-tagged-pdf.ts";
+import { MAARIF_WORD_VIBRANT_THEME } from "./export-document.ts";
 
 export type MonthlyEvaluationExportFormat = "pdf" | "word";
 
@@ -35,7 +37,7 @@ export interface MonthlyEvaluationExportManifest {
     version: "2024";
     evaluationPages: "136-139";
     annex: "Ek 18 - Aylık Plan Kontrol Çizelgesi";
-    annexPages: "344-349";
+    annexPages: "343-348";
   };
   generatedAt: string;
   monthlyPlanId: string;
@@ -455,13 +457,16 @@ const EK18_PAGES: readonly Ek18Page[] = [
   },
 ] as const;
 
+const EK18_WORKSHEET_NOTICE = "Ek 18 esas alınarak hazırlanan öğretmen çalışma çizelgesidir; birebir resmî form değildir. Eşlemeler öğretmenin çalışma kaydıdır; uzman doğrulaması içermez.";
+const EK18_OFFICIAL_SOURCE_URL = "https://tymm.meb.gov.tr/assets/pdf/2024programokuloncesiOnayli.pdf#page=343";
+
 const OFFICIAL_SOURCE = Object.freeze({
   authority: "T.C. Millî Eğitim Bakanlığı" as const,
   program: "Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı" as const,
   version: "2024" as const,
   evaluationPages: "136-139" as const,
   annex: "Ek 18 - Aylık Plan Kontrol Çizelgesi" as const,
-  annexPages: "344-349" as const,
+  annexPages: "343-348" as const,
 });
 
 const REFERENCE_ROW_RULES: readonly {
@@ -992,12 +997,23 @@ function createZip(
 }
 
 const TABLE_WIDTHS = {
-  group: 760,
-  label: 3906,
-  month: 572,
+  group: 1840,
+  label: 2826,
   total: 10386,
   indent: 80,
 } as const;
+
+// Az satırlı birleşik hücrelerde dikey metin Word ve LibreOffice tarafından
+// kesilebiliyor. 1–3 satırlı gruplar bu ortak kuralla yatay sarılır; 360 twip
+// yalnız asgari satır yüksekliğidir, uzun kaynak metni gerektiğinde büyütebilir.
+const HORIZONTAL_GROUP_MAX_ROW_COUNT = 3;
+const HORIZONTAL_GROUP_ROW_MIN_HEIGHT = 360;
+
+// LibreOffice, eşit 572 twip sütunda "Haziran"ın son harfini tek başına alt
+// satıra taşıyabiliyor. Toplam tablo genişliğini değiştirmeden dokuz kısa ayı
+// yalnız 12 twip daraltıp son sütuna 108 twip ekleriz; kaynak etiket aynen
+// kalır ve Word/LibreOffice baskısında tek satıra sığar.
+const MONTH_COLUMN_WIDTHS = [560, 560, 560, 560, 560, 560, 560, 560, 560, 680] as const;
 
 function docxRun(
   text: string,
@@ -1014,7 +1030,9 @@ function docxRun(
     `<w:sz w:val="${options.sizeHalfPoints ?? 17}"/>`,
     `<w:szCs w:val="${options.sizeHalfPoints ?? 17}"/>`,
   ].join("");
-  return `<w:r><w:rPr>${properties}</w:rPr><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
+  return text.split(/\r\n|\r|\n/).map((line, index) => `${
+    index > 0 ? "<w:r><w:br/></w:r>" : ""
+  }<w:r><w:rPr>${properties}</w:rPr><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r>`).join("");
 }
 
 function docxParagraph(
@@ -1033,10 +1051,10 @@ function docxParagraph(
 ): string {
   const pPr = [
     options.style ? `<w:pStyle w:val="${options.style}"/>` : "",
-    options.align ? `<w:jc w:val="${options.align}"/>` : "",
-    `<w:spacing w:before="${options.before ?? 0}" w:after="${options.after ?? 80}" w:line="240" w:lineRule="auto"/>`,
     options.keepNext ? "<w:keepNext/>" : "",
     options.pageBreakBefore ? "<w:pageBreakBefore/>" : "",
+    `<w:spacing w:before="${options.before ?? 0}" w:after="${options.after ?? 80}" w:line="240" w:lineRule="auto"/>`,
+    options.align ? `<w:jc w:val="${options.align}"/>` : "",
   ].join("");
   return `<w:p><w:pPr>${pPr}</w:pPr>${docxRun(text, options)}</w:p>`;
 }
@@ -1054,15 +1072,33 @@ function tableCell(
 ): string {
   const tcPr = [
     `<w:tcW w:w="${width}" w:type="dxa"/>`,
-    options.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${options.fill}"/>` : "",
-    options.textDirection ? `<w:textDirection w:val="${options.textDirection}"/>` : "",
-    options.verticalAlign ? `<w:vAlign w:val="${options.verticalAlign}"/>` : "",
     options.gridSpan ? `<w:gridSpan w:val="${options.gridSpan}"/>` : "",
     options.merge === "restart" ? '<w:vMerge w:val="restart"/>' : "",
     options.merge === "continue" ? "<w:vMerge/>" : "",
+    options.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${options.fill}"/>` : "",
     '<w:tcMar><w:top w:w="40" w:type="dxa"/><w:start w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:end w:w="80" w:type="dxa"/></w:tcMar>',
+    options.textDirection ? `<w:textDirection w:val="${options.textDirection}"/>` : "",
+    options.verticalAlign ? `<w:vAlign w:val="${options.verticalAlign}"/>` : "",
   ].join("");
   return `<w:tc><w:tcPr>${tcPr}</w:tcPr>${contents}</w:tc>`;
+}
+
+function docxTableRow(
+  cells: string,
+  options: {
+    repeatHeader?: boolean;
+    cantSplit?: boolean;
+    minHeightTwips?: number;
+  } = {},
+): string {
+  const properties = [
+    options.cantSplit ? "<w:cantSplit/>" : "",
+    options.repeatHeader ? "<w:tblHeader/>" : "",
+    options.minHeightTwips
+      ? `<w:trHeight w:val="${options.minHeightTwips}" w:hRule="atLeast"/>`
+      : "",
+  ].join("");
+  return `<w:tr>${properties ? `<w:trPr>${properties}</w:trPr>` : ""}${cells}</w:tr>`;
 }
 
 function ek18TableXml(
@@ -1073,30 +1109,31 @@ function ek18TableXml(
   const grid = [
     TABLE_WIDTHS.group,
     TABLE_WIDTHS.label,
-    ...MONTHS.map(() => TABLE_WIDTHS.month),
+    ...MONTH_COLUMN_WIDTHS,
   ].map((width) => `<w:gridCol w:w="${width}"/>`).join("");
-  const header = `<w:tr>${tableCell(
+  const header = docxTableRow(`${tableCell(
     docxParagraph(table.title, {
       align: "center",
       bold: true,
-      color: "FFFFFF",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 19,
       after: 0,
     }),
     TABLE_WIDTHS.group + TABLE_WIDTHS.label,
-    { fill: "F4511E", gridSpan: 2, verticalAlign: "center" },
-  )}${MONTHS.map(({ label }) => tableCell(
+    { fill: MAARIF_WORD_VIBRANT_THEME.teal, gridSpan: 2, verticalAlign: "center" },
+  )}${MONTHS.map(({ label }, monthIndex) => tableCell(
     docxParagraph(label, {
       align: "center",
       bold: true,
-      color: "FFFFFF",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 13,
       after: 0,
     }),
-    TABLE_WIDTHS.month,
-    { fill: "F4511E", verticalAlign: "center" },
-  )).join("")}</w:tr>`;
+    MONTH_COLUMN_WIDTHS[monthIndex]!,
+    { fill: MAARIF_WORD_VIBRANT_THEME.teal, verticalAlign: "center" },
+  )).join("")}`, { repeatHeader: true, cantSplit: true });
   const body = table.groups.map((group) => group.rows.map((row, rowIndex) => {
+    const horizontalGroupLabel = group.rows.length <= HORIZONTAL_GROUP_MAX_ROW_COUNT;
     const groupCell = tableCell(
       rowIndex === 0
         ? docxParagraph(group.label, {
@@ -1108,10 +1145,10 @@ function ek18TableXml(
         : docxParagraph("", { after: 0 }),
       TABLE_WIDTHS.group,
       {
-        fill: "F2DDD3",
-        textDirection: "btLr",
+        fill: MAARIF_WORD_VIBRANT_THEME.tealTint,
         verticalAlign: "center",
         merge: rowIndex === 0 ? "restart" : "continue",
+        ...(horizontalGroupLabel ? {} : { textDirection: "btLr" as const }),
       },
     );
     const labelCell = tableCell(
@@ -1128,19 +1165,22 @@ function ek18TableXml(
         {
           align: "center",
           bold: true,
-          color: marked.has(row.id) && monthIndex === document.monthColumnIndex
-            ? "F4511E"
-            : "222222",
+          color: MAARIF_WORD_VIBRANT_THEME.ink,
           sizeHalfPoints: 18,
           after: 0,
         },
       ),
-      TABLE_WIDTHS.month,
+      MONTH_COLUMN_WIDTHS[monthIndex]!,
       { verticalAlign: "center" },
     )).join("");
-    return `<w:tr>${groupCell}${labelCell}${monthCells}</w:tr>`;
+    return docxTableRow(`${groupCell}${labelCell}${monthCells}`, {
+      cantSplit: true,
+      ...(horizontalGroupLabel
+        ? { minHeightTwips: HORIZONTAL_GROUP_ROW_MIN_HEIGHT }
+        : {}),
+    });
   }).join("")).join("");
-  return `<w:tbl><w:tblPr><w:tblW w:w="${TABLE_WIDTHS.total}" w:type="dxa"/><w:tblInd w:w="${TABLE_WIDTHS.indent}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="12" w:color="F4511E"/><w:left w:val="single" w:sz="12" w:color="F4511E"/><w:bottom w:val="single" w:sz="12" w:color="F4511E"/><w:right w:val="single" w:sz="12" w:color="F4511E"/><w:insideH w:val="single" w:sz="4" w:color="AAAAAA"/><w:insideV w:val="single" w:sz="4" w:color="AAAAAA"/></w:tblBorders></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${header}${body}</w:tbl>`;
+  return `<w:tbl><w:tblPr><w:tblW w:w="${TABLE_WIDTHS.total}" w:type="dxa"/><w:tblInd w:w="${TABLE_WIDTHS.indent}" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:left w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:bottom w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:right w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:insideH w:val="single" w:sz="4" w:color="${MAARIF_WORD_VIBRANT_THEME.muted}"/><w:insideV w:val="single" w:sz="4" w:color="${MAARIF_WORD_VIBRANT_THEME.muted}"/></w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${header}${body}</w:tbl>`;
 }
 
 function statusLabel(status: PremiumMonthlyCriterionStatus): string {
@@ -1177,10 +1217,10 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     PREMIUM_MONTHLY_TEACHER_CRITERIA.map((criterion) => [criterion.id, criterion.label]),
   );
   const paragraphs = [
-    docxParagraph("ÖĞRETMEN DEĞERLENDİRME EKİ", {
+    docxParagraph("ÖĞRETMEN DEĞERLENDİRME EKİ", { style: "Heading1",
       align: "center",
       bold: true,
-      color: "F4511E",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 30,
       after: 160,
       keepNext: true,
@@ -1196,12 +1236,12 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     }),
     docxParagraph(
       `Dönem: ${document.monthlyPlan.periodStart} - ${document.monthlyPlan.periodEnd} · Kayıt zamanı: ${evaluation.createdAt}`,
-      { color: "666666", sizeHalfPoints: 17, after: 160 },
+      { color: MAARIF_WORD_VIBRANT_THEME.muted, sizeHalfPoints: 17, after: 160 },
     ),
     ...(programComponentExplanation(document)
       ? [
           docxParagraph(programComponentExplanation(document)!, {
-            color: "8A4B08",
+            color: MAARIF_WORD_VIBRANT_THEME.ink,
             sizeHalfPoints: 17,
             after: 160,
           }),
@@ -1210,7 +1250,7 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     docxParagraph("1. ÇOCUKLAR YÖNÜNDEN DEĞERLENDİRME", {
       style: "Heading1",
       bold: true,
-      color: "F4511E",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 22,
       before: 100,
       after: 80,
@@ -1227,12 +1267,12 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     }),
     docxParagraph(
       `Kanıt kapsamı: ${coverage.observationCount} gözlem · ${coverage.anecdotalObservationCount} anekdot · ${coverage.distinctCivilDateCount} gün · ${coverage.distinctWeekCount} hafta · ${coverage.coveredActiveStudentCount}/${coverage.activeStudentCount} aktif çocuk`,
-      { color: "666666", sizeHalfPoints: 16, after: 120 },
+      { color: MAARIF_WORD_VIBRANT_THEME.muted, sizeHalfPoints: 16, after: 120 },
     ),
     docxParagraph("2. PROGRAM YÖNÜNDEN DEĞERLENDİRME", {
       style: "Heading1",
       bold: true,
-      color: "F4511E",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 22,
       before: 100,
       after: 80,
@@ -1251,7 +1291,7 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     docxParagraph("3. ÖĞRETMEN YÖNÜNDEN DEĞERLENDİRME", {
       style: "Heading1",
       bold: true,
-      color: "F4511E",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 22,
       before: 120,
       after: 80,
@@ -1270,7 +1310,7 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
     docxParagraph("SONRAKİ AY İÇİN ÖĞRETMEN ÖNERİSİ", {
       style: "Heading1",
       bold: true,
-      color: "F4511E",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
       sizeHalfPoints: 22,
       before: 120,
       after: 80,
@@ -1281,8 +1321,8 @@ function appendixDocumentXml(document: MonthlyEvaluationExportDocument): string 
       after: 120,
     }),
     docxParagraph(
-      "Kaynak: T.C. Millî Eğitim Bakanlığı, Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı (2024), s. 136-139 ve Ek 18, s. 344-349.",
-      { color: "666666", sizeHalfPoints: 15, before: 120, after: 0 },
+      "Kaynak: T.C. Millî Eğitim Bakanlığı, Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı (2024), s. 136-139 ve Ek 18, s. 343-348.",
+      { color: MAARIF_WORD_VIBRANT_THEME.muted, sizeHalfPoints: 15, before: 120, after: 0 },
     ),
   ];
   return paragraphs.join("");
@@ -1301,6 +1341,32 @@ function customManifestXml(manifest: MonthlyEvaluationExportManifest): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><maarifos:monthlyEvaluationExportManifest xmlns:maarifos="https://maarifos.local/schema/monthly-evaluation-export/2"><maarifos:schemaVersion>2</maarifos:schemaVersion><maarifos:documentType>${manifest.documentType}</maarifos:documentType><maarifos:renderingMode>${manifest.renderingMode}</maarifos:renderingMode><maarifos:officialSourceFormPageCount>${manifest.officialSourceFormPageCount}</maarifos:officialSourceFormPageCount><maarifos:outputPagination>${manifest.outputPagination}</maarifos:outputPagination><maarifos:generatedAt>${xmlEscape(manifest.generatedAt)}</maarifos:generatedAt><maarifos:monthlyPlanId>${xmlEscape(manifest.monthlyPlanId)}</maarifos:monthlyPlanId><maarifos:monthlyEvaluationId>${xmlEscape(manifest.monthlyEvaluationId)}</maarifos:monthlyEvaluationId>${teacherOwnedIntegrity}${idElements("observationIds", manifest.observationIds)}${idElements("curriculumLinkIds", manifest.curriculumLinkIds)}<maarifos:programComponentEvidenceStatus>${manifest.programComponentEvidenceStatus}</maarifos:programComponentEvidenceStatus>${programComponents("persistedProgramComponents", manifest.persistedProgramComponents)}<maarifos:mappedOfficialRowIds>${manifest.mappedOfficialRowIds.map((id) => `<maarifos:id>${xmlEscape(id)}</maarifos:id>`).join("")}</maarifos:mappedOfficialRowIds>${programComponents("unmappedPlanComponents", manifest.unmappedPlanComponents)}<maarifos:officialSource authority="${xmlEscape(manifest.officialSource.authority)}" version="${manifest.officialSource.version}" evaluationPages="${manifest.officialSource.evaluationPages}" annexPages="${manifest.officialSource.annexPages}">${xmlEscape(manifest.officialSource.annex)}</maarifos:officialSource></maarifos:monthlyEvaluationExportManifest>`;
 }
 
+
+
+function generalEvaluationTableXml(document: MonthlyEvaluationExportDocument): string {
+  const titleRow = docxTableRow(
+    tableCell(docxParagraph("GENEL DEĞERLENDİRME", {
+      align: "center",
+      color: MAARIF_WORD_VIBRANT_THEME.ink,
+      bold: true,
+      sizeHalfPoints: 20,
+      after: 0,
+    }), TABLE_WIDTHS.total, {
+      fill: MAARIF_WORD_VIBRANT_THEME.teal,
+      verticalAlign: "center",
+    }),
+    { repeatHeader: true, cantSplit: true },
+  );
+  const valueRow = docxTableRow(
+    tableCell(docxParagraph(
+      officialGeneralEvaluationDocxText(document.evaluation.program.narrative),
+      { sizeHalfPoints: 18, after: 0 },
+    ), TABLE_WIDTHS.total, { verticalAlign: "center" }),
+    { cantSplit: true },
+  );
+  return `<w:tbl><w:tblPr><w:tblW w:w="${TABLE_WIDTHS.total}" w:type="dxa"/><w:tblInd w:w="${TABLE_WIDTHS.indent}" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:left w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:bottom w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/><w:right w:val="single" w:sz="12" w:color="${MAARIF_WORD_VIBRANT_THEME.teal}"/></w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${TABLE_WIDTHS.total}"/></w:tblGrid>${titleRow}${valueRow}</w:tbl>`;
+}
+
 export function createMonthlyEvaluationDocx(
   document: MonthlyEvaluationExportDocument,
 ): Uint8Array {
@@ -1310,14 +1376,18 @@ export function createMonthlyEvaluationDocx(
       : "";
     const intro = page.intro
       ? [
-          docxParagraph("EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ", {
+          docxParagraph("EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ", { style: "Title",
             align: "center",
             bold: true,
-            color: "F4511E",
+            color: MAARIF_WORD_VIBRANT_THEME.ink,
             sizeHalfPoints: 30,
             after: 180,
             keepNext: true,
           }),
+          docxParagraph(EK18_WORKSHEET_NOTICE, {
+            bold: true, sizeHalfPoints: 17, after: 80, keepNext: true,
+          }),
+          `<w:p><w:pPr><w:keepNext/><w:spacing w:after="100"/></w:pPr><w:hyperlink r:id="rIdOfficialSource"><w:r><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/><w:sz w:val="17"/></w:rPr><w:t>Özgün resmî Ek 18 formu · s. 343–348</w:t></w:r></w:hyperlink></w:p>`,
           docxParagraph("Sayın Öğretmen,", {
             sizeHalfPoints: 18,
             after: 120,
@@ -1332,19 +1402,21 @@ export function createMonthlyEvaluationDocx(
       `${tableIndex > 0 ? docxParagraph("", { after: 80 }) : ""}${ek18TableXml(table, document)}`,
     ).join("");
     const generalEvaluation = page.generalEvaluation
-      ? `${docxParagraph("", { after: 80 })}<w:tbl><w:tblPr><w:tblW w:w="${TABLE_WIDTHS.total}" w:type="dxa"/><w:tblInd w:w="${TABLE_WIDTHS.indent}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="12" w:color="F4511E"/><w:left w:val="single" w:sz="12" w:color="F4511E"/><w:bottom w:val="single" w:sz="12" w:color="F4511E"/><w:right w:val="single" w:sz="12" w:color="F4511E"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${TABLE_WIDTHS.total}"/></w:tblGrid><w:tr>${tableCell(docxParagraph("GENEL DEĞERLENDİRME", { align: "center", color: "FFFFFF", bold: true, sizeHalfPoints: 20, after: 0 }), TABLE_WIDTHS.total, { fill: "F4511E", verticalAlign: "center" })}</w:tr><w:tr>${tableCell(docxParagraph(officialGeneralEvaluationDocxText(document.evaluation.program.narrative), { sizeHalfPoints: 18, after: 0 }), TABLE_WIDTHS.total, { verticalAlign: "center" })}</w:tr></w:tbl>`
+      ? `${docxParagraph("", { after: 80 })}${generalEvaluationTableXml(document)}`
       : "";
     return `${pageBreak}${intro}${tables}${generalEvaluation}`;
   }).join("");
   const appendix = `<w:p><w:r><w:br w:type="page"/></w:r></w:p>${appendixDocumentXml(document)}`;
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${officialPages}${appendix}<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="700" w:right="720" w:bottom="700" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`;
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial"/><w:sz w:val="17"/><w:szCs w:val="17"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="80" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="80"/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="F4511E"/><w:sz w:val="22"/></w:rPr></w:style></w:styles>`;
-  const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:color w:val="777777"/><w:sz w:val="14"/></w:rPr><w:t>MaarifOS · Ek 18 · Sayfa </w:t></w:r><w:fldSimple w:instr="PAGE"><w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>`;
-  const coreXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Ek 18 - Aylık Plan Kontrol Çizelgesi</dc:title><dc:creator>MaarifOS</dc:creator><dc:subject>MEB 2024 Ek 18 ve ayrı öğretmen değerlendirme eki</dc:subject><dcterms:created xsi:type="dcterms:W3CDTF">${xmlEscape(document.manifest.generatedAt)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${xmlEscape(document.manifest.generatedAt)}</dcterms:modified></cp:coreProperties>`;
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${officialPages}${appendix}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="700" w:right="720" w:bottom="700" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const stylesXml = wordDocumentStyles(17, true);
+  const headerXml = wordRunningHeader(`MaarifOS · Ek 18 · ${document.monthLabel} ${document.monthlyPlan.periodStart.slice(0, 4)}`);
+  const footerXml = wordRunningFooter(`MaarifOS · Ek 18 · ${document.monthLabel} ${document.monthlyPlan.periodStart.slice(0, 4)}`);
+  const settingsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:updateFields w:val="true"/></w:settings>';
+  const coreXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Ek 18 - Aylık Plan Kontrol Çizelgesi</dc:title><dc:creator>MaarifOS</dc:creator><cp:lastModifiedBy>MaarifOS</cp:lastModifiedBy><dc:subject>MEB 2024 Ek 18 ve ayrı öğretmen değerlendirme eki</dc:subject><dc:language>tr-TR</dc:language><cp:category>Aylık değerlendirme</cp:category><cp:keywords>MaarifOS; TYMM 2024; Ek 18; aylık değerlendirme</cp:keywords><dcterms:created xsi:type="dcterms:W3CDTF">${xmlEscape(document.manifest.generatedAt)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${xmlEscape(document.manifest.generatedAt)}</dcterms:modified></cp:coreProperties>`;
   return createZip([
     {
       name: "[Content_Types].xml",
-      contents: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/></Types>',
+      contents: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/></Types>',
     },
     {
       name: "_rels/.rels",
@@ -1353,10 +1425,12 @@ export function createMonthlyEvaluationDocx(
     { name: "docProps/core.xml", contents: coreXml },
     { name: "word/document.xml", contents: documentXml },
     { name: "word/styles.xml", contents: stylesXml },
+    { name: "word/settings.xml", contents: settingsXml },
+    { name: "word/header1.xml", contents: headerXml },
     { name: "word/footer1.xml", contents: footerXml },
     {
       name: "word/_rels/document.xml.rels",
-      contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rIdCustomXml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="../customXml/item1.xml"/></Relationships>',
+      contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rIdHeader" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rIdCustomXml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="../customXml/item1.xml"/><Relationship Id="rIdOfficialSource" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://tymm.meb.gov.tr/assets/pdf/2024programokuloncesiOnayli.pdf#page=343" TargetMode="External"/></Relationships>',
     },
     { name: "customXml/item1.xml", contents: customManifestXml(document.manifest) },
     {
@@ -1747,7 +1821,7 @@ function appendixBlocks(document: MonthlyEvaluationExportDocument): AppendixBloc
     {
       heading: "Kaynak",
       paragraphs: [
-        "T.C. Millî Eğitim Bakanlığı, Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı (2024), s. 136-139 ve Ek 18, s. 344-349.",
+        "T.C. Millî Eğitim Bakanlığı, Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı (2024), s. 136-139 ve Ek 18, s. 343-348.",
       ],
     },
   ];
@@ -1835,6 +1909,8 @@ export async function createMonthlyEvaluationPdf(
   const marked = new Set(document.mappedOfficialRowIds);
   const nodes: SemanticPdfNode[] = [
     { kind: "heading", level: 1, text: "EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ" },
+    { kind: "paragraph", text: EK18_WORKSHEET_NOTICE },
+    { kind: "paragraph", text: "Özgün resmî Ek 18 formu · s. 343–348", href: EK18_OFFICIAL_SOURCE_URL },
     { kind: "heading", level: 2, text: "Sayın Öğretmen" },
     {
       kind: "paragraph",
@@ -1845,7 +1921,7 @@ export async function createMonthlyEvaluationPdf(
     nodes.push({
       kind: "heading",
       level: 2,
-      text: `Ek 18 · Resmî kaynak sayfası ${344 + pageIndex}`,
+      text: `Ek 18 · Resmî kaynak sayfası ${343 + pageIndex}`,
       pageBreakBefore: pageIndex > 0,
       forcePageBreakBefore: pageIndex > 0,
     });
@@ -1967,3 +2043,5 @@ export async function generateMonthlyEvaluationExportFile(
     document: exportDocument,
   };
 }
+
+

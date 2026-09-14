@@ -1,5 +1,6 @@
 import type { TodayAttendanceSummary, TodayStudentCard } from "../today/today-screen-model.ts";
 import type { TeacherWorkCycleWorkspace } from "../teacher-cycle/teacher-work-cycle.ts";
+import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import {
   ACTIVITY_STUDIO_AGE_BANDS,
   ACTIVITY_STUDIO_ITEMS,
@@ -484,30 +485,315 @@ export interface PedagogicalLoopStage {
   readonly id: "plan" | "apply" | "observe" | "reflect" | "adapt" | "family" | "next-plan";
   readonly label: string;
   readonly state: "done" | "current" | "waiting";
+  /** Aşamanın neden tamamlandığını veya neden kanıt beklediğini açıklar. */
+  readonly reason: string;
+}
+
+export interface PedagogicalLoopLineageInput {
+  /**
+   * Sayaç yerine kalıcı kayıt kimlikleriyle plan zincirini doğrulamak için
+   * gereken en dar veri görünümü.
+   */
+  readonly snapshot: Pick<DataSnapshot, "plans" | "activities" | "observations">;
+  /** Verildiğinde yalnız bu çocuğun gözlemi zincir kanıtı sayılır. */
+  readonly focusStudentId?: string;
+}
+
+interface WeeklyEvaluationLineage {
+  readonly id: string;
+  readonly reflection: string;
+  readonly evidenceSummary: string;
+  readonly observationIds: readonly string[];
+  readonly nextPlanDecision: "keep" | "adapt" | "replace" | "observe-more";
+  readonly nextPlanTargetPlanId: string;
+  readonly sourcePlanRevisionNumber: number;
+  readonly targetPlanRevisionNumberAtSuggestion: number;
+  readonly teacherAuthored: true;
+  readonly createdAt: string;
+}
+
+interface ExactLoopLineage {
+  readonly planVerified: boolean;
+  readonly applicationVerified: boolean;
+  readonly observationVerified: boolean;
+  readonly evaluation: WeeklyEvaluationLineage | null;
+  readonly targetLinked: boolean;
+  readonly targetAccepted: boolean;
+  readonly reasons: Readonly<Record<"plan" | "apply" | "observe" | "reflect" | "adapt" | "next-plan", string>>;
+}
+
+const NEXT_PLAN_DECISIONS = new Set(["keep", "adapt", "replace", "observe-more"]);
+
+function liveRecord(record: StoredRecord | undefined): record is StoredRecord {
+  return Boolean(record) && typeof record?.deletedAt !== "string";
+}
+
+function stringValues(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((candidate): candidate is string => typeof candidate === "string")
+    : [];
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function finiteRevision(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 1;
+}
+
+function isoMillis(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseWeeklyEvaluation(value: unknown): WeeklyEvaluationLineage | null {
+  const evaluation = recordValue(value);
+  if (!evaluation) return null;
+  const observationIds = stringValues(evaluation.observationIds);
+  if (
+    typeof evaluation.id !== "string" ||
+    !evaluation.id ||
+    typeof evaluation.reflection !== "string" ||
+    !evaluation.reflection.trim() ||
+    typeof evaluation.evidenceSummary !== "string" ||
+    !evaluation.evidenceSummary.trim() ||
+    observationIds.length === 0 ||
+    new Set(observationIds).size !== observationIds.length ||
+    typeof evaluation.nextPlanDecision !== "string" ||
+    !NEXT_PLAN_DECISIONS.has(evaluation.nextPlanDecision) ||
+    typeof evaluation.nextPlanTargetPlanId !== "string" ||
+    !evaluation.nextPlanTargetPlanId ||
+    !finiteRevision(evaluation.sourcePlanRevisionNumber) ||
+    !finiteRevision(evaluation.targetPlanRevisionNumberAtSuggestion) ||
+    evaluation.teacherAuthored !== true ||
+    isoMillis(evaluation.createdAt) === null
+  ) return null;
+  return {
+    id: evaluation.id,
+    reflection: evaluation.reflection,
+    evidenceSummary: evaluation.evidenceSummary,
+    observationIds,
+    nextPlanDecision: evaluation.nextPlanDecision as WeeklyEvaluationLineage["nextPlanDecision"],
+    nextPlanTargetPlanId: evaluation.nextPlanTargetPlanId,
+    sourcePlanRevisionNumber: evaluation.sourcePlanRevisionNumber,
+    targetPlanRevisionNumberAtSuggestion: evaluation.targetPlanRevisionNumberAtSuggestion,
+    teacherAuthored: true,
+    createdAt: evaluation.createdAt as string,
+  };
+}
+
+function observationStudentIds(record: StoredRecord): readonly string[] {
+  return stringValues(record.studentIds);
+}
+
+function exactLoopLineage(
+  workspace: TeacherWorkCycleWorkspace,
+  input: PedagogicalLoopLineageInput,
+): ExactLoopLineage {
+  const dailyPlanId = workspace.daily.planId;
+  const dailyPlan = typeof dailyPlanId === "string"
+    ? input.snapshot.plans.find((record) => record.id === dailyPlanId)
+    : undefined;
+  const weeklyPlanId = workspace.weekly?.id ?? null;
+  const weeklyPlan = typeof weeklyPlanId === "string"
+    ? input.snapshot.plans.find((record) => record.id === weeklyPlanId)
+    : undefined;
+  const planVerified =
+    workspace.daily.status === "ready" &&
+    liveRecord(dailyPlan) &&
+    dailyPlan.planType === "daily" &&
+    dailyPlan.civilDate === workspace.civilDate &&
+    liveRecord(weeklyPlan) &&
+    weeklyPlan.planType === "weekly" &&
+    dailyPlan.sourceWeeklyPlanId === weeklyPlan.id;
+
+  const dailyActivities = planVerified
+    ? input.snapshot.activities.filter(
+        (record) => liveRecord(record) && record.planId === dailyPlan.id,
+      )
+    : [];
+  const completedActivities = dailyActivities.filter(
+    (record) => record.status === "completed",
+  );
+  const applicationVerified =
+    planVerified &&
+    dailyActivities.length > 0 &&
+    completedActivities.length === dailyActivities.length &&
+    workspace.daily.activityCount === dailyActivities.length &&
+    workspace.daily.completedActivityCount === completedActivities.length;
+  const completedActivityIds = new Set(completedActivities.map((record) => record.id));
+
+  const exactObservations = applicationVerified
+    ? input.snapshot.observations.filter(
+        (record) =>
+          liveRecord(record) &&
+          record.planId === dailyPlan.id &&
+          typeof record.activityId === "string" &&
+          completedActivityIds.has(record.activityId) &&
+          (!input.focusStudentId || observationStudentIds(record).includes(input.focusStudentId)),
+      )
+    : [];
+  const observationVerified = exactObservations.length > 0;
+  const exactObservationIds = new Set(exactObservations.map((record) => record.id));
+  const latestObservationMillis = exactObservations.reduce(
+    (latest, record) => Math.max(
+      latest,
+      isoMillis(record.observedAt) ?? isoMillis(record.updatedAt) ?? isoMillis(record.createdAt) ?? 0,
+    ),
+    0,
+  );
+
+  const evaluations = liveRecord(weeklyPlan) && Array.isArray(weeklyPlan.weeklyEvaluations)
+    ? weeklyPlan.weeklyEvaluations
+        .map(parseWeeklyEvaluation)
+        .filter((evaluation): evaluation is WeeklyEvaluationLineage => evaluation !== null)
+        .filter(
+          (evaluation) =>
+            observationVerified &&
+            evaluation.sourcePlanRevisionNumber === weeklyPlan.revisionNumber &&
+            evaluation.observationIds.some((id) => exactObservationIds.has(id)) &&
+            (isoMillis(evaluation.createdAt) ?? 0) > latestObservationMillis,
+        )
+        .sort(
+          (left, right) =>
+            (isoMillis(right.createdAt) ?? 0) - (isoMillis(left.createdAt) ?? 0) ||
+            right.id.localeCompare(left.id),
+        )
+    : [];
+  const evaluation = evaluations[0] ?? null;
+
+  const targetPlan = evaluation
+    ? input.snapshot.plans.find((record) => record.id === evaluation.nextPlanTargetPlanId)
+    : undefined;
+  const context = liveRecord(targetPlan)
+    ? recordValue(targetPlan.nextPlanDecisionContext)
+    : null;
+  const sameCarryPayload = Boolean(
+    evaluation &&
+    liveRecord(weeklyPlan) &&
+    liveRecord(targetPlan) &&
+    targetPlan.planType === "weekly" &&
+    targetPlan.monthlyPlanId === weeklyPlan.monthlyPlanId &&
+    typeof weeklyPlan.periodEnd === "string" &&
+    typeof targetPlan.periodStart === "string" &&
+    targetPlan.periodStart > weeklyPlan.periodEnd &&
+    targetPlan.previousWeekEvaluationId === evaluation.id &&
+    finiteRevision(targetPlan.revisionNumber) &&
+    targetPlan.revisionNumber >= evaluation.targetPlanRevisionNumberAtSuggestion &&
+    context &&
+    context.sourceWeeklyPlanId === weeklyPlan.id &&
+    context.evaluationId === evaluation.id &&
+    context.decision === evaluation.nextPlanDecision &&
+    context.evidenceSummary === evaluation.evidenceSummary &&
+    context.teacherReflection === evaluation.reflection &&
+    context.sourcePlanRevisionNumber === evaluation.sourcePlanRevisionNumber &&
+    context.targetPlanRevisionNumberAtSuggestion === evaluation.targetPlanRevisionNumberAtSuggestion &&
+    context.createdAt === evaluation.createdAt,
+  );
+  const targetLinked = sameCarryPayload;
+  const reviews = targetLinked && Array.isArray(context?.reviewHistory)
+    ? context.reviewHistory.map(recordValue).filter((item): item is Record<string, unknown> => item !== null)
+    : [];
+  const latestReview = reviews.at(-1) ?? null;
+  const targetAccepted = Boolean(
+    targetLinked &&
+    context?.applicationStatus === "accepted" &&
+    latestReview?.action === "accepted" &&
+    finiteRevision(latestReview.targetPlanRevisionNumberBefore) &&
+    finiteRevision(latestReview.targetPlanRevisionNumberAfter) &&
+    latestReview.targetPlanRevisionNumberAfter === Number(latestReview.targetPlanRevisionNumberBefore) + 1 &&
+    latestReview.targetPlanRevisionNumberAfter === targetPlan?.revisionNumber &&
+    (isoMillis(latestReview.createdAt) ?? 0) > (isoMillis(evaluation?.createdAt) ?? Number.MAX_SAFE_INTEGER),
+  );
+
+  return {
+    planVerified,
+    applicationVerified,
+    observationVerified,
+    evaluation,
+    targetLinked,
+    targetAccepted,
+    reasons: {
+      plan: planVerified
+        ? "Bugünün günlük planı bağlı haftalık plan kimliğiyle doğrulandı."
+        : "Bugünün günlük planı ile haftalık plan bağı kayıt kimlikleriyle doğrulanamadı.",
+      apply: applicationVerified
+        ? "Günlük plana bağlı tüm etkinlikler tamamlanmış kayıtlarla doğrulandı."
+        : "Tamamlanma sayısı günlük plana bağlı etkinlik kayıtlarıyla bire bir uyuşmuyor.",
+      observe: observationVerified
+        ? "Tamamlanan etkinliğe bağlı gözlem kimliği doğrulandı."
+        : input.focusStudentId
+          ? "Tamamlanan etkinlikte odaktaki çocuğa bağlı bir gözlem kimliği bulunamadı."
+          : "Tamamlanan etkinliğe bağlı bir gözlem kimliği bulunamadı.",
+      reflect: evaluation
+        ? "Öğretmen değerlendirmesi bu planın doğrulanmış gözlem kimliğini kullanıyor."
+        : "Genel değerlendirme sayısı yeterli değil; bu planın gözlem kimliğine bağlı öğretmen değerlendirmesi bulunamadı.",
+      adapt: targetLinked
+        ? "Öğretmenin sonraki plan kararı değerlendirme ve hedef plan kimlikleriyle doğrulandı."
+        : "Değerlendirme, öğretmen kararı ve hedef plan arasındaki kimlik bağı doğrulanamadı.",
+      "next-plan": targetAccepted
+        ? "Hedef plan, bağlı değerlendirme ve öğretmenin kabul olayıyla doğrulandı."
+        : targetLinked
+          ? "Hedef plan bağlı; öğretmenin kabul olayı doğrulanmadan uygulanmış sayılamaz."
+          : "Aynı haftadaki plan sayısı kanıt değildir; değerlendirmeye bağlı hedef plan bulunamadı.",
+    },
+  };
 }
 
 export function createPedagogicalLoop(
   workspace: TeacherWorkCycleWorkspace,
+  lineageInput?: PedagogicalLoopLineageInput,
 ): readonly PedagogicalLoopStage[] {
-  const planDone = workspace.daily.planId !== null;
-  const applyDone = workspace.daily.activityCount > 0 && workspace.daily.completedActivityCount >= workspace.daily.activityCount;
-  const observeDone = workspace.daily.observationCount > 0;
-  const weeklyEvaluationDone = (workspace.weekly?.evaluationCount ?? 0) > 0;
-  const reflectDone = weeklyEvaluationDone || (workspace.monthly?.evaluationCount ?? 0) > 0;
-  const adaptDone = weeklyEvaluationDone;
+  const lineage = lineageInput ? exactLoopLineage(workspace, lineageInput) : null;
+  const planDone = lineage?.planVerified ?? (
+    workspace.daily.status === "ready" && workspace.daily.planId !== null
+  );
+  const applyDone = lineage?.applicationVerified ?? (
+    planDone &&
+    workspace.daily.activityCount > 0 &&
+    workspace.daily.completedActivityCount === workspace.daily.activityCount
+  );
+  const observeDone = lineage?.observationVerified ?? (
+    applyDone && workspace.daily.observationCount > 0
+  );
+  // Haftalık/aylık genel sayaçlar değerlendirmeyi bugünkü gözlem zincirine
+  // bağlamaz. Exact kayıt görünümü yoksa bu aşamalar bilerek fail-closed kalır.
+  const reflectDone = Boolean(lineage?.evaluation);
+  const adaptDone = lineage?.targetLinked ?? false;
   const familyReady = workspace.documents.anecdoteReadyCount > 0;
-  const nextPlanDone = weeklyEvaluationDone && (workspace.weekly?.dailyPlanCount ?? 0) > 1;
+  const nextPlanDone = lineage?.targetAccepted ?? false;
   const done = [planDone, applyDone, observeDone, reflectDone, adaptDone, familyReady, nextPlanDone];
   const currentIndex = done.findIndex((value) => !value);
   const labels = ["Planla", "Uygula", "Gözle", "Yansıt", "Uyarla", "Aileye bağla", "Sonraki plan"] as const;
   const ids: readonly PedagogicalLoopStage["id"][] = ["plan", "apply", "observe", "reflect", "adapt", "family", "next-plan"];
+  const reasons: Readonly<Record<PedagogicalLoopStage["id"], string>> = {
+    plan: lineage?.reasons.plan ?? (planDone
+      ? "Bugünün günlük plan kimliği doğrulandı."
+      : "Bugün için tekil ve hazır bir günlük plan bekleniyor."),
+    apply: lineage?.reasons.apply ?? (applyDone
+      ? "Günlük plana bağlı bütün etkinlikler tamamlandı."
+      : "Günlük plana bağlı bütün etkinliklerin tamamlanması bekleniyor."),
+    observe: lineage?.reasons.observe ?? (observeDone
+      ? "Günlük plana bağlı en az bir gözlem var."
+      : "Tamamlanan plan etkinliğine bağlı bir gözlem bekleniyor."),
+    reflect: lineage?.reasons.reflect ?? "Genel değerlendirme sayısı yeterli değil; bu planın gözlem kimliğine bağlı değerlendirme kanıtı yüklenmedi.",
+    adapt: lineage?.reasons.adapt ?? "Değerlendirme, öğretmen kararı ve hedef plan kimlikleri doğrulanmadı.",
+    family: familyReady
+      ? "Paylaşıma hazır en az bir anekdot kaydı var."
+      : "Aile paylaşımı için incelemesi tamamlanmış bir anekdot bekleniyor.",
+    "next-plan": lineage?.reasons["next-plan"] ?? "Aynı haftadaki plan sayısı kanıt değildir; değerlendirmeye bağlı hedef plan ve öğretmen kabulü bekleniyor.",
+  };
   return Object.freeze(ids.map((id, index): PedagogicalLoopStage => {
     const state: PedagogicalLoopStage["state"] = currentIndex === -1 || index < currentIndex
       ? "done"
       : index === currentIndex
         ? "current"
         : "waiting";
-    return { id, label: labels[index], state };
+    return { id, label: labels[index], state, reason: reasons[id] };
   }));
 }
 

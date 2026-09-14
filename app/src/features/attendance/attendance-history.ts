@@ -1,3 +1,5 @@
+import type { ActiveClassroomScope } from "../../core/domain/classroom-scope.ts";
+import type { StoredRecord } from "../../core/domain/model.ts";
 import {
   isCivilDate,
   resolveAttendanceRecords,
@@ -8,6 +10,8 @@ import {
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 
 export interface StudentAttendanceHistoryOptions {
+  /** Optional explicit scope; history otherwise preserves every class/year separately. */
+  scope?: ActiveClassroomScope;
   /** Sonuçlara dahil edilecek ilk sivil gün (dahil). */
   fromCivilDate?: string;
   /** Sonuçlara dahil edilecek son sivil gün (dahil). */
@@ -83,8 +87,13 @@ export async function loadStudentAttendanceHistory(
   const snapshot = await store.readSnapshot();
   if (!snapshot.students.some((student) => student.id === studentId)) return [];
 
-  const resolved = resolveAttendanceRecords(snapshot.attendanceRecords);
-  const records = [...resolved.latestByKey.values()]
+  const groups = new Map<string, StoredRecord[]>();
+  for (const record of snapshot.attendanceRecords) {
+    if (record.studentId !== studentId || (options.scope && (record.academicYearId !== options.scope.academicYearId || record.classroomId !== options.scope.classroomId))) continue;
+    const key = JSON.stringify([record.academicYearId ?? null, record.classroomId ?? null]);
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  }
+  const records = [...groups.values()].flatMap(records => [...resolveAttendanceRecords(records).latestByKey.values()])
     .filter(
       (record) =>
         record.studentId === studentId &&

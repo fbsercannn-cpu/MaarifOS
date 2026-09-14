@@ -16,8 +16,8 @@ export const OBSERVATION_WORKFLOW_STATUS_LABELS: Readonly<
   Record<ObservationWorkflowStatus, string>
 > = Object.freeze({
   "gözlem-alındı": "Gözlem alındı",
-  "program-bağlantısı-bekliyor": "Program bağlantısı bekliyor",
-  "değerlendirme-bekliyor": "Değerlendirme bekliyor",
+  "program-bağlantısı-bekliyor": "Program hedefini seç ve bağla",
+  "değerlendirme-bekliyor": "Değerlendirmeyi tamamla",
   tamamlandı: "Gözlem zinciri tamamlandı",
 });
 
@@ -43,7 +43,7 @@ export function isCitedObservationAssessmentDraft(
   return (
     isLiveRecord(record) &&
     record.reportType === "evidence-assessment" &&
-    record.status === "teacher-review-required" &&
+    (record.status === "teacher-review-required" || record.status === "teacher-saved") &&
     record.authoredBy === "teacher" &&
     typeof record.teacherAssessmentText === "string" &&
     record.teacherAssessmentText.trim().length > 0 &&

@@ -14,8 +14,8 @@ import {
   type ClassRosterPdfRuntime,
 } from "../classroom/class-roster-document.ts";
 
-export const SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION = "2.0" as const;
-export const SIMPLE_CLASS_ROSTER_FILE_VERSION_SEGMENT = "v2_0" as const;
+export const SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION = "6.0" as const;
+export const SIMPLE_CLASS_ROSTER_FILE_VERSION_SEGMENT = "v6_0" as const;
 
 export type SimpleClassRosterDocumentInput = ClassRosterDocumentInput;
 
@@ -44,8 +44,8 @@ export interface SimpleClassRosterPdfDocumentOutputContract
 const encoder = new TextEncoder();
 
 function versionedFileName(fileName: string): string {
-  const prefix = "MaarifOS_Sinif_Listesi_";
-  if (!fileName.startsWith(prefix)) {
+  const prefix = ["MaarifOS_Sinif_Listesi_", "MaarifOS_Acil_Durum_Karti_", "MaarifOS_Bireysel_Ogrenci_Bilgileri_"].find((candidate) => fileName.startsWith(candidate));
+  if (!prefix) {
     throw new Error("Sınıf listesi dosya adı sürümlenemedi.");
   }
   return `${prefix}${SIMPLE_CLASS_ROSTER_FILE_VERSION_SEGMENT}_${fileName.slice(prefix.length)}`;

@@ -1,4 +1,5 @@
 import type { PremiumContentPack } from "../premium-plans/domain.ts";
+import { teacherSupportStepsText } from "../../core/domain/teacher-followup.ts";
 import {
   buildPremiumPlanExportParagraphs,
   createPremiumPlanDocx,
@@ -385,8 +386,9 @@ function teacherContentLines(record: TeacherOwnedPlanRecord): string[] {
   const hiddenTechnicalKeys = new Set([
     "draftStatus",
     "sourceOutlineMonthKey",
+    "followupSupportSteps",
   ]);
-  return Object.entries(record.teacherContent)
+  const lines = Object.entries(record.teacherContent)
     .filter(([key]) => !hiddenTechnicalKeys.has(key))
     .map(([key, value]) => {
     const rendered = Array.isArray(value)
@@ -396,6 +398,8 @@ function teacherContentLines(record: TeacherOwnedPlanRecord): string[] {
         : String(value);
     return `${labels[key] ?? "Öğretmen notu"}: ${rendered}`;
   });
+  const support = teacherSupportStepsText(record.teacherContent);
+  return support ? [...lines, support] : lines;
 }
 
 function scopedDocumentHeading(
@@ -566,6 +570,7 @@ function signatureParagraphs(
       text: `Adı soyadı: ${teacherName ?? "____________________________"}`,
       style: "body",
     },
+    { text: "Okul Öncesi Öğretmeni", style: "body" },
     { text: "İmza: ____________________________", style: "body" },
   ];
 }

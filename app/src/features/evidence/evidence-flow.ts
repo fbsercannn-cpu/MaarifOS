@@ -1,3 +1,4 @@
+import { resolveStudentMembershipOn, studentMembershipOverlaps } from "../../core/domain/student-membership.ts";
 import {
   civilDateInIstanbul,
   isCivilDate,
@@ -104,6 +105,15 @@ export interface TeacherConfirmedCurriculumLink {
 export interface PlanActivityResult {
   plan: StoredRecord;
   activity: StoredRecord;
+}
+
+export interface ExpectedTeacherOwnedDailyLineage {
+  annualPlanId: string;
+  monthlyPlanId: string;
+  weeklyPlanId: string;
+  expectedAnnualUpdatedAt: string;
+  expectedMonthlyUpdatedAt: string;
+  expectedWeeklyUpdatedAt: string;
 }
 
 export interface CapturedEvidenceResult {
@@ -298,6 +308,8 @@ function normalizeCurriculumTargets(
 function activeStudentIdsForScope(
   students: readonly StoredRecord[],
   scope: ActiveClassroomScope,
+  civilDate: string,
+  academicYear: StoredRecord,
 ): string[] {
   return students
     .filter(
@@ -306,7 +318,7 @@ function activeStudentIdsForScope(
         record.enrollmentStatus !== "left" &&
         record.enrollmentStatus !== "completed" &&
         record.enrollmentStatus !== "transferred" &&
-        sameScope(record, scope),
+        sameScope(record, scope) && resolveStudentMembershipOn(record, { ...scope, civilDate, academicYear }).eligible,
     )
     .map((record) => record.id)
     .sort((left, right) => left.localeCompare(right));
@@ -491,6 +503,7 @@ export async function createPlanWithActivity(
     teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
     pedagogicalProvenance?: PedagogicalPlanProvenance;
     premiumAlternativeActivated?: boolean;
+    expectedTeacherOwnedLineage?: ExpectedTeacherOwnedDailyLineage;
     initialActivityStatus?: "planned" | "in_progress";
     now?: Date;
   },
@@ -517,6 +530,24 @@ export async function createPlanWithActivity(
     );
   }
   const initialActivityStatus = input.initialActivityStatus ?? "planned";
+  const expectedTeacherOwnedLineage = input.expectedTeacherOwnedLineage;
+  if (expectedTeacherOwnedLineage) {
+    validUuid(expectedTeacherOwnedLineage.annualPlanId, "Beklenen yıllık plan");
+    validUuid(expectedTeacherOwnedLineage.monthlyPlanId, "Beklenen aylık plan");
+    validUuid(expectedTeacherOwnedLineage.weeklyPlanId, "Beklenen haftalık plan");
+    validUtc(
+      expectedTeacherOwnedLineage.expectedAnnualUpdatedAt,
+      "Beklenen yıllık plan güncelleme zamanı",
+    );
+    validUtc(
+      expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt,
+      "Beklenen aylık plan güncelleme zamanı",
+    );
+    validUtc(
+      expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt,
+      "Beklenen haftalık plan güncelleme zamanı",
+    );
+  }
   const planId = validUuid(input.planId, "Plan");
   const activityId = validUuid(input.activityId, "Etkinlik");
   const profile = normalizeCurriculumProfile(input.curriculumProfile);
@@ -767,6 +798,52 @@ export async function createPlanWithActivity(
       const teacherOwnedLineage = input.premiumSource
         ? null
         : resolveTeacherOwnedDailyLineage(plans, scope, input.civilDate);
+      if (expectedTeacherOwnedLineage) {
+        const expectedAnnual = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.annualPlanId,
+        );
+        const expectedMonthly = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.monthlyPlanId,
+        );
+        const expectedWeekly = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.weeklyPlanId,
+        );
+        if (
+          !teacherOwnedLineage ||
+          teacherOwnedLineage.annualPlanId !== expectedTeacherOwnedLineage.annualPlanId ||
+          teacherOwnedLineage.monthlyPlanId !== expectedTeacherOwnedLineage.monthlyPlanId ||
+          teacherOwnedLineage.weeklyPlanId !== expectedTeacherOwnedLineage.weeklyPlanId ||
+          expectedAnnual?.updatedAt !== expectedTeacherOwnedLineage.expectedAnnualUpdatedAt ||
+          expectedMonthly?.updatedAt !== expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt ||
+          expectedWeekly?.updatedAt !== expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt
+        ) {
+          throw new Error(
+            "Plan zinciri seçimden sonra değişti; günlük plan son sürüm yüklenmeden kaydedilmedi.",
+          );
+        }
+        if (
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedAnnualUpdatedAt) ||
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt) ||
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt)
+        ) {
+          throw new Error(
+            "Günlük plan kayıt zamanı kaynak planların son güncelleme zamanından sonra olmalıdır.",
+          );
+        }
+        if (
+          plans.some(
+            (record) =>
+              record.planType === "daily" &&
+              record.civilDate === input.civilDate &&
+              typeof record.deletedAt !== "string" &&
+              sameScope(record, scope),
+          )
+        ) {
+          throw new Error(
+            "Bu gün için günlük plan zaten var; ikinci bir plan oluşturulmadı.",
+          );
+        }
+      }
       if (
         input.teacherOwnedDailyFlowBlocks !== undefined &&
         !teacherOwnedLineage
@@ -838,7 +915,7 @@ export async function createPlanWithActivity(
         }
         teacherOwnedFlowBlockId = activityFlowBlock.id;
       }
-      const activeStudentIds = activeStudentIdsForScope(students, scope);
+      const activeStudentIds = activeStudentIdsForScope(students, scope, input.civilDate, academicYear);
       const assignedStudentIds =
         input.assignmentMode === "whole-class"
           ? activeStudentIds
@@ -1047,8 +1124,9 @@ export async function updateScheduledPlanWithActivity(
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [academicYears, plans, activities, observations] = await Promise.all([
+      const [academicYears, students, plans, activities, observations] = await Promise.all([
         transaction.getAll("academicYears"),
+        transaction.getAll("students"),
         transaction.getAll("plans"),
         transaction.getAll("activities"),
         transaction.getAll("observations"),
@@ -1132,6 +1210,10 @@ export async function updateScheduledPlanWithActivity(
         input.civilDate > String(academicYear.endDate)
       ) {
         throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
+      }
+      const assignedIds = Array.isArray(activity.studentIds) ? activity.studentIds : [];
+      if (assignedIds.some(id => !students.some(student => student.id === id && resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: input.civilDate }).eligible))) {
+        throw new Error("Planın çocuklarından biri yeni tarihte bu sınıfa kayıtlı değil; tarih veya çocuk kapsamı incelenmeli.");
       }
       const integrityIssue = scheduledPlanIntegrityIssue({
         plan,
@@ -1357,7 +1439,8 @@ export async function captureImmutableRawObservation(
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [students, plans, activities, observations] = await Promise.all([
+      const [academicYears, students, plans, activities, observations] = await Promise.all([
+        transaction.getAll("academicYears"),
         transaction.getAll("students"),
         transaction.getAll("plans"),
         transaction.getAll("activities"),
@@ -1373,6 +1456,10 @@ export async function captureImmutableRawObservation(
           sameScope(record, scope),
       );
       if (!student) throw new Error("Gözlem notu yalnız etkin sınıftaki çocuğa bağlanabilir.");
+      const academicYear = academicYears.find(record => record.id === scope.academicYearId);
+      if (!academicYear || !resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: civilDateInIstanbul(new Date(observedAt)) }).eligible) {
+        throw new Error("Gözlem tarihinde çocuk bu sınıfa kayıtlı değil; üyelik dönemi incelenmeli.");
+      }
       const plan = plans.find(
         (record) =>
           record.id === planId &&
@@ -1639,6 +1726,8 @@ export async function createCitedAssessmentDraft(
     studentId: string;
     observationIds: string[];
     teacherAssessmentText: string;
+    /** The teacher's save action completes their own authored assessment. */
+    completeTeacherAssessment?: boolean;
     assessmentLevel?: CurriculumAssessmentLevel;
     assessmentTargetIds?: string[];
     periodStart: string;
@@ -1727,13 +1816,14 @@ export async function createCitedAssessmentDraft(
       if (!student) {
         throw new Error("Değerlendirme yalnız etkin sınıftaki çocuk için hazırlanabilir.");
       }
+      if (!studentMembershipOverlaps(student, { ...scope, academicYear, periodStart: input.periodStart, periodEnd: input.periodEnd })) throw new Error("Değerlendirme döneminde çocuğun sınıf üyeliği yok.");
       if (reportDrafts.some((record) => record.id === draftId)) {
         throw new Error("Bu değerlendirme taslağı kimliği zaten kullanılıyor.");
       }
       const selected = observationIds.map((id) =>
         observations.find(
           (record) =>
-            record.id === id &&
+            record.id === id && resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: record.civilDate }).eligible &&
             record.rawTextImmutable === true &&
             typeof record.deletedAt !== "string" &&
             sameScope(record, scope) &&
@@ -1790,10 +1880,12 @@ export async function createCitedAssessmentDraft(
         observedAt: record!.observedAt,
         confirmedCurriculumLinkIds: selectedLinks[index].map((link) => link.id),
       }));
+      const reviewedByUserId = input.completeTeacherAssessment === true
+        ? await resolveLocalTeacherIdentity(transaction, { now }) : null;
       draft = {
         id: draftId,
         reportType: "evidence-assessment",
-        status: "teacher-review-required",
+        status: reviewedByUserId ? "teacher-saved" : "teacher-review-required",
         studentIds: [studentId],
         observationIds,
         evidenceCitations: citations,
@@ -1804,10 +1896,10 @@ export async function createCitedAssessmentDraft(
         assessmentLevel,
         assessmentTargetIds,
         authoredBy: "teacher",
-        teacherReviewRequired: true,
-        reviewStatus: "pending",
-        reviewedByUserId: null,
-        reviewedAt: null,
+        teacherReviewRequired: !reviewedByUserId,
+        reviewStatus: reviewedByUserId ? "teacher-saved" : "pending",
+        reviewedByUserId,
+        reviewedAt: reviewedByUserId ? timestamp : null,
         generationMode: "teacher-authored-cited-draft",
         referenceVerificationStatus,
         periodStart: input.periodStart,

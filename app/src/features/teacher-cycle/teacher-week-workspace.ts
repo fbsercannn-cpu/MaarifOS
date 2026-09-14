@@ -1,3 +1,4 @@
+import { resolveSchoolDay } from "../../core/domain/school-calendar.ts";
 import type { DataSnapshot } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import { resolveActiveClassroomScope } from "../../core/domain/classroom-scope.ts";
@@ -211,10 +212,10 @@ export function resolveTeacherWeekWorkspace(
   if (!scope) return emptyTeacherWeekWorkspace(civilDate);
   const currentCycle = resolveTeacherWorkCycle(snapshot, { civilDate });
   let coverageStatus: TeacherWeekWorkspace["coverageStatus"] = "fallback";
-  let coverageDetail = "Haftalık plan bağlanana kadar Pazartesi–Cuma çalışma görünümü kullanılıyor.";
-  let expectedCivilDates = WEEKDAY_LABELS.map((_, index) =>
-    shiftCivilDate(weekStart, index),
-  );
+  let coverageDetail = "Öğretim günleri etkin eğitim yılı ve okul takviminden çözüldü; haftalık plan henüz bağlı değil.";
+  const scopeYear = snapshot.academicYears.find(record => record.id === scope.academicYearId && typeof record.deletedAt !== "string");
+  let expectedCivilDates = scopeYear ? WEEKDAY_LABELS.map((_, index) => shiftCivilDate(weekStart, index)).filter(day =>
+    resolveSchoolDay({ academicYear: scopeYear, classroomId: scope.classroomId, calendarEntries: snapshot.calendarEntries, civilDate: day }).isTeachingDay) : [];
   const weeklyRecord = currentCycle.weekly?.relation === "current"
     ? snapshot.plans.find((record) => record.id === currentCycle.weekly?.id)
     : null;

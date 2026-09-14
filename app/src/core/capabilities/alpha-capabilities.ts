@@ -63,7 +63,7 @@ export type AlphaPrimaryNavigationId =
 
 export interface AlphaPrimaryNavigationItem {
   readonly id: AlphaPrimaryNavigationId;
-  readonly label: "Bugün" | "Sınıfım" | "Etkinlikler" | "Planlar" | "Çıktılar";
+  readonly label: "Bugün" | "Sınıfım" | "Gözlem" | "Planlar" | "Belgeler";
   readonly capability: "today" | "classroom" | "capture" | "planningHub" | "recordsHub";
 }
 
@@ -75,11 +75,11 @@ const ALPHA_PRIMARY_NAVIGATION: readonly AlphaPrimaryNavigationItem[] =
       label: "Sınıfım",
       capability: "classroom",
     }),
-    Object.freeze({ id: "capture", label: "Etkinlikler", capability: "capture" }),
+    Object.freeze({ id: "capture", label: "Gözlem", capability: "capture" }),
     Object.freeze({ id: "plans", label: "Planlar", capability: "planningHub" }),
     Object.freeze({
       id: "documents",
-      label: "Çıktılar",
+      label: "Belgeler",
       capability: "recordsHub",
     }),
   ]);

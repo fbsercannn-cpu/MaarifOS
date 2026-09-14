@@ -1,3 +1,4 @@
+import { buildAttendanceDayBreakdown } from "../attendance/attendance-day-breakdown.ts";
 import {
   attendanceRecordKey,
   civilDateInIstanbul,
@@ -15,7 +16,8 @@ import {
   type StoredRecord,
 } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
-import { studentEnrollments } from "../archive/academic-year-archive.ts";
+import { resolveStudentMembershipOn } from "../../core/domain/student-membership.ts";
+import { resolveSchoolDay, type SchoolDayResolution } from "../../core/domain/school-calendar.ts";
 import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 
 export const TEACHER_DAY_CLOSURE_SETTING_TYPE = "teacher-day-closure" as const;
@@ -44,6 +46,7 @@ export interface TeacherDayClosureIssue {
 }
 
 export interface TeacherDayClosureEvidence {
+  readonly isTeachingDay?: boolean;
   readonly expectedStudentCount: number;
   readonly attendanceMarkedCount: number;
   readonly attendanceCompleted: boolean;
@@ -104,6 +107,7 @@ export interface TeacherDayCarryForwardItem {
 }
 
 export interface TeacherDayClosureWorkspace {
+  readonly calendarDay?: SchoolDayResolution;
   readonly status: "not-configured" | "open" | "closed" | "stale";
   readonly civilDate: string;
   readonly evidence: TeacherDayClosureEvidence;
@@ -252,8 +256,10 @@ function isEvidence(value: unknown): value is TeacherDayClosureEvidence {
     "expectedStudentCount",
     "observationCount",
     "pendingCurriculumLinkCount",
+    ...(evidence.isTeachingDay === undefined ? [] : ["isTeachingDay"]),
   ].sort();
   return (
+    (evidence.isTeachingDay === undefined || typeof evidence.isTeachingDay === "boolean") &&
     keys.length === expectedKeys.length &&
     keys.every((key, index) => key === expectedKeys[index]) &&
     isSafeCount(evidence.expectedStudentCount) &&
@@ -378,40 +384,16 @@ function exactScope(
   );
 }
 
-function studentWasEnrolledOn(
-  record: StoredRecord,
-  input: {
-    readonly academicYearId: string;
-    readonly classroomId: string;
-    readonly civilDate: string;
-    readonly operationalStartDate?: string;
-  },
-): boolean {
-  const matchingEnrollments = studentEnrollments(record).filter(
-    (enrollment) =>
-      enrollment.academicYearId === input.academicYearId &&
-      enrollment.classroomId === input.classroomId,
-  );
-  if (matchingEnrollments.length > 0) {
-    return matchingEnrollments.some(
-      (enrollment) =>
-        (enrollment.startedOn <= input.civilDate ||
-          (enrollment.status === "active" &&
-            input.operationalStartDate !== undefined &&
-            input.operationalStartDate <= input.civilDate)) &&
-        (enrollment.endedOn === undefined || enrollment.endedOn >= input.civilDate),
+function observationHasEnrolledParticipant(record: StoredRecord, studentIds: ReadonlySet<string>): boolean {
+  // The current array contract is authoritative, including an empty/invalid list.
+  if (record.studentIds !== undefined) {
+    return Array.isArray(record.studentIds) && record.studentIds.some(
+      (id) => typeof id === "string" && studentIds.has(id),
     );
   }
-  if (!exactScope(record, input.academicYearId, input.classroomId)) return false;
-  if (
-    typeof record.enrollmentDate === "string" &&
-    isCivilDate(record.enrollmentDate) &&
-    record.enrollmentDate > input.civilDate
-  ) {
-    return false;
-  }
-  return record.active !== false && record.enrollmentStatus !== "left";
+  return typeof record.studentId !== "string" || studentIds.has(record.studentId);
 }
+
 
 export function teacherDayClosureSemanticFingerprint(
   snapshot: DataSnapshot,
@@ -433,27 +415,14 @@ export function teacherDayClosureSemanticFingerprint(
   const academicYear = snapshot.academicYears.find(
     (record) => isLive(record) && record.id === input.academicYearId,
   );
-  const operationalStartDate = academicYear &&
-    typeof academicYear.startDate === "string"
-    ? academicYearEffectiveOperationalStart({
-        startDate: academicYear.startDate,
-        operationalStartDate:
-          typeof academicYear.operationalStartDate === "string"
-            ? academicYear.operationalStartDate
-            : undefined,
-      })
-    : undefined;
-  const activeStudentIds = snapshot.students
-    .filter((record) =>
-      studentWasEnrolledOn(record, { ...input, operationalStartDate }),
-    )
-    .map((record) => record.id)
-    .sort();
+  const calendarDay = academicYear ? resolveSchoolDay({ academicYear, classroomId: input.classroomId, civilDate: input.civilDate, calendarEntries: snapshot.calendarEntries }) : null;
+  const activeStudentIds = academicYear ? snapshot.students.filter(record =>
+    resolveStudentMembershipOn(record, { ...input, academicYear }).eligible).map(record => record.id).sort() : [];
   const activeStudentIdSet = new Set(activeStudentIds);
   const resolvedAttendance = resolveAttendanceRecords(
-    snapshot.attendanceRecords.filter(inScope),
+    snapshot.attendanceRecords.filter(record => record.academicYearId === input.academicYearId && record.classroomId === input.classroomId),
   );
-  const attendance = activeStudentIds.map((studentId) => {
+  const attendance = (calendarDay?.isTeachingDay ? activeStudentIds : []).map((studentId) => {
     const latest = resolvedAttendance.latestByKey.get(
       attendanceRecordKey(studentId, input.civilDate),
     );
@@ -462,6 +431,7 @@ export function teacherDayClosureSemanticFingerprint(
           id: latest.id,
           studentId,
           status: latest.status ?? null,
+          deletedAt: latest.deletedAt ?? null,
           events: Array.isArray(latest.events)
             ? latest.events.map((event) => ({
                 civilDate: event.civilDate,
@@ -499,8 +469,7 @@ export function teacherDayClosureSemanticFingerprint(
       (record) =>
         inScope(record) &&
         record.civilDate === input.civilDate &&
-        (typeof record.studentId !== "string" ||
-          activeStudentIdSet.has(record.studentId)),
+        observationHasEnrolledParticipant(record, activeStudentIdSet),
     )
     .sort((left, right) => left.id.localeCompare(right.id));
   const observationIds = new Set(observations.map((record) => record.id));
@@ -522,6 +491,7 @@ export function teacherDayClosureSemanticFingerprint(
     .sort((left, right) => left.id.localeCompare(right.id));
   const semanticProjection = canonicalSemanticJson({
     activeStudentIds,
+    calendar: calendarDay ? { isTeachingDay: calendarDay.isTeachingDay, reasons: calendarDay.reasons, sourceIds: calendarDay.sourceIds } : null,
     attendance,
     attendanceCompletion: attendanceCompletion.map((record) => ({
       attendanceCompleted: record.attendanceCompleted === true,
@@ -602,23 +572,23 @@ export function isTeacherDayClosureSetting(
 
 function issueList(evidence: TeacherDayClosureEvidence): TeacherDayClosureIssue[] {
   const issues: TeacherDayClosureIssue[] = [];
-  if (evidence.expectedStudentCount === 0) {
+  if (evidence.isTeachingDay !== false && evidence.expectedStudentCount === 0) {
     issues.push({
       code: "no-students",
       title: "Sınıf listesi boş",
       detail: "Günü kapatmadan önce etkin çocuk listesini doğrulayın.",
     });
-  } else if (
+  } else if (evidence.isTeachingDay !== false && (
     !evidence.attendanceCompleted ||
     evidence.attendanceMarkedCount < evidence.expectedStudentCount
-  ) {
+  )) {
     issues.push({
       code: "attendance-incomplete",
       title: "Yoklama tamamlanmadı",
       detail: `${evidence.attendanceMarkedCount}/${evidence.expectedStudentCount} çocuk işaretlendi.`,
     });
   }
-  if (evidence.dailyPlanCount === 0) {
+  if (evidence.isTeachingDay !== false && evidence.dailyPlanCount === 0) {
     issues.push({
       code: "daily-plan-missing",
       title: "Günlük plan yok",
@@ -662,6 +632,7 @@ function evidenceEquals(
   right: TeacherDayClosureEvidence,
 ): boolean {
   return (
+    (left.isTeachingDay ?? true) === (right.isTeachingDay ?? true) &&
     left.expectedStudentCount === right.expectedStudentCount &&
     left.attendanceMarkedCount === right.attendanceMarkedCount &&
     left.attendanceCompleted === right.attendanceCompleted &&
@@ -931,27 +902,11 @@ export function resolveTeacherDayClosureWorkspace(
 
   const inScope = (record: StoredRecord) =>
     isLive(record) && recordBelongsToClassroomScope(record, scope);
-  const activeStudents = snapshot.students.filter((record) =>
-    studentWasEnrolledOn(record, {
-      academicYearId: scope.academicYearId,
-      classroomId: scope.classroomId,
-      civilDate,
-      operationalStartDate: academicYearEffectiveOperationalStart({
-        startDate: String(academicYear.startDate),
-        operationalStartDate:
-          typeof academicYear.operationalStartDate === "string"
-            ? academicYear.operationalStartDate
-            : undefined,
-      }),
-    })
-  );
+  const calendarDay = resolveSchoolDay({ academicYear, classroomId: scope.classroomId, civilDate, calendarEntries: snapshot.calendarEntries });
+  const activeStudents = snapshot.students.filter(record => resolveStudentMembershipOn(record, { ...scope, civilDate, academicYear }).eligible);
   const activeStudentIds = new Set(activeStudents.map((record) => record.id));
-  const resolvedAttendance = resolveAttendanceRecords(
-    snapshot.attendanceRecords.filter(inScope),
-  );
-  const attendanceMarkedCount = activeStudents.filter((student) =>
-    resolvedAttendance.latestByKey.has(attendanceRecordKey(student.id, civilDate)),
-  ).length;
+  const accounting = buildAttendanceDayBreakdown(snapshot, { scope, periodStart: civilDate, periodEnd: civilDate, asOfCivilDate: civilDate });
+  const attendanceMarkedCount = accounting.totals.recordedStudentDays;
   const scopedSettings = snapshot.settings.filter((record) =>
     recordBelongsToClassroomScope(record, scope),
   );
@@ -969,7 +924,7 @@ export function resolveTeacherDayClosureWorkspace(
     (record) =>
       inScope(record) &&
       record.civilDate === civilDate &&
-      (typeof record.studentId !== "string" || activeStudentIds.has(record.studentId)),
+      observationHasEnrolledParticipant(record, activeStudentIds),
   );
   const linkedObservationIds = new Set(
     snapshot.evidenceCurriculumLinks
@@ -982,9 +937,10 @@ export function resolveTeacherDayClosureWorkspace(
       ),
   );
   const evidence: TeacherDayClosureEvidence = {
-    expectedStudentCount: activeStudents.length,
+    isTeachingDay: calendarDay.isTeachingDay,
+    expectedStudentCount: accounting.totals.expectedStudentDays,
     attendanceMarkedCount,
-    attendanceCompleted:
+    attendanceCompleted: calendarDay.isTeachingDay &&
       findAttendanceCompletionSetting(scopedSettings, civilDate)
         ?.attendanceCompleted === true,
     dailyPlanCount: dailyPlans.length,
@@ -1061,6 +1017,7 @@ export function resolveTeacherDayClosureWorkspace(
   ) ?? null;
   return {
     status: latestClosure ? (stale ? "stale" : "closed") : "open",
+    calendarDay,
     civilDate,
     evidence,
     evidenceFingerprint,
@@ -1105,6 +1062,7 @@ export async function closeTeacherDay(
     throw new Error("Yarına not 1200 karakteri aşamaz.");
   }
   const collections = [
+    "calendarEntries",
     "academicYears",
     "classrooms",
     "students",

@@ -3,6 +3,10 @@ import {
   type ActivityStudioAgeBand,
 } from "../activity-studio/activity-studio-model.ts";
 import { ACTIVITY_YEAR_MONTH_LENSES } from "../activity-studio/activity-year-program.ts";
+import {
+  TYMM_PENDING_MAPPING_DISCLOSURE,
+  TYMM_PENDING_MAPPING_PUBLICATION_STATE,
+} from "./tymm-human-review-ledger.ts";
 
 export const TYMM_HUMAN_REVIEW_STATUS = "pending-human-review" as const;
 
@@ -21,6 +25,8 @@ export interface ActivityAgeMappingReviewItem {
   /** İnsan uzmanların dolduracağı exact bütüncül eşleme; boşken üretimde kullanılamaz. */
   readonly mapping: null;
   readonly reviewStatus: typeof TYMM_HUMAN_REVIEW_STATUS;
+  readonly publicationState: typeof TYMM_PENDING_MAPPING_PUBLICATION_STATE;
+  readonly reviewDisclosure: typeof TYMM_PENDING_MAPPING_DISCLOSURE;
   readonly independentPreschoolExpertApprovals: readonly [];
 }
 export interface AgeMonthPackageReviewItem {
@@ -32,6 +38,8 @@ export interface AgeMonthPackageReviewItem {
   readonly familyBridge: string;
   readonly packageMapping: null;
   readonly reviewStatus: typeof TYMM_HUMAN_REVIEW_STATUS;
+  readonly publicationState: typeof TYMM_PENDING_MAPPING_PUBLICATION_STATE;
+  readonly reviewDisclosure: typeof TYMM_PENDING_MAPPING_DISCLOSURE;
   readonly independentPreschoolExpertApprovals: readonly [];
 }
 
@@ -64,6 +72,8 @@ export const ACTIVITY_AGE_MAPPING_REVIEW_QUEUE = deepFreeze(
         familyBridge: activity.familyExtension,
         mapping: null,
         reviewStatus: TYMM_HUMAN_REVIEW_STATUS,
+        publicationState: TYMM_PENDING_MAPPING_PUBLICATION_STATE,
+        reviewDisclosure: TYMM_PENDING_MAPPING_DISCLOSURE,
         independentPreschoolExpertApprovals: [],
       }),
     ),
@@ -88,6 +98,8 @@ export const AGE_MONTH_PACKAGE_REVIEW_QUEUE = deepFreeze(
         familyBridge: lens.familyBridge,
         packageMapping: null,
         reviewStatus: TYMM_HUMAN_REVIEW_STATUS,
+        publicationState: TYMM_PENDING_MAPPING_PUBLICATION_STATE,
+        reviewDisclosure: TYMM_PENDING_MAPPING_DISCLOSURE,
         independentPreschoolExpertApprovals: [],
       }),
     ),
@@ -124,6 +136,8 @@ export function assertTymmHumanReviewQueueCoverage(): void {
   ].every(
     (item) =>
       item.reviewStatus === TYMM_HUMAN_REVIEW_STATUS &&
+      item.publicationState === TYMM_PENDING_MAPPING_PUBLICATION_STATE &&
+      item.reviewDisclosure === TYMM_PENDING_MAPPING_DISCLOSURE &&
       item.independentPreschoolExpertApprovals.length === 0,
   );
   if (!allPending) {

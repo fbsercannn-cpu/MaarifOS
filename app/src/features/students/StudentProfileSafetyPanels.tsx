@@ -15,11 +15,19 @@ import {
   contactActionLinks,
   contactDisplayLabel,
 } from "./student-profile-tools.ts";
+import { studentFamilyFlagFields, studentProfileCopy } from "./student-profile-copy.ts";
+import { ParentSurnameSuggestion } from "./ParentSurnameSuggestion.tsx";
+import { StudentAddressField } from "./StudentAddressField.tsx";
+import type { StudentHomeAddressParts } from "../../core/domain/student-home-address.ts";
 
-export type StudentCareFormState = Required<StudentCareDetails>;
+export type StudentCareFormState = Required<Omit<StudentCareDetails, "homeAddressParts">> & Pick<StudentCareDetails, "homeAddressParts">;
 
 type ContactPanelProps = {
   mode: "contacts";
+  studentSurname: string;
+  homeAddress: string;
+  homeAddressParts?: StudentHomeAddressParts;
+  onHomeAddressChange(value: string, parts?: StudentHomeAddressParts): void;
   contacts: StudentContact[];
   removedContact: StudentContact | null;
   onUpdateContact(contactId: string, update: Partial<StudentContact>): void;
@@ -32,9 +40,10 @@ type ContactPanelProps = {
 type CarePanelProps = {
   mode: "care";
   careDetails: StudentCareFormState;
+  onHomeAddressChange(value: string, parts?: StudentHomeAddressParts): void;
   onCareDetailsChange(
-    field: keyof StudentCareFormState,
-    value: StudentCareFormState[keyof StudentCareFormState],
+    field: Exclude<keyof StudentCareFormState, "homeAddressParts">,
+    value: StudentCareFormState[Exclude<keyof StudentCareFormState, "homeAddressParts">],
   ): void;
 };
 
@@ -42,8 +51,8 @@ type FamilyPanelProps = {
   mode: "family";
   careDetails: StudentCareFormState;
   onCareDetailsChange(
-    field: keyof StudentCareFormState,
-    value: StudentCareFormState[keyof StudentCareFormState],
+    field: Exclude<keyof StudentCareFormState, "homeAddressParts">,
+    value: StudentCareFormState[Exclude<keyof StudentCareFormState, "homeAddressParts">],
   ): void;
 };
 
@@ -170,20 +179,8 @@ export function StudentProfileSafetyPanels(
           rows={3}
         />
 
-        <label htmlFor="student-care-home-address">
-          Ev adresi
-          <small>Yalnız okul kayıt ve acil durum ihtiyacı için</small>
-        </label>
-        <KeyboardTextarea
-          id="student-care-home-address"
-          value={careDetails.homeAddress}
-          onChange={(event) =>
-            onCareDetailsChange("homeAddress", event.target.value.slice(0, 500))
-          }
-          placeholder="Mahalle, sokak, bina/daire, ilçe ve il"
-          autoComplete="street-address"
-          rows={3}
-        />
+        <StudentAddressField id="student-care-home-address" value={careDetails.homeAddress}
+          parts={careDetails.homeAddressParts} onChange={props.onHomeAddressChange} />
       </>
     );
   }
@@ -203,6 +200,31 @@ export function StudentProfileSafetyPanels(
           Ailenin tercihlerini ve okulda bulunan imzalı formları tek yerde izleyin.
           Buradaki işaretler izin vermek yerine, imzalı belgenin dosyada olduğunu kaydeder.
         </p>
+
+        <fieldset className="student-contact-permissions">
+          <legend>{studentProfileCopy.familySituation}</legend>
+          <p className="student-contact-intro">{studentProfileCopy.familySituationHelp}</p>
+          {studentFamilyFlagFields.map((field) => (
+            <label className="student-contact-primary" key={field}>
+              <input type="checkbox" checked={careDetails[field]}
+                onChange={(event) => onCareDetailsChange(field, event.target.checked)} />
+              {studentProfileCopy[field]}
+            </label>
+          ))}
+        </fieldset>
+
+        <label htmlFor="student-family-situation-notes">{studentProfileCopy.familySituationNotes}</label>
+        <KeyboardTextarea id="student-family-situation-notes" rows={4}
+          value={careDetails.familySituationNotes} maxLength={1_000}
+          onChange={(event) => onCareDetailsChange("familySituationNotes", event.target.value)} />
+
+        <label htmlFor="student-child-private-notes">
+          {studentProfileCopy.privateNotes}
+          <small>{studentProfileCopy.privateNotesHelp}</small>
+        </label>
+        <KeyboardTextarea id="student-child-private-notes" rows={6}
+          value={careDetails.childPrivateNotes} maxLength={2_000}
+          onChange={(event) => onCareDetailsChange("childPrivateNotes", event.target.value)} />
 
         <label htmlFor="student-family-email">
           Veli e-posta adresi
@@ -328,12 +350,16 @@ export function StudentProfileSafetyPanels(
         Anne, baba, bakıcı veya başka bir yakını ekleyin; acil iletişim ve teslim
         yetkisini kişi bazında açıkça işaretleyin.
       </p>
+      <p className="student-contact-intro">{studentProfileCopy.contactOptional}</p>
+      <StudentAddressField id="student-contacts-home-address" value={props.homeAddress}
+        parts={props.homeAddressParts} onChange={props.onHomeAddressChange} />
 
       <div className="student-contact-editor">
         {contacts.map((contact) => {
           const contactLinks = contactActionLinks(contact.phone);
           return (
-            <section className="student-contact-card" key={contact.id}>
+            <section className="student-contact-card" key={contact.id}
+              aria-label={contact.kind === "mother" ? "Anne bilgileri" : contact.kind === "father" ? "Baba bilgileri" : "Üçüncü kişi bilgileri"}>
               <div className="student-contact-card-heading">
                 <strong>
                   {contact.kind === "mother"
@@ -356,7 +382,7 @@ export function StudentProfileSafetyPanels(
 
               {contact.kind === "other" ? (
                 <label htmlFor={`student-contact-relationship-${contact.id}`}>
-                  Yakınlığı
+                  Yakınlığı / unvanı
                   <KeyboardInput
                     id={`student-contact-relationship-${contact.id}`}
                     value={contact.relationship}
@@ -384,6 +410,17 @@ export function StudentProfileSafetyPanels(
                   placeholder="İsteğe bağlı"
                   autoComplete="name"
                 />
+              </label>
+
+              <ParentSurnameSuggestion childLastName={props.studentSurname} parentName={contact.name ?? ""}
+                kind={contact.kind} onApply={(name) => onUpdateContact(contact.id, { name })} />
+
+              <label htmlFor={`student-contact-occupation-${contact.id}`}>
+                {studentProfileCopy.occupation}
+                <KeyboardInput id={`student-contact-occupation-${contact.id}`}
+                  value={contact.occupation ?? ""} maxLength={120}
+                  onChange={(event) => onUpdateContact(contact.id, { occupation: event.target.value })}
+                  autoComplete="organization-title" />
               </label>
 
               <label htmlFor={`student-contact-phone-${contact.id}`}>

@@ -1,3 +1,4 @@
+import { wordDocumentStyles, wordRunningFooter } from "../documents/word-document-design.ts";
 import {
   ANECDOTE_FORM_OFFICIAL_SOURCE,
   ANECDOTE_FORM_OFFICIAL_SOURCE_URL,
@@ -30,6 +31,16 @@ export interface AnecdotePdfRuntime extends SemanticTaggedPdfRuntime {
 const encoder = new TextEncoder();
 const A4_CANVAS_WIDTH = 1240;
 const A4_CANVAS_HEIGHT = 1754;
+const ANECDOTE_INTRO =
+  "Günlük plan kapsamında etkinlikler gerçekleştirildikten sonra günlük, haftalık ve/veya özel bir durum gözlemlendiğinde anekdot kaydı tutulabilir. Bu form, gözlenen özel durumu ve öğretmenin değerlendirmesini ayrı kanıt katmanlarında korur.";
+const ANECDOTE_OBSERVED_SITUATION_LABEL =
+  "Gözlenen Durum — ham gözlem ve çocuğun sözü";
+const ANECDOTE_OBSERVER_ASSESSMENT_LABEL =
+  "Gözlemcinin Genel Değerlendirmesi — öğretmen yorumu";
+const ANECDOTE_RAW_OBSERVATION_NOTE =
+  "Aşağıdaki metin ham gözlem kaydıdır; çocuğun doğrudan sözü yorum eklenmeden bu kayıt içinde korunur.";
+const ANECDOTE_SOURCE_CITATION =
+  `${ANECDOTE_FORM_OFFICIAL_SOURCE} · ${ANECDOTE_FORM_OFFICIAL_SOURCE_URL}`;
 
 function xmlEscape(value: string): string {
   return value
@@ -191,11 +202,11 @@ function wordParagraph(
 ): string {
   const paragraphProperties = [
     options.style ? `<w:pStyle w:val="${options.style}"/>` : "",
-    options.align ? `<w:jc w:val="${options.align}"/>` : "",
     options.keepNext ? "<w:keepNext/>" : "",
     options.beforeTwips !== undefined || options.afterTwips !== undefined
       ? `<w:spacing w:before="${options.beforeTwips ?? 0}" w:after="${options.afterTwips ?? 0}"/>`
       : "",
+    options.align ? `<w:jc w:val="${options.align}"/>` : "",
   ].join("");
   const runProperties = [
     options.bold ? "<w:b/>" : "",
@@ -218,20 +229,22 @@ function tableCell(
 ): string {
   return `<w:tc><w:tcPr><w:tcW w:w="${options.width}" w:type="dxa"/>${
     options.gridSpan ? `<w:gridSpan w:val="${options.gridSpan}"/>` : ""
-  }${options.fill ? `<w:shd w:fill="${options.fill}"/>` : ""}<w:vAlign w:val="${
+  }${options.fill ? `<w:shd w:fill="${options.fill}"/>` : ""}<w:tcMar><w:top w:w="140" w:type="dxa"/><w:left w:w="140" w:type="dxa"/><w:bottom w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/></w:tcMar><w:vAlign w:val="${
     options.verticalAlign ?? "top"
-  }"/><w:tcMar><w:top w:w="140" w:type="dxa"/><w:left w:w="140" w:type="dxa"/><w:bottom w:w="140" w:type="dxa"/><w:right w:w="140" w:type="dxa"/></w:tcMar></w:tcPr>${contents}</w:tc>`;
+  }"/></w:tcPr>${contents}</w:tc>`;
 }
 
 function tableRow(
   cells: string,
-  options: { minimumHeight?: number; keepTogether?: boolean } = {},
+  options: { minimumHeight?: number; keepTogether?: boolean; repeatHeader?: boolean } = {},
 ): string {
   return `<w:tr><w:trPr>${
+    (options.keepTogether ? "<w:cantSplit/>" : "") + (options.repeatHeader ? "<w:tblHeader/>" : "")
+  }${
     options.minimumHeight
       ? `<w:trHeight w:val="${options.minimumHeight}" w:hRule="atLeast"/>`
       : ""
-  }${options.keepTogether ? "<w:cantSplit/>" : ""}</w:trPr>${cells}</w:tr>`;
+  }</w:trPr>${cells}</w:tr>`;
 }
 
 function customProperty(
@@ -248,8 +261,6 @@ export function createAnecdoteDocx(
 ): Uint8Array {
   assertAnecdoteFormReadyForExport(model);
   const exportedAt = options.exportedAt ?? new Date().toISOString();
-  const intro =
-    "Günlük plan kapsamında etkinlikler gerçekleştirildikten sonra günlük, haftalık ve/veya özel bir durum gözlemlendiğinde anekdot kaydı tutmanız beklenmektedir. Bu form olumlu ya da olumsuz özel durumların ortaya çıkması durumunda öğretmen tarafından istenildiği zaman doldurulabilir.";
   const labelWidth = 2200;
   const valueWidth = 7960;
   const fullWidth = labelWidth + valueWidth;
@@ -268,7 +279,7 @@ export function createAnecdoteDocx(
             width: valueWidth,
             verticalAlign: "center",
           }),
-        { minimumHeight: 700, keepTogether: true },
+        { minimumHeight: 560, keepTogether: true, repeatHeader: true },
       ),
     )
     .join("");
@@ -281,9 +292,9 @@ export function createAnecdoteDocx(
   ) =>
     tableRow(
       tableCell(
-        wordParagraph(label, { bold: true, keepNext: true }) +
+        wordParagraph(label, { style: "Heading1", bold: true, keepNext: true }) +
           (note ? wordParagraph(note, { keepNext: true }) : ""),
-        { width: fullWidth, gridSpan: 2, fill: "F2DCD3" },
+        { width: fullWidth, gridSpan: 2, fill: "CFEFEB" },
       ),
       { keepTogether: true },
     ) +
@@ -295,26 +306,26 @@ export function createAnecdoteDocx(
       }),
       { minimumHeight },
     );
-  const tableXml = `<w:tbl><w:tblPr><w:tblW w:w="${fullWidth}" w:type="dxa"/><w:tblInd w:w="120" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="B7B7B7"/><w:left w:val="single" w:sz="4" w:color="B7B7B7"/><w:bottom w:val="single" w:sz="4" w:color="B7B7B7"/><w:right w:val="single" w:sz="4" w:color="B7B7B7"/><w:insideH w:val="single" w:sz="4" w:color="B7B7B7"/><w:insideV w:val="single" w:sz="4" w:color="B7B7B7"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${labelWidth}"/><w:gridCol w:w="${valueWidth}"/></w:tblGrid>${metadataRows}${section(
-    "Gözlenen Durum",
+  const tableXml = `<w:tbl><w:tblPr><w:tblW w:w="${fullWidth}" w:type="dxa"/><w:tblInd w:w="120" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="D9D9D9"/><w:left w:val="single" w:sz="4" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="4" w:color="D9D9D9"/><w:right w:val="single" w:sz="4" w:color="D9D9D9"/><w:insideH w:val="single" w:sz="4" w:color="D9D9D9"/><w:insideV w:val="single" w:sz="4" w:color="D9D9D9"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${labelWidth}"/><w:gridCol w:w="${valueWidth}"/></w:tblGrid>${metadataRows}${section(
+    ANECDOTE_OBSERVED_SITUATION_LABEL,
     model.observedSituation,
-    1650,
-    "(Bu formu doldurmanıza neden olan durumu açıklamanız beklenmektedir.)",
+    1000,
+    `(Bu formu doldurmanıza neden olan durumu açıklamanız beklenmektedir.) ${ANECDOTE_RAW_OBSERVATION_NOTE}`,
   )}${section(
     "Gözlenen Beceriler",
     skillsText(model),
-    1800,
+    1000,
   )}${section(
-    "Gözlemcinin Genel Değerlendirmesi",
+    ANECDOTE_OBSERVER_ASSESSMENT_LABEL,
     model.observerGeneralAssessment,
-    2200,
+    1200,
   )}</w:tbl>`;
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${wordParagraph(
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${wordParagraph(
     ANECDOTE_FORM_OFFICIAL_TITLE,
     {
-      style: "FormTitle",
+      style: "Title",
       bold: true,
-      color: "F04B13",
+      color: "000000",
       sizeHalfPoints: 34,
       align: "center",
       afterTwips: 360,
@@ -323,11 +334,21 @@ export function createAnecdoteDocx(
     style: "FormBody",
     bold: true,
     afterTwips: 180,
-  })}${wordParagraph(intro, {
+  })}${wordParagraph(ANECDOTE_INTRO, {
     style: "FormBody",
     afterTwips: 420,
-  })}${tableXml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360"/></w:sectPr></w:body></w:document>`;
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="tr-TR"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="80" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="80" w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FormTitle"><w:name w:val="Form Title"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="360" w:line="360" w:lineRule="auto"/><w:keepNext/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:b/><w:color w:val="F04B13"/><w:sz w:val="34"/><w:szCs w:val="34"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FormBody"><w:name w:val="Form Body"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="120" w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr></w:style></w:styles>`;
+  })}${tableXml}${wordParagraph("Kaynak", {
+    bold: true,
+    color: "17324D",
+    keepNext: true,
+    beforeTwips: 220,
+    afterTwips: 80,
+  })}${wordParagraph(ANECDOTE_SOURCE_CITATION, {
+    color: "466278",
+    sizeHalfPoints: 17,
+    afterTwips: 0,
+  })}<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360"/></w:sectPr></w:body></w:document>`;
+  const stylesXml = wordDocumentStyles(21, true);
   const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(
     ANECDOTE_FORM_OFFICIAL_TITLE,
   )}</dc:title><dc:subject>${xmlEscape(
@@ -354,7 +375,7 @@ export function createAnecdoteDocx(
     {
       name: "[Content_Types].xml",
       contents:
-        '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/></Types>',
+        '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/></Types>',
     },
     {
       name: "_rels/.rels",
@@ -363,10 +384,12 @@ export function createAnecdoteDocx(
     },
     { name: "word/document.xml", contents: documentXml },
     { name: "word/styles.xml", contents: stylesXml },
+    { name: "word/footer1.xml", contents: wordRunningFooter(`MaarifOS · Gözlem formu · ${turkishDate(model.civilDate)}`) },
+    { name: "word/settings.xml", contents: '<?xml version="1.0" encoding="UTF-8"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:updateFields w:val="true"/></w:settings>' },
     {
       name: "word/_rels/document.xml.rels",
       contents:
-        '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+        '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
     },
     { name: "docProps/core.xml", contents: coreProperties },
     { name: "docProps/custom.xml", contents: customProperties },
@@ -493,12 +516,10 @@ export async function createAnecdotePdf(
   options: { exportedAt?: string; runtime?: AnecdotePdfRuntime } = {},
 ): Promise<Uint8Array> {
   assertAnecdoteFormReadyForExport(model);
-  const intro =
-    "Günlük plan kapsamında etkinlikler gerçekleştirildikten sonra günlük, haftalık ve/veya özel bir durum gözlemlendiğinde anekdot kaydı tutulabilir. Bu form, gözlenen özel durumu ve öğretmenin değerlendirmesini ayrı kanıt katmanlarında korur.";
   const nodes: SemanticPdfNode[] = [
     { kind: "heading", level: 1, text: ANECDOTE_FORM_OFFICIAL_TITLE },
     { kind: "heading", level: 2, text: "Sayın Öğretmen" },
-    { kind: "paragraph", text: intro },
+    { kind: "paragraph", text: ANECDOTE_INTRO },
     {
       kind: "table",
       summary: "Çocuk, tarih ve gözlem mekânı bilgileri",
@@ -511,11 +532,11 @@ export async function createAnecdotePdf(
         ["Gözlenen Mekân", model.observedLocation],
       ],
     },
-    { kind: "heading", level: 2, text: "Gözlenen Durum — ham gözlem ve çocuğun sözü" },
+    { kind: "heading", level: 2, text: ANECDOTE_OBSERVED_SITUATION_LABEL },
     {
       kind: "paragraph",
       tone: "meta",
-      text: "Aşağıdaki metin ham gözlem kaydıdır; çocuğun doğrudan sözü yorum eklenmeden bu kayıt içinde korunur.",
+      text: ANECDOTE_RAW_OBSERVATION_NOTE,
     },
     { kind: "paragraph", text: model.observedSituation },
     { kind: "heading", level: 2, text: "Gözlenen Beceriler" },
@@ -528,14 +549,14 @@ export async function createAnecdotePdf(
     {
       kind: "heading",
       level: 2,
-      text: "Gözlemcinin Genel Değerlendirmesi — öğretmen yorumu",
+      text: ANECDOTE_OBSERVER_ASSESSMENT_LABEL,
     },
     { kind: "paragraph", text: model.observerGeneralAssessment },
     { kind: "heading", level: 2, text: "Kaynak" },
     {
       kind: "paragraph",
       tone: "meta",
-      text: `${ANECDOTE_FORM_OFFICIAL_SOURCE} · ${ANECDOTE_FORM_OFFICIAL_SOURCE_URL}`,
+      text: ANECDOTE_SOURCE_CITATION,
     },
   ];
   return createSemanticTaggedPdf(
@@ -581,3 +602,4 @@ export async function generateAnecdoteExportFile(
     exportedAt,
   };
 }
+

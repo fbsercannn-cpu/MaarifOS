@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ArchiveIcon,
   ChevronRightIcon,
@@ -14,7 +14,14 @@ import {
   type TeacherFeedback,
 } from "../feedback/teacher-feedback.ts";
 import { resolveSimpleDailyDocumentReadiness } from "../teacher-cycle/teacher-work-cycle.ts";
+import {
+  DOCUMENT_AUTHORIZED_CHANNEL_NOTICE,
+  DOCUMENT_USE_PHASES,
+} from "../documents/document-use-policy.ts";
 import "./simple-workspaces.css";
+import "./simple-document-purposes.css";
+import { ClassRosterPurposeActions } from "../classroom/ClassRosterPurposeActions.tsx";
+import type { ClassRosterLayoutId } from "../classroom/class-roster-layouts.ts";
 
 export type SimplePlanOutputKind = "annual" | "monthly" | "weekly" | "daily";
 export type SimpleDocumentOutputId = SimplePlanOutputKind | "roster" | "observations";
@@ -26,7 +33,10 @@ export type SimpleDocumentOutputState =
 
 export interface SimpleDocumentWorkspaceScreenProps
   extends DocumentWorkspaceScreenProps {
+  extraDocumentTools?: ReactNode;
+  documentPurposeTools?: Partial<Record<"classroom" | "family" | "administration" | "archive", ReactNode>>;
   onDownloadClassRoster(): void | Promise<void>;
+  onPrepareRoster?(layout: ClassRosterLayoutId): void | Promise<void>;
   onShareClassRoster(): Promise<"shared" | "downloaded" | "cancelled">;
   onDownloadPlan(kind: SimplePlanOutputKind): void | Promise<void>;
   onOpenObservationOutput(): void;
@@ -47,7 +57,7 @@ const OUTPUTS = [
     id: "roster",
     label: "İDARE",
     title: "Sınıf listesi",
-    detail: "Öğrenci no, T.C. kimlik, veli ve imza alanlı görsel A4 PDF",
+    detail: "Günlük çizelge, veli iletişimi veya ayrıntılı öğrenci dökümü",
     icon: PersonIcon,
   },
   {
@@ -132,10 +142,13 @@ function outputAction(
 
 export function SimpleDocumentWorkspaceScreen({
   workspace,
+  extraDocumentTools,
+  documentPurposeTools,
   studentCount,
   observationCount,
   dataBusy,
   onDownloadClassRoster,
+  onPrepareRoster,
   onShareClassRoster,
   onDownloadPlan,
   onOpenObservationOutput,
@@ -149,6 +162,7 @@ export function SimpleDocumentWorkspaceScreen({
   schoolNameReady = true,
   teacherNameReady = true,
 }: SimpleDocumentWorkspaceScreenProps) {
+  const [purpose, setPurpose] = useState<"classroom" | "family" | "administration" | "archive">("classroom");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
@@ -202,7 +216,7 @@ export function SimpleDocumentWorkspaceScreen({
         id === "observations"
           ? "Gözlem için yazdırılabilir dosya alanı açıldı."
           : id === "roster"
-            ? "Görsel A4 PDF bu cihazda indirildi; dosyayı önizlemeden açıp yazdırabilirsiniz."
+            ? "Sınıf listesi önizlemede hazır; buradan yazdırabilir, PDF veya Excel olarak alabilirsiniz."
             : "Görsel PDF bu cihazda hazırlandı.",
       );
     } catch (reason) {
@@ -269,13 +283,38 @@ export function SimpleDocumentWorkspaceScreen({
     <main className="simple-workspace" aria-labelledby="simple-documents-title">
       <header className="simple-workspace__hero">
         <span>HIZLA HAZIRLA</span>
-        <h1 id="simple-documents-title" data-route-heading tabIndex={-1}>Çıktılar</h1>
+        <h1 id="simple-documents-title" data-route-heading tabIndex={-1}>Belgeler</h1>
         <p>Belgeyi seçin; okul, sınıf ve öğretmen bilgileri kendiliğinden yerleşsin.</p>
         <div className="simple-workspace__facts" aria-label="Kayıt özeti">
           <span><strong>{studentCount}</strong> öğrenci</span>
           <span><strong>{observationCount}</strong> gözlem</span>
         </div>
       </header>
+
+      <nav className="simple-document-purposes" aria-label="Belge kullanım amacı">
+        {([{id:"classroom",label:"Sınıfta kullan"},{id:"family",label:"Aileye ver"},{id:"administration",label:"İdareye sun"},{id:"archive",label:"Dosyala"}] as const).map(item=><button type="button" key={item.id} aria-pressed={purpose===item.id} onClick={()=>setPurpose(item.id)}>{item.label}</button>)}
+      </nav>
+      {documentPurposeTools?.[purpose] ?? (purpose === "classroom" ? extraDocumentTools : null)}
+      <details className="simple-document-use-policy">
+        <summary>
+          <span>
+            <small>SINIF İÇİ KULLANIM SINIRI</small>
+            <strong>Ders öncesi hazırla, basılı kullan, ders sonrası kaydet</strong>
+          </span>
+          <ChevronRightIcon aria-hidden="true" />
+        </summary>
+        <div>
+          <ol>
+            {DOCUMENT_USE_PHASES.map((phase) => (
+              <li key={phase.id}>
+                <strong>{phase.label}</strong>
+                <p>{phase.detail}</p>
+              </li>
+            ))}
+          </ol>
+          <p>{DOCUMENT_AUTHORIZED_CHANNEL_NOTICE}</p>
+        </div>
+      </details>
 
       {setupRequirement.length > 0 ? (
         <button
@@ -300,8 +339,9 @@ export function SimpleDocumentWorkspaceScreen({
             <h2 id="simple-outputs-heading">Hangisini alacaksınız?</h2>
           </div>
         </div>
+        {onPrepareRoster && <ClassRosterPurposeActions onPrepare={onPrepareRoster} disabled={dataBusy || busyId !== null} />}
         <div className="simple-action-list">
-          {OUTPUTS.map((output) => {
+          {OUTPUTS.filter(output => purpose === "archive" || (purpose === "family" ? output.id === "observations" : purpose === "administration" ? ["monthly", "annual", "roster"].includes(output.id) : ["daily", "weekly", "roster"].includes(output.id))).map((output) => {
             const Icon = output.icon;
             const state = outputStates?.[output.id] ?? defaultOutputState(output.id, {
               workspace,
@@ -378,6 +418,7 @@ export function SimpleDocumentWorkspaceScreen({
         </span>
         <ChevronRightIcon aria-hidden="true" />
       </button>
+
 
       <p className="simple-workspace__privacy">
         T.C. kimlik ve veli telefonu yalnız idare listesindedir; veli gözlem özetine eklenmez.

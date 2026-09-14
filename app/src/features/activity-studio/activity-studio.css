@@ -222,7 +222,7 @@
 }
 
 .activity-studio__result-count span {
-  margin-left: auto;
+  margin-left: 0;
   color: var(--maarif-teal-dark, #176b63);
   font-weight: 750;
 }

@@ -10,37 +10,51 @@
   background: #fffaf3;
 }
 
-.simple-today__advanced-toggle {
+.simple-today__follow-ups {
+  display: grid;
+  margin-top: 18px;
+  border-block: 1px solid #e7dece;
+}
+
+.simple-today__follow-ups > button {
   width: 100%;
   min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 12px 4px;
   color: var(--maarif-teal-dark);
-  background: #ffffff;
-  border: 1px solid var(--maarif-line-soft);
-  border-radius: 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #e7dece;
   font: inherit;
   text-align: left;
 }
 
-.simple-today__advanced-toggle span {
+.simple-today__follow-ups > button:last-child {
+  border-bottom: 0;
+}
+
+.simple-today__follow-ups > button:disabled {
+  opacity: 0.56;
+}
+
+.simple-today__follow-ups span {
   display: grid;
   gap: 3px;
 }
 
-.simple-today__advanced-toggle strong {
+.simple-today__follow-ups strong {
   font-size: 14px;
 }
 
-.simple-today__advanced-toggle small {
+.simple-today__follow-ups small {
   color: var(--maarif-muted);
   font-size: 11px;
 }
 
-.simple-today__advanced-toggle[aria-expanded="true"] > svg {
+.simple-today__follow-ups [aria-expanded="true"] > svg {
   transform: rotate(90deg);
 }
 
@@ -308,6 +322,277 @@
   color: var(--maarif-teal-dark);
 }
 
+.simple-today__lesson-badge {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 6px 11px;
+  color: var(--maarif-teal-dark);
+  background: var(--maarif-teal-soft);
+  border: 1px solid #b9d9d1;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.simple-today__lesson-tools {
+  display: grid;
+  min-width: 0;
+  gap: 11px;
+  margin-top: 18px;
+  padding: 14px;
+  background: #f3f9f6;
+  border: 1px solid #cbded9;
+  border-radius: 20px;
+}
+
+.simple-today__lesson-tools > header {
+  display: flex;
+  min-width: 0;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.simple-today__lesson-tools > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.simple-today__lesson-tools h2,
+.simple-today__lesson-tools p {
+  margin: 0;
+}
+
+.simple-today__lesson-tools h2 {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.simple-today__lesson-tools p {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.simple-today__lesson-toggle {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  color: var(--maarif-teal-dark);
+  background: #ffffff;
+  border: 1px solid #b9d5cf;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.simple-today__lesson-toggle[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--maarif-teal-dark);
+  border-color: var(--maarif-teal-dark);
+}
+
+.simple-today__capture-shortcuts {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.simple-today__capture-shortcuts > button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  grid-template-columns: 24px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  color: var(--maarif-navy);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d5e2de;
+  border-radius: 14px;
+  font: inherit;
+  text-align: left;
+}
+
+.simple-today__capture-shortcuts > button.is-observation {
+  grid-column: 1 / -1;
+  min-height: 72px;
+  color: #ffffff;
+  background: var(--maarif-teal-dark);
+  border-color: var(--maarif-teal-dark);
+}
+
+.simple-today__capture-shortcuts > button:disabled,
+.simple-today__lesson-toggle:disabled,
+.simple-today__shortcut-editor button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.simple-today__capture-shortcuts > button > svg:first-child {
+  width: 22px;
+  height: 22px;
+}
+
+.simple-today__capture-shortcuts > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.simple-today__capture-shortcuts strong,
+.simple-today__capture-shortcuts small {
+  overflow-wrap: anywhere;
+}
+
+.simple-today__capture-shortcuts strong {
+  font-size: 13px;
+}
+
+.simple-today__capture-shortcuts small {
+  color: var(--maarif-muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.simple-today__capture-shortcuts > button.is-observation small {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.simple-today__shortcut-editor,
+.simple-today__ready-work {
+  min-width: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid #d9e4e1;
+  border-radius: 13px;
+}
+
+.simple-today__shortcut-editor > summary,
+.simple-today__ready-work > summary {
+  min-height: 44px;
+  align-items: center;
+  padding: 9px 11px;
+  color: var(--maarif-teal-dark);
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.simple-today__shortcut-editor > summary::-webkit-details-marker,
+.simple-today__ready-work > summary::-webkit-details-marker {
+  display: none;
+}
+
+.simple-today__shortcut-editor > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  padding: 0 11px 9px;
+}
+
+.simple-today__shortcut-editor > div > button,
+.simple-today__shortcut-save {
+  min-height: 44px;
+  padding: 8px 10px;
+  color: var(--maarif-teal-dark);
+  background: #ffffff;
+  border: 1px solid #c7d9d4;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.simple-today__shortcut-editor > div > button[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--maarif-teal-dark);
+  border-color: var(--maarif-teal-dark);
+}
+
+.simple-today__shortcut-save {
+  width: calc(100% - 22px);
+  margin: 0 11px 11px;
+}
+
+.simple-today__preference-notice {
+  margin: 0 !important;
+  color: var(--maarif-teal-dark) !important;
+  font-weight: 750;
+}
+
+.simple-today__completion {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin-top: 19px;
+}
+
+.simple-today__completion > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.simple-today__completion > header h2,
+.simple-today__completion > header small {
+  margin: 0;
+}
+
+.simple-today__completion > header h2 {
+  font-size: 19px;
+}
+
+.simple-today__completion > header small {
+  color: var(--maarif-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.simple-today__completion .simple-today__focus,
+.simple-today__completion .simple-today__follow-ups {
+  margin-top: 0;
+}
+
+.simple-today__ready-work {
+  margin-top: 13px;
+  background: #ffffff;
+  border-color: #e2ddd3;
+}
+
+.simple-today__ready-work > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+}
+
+.simple-today__ready-work > summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.simple-today__ready-work > summary strong,
+.simple-today__ready-work > summary small {
+  overflow-wrap: anywhere;
+}
+
+.simple-today__ready-work > summary small {
+  color: var(--maarif-muted);
+  font-size: 10px;
+}
+
+.simple-today__ready-work > div {
+  padding: 0 11px 11px;
+}
+
 .simple-today__focus {
   margin-top: 22px;
 }
@@ -359,7 +644,7 @@
 }
 
 .simple-focus__copy small {
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 11px;
   font-weight: 750;
 }
@@ -1046,50 +1331,176 @@
 .simple-today__learning-loop {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  gap: 10px;
 }
 
-.simple-today__learning-loop li {
+.simple-learning-loop__glance {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.simple-learning-loop__glance article {
   display: grid;
   min-width: 0;
   gap: 4px;
-  justify-items: center;
-  text-align: center;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #dbe7e3;
+  border-radius: 14px;
 }
 
-.simple-today__learning-loop li > span {
+.simple-learning-loop__glance article[data-stage-preview="current"] {
+  background: #eef7f2;
+  border-color: #b8d9cc;
+}
+
+.simple-learning-loop__glance article > span {
+  color: var(--maarif-teal-dark);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.simple-learning-loop__glance article > strong {
+  min-width: 0;
+  color: var(--maarif-navy);
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.simple-learning-loop__glance article > small {
+  color: #657187;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.simple-learning-loop__details {
+  min-width: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #dbe7e3;
+  border-radius: 14px;
+}
+
+.simple-learning-loop__details > summary {
   display: grid;
-  width: 25px;
-  height: 25px;
+  min-width: 0;
+  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: var(--maarif-teal-dark);
+  cursor: pointer;
+  list-style: none;
+}
+
+.simple-learning-loop__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.simple-learning-loop__details > summary:focus-visible {
+  outline: 3px solid var(--maarif-teal);
+  outline-offset: -3px;
+}
+
+.simple-learning-loop__details > summary > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.simple-learning-loop__details > summary strong,
+.simple-learning-loop__details > summary small {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.simple-learning-loop__details > summary strong {
+  color: var(--maarif-navy);
+}
+
+.simple-learning-loop__details > summary small {
+  color: #657187;
+  font-weight: 750;
+}
+
+.simple-learning-loop__details > summary > svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 140ms ease;
+}
+
+.simple-learning-loop__details[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.simple-learning-loop__details ol {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
+  padding: 0 12px 12px;
+  list-style: none;
+}
+
+.simple-learning-loop__details li {
+  display: grid;
+  min-width: 0;
+  min-height: 52px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid #e7eeec;
+}
+
+.simple-learning-loop__index {
+  display: grid;
+  width: 32px;
+  height: 32px;
   place-items: center;
   color: #657187;
   background: #eef1f4;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 900;
 }
 
-.simple-today__learning-loop li[data-state="done"] > span {
+.simple-learning-loop__details li[data-state="done"] .simple-learning-loop__index {
   color: #ffffff;
   background: var(--maarif-teal-dark);
 }
 
-.simple-today__learning-loop li[data-state="current"] > span {
+.simple-learning-loop__details li[data-state="current"] .simple-learning-loop__index {
   color: var(--maarif-navy);
   background: #f1d8a8;
   box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px #d8b978;
 }
 
-.simple-today__learning-loop strong {
-  max-width: 48px;
-  color: #657187;
-  font-size: 8px;
-  line-height: 1.2;
+.simple-learning-loop__stage-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.simple-learning-loop__stage-copy strong,
+.simple-learning-loop__stage-copy small {
+  font-size: 12px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.simple-learning-loop__stage-copy strong {
+  color: var(--maarif-navy);
+}
+
+.simple-learning-loop__stage-copy small {
+  color: #657187;
+  font-weight: 750;
 }
 
 @media (max-width: 430px) {
@@ -1121,6 +1532,26 @@
 
   .simple-today__brand strong {
     font-size: 25px;
+  }
+
+  .simple-today__lesson-tools {
+    padding: 11px;
+  }
+
+  .simple-today__lesson-tools > header {
+    display: grid;
+  }
+
+  .simple-today__lesson-toggle {
+    width: 100%;
+  }
+
+  .simple-today__capture-shortcuts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .simple-today__capture-shortcuts > button.is-observation {
+    grid-column: auto;
   }
 
   .simple-today__context {
@@ -1231,9 +1662,8 @@
     flex: 1 1 calc(50% - 6px);
   }
 
-  .simple-today__learning-loop {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    row-gap: 9px;
+  .simple-learning-loop__glance {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1257,3 +1687,4 @@
     transition: transform 140ms ease, box-shadow 140ms ease;
   }
 }
+.simple-classroom__export-hint{grid-column:1/-1;margin:0;color:#54706b;font-size:12px;line-height:1.5}

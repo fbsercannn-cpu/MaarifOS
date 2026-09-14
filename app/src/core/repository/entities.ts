@@ -1,3 +1,5 @@
+import { HOME_GAME_CARD_SETTING_TYPE, isHomeGameCardRecord } from "../../features/home-game-cards/home-game-card-model.ts";
+import {STUDENT_ERASURE_TYPE,isStudentErasure} from '../domain/student-erasure.ts';
 import {
   isAttendanceRecord,
   isCivilDate,
@@ -15,6 +17,7 @@ import {
   type CollectionName,
   type StoredRecord,
 } from "../domain/model.ts";
+import { formatStudentHomeAddress, isStudentHomeAddressParts } from "../domain/student-home-address.ts";
 import {
   isQuickObservationCategory,
   isQuickObservationType,
@@ -23,10 +26,31 @@ import {
 } from "../domain/quick-observation.ts";
 import {
   isValidStudentNationalIdentityNumber,
+  isStudentSpreadsheetImportReview,
   studentProfileFromRecord,
   type StudentCareDetails,
   type StudentContact,
+  type StudentSpreadsheetImportReview,
 } from "../domain/student.ts";
+import {
+  isDevelopmentObservationSelection,
+  type DevelopmentObservationSelection,
+} from "../../features/evidence/development-observation-presets.ts";
+import { isDevelopmentObservationCurriculumLink } from "../../features/evidence/development-observation-record.ts";
+import type { CurriculumTargetSnapshot } from "../../features/curriculum/curriculum-catalog.ts";
+import { DEVELOPMENT_REPORT_SETTING_TYPE, isDevelopmentReportRecord } from "../../features/development/development-report-model.ts";
+import { TEACHER_FOLLOWUP_SETTING_TYPE, isTeacherFollowupRecord } from "../domain/teacher-followup.ts";
+import { CONSENT_TRIP_SETTING_TYPE, isConsentTripRecord } from "../domain/consent-trips.ts";
+import { CLASSROOM_ADMIN_SETTING_TYPE, isClassroomAdminRecord } from "../domain/classroom-admin.ts";
+import { GROWTH_MEASUREMENT_SETTING_TYPE, isGrowthMeasurementRecord } from "../domain/growth-measurements.ts";
+import { LEARNING_CENTER_SETTING_TYPE, isLearningCenterRecord } from "../domain/learning-centers.ts";
+import {CLASS_DUTY_SETTING_TYPE,isClassDutyRecord} from "../domain/class-duty-schedule.ts";
+import {TEACHER_HOME_PREFERENCES_SETTING_TYPE,isTeacherHomePreferencesRecord} from "../../features/simple-experience/teacher-home-preferences.ts";
+import { FAMILY_ENGAGEMENT_SETTING_TYPE, isFamilyEngagementRecord } from "../domain/family-engagement.ts";
+import { SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE, isSchoolDocumentTemplateRecord } from "../domain/school-document-template.ts";
+import { DAILY_ROUTINE_CARD_SETTING_TYPE, isDailyRoutineCardRecord } from "../domain/daily-routine-cards.ts";
+import { OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE, isOfficialAppointmentCompletionRecord } from "../../features/family-engagement/official-appointment-transition.ts";
+import { PLAY_FAMILY_CYCLE_SETTING_TYPE, isPlayFamilyCycleRecord } from "../../features/planning/play-family-cycle.ts";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -70,7 +94,8 @@ export interface StudentRecord extends StoredRecord {
   supportPreferences?: string;
   contacts?: StudentContact[];
   careDetails?: StudentCareDetails;
-  profileSchemaVersion?: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  profileSchemaVersion?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  spreadsheetImportReview?: StudentSpreadsheetImportReview;
   active?: boolean;
   enrollmentStatus?: "active" | "left" | "completed" | "transferred";
 }
@@ -90,6 +115,7 @@ export interface ObservationRecord extends StoredRecord {
   classroomId?: string;
   observationType?: QuickObservationType;
   observationCategories?: QuickObservationCategory[];
+  developmentSelection?: DevelopmentObservationSelection;
   _MUKERRER_INCELE?: true;
   duplicateOf?: string;
 }
@@ -154,6 +180,8 @@ export interface CurriculumEvidenceLinkRecord extends StoredRecord {
   targetSourcePage?: number;
   targetSourceSha256?: `sha256:${string}`;
   holisticGraphReference?: HolisticGraphReferenceRecord;
+  developmentSelection?: DevelopmentObservationSelection;
+  targetSnapshot?: CurriculumTargetSnapshot;
 }
 
 export interface HolisticGraphReferenceRecord {
@@ -394,6 +422,8 @@ function isStudentRecord(value: unknown): value is StudentRecord {
   if (!isStoredRecord(value) || studentProfileFromRecord(value) === null) {
     return false;
   }
+  if (value.spreadsheetImportReview !== undefined &&
+    !isStudentSpreadsheetImportReview(value.spreadsheetImportReview, value)) return false;
   const optionalTextFields = [
     "firstName",
     "lastName",
@@ -430,7 +460,9 @@ function isStudentRecord(value: unknown): value is StudentRecord {
       value.profileSchemaVersion !== 5 &&
       value.profileSchemaVersion !== 6 &&
       value.profileSchemaVersion !== 7 &&
-      value.profileSchemaVersion !== 8) ||
+      value.profileSchemaVersion !== 8 &&
+      value.profileSchemaVersion !== 9 &&
+      value.profileSchemaVersion !== 10) ||
     (value.active !== undefined && typeof value.active !== "boolean") ||
     (value.enrollmentStatus !== undefined &&
       value.enrollmentStatus !== "active" &&
@@ -444,6 +476,12 @@ function isStudentRecord(value: unknown): value is StudentRecord {
     value.careDetails !== undefined &&
     studentProfileFromRecord(value)?.careDetails === undefined
   ) {
+    return false;
+  }
+  if (isObject(value.careDetails) && value.careDetails.homeAddressParts !== undefined &&
+    (!isStudentHomeAddressParts(value.careDetails.homeAddressParts) ||
+      !formatStudentHomeAddress(value.careDetails.homeAddressParts) ||
+      formatStudentHomeAddress(value.careDetails.homeAddressParts) !== value.careDetails.homeAddress)) {
     return false;
   }
   if (value.contacts === undefined) return true;
@@ -461,8 +499,11 @@ function isStudentRecord(value: unknown): value is StudentRecord {
         contact.relationship.trim().length > 0 &&
         (contact.name === undefined ||
           (typeof contact.name === "string" && contact.name.trim().length > 0)) &&
+        (contact.occupation === undefined ||
+          (typeof contact.occupation === "string" && contact.occupation.trim().length > 0 && contact.occupation.length <= 120)) &&
         typeof contact.phone === "string" &&
-        contact.phone.trim().length > 0 &&
+        (contact.phone.trim().length > 0 ||
+          typeof contact.name === "string" || typeof contact.occupation === "string") &&
         typeof contact.isPrimary === "boolean" &&
         (contact.isEmergencyContact === undefined ||
           typeof contact.isEmergencyContact === "boolean") &&
@@ -510,6 +551,8 @@ function isObservationRecord(value: unknown): value is ObservationRecord {
   return (
     studentIdsValid &&
     observationCategoriesValid &&
+    (value.developmentSelection === undefined ||
+      isDevelopmentObservationSelection(value.developmentSelection)) &&
     (value.planId === undefined || isUuid(value.planId)) &&
     (value.activityId === undefined || isUuid(value.activityId)) &&
     (value.rawTextImmutable === undefined || value.rawTextImmutable === true) &&
@@ -610,6 +653,8 @@ function isCurriculumEvidenceLinkRecord(
       !isSha256Digest(value.targetSourceSha256)) ||
     (value.holisticGraphReference !== undefined &&
       !isHolisticGraphReference(value.holisticGraphReference)) ||
+    ((value.developmentSelection !== undefined || value.targetSnapshot !== undefined) &&
+      !isDevelopmentObservationCurriculumLink(value)) ||
     (value.schemaVersion === 2 &&
       value.framework === "tymm" &&
       officialCatalogVerified === true &&
@@ -727,7 +772,22 @@ export const ENTITY_RECORD_GUARDS = {
   externalFeedback: isStoredRecord,
   exportPackages: isStoredRecord,
   notificationRules: isStoredRecord,
-  settings: isStoredRecord,
+  settings: (value: unknown): value is StoredRecord => isStoredRecord(value) &&
+      (value.settingType !== STUDENT_ERASURE_TYPE || isStudentErasure(value)) &&
+      (value.settingType !== HOME_GAME_CARD_SETTING_TYPE || isHomeGameCardRecord(value)) &&
+    (value.settingType !== DEVELOPMENT_REPORT_SETTING_TYPE || isDevelopmentReportRecord(value)) &&
+    (value.settingType !== TEACHER_FOLLOWUP_SETTING_TYPE || isTeacherFollowupRecord(value)) &&
+    (value.settingType !== CONSENT_TRIP_SETTING_TYPE || isConsentTripRecord(value)) &&
+    (value.settingType !== CLASSROOM_ADMIN_SETTING_TYPE || isClassroomAdminRecord(value)) &&
+    (value.settingType !== GROWTH_MEASUREMENT_SETTING_TYPE || isGrowthMeasurementRecord(value)) &&
+    (value.settingType !== LEARNING_CENTER_SETTING_TYPE || isLearningCenterRecord(value)) &&
+    (value.settingType !== CLASS_DUTY_SETTING_TYPE || isClassDutyRecord(value)) &&
+    (value.settingType !== TEACHER_HOME_PREFERENCES_SETTING_TYPE || isTeacherHomePreferencesRecord(value)) &&
+    (value.settingType !== FAMILY_ENGAGEMENT_SETTING_TYPE || isFamilyEngagementRecord(value)) &&
+    (value.settingType !== SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE || isSchoolDocumentTemplateRecord(value)) &&
+    (value.settingType !== DAILY_ROUTINE_CARD_SETTING_TYPE || isDailyRoutineCardRecord(value)) &&
+    (value.settingType !== OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE || isOfficialAppointmentCompletionRecord(value)) &&
+    (value.settingType !== PLAY_FAMILY_CYCLE_SETTING_TYPE || isPlayFamilyCycleRecord(value)),
   auditLogs: isStoredRecord,
 } satisfies {
   [Collection in CollectionName]: EntityRecordGuard<Collection>;
@@ -790,3 +850,4 @@ export function createEmptyEntitySnapshot(): EntitySnapshot {
     auditLogs: [],
   };
 }
+

@@ -1,6 +1,7 @@
 import type { StoredRecord } from "./model.ts";
+import { formatStudentHomeAddress, normalizeStudentHomeAddressParts, type StudentHomeAddressParts } from "./student-home-address.ts";
 
-export const STUDENT_PROFILE_SCHEMA_VERSION = 8 as const;
+export const STUDENT_PROFILE_SCHEMA_VERSION = 10 as const;
 
 const CIVIL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NATIONAL_IDENTIFIER_PATTERN = /^\d{10,11}$/;
@@ -13,11 +14,40 @@ const MAX_PROFILE_PHOTO_DATA_URL_LENGTH = 400_000;
 
 export type StudentContactKind = "mother" | "father" | "other";
 
+/** Immutable evidence of an explicit duplicate review; contains no source PII. */
+export type StudentSpreadsheetImportReview = {
+  sourceRow: number;
+  reviewedAtUtc: string;
+  duplicateCandidateIds: string[];
+  _MUKERRER_INCELE: true;
+  decision: "distinct-student-confirmed";
+};
+
+export function isStudentSpreadsheetImportReview(
+  value: unknown,
+  record: Pick<StoredRecord, "id" | "createdAt" | "updatedAt">,
+): value is StudentSpreadsheetImportReview {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const review = value as Record<string, unknown>;
+  if (Object.keys(review).sort().join(",") !== "_MUKERRER_INCELE,decision,duplicateCandidateIds,reviewedAtUtc,sourceRow") return false;
+  if (!Number.isSafeInteger(review.sourceRow) || Number(review.sourceRow) < 1 || Number(review.sourceRow) > 1_048_576 ||
+    review._MUKERRER_INCELE !== true || review.decision !== "distinct-student-confirmed" ||
+    typeof review.reviewedAtUtc !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(review.reviewedAtUtc)) return false;
+  const reviewedAt = new Date(review.reviewedAtUtc);
+  if (Number.isNaN(reviewedAt.getTime()) || reviewedAt.toISOString() !== review.reviewedAtUtc ||
+    review.reviewedAtUtc < record.createdAt || review.reviewedAtUtc > record.updatedAt) return false;
+  return Array.isArray(review.duplicateCandidateIds) && review.duplicateCandidateIds.length > 0 &&
+    new Set(review.duplicateCandidateIds).size === review.duplicateCandidateIds.length &&
+    review.duplicateCandidateIds.every(id => typeof id === "string" && CONTACT_ID_PATTERN.test(id) && id !== record.id);
+}
+
 export type StudentContactInput = {
   id: string;
   kind: StudentContactKind;
   relationship: string;
   name?: string;
+  occupation?: string;
   phone: string;
   isPrimary?: boolean;
   isEmergencyContact?: boolean;
@@ -29,6 +59,7 @@ export type StudentContact = {
   kind: StudentContactKind;
   relationship: string;
   name?: string;
+  occupation?: string;
   phone: string;
   isPrimary: boolean;
   isEmergencyContact?: boolean;
@@ -37,6 +68,14 @@ export type StudentContact = {
 
 export type StudentCareDetailsInput = {
   homeAddress?: string;
+  homeAddressParts?: StudentHomeAddressParts;
+  childPrivateNotes?: string;
+  familySituationNotes?: string;
+  parentsSeparated?: boolean;
+  motherDeceased?: boolean;
+  fatherDeceased?: boolean;
+  martyrChild?: boolean;
+  veteranChild?: boolean;
   allergies?: string;
   dietaryNeeds?: string;
   medicationNotes?: string;
@@ -55,6 +94,14 @@ export type StudentCareDetailsInput = {
 
 export type StudentCareDetails = {
   homeAddress?: string;
+  homeAddressParts?: StudentHomeAddressParts;
+  childPrivateNotes?: string;
+  familySituationNotes?: string;
+  parentsSeparated?: boolean;
+  motherDeceased?: boolean;
+  fatherDeceased?: boolean;
+  martyrChild?: boolean;
+  veteranChild?: boolean;
   allergies?: string;
   dietaryNeeds?: string;
   medicationNotes?: string;
@@ -237,12 +284,21 @@ export function normalizeStudentContacts(
       throw new Error("Yakınlık bilgisi boş bırakılamaz.");
     }
     const name = optionalLimitedText(contact.name, "Yakın adı", 120);
+    const occupation = optionalLimitedText(contact.occupation, "Yakın mesleği", 120);
+    const phone = contact.phone.trim() ? normalizeStudentPhone(contact.phone) : "";
+    if (!name && !occupation && !phone) {
+      throw new Error("Yakın için ad, meslek veya telefon bilgilerinden en az birini girin.");
+    }
+    if (!phone && (contact.isPrimary || contact.isEmergencyContact)) {
+      throw new Error("Öncelikli veya acil iletişim kişisi için telefon numarası gereklidir.");
+    }
     return {
       id: contact.id,
       kind: contact.kind,
       relationship,
       ...(name ? { name } : {}),
-      phone: normalizeStudentPhone(contact.phone),
+      ...(occupation ? { occupation } : {}),
+      phone,
       isPrimary: contact.isPrimary === true,
       ...(contact.isEmergencyContact === true ? { isEmergencyContact: true } : {}),
       ...(contact.isAuthorizedPickup === true ? { isAuthorizedPickup: true } : {}),
@@ -272,7 +328,9 @@ export function studentContactsFromRecord(value: unknown): StudentContact[] {
       typeof source.relationship !== "string" ||
       !source.relationship.trim() ||
       typeof source.phone !== "string" ||
-      !source.phone.trim()
+      (!source.phone.trim() &&
+        !(typeof source.name === "string" && source.name.trim()) &&
+        !(typeof source.occupation === "string" && source.occupation.trim()))
     ) {
       continue;
     }
@@ -286,6 +344,9 @@ export function studentContactsFromRecord(value: unknown): StudentContact[] {
       relationship: source.relationship,
       ...(typeof source.name === "string" && source.name.trim()
         ? { name: source.name }
+        : {}),
+      ...(typeof source.occupation === "string" && source.occupation.trim()
+        ? { occupation: source.occupation }
         : {}),
       phone: source.phone,
       isPrimary,
@@ -329,7 +390,21 @@ export function normalizeStudentCareDetails(
   input: StudentCareDetailsInput | undefined,
 ): StudentCareDetails | undefined {
   if (!input) return undefined;
-  const homeAddress = optionalLimitedText(input.homeAddress, "Ev adresi", 500);
+  const homeAddressParts = input.homeAddressParts === undefined
+    ? undefined : normalizeStudentHomeAddressParts(input.homeAddressParts);
+  const homeAddress = optionalLimitedText(
+    homeAddressParts ? formatStudentHomeAddress(homeAddressParts) : input.homeAddress,
+    "Ev adresi", 500,
+  );
+  const childPrivateNotes = optionalLimitedText(input.childPrivateNotes, "Çocuğa özel bilgi notu", 2_000);
+  const familySituationNotes = optionalLimitedText(input.familySituationNotes, "Aile durumu açıklaması", 1_000);
+  const familyFlags = {
+    ...(input.parentsSeparated === true ? { parentsSeparated: true } : {}),
+    ...(input.motherDeceased === true ? { motherDeceased: true } : {}),
+    ...(input.fatherDeceased === true ? { fatherDeceased: true } : {}),
+    ...(input.martyrChild === true ? { martyrChild: true } : {}),
+    ...(input.veteranChild === true ? { veteranChild: true } : {}),
+  };
   const allergies = optionalLimitedText(input.allergies, "Alerji bilgisi", 500);
   const dietaryNeeds = optionalLimitedText(
     input.dietaryNeeds,
@@ -373,6 +448,9 @@ export function normalizeStudentCareDetails(
     : undefined;
   if (
     !homeAddress &&
+    !childPrivateNotes &&
+    !familySituationNotes &&
+    Object.keys(familyFlags).length === 0 &&
     !allergies &&
     !dietaryNeeds &&
     !medicationNotes &&
@@ -392,6 +470,10 @@ export function normalizeStudentCareDetails(
   }
   return {
     ...(homeAddress ? { homeAddress } : {}),
+    ...(homeAddress && homeAddressParts ? { homeAddressParts } : {}),
+    ...(childPrivateNotes ? { childPrivateNotes } : {}),
+    ...(familySituationNotes ? { familySituationNotes } : {}),
+    ...familyFlags,
     ...(allergies ? { allergies } : {}),
     ...(dietaryNeeds ? { dietaryNeeds } : {}),
     ...(medicationNotes ? { medicationNotes } : {}),
@@ -420,6 +502,14 @@ export function studentCareDetailsFromRecord(
   const source = value as StudentCareDetailsInput;
   try {
     return normalizeStudentCareDetails({
+      ...(source.homeAddressParts !== undefined ? { homeAddressParts: source.homeAddressParts } : {}),
+      ...(typeof source.childPrivateNotes === "string" ? { childPrivateNotes: source.childPrivateNotes } : {}),
+      ...(typeof source.familySituationNotes === "string" ? { familySituationNotes: source.familySituationNotes } : {}),
+      ...(source.parentsSeparated === true ? { parentsSeparated: true } : {}),
+      ...(source.motherDeceased === true ? { motherDeceased: true } : {}),
+      ...(source.fatherDeceased === true ? { fatherDeceased: true } : {}),
+      ...(source.martyrChild === true ? { martyrChild: true } : {}),
+      ...(source.veteranChild === true ? { veteranChild: true } : {}),
       ...(typeof source.homeAddress === "string"
         ? { homeAddress: source.homeAddress }
         : {}),

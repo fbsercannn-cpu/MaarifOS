@@ -1,4 +1,5 @@
-import type { StoredRecord } from "../domain/model.ts";
+import { COLLECTION_NAMES, type StoredRecord } from "../domain/model.ts";
+import { formatStudentHomeAddress, isStudentHomeAddressParts, type StudentHomeAddressParts } from "../domain/student-home-address.ts";
 import type { RecoverySnapshotRecord } from "../repository/contracts.ts";
 import { canonicalJson } from "../backup/canonical-json.ts";
 import {
@@ -40,11 +41,13 @@ import {
 import { openLocalVaultReadwriteTransaction } from "./local-vault-idb.ts";
 import {
   acceptLocalVaultRecordGeneration,
+  cancelAbortedLocalVaultRetirements,
   bindLocalVaultRecordGeneration,
   ensureLocalVaultRecordGenerationStores,
   prepareLocalVaultRecordGenerationRetirements,
   reconcileLocalVaultRecordGenerationRetirements,
   reserveLocalVaultRecordGeneration,
+  type LocalVaultRetirementPreparation,
 } from "./local-vault-record-generation.ts";
 
 export const STUDENT_SENSITIVE_ENVELOPE_FIELD =
@@ -78,7 +81,7 @@ type StudentSensitivePayload = {
   nationalIdentityNumber?: string;
   contactPhones: Array<{ id: string; phone: string }>;
   contactNames: Array<{ id: string; name: string }>;
-  careDetails?: Record<string, string | boolean>;
+  careDetails?: Record<string, string | boolean | StudentHomeAddressParts>;
 };
 
 type SensitiveStudentRecord = StoredRecord & {
@@ -307,6 +310,8 @@ function contactRecords(record: StoredRecord): Record<string, unknown>[] {
 
 const STUDENT_CARE_DETAIL_LIMITS = {
   homeAddress: 500,
+  childPrivateNotes: 2_000,
+  familySituationNotes: 1_000,
   allergies: 500,
   dietaryNeeds: 500,
   medicationNotes: 500,
@@ -321,12 +326,17 @@ const STUDENT_CARE_DETAIL_LIMITS = {
 } as const;
 
 const STUDENT_CARE_BOOLEAN_FIELDS = new Set([
+  "parentsSeparated",
+  "motherDeceased",
+  "fatherDeceased",
+  "martyrChild",
+  "veteranChild",
   "photoVideoPermissionOnFile",
   "fieldTripPermissionOnFile",
   "digitalCommunicationPermissionOnFile",
 ]);
 
-function careDetailsRecord(value: unknown): Record<string, string | boolean> {
+function careDetailsRecord(value: unknown): Record<string, string | boolean | StudentHomeAddressParts> {
   if (!isRecord(value)) {
     throw new Error("Hassas öğrenci sağlık ve güvenlik verisi doğrulanamadı.");
   }
@@ -336,14 +346,22 @@ function careDetailsRecord(value: unknown): Record<string, string | boolean> {
     keys.some(
       (key) =>
         !(key in STUDENT_CARE_DETAIL_LIMITS) &&
-        !STUDENT_CARE_BOOLEAN_FIELDS.has(key),
+        !STUDENT_CARE_BOOLEAN_FIELDS.has(key) && key !== "homeAddressParts",
     )
   ) {
     throw new Error("Hassas öğrenci sağlık ve güvenlik verisi doğrulanamadı.");
   }
-  const normalized: Record<string, string | boolean> = {};
+  const normalized: Record<string, string | boolean | StudentHomeAddressParts> = {};
   for (const key of keys) {
     const fieldValue = value[key];
+    if (key === "homeAddressParts") {
+      if (!isStudentHomeAddressParts(fieldValue) || !formatStudentHomeAddress(fieldValue) ||
+        formatStudentHomeAddress(fieldValue) !== value.homeAddress) {
+        throw new Error("Hassas öğrenci adres bilgisi doğrulanamadı.");
+      }
+      normalized[key] = { ...fieldValue };
+      continue;
+    }
     if (STUDENT_CARE_BOOLEAN_FIELDS.has(key)) {
       if (fieldValue !== true) {
         throw new Error("Hassas öğrenci sağlık ve güvenlik verisi doğrulanamadı.");
@@ -783,6 +801,71 @@ export class StudentSensitiveVault {
     )) as unknown as StoredRecord;
   }
 
+  /** Uses the same nonce, AAD and rollback ledger for every local collection. */
+  async sealCollectionRecord(record: StoredRecord, collection: string): Promise<StoredRecord> {
+    return await this.sealV2Record(record, collection) as unknown as StoredRecord;
+  }
+
+  async openCollectionRecord(record: StoredRecord, collection: string): Promise<StoredRecord> {
+    if (!hasLocalVaultEnvelope(record)) {
+      throw new LocalVaultSecurityError("LOCAL_VAULT_MIGRATION_REQUIRED", "Yerel kayıt tam veri kasasına taşınmadan açılamaz.");
+    }
+    return this.openV2Record(record, collection, record.id);
+  }
+
+  async verifyPreparedCollectionRecord(record: StoredRecord, collection: string): Promise<StoredRecord> {
+    const context = await this.getExistingV2Context();
+    return openLocalVaultRecord(record, { crypto: this.cryptoProvider, key: context.key,
+      databaseInstanceId: context.databaseInstanceId, collection,
+      expectedRecordId: record.id, expectedKeyId: context.keyId });
+  }
+
+  async collectionVaultIdentity(): Promise<{ keyId: string; databaseInstanceId: string }> {
+    const { keyId, databaseInstanceId } = await this.getExistingV2Context();
+    return { keyId, databaseInstanceId };
+  }
+
+  async allCollectionsReady(complete = false): Promise<boolean> {
+    const identity = await this.collectionVaultIdentity();
+    const database = await this.openKeyDatabase();
+    const transaction = complete
+      ? openLocalVaultReadwriteTransaction(database, [LOCAL_VAULT_METADATA_STORE_NAME]).transaction
+      : database.transaction(LOCAL_VAULT_METADATA_STORE_NAME, "readonly");
+    const done = transactionResult(transaction);
+    const store = transaction.objectStore(LOCAL_VAULT_METADATA_STORE_NAME);
+    const id = "all-collections-v2-ready";
+    const expected = { id, version: 1, ...identity };
+    const current: unknown = await requestResult(store.get(id));
+    if (current !== undefined && canonicalJson(current) !== canonicalJson(expected)) {
+      await done;
+      throw new LocalVaultSecurityError("LOCAL_VAULT_STATE_INVALID", "Tam kasa anahtar durumunun bütünlüğü doğrulanamadı.");
+    }
+    if (complete && current === undefined) await requestResult(store.put(expected));
+    await done;
+    return current !== undefined || complete;
+  }
+
+  async prepareCollectionRetirements(collection: string, records: readonly StoredRecord[]): Promise<LocalVaultRetirementPreparation> {
+    const context = await this.getExistingV2Context();
+    return prepareLocalVaultRecordGenerationRetirements(await this.openKeyDatabase(), {
+      keyId: context.keyId, scope: `collection:${collection}`,
+      presentRecords: records.map((record) => ({ collection, recordId: record.id })),
+    });
+  }
+
+  async cancelAbortedRetirements(receipts: readonly LocalVaultRetirementPreparation[]): Promise<void> {
+    await cancelAbortedLocalVaultRetirements(await this.openKeyDatabase(), receipts);
+  }
+
+  async acceptCollectionRecords(collection: string, records: readonly StoredRecord[]): Promise<void> {
+    const context = await this.getExistingV2Context();
+    for (const record of records) await this.acceptV2Envelope(record, collection, record.id, context);
+    await reconcileLocalVaultRecordGenerationRetirements(await this.openKeyDatabase(), {
+      keyId: context.keyId, scope: `collection:${collection}`,
+      presentRecords: records.map((record) => ({ collection, recordId: record.id })),
+    });
+  }
+
   async openStudentRecord(
     record: StoredRecord,
     subject: string,
@@ -955,14 +1038,16 @@ export class StudentSensitiveVault {
     snapshot: RecoverySnapshotRecord,
   ): Promise<RecoverySnapshotRecord> {
     const sealed = structuredClone(snapshot);
-    sealed.envelope.payload.students = await Promise.all(
-      sealed.envelope.payload.students.map(async (student) =>
+    for (const collection of COLLECTION_NAMES) {
+    sealed.envelope.payload[collection] = await Promise.all(
+      sealed.envelope.payload[collection].map(async (student) =>
         (await this.sealV2Record(
           student,
-          this.recoveryStudentCollection(snapshot.id),
+          `recoverySnapshots/${snapshot.id}/${collection}`,
         )) as unknown as StoredRecord,
       ),
     );
+    }
     return sealed;
   }
 
@@ -971,16 +1056,18 @@ export class StudentSensitiveVault {
     options: { allowLegacyPlaintext?: boolean } = {},
   ): Promise<RecoverySnapshotRecord> {
     const opened = structuredClone(snapshot);
-    const students = opened?.envelope?.payload?.students;
+    for (const collection of COLLECTION_NAMES) {
+    const students = opened?.envelope?.payload?.[collection];
+    if (students === undefined) continue; // Historical snapshots may predate a collection.
     if (!Array.isArray(students)) {
       throw new Error("Kurtarma snapshot hassas veri yapısı doğrulanamadı.");
     }
-    opened.envelope.payload.students = await Promise.all(
+    opened.envelope.payload[collection] = await Promise.all(
       students.map(async (student) => {
         if (hasLocalVaultEnvelope(student)) {
           return this.openV2Record(
             student,
-            this.recoveryStudentCollection(snapshot.id),
+            `recoverySnapshots/${snapshot.id}/${collection}`,
             student.id,
           );
         }
@@ -990,12 +1077,14 @@ export class StudentSensitiveVault {
             "Kurtarma snapshot öğrenci kaydı v2 yerel kasaya taşınmadan açılamaz.",
           );
         }
+        if (collection !== "students") return structuredClone(student);
         return this.openLegacyRecord(
           student,
           this.recoveryStudentSubject(snapshot.id, student.id),
         );
       }),
     );
+    }
     return opened;
   }
 
@@ -1042,24 +1131,27 @@ export class StudentSensitiveVault {
     const context = await this.getExistingV2Context();
     const presentRecords: Array<{ collection: string; recordId: string }> = [];
     for (const snapshot of snapshots) {
-      const students = snapshot?.envelope?.payload?.students;
+      for (const name of COLLECTION_NAMES) {
+      const students = snapshot?.envelope?.payload?.[name];
+      if (students === undefined) continue;
       if (!Array.isArray(students)) {
         throw new LocalVaultSecurityError(
           "LOCAL_VAULT_INVALID_RECORD",
           "Kurtarma snapshot öğrenci yapısı doğrulanamadı.",
         );
       }
-      const collection = this.recoveryStudentCollection(snapshot.id);
+      const collection = `recoverySnapshots/${snapshot.id}/${name}`;
       for (const student of students) {
         await this.acceptV2Envelope(student, collection, student.id, context);
         presentRecords.push({ collection, recordId: student.id });
+      }
       }
     }
     await reconcileLocalVaultRecordGenerationRetirements(
       await this.openKeyDatabase(),
       {
         keyId: context.keyId,
-        scope: "recovery-students",
+        scope: "recovery-records",
         presentRecords,
       },
     );
@@ -1067,27 +1159,30 @@ export class StudentSensitiveVault {
 
   async prepareCommittedRecoverySnapshotRetirements(
     snapshots: readonly RecoverySnapshotRecord[],
-  ): Promise<void> {
+  ): Promise<LocalVaultRetirementPreparation> {
     const context = await this.getExistingV2Context();
     const presentRecords: Array<{ collection: string; recordId: string }> = [];
     for (const snapshot of snapshots) {
-      const students = snapshot?.envelope?.payload?.students;
+      for (const name of COLLECTION_NAMES) {
+      const students = snapshot?.envelope?.payload?.[name];
+      if (students === undefined) continue;
       if (!Array.isArray(students)) {
         throw new LocalVaultSecurityError(
           "LOCAL_VAULT_INVALID_RECORD",
           "Kurtarma snapshot öğrenci yapısı doğrulanamadı.",
         );
       }
-      const collection = this.recoveryStudentCollection(snapshot.id);
+      const collection = `recoverySnapshots/${snapshot.id}/${name}`;
       for (const student of students) {
         presentRecords.push({ collection, recordId: student.id });
       }
+      }
     }
-    await prepareLocalVaultRecordGenerationRetirements(
+    return prepareLocalVaultRecordGenerationRetirements(
       await this.openKeyDatabase(),
       {
         keyId: context.keyId,
-        scope: "recovery-students",
+        scope: "recovery-records",
         presentRecords,
       },
     );

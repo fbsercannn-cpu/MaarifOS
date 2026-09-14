@@ -1,13 +1,28 @@
+import { registerSemanticPdfPreview } from "./semantic-pdf-preview.ts";
+
 const encoder = new TextEncoder();
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
-const PAGE_MARGIN = 54;
-const CONTENT_TOP = A4_HEIGHT - PAGE_MARGIN;
-const CONTENT_BOTTOM = 54;
 
 export const ACCESSIBLE_PDF_FONT_ASSET_PATH =
   "/assets/fonts/MaarifOSSans-Regular.ttf" as const;
+export const ACCESSIBLE_PDF_BOLD_FONT_ASSET_PATH = "/assets/fonts/MaarifOSSans-Bold.ttf" as const;
+export type SemanticPdfColor = readonly [number, number, number];
+/** Opt-in presentation; an absent theme preserves the original font and PDF bytes. */
+export interface SemanticPdfTheme {
+  readonly bodyColor: SemanticPdfColor;
+  readonly metaColor: SemanticPdfColor;
+  readonly headingColor: SemanticPdfColor;
+  readonly tableHeaderFill: SemanticPdfColor;
+  readonly tableHeaderColor: SemanticPdfColor;
+  readonly tableBorderColor: SemanticPdfColor;
+  readonly tableDetailFill: SemanticPdfColor;
+  readonly headerGroupFills: readonly SemanticPdfColor[];
+  readonly headerGroupTints: readonly SemanticPdfColor[];
+  readonly headerGroupTextColor: SemanticPdfColor;
+  readonly boldHeadings?: boolean;
+}
 
 export type SemanticPdfHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -18,12 +33,19 @@ export type SemanticPdfNode =
       text: string;
       pageBreakBefore?: boolean;
       forcePageBreakBefore?: boolean;
+      /** Context for this independent form and its continuation pages. */
+      continuationHeaderText?: string;
     }>
   | Readonly<{
       kind: "paragraph";
       text: string;
       tone?: "body" | "meta";
       pageBreakBefore?: boolean;
+      forcePageBreakBefore?: boolean;
+      /** A single line measured in an authored canvas/HTML page; PDF points, top-left origin. */
+      placement?: Readonly<{ x: number; y: number; width: number; height: number; fontSize?: number; invisible?: boolean }>;
+      /** Only explicitly supplied http(s) source addresses become clickable annotations. */
+      href?: string;
     }>
   | Readonly<{
       kind: "list";
@@ -36,14 +58,32 @@ export type SemanticPdfNode =
       headers: readonly string[];
       rows: readonly (readonly string[])[];
       summary?: string;
+      /** Birleşik üst başlıklar; span toplamı yaprak sütun sayısına eşittir. */
+      headerGroups?: readonly Readonly<{ label: string; span: number; colorIndex?: number }>[];
+      /** Satırdan hemen sonra tam genişlikte gösterilen ayrıntı; rows ile birebir eşleşir. */
+      rowDetails?: readonly (string | null)[];
       /** Sütunlara ayrılan göreli genişlikler; verilmezse sütunlar eşit genişler. */
       columnWeights?: readonly number[];
       /** Hücre iç boşluğu (pt); dar resmî matrislerde açıkça küçültülebilir. */
       cellPadding?: number;
+      /** Okunabilir çizelge tipografisi; varsayılan 9 pt korunur. */
+      fontSize?: number;
+      /** Dar, tek sayfalık resmî çizelgelerde gövde hücrelerini ölçülü olarak en çok bu satır sayısına sığdırır. */
+      fitBodyCellsWithinLines?: 1 | 2;
+      /** Tek satır sığdırmada kabul edilen en küçük yatay ölçek yüzdesi. */
+      minimumBodyCellHorizontalScale?: number;
+      /** Çok sayfalı çizelgenin son sayfasında az satır kalmasını azaltır. */
+      balancePages?: boolean;
+      /** Son tablo sayfasında imza gibi sonraki içerik için ayrılan yükseklik. */
+      reserveAfter?: number | "following-content";
       /** Gövde satırını ekran okuyucuya bağlayan satır başlığı sütunu. */
       rowHeaderColumn?: number;
+      /** Ardışık aynı anahtarlı satırlar sığdıkları sürece birlikte kalır. */
+      rowGroupColumn?: number;
       /** Yalnız bir satır tam sayfadan uzunsa devam sayfasında yinelenecek bağlam sütunları. */
       continuationContextColumns?: readonly number[];
+      /** Sınıf belgelerinde devam bağlamındaki çocuk adı da kısaltılmadan yinelenir. */
+      preserveContinuationContext?: boolean;
       pageBreakBefore?: boolean;
     }>
   | Readonly<{
@@ -52,14 +92,24 @@ export type SemanticPdfNode =
       caption?: string;
       height?: number;
       pageBreakBefore?: boolean;
+      forcePageBreakBefore?: boolean;
     }>;
 
 export interface SemanticTaggedPdfDocument {
   readonly title: string;
+  readonly theme?: SemanticPdfTheme;
+  readonly orientation?: "portrait" | "landscape";
+  readonly pageFormat?: "A4" | "A5";
+  readonly pageMargin?: number;
   readonly language?: "tr-TR";
   readonly creator?: string;
   /** Her sayfada semantik okuma ağacının dışında gösterilen kısa güvenlik notu. */
   readonly artifactFooterText?: string;
+  readonly artifactHeaderText?: string;
+  readonly artifactHeaderOnFirstPage?: boolean;
+  readonly includeTotalPages?: boolean;
+  /** Authored image pages already contain their page furniture. */
+  readonly omitPageFurniture?: boolean;
   /**
    * Yalnız teknik izlenebilirlik değerleri içindir. Görünür belge içeriği veya
    * öğrenci/veli kişisel verisi bu alana taşınmamalıdır.
@@ -74,7 +124,13 @@ export interface SemanticTaggedPdfDocument {
 export interface SemanticTaggedPdfRuntime {
   readonly fontBytes?: Uint8Array;
   readonly loadFontBytes?: () => Promise<Uint8Array>;
+  readonly boldFontBytes?: Uint8Array;
+  readonly loadBoldFontBytes?: () => Promise<Uint8Array>;
 }
+
+export interface SemanticPdfFigureBox { readonly pageIndex: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly altText: string; }
+const figureBoxesByPdf = new WeakMap<Uint8Array, readonly SemanticPdfFigureBox[]>();
+export function semanticPdfFigureBoxes(bytes: Uint8Array): readonly SemanticPdfFigureBox[] { return figureBoxesByPdf.get(bytes) ?? []; }
 
 export interface SemanticTaggedPdfEvidence {
   readonly implementationStatus: "IMPLEMENTED_UNVERIFIED";
@@ -100,6 +156,7 @@ export const SEMANTIC_TAGGED_PDF_EVIDENCE = Object.freeze({
 
 interface FontMetrics {
   readonly bytes: Uint8Array;
+  readonly weight: number;
   readonly unitsPerEm: number;
   readonly ascent: number;
   readonly descent: number;
@@ -133,6 +190,7 @@ interface StructElement {
   readonly altText?: string;
   readonly tableSummary?: string;
   readonly tableHeaderScope?: "Column" | "Row";
+  readonly tableColumnSpan?: number;
   objectId?: number;
   parent?: StructElement;
 }
@@ -145,6 +203,8 @@ interface MarkedContentReference {
 interface PdfPageDraft {
   readonly commands: string[];
   readonly structParents: StructElement[];
+  readonly links: { uri: string; rect: readonly [number, number, number, number] }[];
+  headerText?: string;
   cursorY: number;
 }
 
@@ -153,6 +213,7 @@ interface TextStyle {
   readonly lineHeight: number;
   readonly gap: number;
   readonly color: readonly [number, number, number];
+  readonly fontResource?: "F0" | "F1";
 }
 
 const HEADING_STYLES: Readonly<Record<SemanticPdfHeadingLevel, TextStyle>> = {
@@ -327,6 +388,7 @@ function parseFontMetrics(fontBytes: Uint8Array): FontMetrics {
   const capHeight = os2Version >= 2 ? readInt16(bytes, os2 + 88) : readInt16(bytes, hhea + 4);
   return {
     bytes,
+    weight: readUint16(bytes, os2 + 4),
     unitsPerEm,
     ascent: readInt16(bytes, hhea + 4),
     descent: readInt16(bytes, hhea + 6),
@@ -479,6 +541,7 @@ function createStructElement(
     readonly altText?: string;
     readonly tableSummary?: string;
     readonly tableHeaderScope?: "Column" | "Row";
+  readonly tableColumnSpan?: number;
   } = {},
 ): StructElement {
   return {
@@ -499,8 +562,8 @@ function rgb(color: readonly [number, number, number]): string {
   return color.map((value) => value.toFixed(3)).join(" ");
 }
 
-function createPage(): PdfPageDraft {
-  return { commands: [], structParents: [], cursorY: CONTENT_TOP };
+function createPage(contentTop: number): PdfPageDraft {
+  return { commands: [], structParents: [], links: [], cursorY: contentTop };
 }
 
 function addArtifact(page: PdfPageDraft, commands: string): void {
@@ -525,7 +588,7 @@ function drawTextLines(
   firstBaseline: number,
   style: TextStyle,
 ): string {
-  const commands = [`${rgb(style.color)} rg`, "BT", `/F0 ${style.fontSize} Tf`];
+  const commands = [`${rgb(style.color)} rg`, "BT", `/${style.fontResource ?? "F0"} ${style.fontSize} Tf`];
   lines.forEach((line, index) => {
     const y = firstBaseline - index * style.lineHeight;
     commands.push(`1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm ${textHex(line)} Tj`);
@@ -534,7 +597,72 @@ function drawTextLines(
   return commands.join("\n");
 }
 
+function drawSingleLineCellText(
+  text: string,
+  x: number,
+  baseline: number,
+  availableWidth: number,
+  style: TextStyle,
+  font: FontMetrics,
+  minimumScale: number,
+): string {
+  const naturalWidth = textWidth(text, style.fontSize, font);
+  const scale = Math.min(100, availableWidth / Math.max(0.001, naturalWidth) * 100);
+  if (scale + 0.001 < minimumScale) {
+    throw new Error(`PDF tek sayfa hücre metni yüzde ${scale.toFixed(1)} ölçüldü; okunabilir yüzde ${minimumScale} yatay ölçek sınırına sığmıyor.`);
+  }
+  return [
+    "q",
+    `${rgb(style.color)} rg`,
+    "BT",
+    `/${style.fontResource ?? "F0"} ${style.fontSize} Tf`,
+    `${scale.toFixed(3)} Tz`,
+    `1 0 0 1 ${x.toFixed(2)} ${baseline.toFixed(2)} Tm ${textHex(text)} Tj`,
+    "ET",
+    "Q",
+  ].join("\n");
+}
+
+function fitCellTextWithinLines(
+  value: string,
+  availableWidth: number,
+  style: TextStyle,
+  font: FontMetrics,
+  maximumLines: 1 | 2,
+  minimumScale: number,
+): string[] {
+  const text = value.replace(/\s+/gu, " ").trim();
+  const scaleFor = (line: string) => availableWidth / Math.max(0.001, textWidth(line, style.fontSize, font)) * 100;
+  if (maximumLines === 1 || scaleFor(text) >= minimumScale || !text.includes(" ")) return [text];
+  const words = text.split(" ");
+  let best: { lines: [string, string]; scale: number } | undefined;
+  for (let index = 1; index < words.length; index += 1) {
+    const lines: [string, string] = [words.slice(0, index).join(" "), words.slice(index).join(" ")];
+    const scale = Math.min(...lines.map(scaleFor));
+    if (!best || scale > best.scale) best = { lines, scale };
+  }
+  return best?.lines ?? [text];
+}
+
 function validateDocument(document: SemanticTaggedPdfDocument): void {
+  if (document.theme !== undefined) {
+    const theme = document.theme;
+    const colorKeys = ["bodyColor","metaColor","headingColor","tableHeaderFill","tableHeaderColor","tableBorderColor","tableDetailFill","headerGroupTextColor"] as const;
+    const validColor = (value: unknown) => Array.isArray(value) && value.length === 3 && [0,1,2].every(index => typeof value[index] === "number" && Number.isFinite(value[index]) && value[index] >= 0 && value[index] <= 1);
+    if (!theme || typeof theme !== "object" || Array.isArray(theme)
+      || Object.keys(theme).some(key => ![...colorKeys,"headerGroupFills","headerGroupTints","boldHeadings"].includes(key))
+      || colorKeys.some(key => !validColor(theme[key]))
+      || !Array.isArray(theme.headerGroupFills) || !theme.headerGroupFills.length || theme.headerGroupFills.length > 20 || Array.from(theme.headerGroupFills).some(color => !validColor(color))
+      || !Array.isArray(theme.headerGroupTints) || theme.headerGroupTints.length !== theme.headerGroupFills.length || Array.from(theme.headerGroupTints).some(color => !validColor(color))
+      || (theme.boldHeadings !== undefined && typeof theme.boldHeadings !== "boolean")) throw new Error("PDF tema renkleri ve yazı ağırlığı geçersiz.");
+  }
+  if (document.pageFormat !== undefined && !["A4", "A5"].includes(document.pageFormat)) throw new Error("PDF sayfa boyutu geçersiz.");
+  if (document.orientation !== undefined && !["portrait", "landscape"].includes(document.orientation)) {
+    throw new Error("PDF sayfa yönü geçersiz.");
+  }
+  if (document.pageMargin !== undefined && (!Number.isFinite(document.pageMargin) || document.pageMargin < 28 || document.pageMargin > 72)) {
+    throw new Error("PDF kenar boşluğu 28 ile 72 punto arasında olmalıdır.");
+  }
   if (!document.title.trim()) throw new Error("PDF belge başlığı boş bırakılamaz.");
   if ((document.language ?? "tr-TR") !== "tr-TR") {
     throw new Error("Erişilebilir belge motoru yalnız tr-TR belge dili üretir.");
@@ -543,6 +671,21 @@ function validateDocument(document: SemanticTaggedPdfDocument): void {
   for (const node of document.nodes) {
     if (node.kind === "heading" || node.kind === "paragraph") {
       if (!node.text.trim()) throw new Error("PDF başlık ve paragrafları boş olamaz.");
+      if (node.kind === "paragraph" && node.href !== undefined) {
+        let target: URL;
+        try { target = new URL(node.href); } catch { throw new Error("PDF bağlantısı geçerli bir web adresi olmalıdır."); }
+        if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) throw new Error("PDF bağlantısı yalnız http/https web adresi olabilir.");
+      }
+      if (node.kind === "paragraph" && node.placement) {
+        const box = node.placement;
+        const width = document.orientation === "landscape" ? (document.pageFormat === "A5" ? A4_WIDTH : A4_HEIGHT) : (document.pageFormat === "A5" ? A4_HEIGHT / 2 : A4_WIDTH);
+        const height = document.orientation === "landscape" ? (document.pageFormat === "A5" ? A4_HEIGHT / 2 : A4_WIDTH) : (document.pageFormat === "A5" ? A4_WIDTH : A4_HEIGHT);
+        if (![box.x, box.y, box.width, box.height, box.fontSize ?? 10].every(Number.isFinite)
+          || box.x < 0 || box.y < 0 || box.width <= 0 || box.height <= 0 || (box.fontSize ?? 10) <= 0
+          || box.x + box.width > width + 0.1 || box.y + box.height > height + 0.1 || /[\r\n]/u.test(node.text)) {
+          throw new Error("PDF metin kutusu sayfa içinde tek satır olmalıdır.");
+        }
+      }
     } else if (node.kind === "list") {
       if (node.items.length === 0 || node.items.some((item) => !item.trim())) {
         throw new Error("PDF listesi en az bir dolu öğe taşımalıdır.");
@@ -553,6 +696,16 @@ function validateDocument(document: SemanticTaggedPdfDocument): void {
       }
       if (node.rows.some((row) => row.length !== node.headers.length)) {
         throw new Error("PDF tablo satırlarının sütun sayısı başlıklarla eşleşmelidir.");
+      }
+      if (node.headerGroups !== undefined && (!Array.isArray(node.headerGroups) || !node.headerGroups.length
+        || node.headerGroups.some((group) => !group || typeof group.label !== "string" || !group.label.trim() || !Number.isInteger(group.span) || group.span < 1)
+        || node.headerGroups.reduce((sum, group) => sum + group.span, 0) !== node.headers.length)) {
+        throw new Error("PDF birleşik başlık aralıkları tüm sütunları tam kapsamalıdır.");
+      }
+      if (node.headerGroups?.some(group => group.colorIndex !== undefined && (!document.theme || !Number.isInteger(group.colorIndex) || group.colorIndex < 0 || group.colorIndex >= document.theme.headerGroupFills.length))) throw new Error("PDF başlık rengi geçerli bir tema rengini seçmelidir.");
+      if (node.rowDetails !== undefined && (!Array.isArray(node.rowDetails) || node.rowDetails.length !== node.rows.length
+        || node.rowDetails.some((detail) => detail !== null && (typeof detail !== "string" || !detail.trim())))) {
+        throw new Error("PDF ayrıntı bantları satırlarla eşleşen dolu metin veya null olmalıdır.");
       }
       if (
         node.columnWeights
@@ -569,6 +722,21 @@ function validateDocument(document: SemanticTaggedPdfDocument): void {
       ) {
         throw new Error("PDF tablo hücre iç boşluğu 2 ile 12 punto arasında olmalıdır.");
       }
+      if (node.fontSize !== undefined && (!Number.isFinite(node.fontSize) || node.fontSize < 8 || node.fontSize > 12)) {
+        throw new Error("PDF tablo yazı boyutu 8 ile 12 punto arasında olmalıdır.");
+      }
+      if (node.fitBodyCellsWithinLines !== undefined && ![1, 2].includes(node.fitBodyCellsWithinLines)) {
+        throw new Error("PDF dar hücre sığdırma satır sayısı geçersiz.");
+      }
+      if (node.minimumBodyCellHorizontalScale !== undefined && (
+        node.fitBodyCellsWithinLines === undefined
+        || !Number.isFinite(node.minimumBodyCellHorizontalScale)
+        || node.minimumBodyCellHorizontalScale < 35
+        || node.minimumBodyCellHorizontalScale > 100
+      )) throw new Error("PDF dar hücre ölçeği yüzde 35 ile 100 arasında olmalıdır.");
+      if (node.reserveAfter !== undefined && node.reserveAfter !== "following-content" && (!Number.isFinite(node.reserveAfter) || node.reserveAfter < 0 || node.reserveAfter > 120)) {
+        throw new Error("PDF tablo sonrası ayrılan alan 0 ile 120 punto arasında olmalıdır.");
+      }
       if (
         node.rowHeaderColumn !== undefined
         && (
@@ -578,6 +746,9 @@ function validateDocument(document: SemanticTaggedPdfDocument): void {
         )
       ) {
         throw new Error("PDF tablo satır başlığı sütunu geçerli bir sütun dizini olmalıdır.");
+      }
+      if (node.rowGroupColumn !== undefined && (!Number.isInteger(node.rowGroupColumn) || node.rowGroupColumn < 0 || node.rowGroupColumn >= node.headers.length)) {
+        throw new Error("PDF tablo satır grubu sütunu geçerli bir sütun dizini olmalıdır.");
       }
       if (
         node.continuationContextColumns
@@ -621,20 +792,31 @@ async function loadDefaultFontBytes(): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+async function loadDefaultBoldFontBytes(): Promise<Uint8Array> {
+  try {
+    const response = await fetch(ACCESSIBLE_PDF_BOLD_FONT_ASSET_PATH, { cache: "force-cache", credentials: "same-origin" });
+    if (!response.ok) throw new Error(String(response.status));
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    throw new Error("PDF kalın yazı tipi yüklenemedi. Yazı tipi dosyası hazır olduğunda yeniden deneyin.");
+  }
+}
+
 function collectDocumentText(document: SemanticTaggedPdfDocument): string[] {
   return [
     document.title,
     document.artifactFooterText ?? "",
+    document.artifactHeaderText ?? "",
     ...document.nodes.flatMap((node) => {
-      if (node.kind === "heading" || node.kind === "paragraph") return [node.text];
+      if (node.kind === "heading" || node.kind === "paragraph") return [node.text, ...(node.kind === "heading" && node.continuationHeaderText ? [node.continuationHeaderText] : [])];
       if (node.kind === "list") return node.items;
       if (node.kind === "table") {
-        return [node.summary ?? "", ...node.headers, ...node.rows.flat()];
+        return [node.summary ?? "", ...node.headers, ...node.rows.flat(), ...(node.headerGroups?.map((group) => group.label) ?? []), ...(node.rowDetails?.filter((detail): detail is string => detail !== null) ?? [])];
       }
       return [node.altText, node.caption ?? ""];
     }),
     "MaarifOS",
-    "Sayfa",
+    document.includeTotalPages ? "Sayfa /" : "Sayfa",
     "Devam … boş · :",
     "• — 0123456789",
   ].filter(Boolean);
@@ -755,48 +937,78 @@ export async function createSemanticTaggedPdf(
   runtime: SemanticTaggedPdfRuntime = {},
 ): Promise<Uint8Array> {
   validateDocument(document);
+  const pageWidth = document.orientation === "landscape" ? (document.pageFormat === "A5" ? A4_WIDTH : A4_HEIGHT) : (document.pageFormat === "A5" ? A4_HEIGHT / 2 : A4_WIDTH);
+  const pageHeight = document.orientation === "landscape" ? (document.pageFormat === "A5" ? A4_HEIGHT / 2 : A4_WIDTH) : (document.pageFormat === "A5" ? A4_WIDTH : A4_HEIGHT);
+  const pageMargin = document.pageMargin ?? 54;
+  let contentTop = pageHeight - pageMargin;
+  const contentBottom = Math.max(pageMargin, 40);
   const loadedFont = runtime.fontBytes
     ?? await (runtime.loadFontBytes ?? loadDefaultFontBytes)();
   const font = parseFontMetrics(loadedFont);
+  const theme = document.theme;
+  let loadedBoldFont: Uint8Array | undefined;
+  let boldFont: FontMetrics | undefined;
+  if (theme?.boldHeadings) {
+    try {
+      loadedBoldFont = runtime.boldFontBytes ?? await (runtime.loadBoldFontBytes ?? loadDefaultBoldFontBytes)();
+      boldFont = parseFontMetrics(loadedBoldFont);
+      if (boldFont.weight < 700) throw new Error("Kalın yazı tipi ağırlığı doğrulanamadı.");
+    } catch {
+      throw new Error("PDF kalın yazı tipi yüklenemedi veya doğrulanamadı. Geçerli kalın yazı tipiyle yeniden deneyin.");
+    }
+  }
+  const bodyStyle: TextStyle = theme ? { ...BODY_STYLE, color: theme.bodyColor } : BODY_STYLE;
+  const metaStyle: TextStyle = theme ? { ...META_STYLE, color: theme.metaColor } : META_STYLE;
+  const headingStyle = (level: SemanticPdfHeadingLevel): TextStyle => theme ? { ...HEADING_STYLES[level], color: theme.headingColor, ...(boldFont ? {fontResource:"F1" as const} : {}) } : HEADING_STYLES[level];
+  const styleFont = (style: TextStyle) => style.fontResource === "F1" ? boldFont! : font;
+  let activeHeaderText = document.artifactHeaderText;
+  const headerLineCount = Math.max(0, ...[document.artifactHeaderText, ...document.nodes.flatMap(node => node.kind === "heading" ? [node.continuationHeaderText] : [])]
+    .filter((value): value is string => Boolean(value)).map(value => wrapText(value, pageWidth - pageMargin * 2, 7.5, font).length));
+  if (headerLineCount) contentTop = pageHeight - Math.max(pageMargin, headerLineCount * 10 + 15);
   for (const value of collectDocumentText(document)) assertSupportedText(value, font);
-  const pageDrafts: PdfPageDraft[] = [createPage()];
+  if (boldFont) for (const value of collectDocumentText(document)) assertSupportedText(value, boldFont);
+  const pageDrafts: PdfPageDraft[] = [createPage(contentTop)];
+  pageDrafts[0]!.headerText = document.artifactHeaderOnFirstPage === false ? undefined : activeHeaderText;
+  const figureBoxes: SemanticPdfFigureBox[] = [];
   const documentStruct = createStructElement("Document");
   let pageIndex = 0;
 
   const currentPage = () => pageDrafts[pageIndex]!;
   const nextPage = () => {
-    pageDrafts.push(createPage());
+    pageDrafts.push(createPage(contentTop));
     pageIndex += 1;
+    currentPage().headerText = activeHeaderText;
   };
   const ensureSpace = (height: number, force = false) => {
     if (
-      currentPage().cursorY < CONTENT_TOP
-      && (force || currentPage().cursorY - height < CONTENT_BOTTOM)
+      currentPage().cursorY < contentTop
+      && (force || currentPage().cursorY - height < contentBottom)
     ) nextPage();
   };
   const applySectionBreak = (force: boolean) => {
     const page = currentPage();
-    if (page.cursorY === CONTENT_TOP) return;
-    const usedHeight = CONTENT_TOP - page.cursorY;
-    const contentHeight = CONTENT_TOP - CONTENT_BOTTOM;
+    if (page.cursorY === contentTop) return;
+    const usedHeight = contentTop - page.cursorY;
+    const contentHeight = contentTop - contentBottom;
     if (force || usedHeight >= contentHeight * 0.42) nextPage();
   };
   const addTextFlow = (
     struct: StructElement,
     text: string,
     style: TextStyle,
-    x = PAGE_MARGIN,
-    width = A4_WIDTH - PAGE_MARGIN * 2,
+    x = pageMargin,
+    width = pageWidth - pageMargin * 2,
     minimumStartHeight = style.lineHeight,
+    href?: string,
   ) => {
-    const lines = wrapText(text, width, style.fontSize, font);
+    const lines = wrapText(text, width, style.fontSize, styleFont(style));
     ensureSpace(Math.max(minimumStartHeight, style.lineHeight + style.gap));
     let lineIndex = 0;
     while (lineIndex < lines.length) {
       const page = currentPage();
       const availableLines = Math.max(
         1,
-        Math.floor((page.cursorY - CONTENT_BOTTOM - style.gap) / style.lineHeight),
+        Math.floor((page.cursorY - contentBottom - style.gap) / style.lineHeight),
       );
       const chunk = lines.slice(lineIndex, lineIndex + availableLines);
       const baseline = page.cursorY - style.fontSize;
@@ -806,40 +1018,88 @@ export async function createSemanticTaggedPdf(
         struct,
         drawTextLines(chunk, x, baseline, style),
       );
+      if (href) chunk.forEach((line, index) => {
+        const y = baseline - index * style.lineHeight;
+        page.links.push({ uri: href, rect: [x, y - style.fontSize * 0.25, x + textWidth(line, style.fontSize, styleFont(style)), y + style.fontSize] });
+      });
       page.cursorY -= chunk.length * style.lineHeight + style.gap;
       lineIndex += chunk.length;
       if (lineIndex < lines.length) nextPage();
     }
   };
 
-  for (const node of document.nodes) {
+  const tableStartHeight = (node: Extract<SemanticPdfNode, { kind: "table" }>): number => {
+    const size = node.fontSize ?? META_STYLE.fontSize;
+    const lineHeight = node.fontSize === undefined ? META_STYLE.lineHeight : size * 1.35;
+    const padding = node.cellPadding ?? 5;
+    const weights = node.columnWeights ?? node.headers.map(() => 1);
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    const rowHeight = (row: readonly string[], metrics = font) => Math.max(...row.map((text, index) => wrapText(text, (pageWidth - pageMargin * 2) * weights[index]! / total - padding * 2, size, metrics).length)) * lineHeight + padding * 2;
+    let columnOffset = 0;
+    const groupedHeaderLines = node.headerGroups?.map((group) => {
+      const width = weights.slice(columnOffset, columnOffset + group.span).reduce((sum, value) => sum + value, 0) / total * (pageWidth - pageMargin * 2);
+      columnOffset += group.span;
+      return wrapText(group.label, width - padding * 2, size, boldFont ?? font).length;
+    });
+    const header = rowHeight(node.headers, boldFont ?? font) + (groupedHeaderLines ? Math.max(...groupedHeaderLines) * lineHeight + padding * 2 : 0);
+    if ((node.headerGroups || node.rowDetails) && header + lineHeight + padding * 2 > contentTop - contentBottom) {
+      throw new Error("PDF tablo başlıkları bir veri satırıyla birlikte sayfaya sığmıyor.");
+    }
+    let firstGroup = 0;
+    for (const [index, row] of node.rows.entries()) {
+      if (index > 0 && (node.rowGroupColumn === undefined || row[node.rowGroupColumn] !== node.rows[0]![node.rowGroupColumn])) break;
+      firstGroup += rowHeight(row);
+      const detail = node.rowDetails?.[index];
+      if (detail) firstGroup += wrapText(detail, pageWidth - pageMargin * 2 - padding * 2, size, font).length * lineHeight + padding * 2;
+    }
+    const freshCapacity = contentTop - contentBottom - header;
+    if (node.headerGroups || node.rowDetails) {
+      // First-page branding can consume substantial room. Reserve the first complete
+      // contact row, then let its group continue naturally instead of making a cover-only page.
+      const firstRow = node.rows[0] ? rowHeight(node.rows[0]) : 0;
+      return header + (firstRow > freshCapacity ? lineHeight + padding * 2 : firstRow);
+    }
+    return header + Math.min(firstGroup, freshCapacity);
+  };
+  for (const [nodeIndex, node] of document.nodes.entries()) {
+    if (node.kind === "heading" && node.continuationHeaderText) activeHeaderText = node.continuationHeaderText;
     if (node.pageBreakBefore) {
       applySectionBreak(
         "forcePageBreakBefore" in node && node.forcePageBreakBefore === true,
       );
     }
     if (node.kind === "heading") {
+      if (node.continuationHeaderText) currentPage().headerText = undefined;
       const struct = attach(documentStruct, createStructElement(`H${node.level}`));
-      const style = HEADING_STYLES[node.level];
+      const style = headingStyle(node.level);
+      const next = document.nodes[nodeIndex + 1];
+      const tableReserve = next?.kind === "table" ? tableStartHeight(next) + wrapText(node.text, pageWidth - pageMargin * 2, style.fontSize, styleFont(style)).length * style.lineHeight + style.gap : 0;
       addTextFlow(
         struct,
         node.text,
         style,
-        PAGE_MARGIN,
-        A4_WIDTH - PAGE_MARGIN * 2,
-        style.lineHeight * 2 + BODY_STYLE.lineHeight * 2,
+        pageMargin,
+        pageWidth - pageMargin * 2,
+        Math.max(style.lineHeight * 2 + bodyStyle.lineHeight * 2, tableReserve),
       );
       continue;
     }
     if (node.kind === "paragraph") {
       const struct = attach(documentStruct, createStructElement("P"));
-      addTextFlow(struct, node.text, node.tone === "meta" ? META_STYLE : BODY_STYLE);
+      if (node.placement) {
+        const box = node.placement;
+        const fontSize = box.fontSize ?? box.height * 0.8;
+        const horizontalScale = box.width / Math.max(0.001, textWidth(node.text, fontSize, font)) * 100;
+        const baseline = pageHeight - box.y - box.height * 0.8;
+        addMarkedCommands(currentPage(), pageIndex, struct, `q\nBT\n/F0 ${fontSize.toFixed(3)} Tf\n${box.invisible ? "3" : "0"} Tr\n${horizontalScale.toFixed(3)} Tz\n1 0 0 1 ${box.x.toFixed(3)} ${baseline.toFixed(3)} Tm ${textHex(node.text)} Tj\nET\nQ`);
+        currentPage().cursorY = Math.min(currentPage().cursorY, contentTop - 1);
+      } else addTextFlow(struct, node.text, node.tone === "meta" ? metaStyle : bodyStyle, pageMargin, pageWidth - pageMargin * 2, 0, node.href);
       continue;
     }
     if (node.kind === "list") {
       const list = attach(documentStruct, createStructElement("L"));
       node.items.forEach((item, itemIndex) => {
-        ensureSpace(BODY_STYLE.lineHeight * 2 + BODY_STYLE.gap);
+        ensureSpace(bodyStyle.lineHeight * 2 + bodyStyle.gap);
         const listItem = attach(list, createStructElement("LI"));
         const label = attach(listItem, createStructElement("Lbl"));
         const body = attach(listItem, createStructElement("LBody"));
@@ -847,24 +1107,24 @@ export async function createSemanticTaggedPdf(
         const labelWidth = 22;
         const lines = wrapText(
           item,
-          A4_WIDTH - PAGE_MARGIN * 2 - labelWidth,
-          BODY_STYLE.fontSize,
+          pageWidth - pageMargin * 2 - labelWidth,
+          bodyStyle.fontSize,
           font,
         );
         const startPage = currentPage();
-        const baseline = startPage.cursorY - BODY_STYLE.fontSize;
+        const baseline = startPage.cursorY - bodyStyle.fontSize;
         addMarkedCommands(
           startPage,
           pageIndex,
           label,
-          drawTextLines([labelText], PAGE_MARGIN, baseline, BODY_STYLE),
+          drawTextLines([labelText], pageMargin, baseline, bodyStyle),
         );
         let lineIndex = 0;
         while (lineIndex < lines.length) {
           const page = currentPage();
           const availableLines = Math.max(
             1,
-            Math.floor((page.cursorY - CONTENT_BOTTOM - BODY_STYLE.gap) / BODY_STYLE.lineHeight),
+            Math.floor((page.cursorY - contentBottom - bodyStyle.gap) / bodyStyle.lineHeight),
           );
           const chunk = lines.slice(lineIndex, lineIndex + availableLines);
           addMarkedCommands(
@@ -873,12 +1133,12 @@ export async function createSemanticTaggedPdf(
             body,
             drawTextLines(
               chunk,
-              PAGE_MARGIN + labelWidth,
-              page.cursorY - BODY_STYLE.fontSize,
-              BODY_STYLE,
+              pageMargin + labelWidth,
+              page.cursorY - bodyStyle.fontSize,
+              bodyStyle,
             ),
           );
-          page.cursorY -= chunk.length * BODY_STYLE.lineHeight + BODY_STYLE.gap;
+          page.cursorY -= chunk.length * bodyStyle.lineHeight + bodyStyle.gap;
           lineIndex += chunk.length;
           if (lineIndex < lines.length) nextPage();
         }
@@ -886,27 +1146,60 @@ export async function createSemanticTaggedPdf(
       continue;
     }
     if (node.kind === "table") {
+      const following = document.nodes[nodeIndex + 1];
+      const reserveAfter = node.reserveAfter === "following-content"
+        ? (following?.kind === "table" && !following.pageBreakBefore ? tableStartHeight(following) + bodyStyle.gap : 0)
+        : node.reserveAfter ?? 0;
+      const baseTableStyle: TextStyle = node.fontSize === undefined ? metaStyle : { ...metaStyle, fontSize: node.fontSize, lineHeight: node.fontSize * 1.35 };
+      const tableStyle: TextStyle = theme ? { ...baseTableStyle, color: theme.bodyColor } : baseTableStyle;
+      const headerStyle: TextStyle = theme ? { ...tableStyle, color: theme.tableHeaderColor, ...(boldFont ? {fontResource:"F1" as const} : {}) } : tableStyle;
+      const headerFont = boldFont ?? font;
       const table = attach(
         documentStruct,
         createStructElement("Table", node.summary ? { tableSummary: node.summary } : {}),
       );
-      const contentWidth = A4_WIDTH - PAGE_MARGIN * 2;
+      const contentWidth = pageWidth - pageMargin * 2;
       const cellPadding = node.cellPadding ?? 5;
       const weights = node.columnWeights ?? node.headers.map(() => 1);
       const weightTotal = weights.reduce((total, weight) => total + weight, 0);
       const columnWidths = weights.map((weight) => contentWidth * weight / weightTotal);
       const columnX = columnWidths.map((_, columnIndex) => (
-        PAGE_MARGIN
+        pageMargin
         + columnWidths.slice(0, columnIndex).reduce((total, width) => total + width, 0)
       ));
       const headerLines = node.headers.map((header, columnIndex) => wrapText(
         header,
         columnWidths[columnIndex]! - cellPadding * 2,
-        META_STYLE.fontSize,
-        font,
+        tableStyle.fontSize,
+        headerFont,
       ));
       const headerHeight = Math.max(...headerLines.map((lines) => lines.length))
-        * META_STYLE.lineHeight + cellPadding * 2;
+        * tableStyle.lineHeight + cellPadding * 2;
+
+      let groupedColumnOffset = 0;
+      const groupLayouts = node.headerGroups?.map((group, groupIndex) => {
+        const x = columnX[groupedColumnOffset]!;
+        const width = columnWidths.slice(groupedColumnOffset, groupedColumnOffset + group.span).reduce((sum, value) => sum + value, 0);
+        groupedColumnOffset += group.span;
+        const colorIndex = group.colorIndex ?? groupIndex % (theme?.headerGroupFills.length ?? 1);
+        return { ...group, colorIndex, x, width, lines: wrapText(group.label, width - cellPadding * 2, tableStyle.fontSize, headerFont) };
+      });
+      const groupHeaderHeight = groupLayouts ? Math.max(...groupLayouts.map((group) => group.lines.length)) * tableStyle.lineHeight + cellPadding * 2 : 0;
+      const totalHeaderHeight = headerHeight + groupHeaderHeight;
+      const drawGroupHeader = (marked: boolean) => {
+        if (!groupLayouts) return;
+        const page = currentPage();
+        const top = page.cursorY;
+        const groupRow = marked ? attach(table, createStructElement("TR")) : null;
+        for (const group of groupLayouts) {
+          addArtifact(page, `${theme ? `${rgb(theme.headerGroupFills[group.colorIndex]!)} rg ${rgb(theme.tableBorderColor)} RG 0.65 w` : "0.87 0.91 0.90 rg 0.72 0.69 0.76 RG 0.5 w"} ${group.x.toFixed(2)} ${(top - groupHeaderHeight).toFixed(2)} ${group.width.toFixed(2)} ${groupHeaderHeight.toFixed(2)} re B`);
+          const groupStyle = theme ? {...headerStyle,color:theme.headerGroupTextColor} : tableStyle;
+          const commands = group.lines.map((line, index) => drawTextLines([line], group.x + (group.width - textWidth(line, tableStyle.fontSize, headerFont)) / 2, top - tableStyle.fontSize - cellPadding - index * tableStyle.lineHeight, groupStyle)).join("\n");
+          if (groupRow) addMarkedCommands(page, pageIndex, attach(groupRow, createStructElement("TH", { tableHeaderScope: "Column", tableColumnSpan: group.span })), commands);
+          else addArtifact(page, commands);
+        }
+        page.cursorY -= groupHeaderHeight;
+      };
 
       const drawRowBackground = (
         page: PdfPageDraft,
@@ -914,10 +1207,19 @@ export async function createSemanticTaggedPdf(
         rowHeight: number,
         header: boolean,
       ) => {
+        if (theme) {
+          columnWidths.forEach((width, columnIndex) => {
+            const x = columnX[columnIndex]!;
+            const group = groupLayouts?.find(group => x >= group.x - 0.01 && x < group.x + group.width - 0.01);
+            const fill = header ? group ? theme.headerGroupTints[group.colorIndex]! : theme.tableHeaderFill : [1,1,1] as const;
+            addArtifact(page, `${rgb(fill)} rg ${rgb(theme.tableBorderColor)} RG 0.65 w ${x.toFixed(2)} ${(rowTop - rowHeight).toFixed(2)} ${width.toFixed(2)} ${rowHeight.toFixed(2)} re B`);
+          });
+          return;
+        }
         addArtifact(
           page,
           `${header ? "0.94 0.92 0.97 rg" : "1 1 1 rg"}\n`
-            + `${PAGE_MARGIN.toFixed(2)} ${(rowTop - rowHeight).toFixed(2)} `
+            + `${pageMargin.toFixed(2)} ${(rowTop - rowHeight).toFixed(2)} `
             + `${contentWidth.toFixed(2)} ${rowHeight.toFixed(2)} re f\n`
             + `0.72 0.69 0.76 RG 0.5 w`,
         );
@@ -930,21 +1232,23 @@ export async function createSemanticTaggedPdf(
         });
       };
       const drawRepeatedHeaderArtifact = () => {
-        ensureSpace(headerHeight);
+        ensureSpace(totalHeaderHeight);
+        drawGroupHeader(false);
         const page = currentPage();
         const rowTop = page.cursorY;
         drawRowBackground(page, rowTop, headerHeight, true);
         const textCommands = headerLines.map((lines, columnIndex) => drawTextLines(
           lines,
           columnX[columnIndex]! + cellPadding,
-          rowTop - META_STYLE.fontSize - cellPadding,
-          META_STYLE,
+          rowTop - tableStyle.fontSize - cellPadding,
+          headerStyle,
         )).join("\n");
         addArtifact(page, textCommands);
         page.cursorY -= headerHeight;
       };
 
-      ensureSpace(headerHeight);
+      ensureSpace(tableStartHeight(node));
+      drawGroupHeader(true);
       const headerPage = currentPage();
       const headerTop = headerPage.cursorY;
       drawRowBackground(headerPage, headerTop, headerHeight, true);
@@ -961,20 +1265,87 @@ export async function createSemanticTaggedPdf(
           drawTextLines(
             headerLines[columnIndex]!,
             columnX[columnIndex]! + cellPadding,
-            headerTop - META_STYLE.fontSize - cellPadding,
-            META_STYLE,
+            headerTop - tableStyle.fontSize - cellPadding,
+            headerStyle,
           ),
         );
       });
       headerPage.cursorY -= headerHeight;
 
-      node.rows.forEach((row) => {
-        const cellLines = row.map((cell, columnIndex) => wrapText(
-          cell,
-          columnWidths[columnIndex]! - cellPadding * 2,
-          META_STYLE.fontSize,
-          font,
-        ));
+      const rowLayouts = node.rows.map((row) => row.map((cell, columnIndex) => (
+        node.fitBodyCellsWithinLines
+          ? fitCellTextWithinLines(
+            cell,
+            columnWidths[columnIndex]! - cellPadding * 2,
+            tableStyle,
+            font,
+            node.fitBodyCellsWithinLines,
+            node.minimumBodyCellHorizontalScale ?? 35,
+          )
+          : wrapText(
+            cell,
+            columnWidths[columnIndex]! - cellPadding * 2,
+            tableStyle.fontSize,
+            font,
+          )
+      )));
+      const balancedBreaks = new Set<number>();
+      const detailLayouts = node.rows.map((_, index) => node.rowDetails?.[index] ? wrapText(node.rowDetails[index]!, contentWidth - cellPadding * 2, tableStyle.fontSize, font) : null);
+      const rowHeights = rowLayouts.map((cells, index) => Math.max(...cells.map((lines) => lines.length)) * tableStyle.lineHeight + cellPadding * 2
+        + (detailLayouts[index] ? detailLayouts[index]!.length * tableStyle.lineHeight + cellPadding * 2 : 0));
+      const rowGroups: { start: number; end: number; height: number }[] = [];
+      rowHeights.forEach((height, rowIndex) => {
+        const previous = rowGroups.at(-1);
+        if (node.rowGroupColumn !== undefined && previous && node.rows[previous.start]![node.rowGroupColumn] === node.rows[rowIndex]![node.rowGroupColumn]) {
+          previous.end = rowIndex + 1; previous.height += height;
+        } else rowGroups.push({ start: rowIndex, end: rowIndex + 1, height });
+      });
+      const groupStarts = new Map(rowGroups.map((group) => [group.start, group.height]));
+      if (node.balancePages && rowLayouts.length && (!(node.headerGroups || node.rowDetails) || rowGroups.every(group => group.height <= contentTop - totalHeaderHeight - contentBottom) && (rowGroups[0]?.height ?? 0) <= currentPage().cursorY - contentBottom)) {
+        const heights = rowGroups.map((group) => group.height);
+        const firstCapacity = currentPage().cursorY - contentBottom;
+        const fullCapacity = contentTop - totalHeaderHeight - contentBottom;
+        const reserve = reserveAfter;
+        const groups: { start: number; end: number; height: number; capacity: number }[] = [];
+        let start = 0;
+        while (start < heights.length) {
+          const capacity = groups.length ? fullCapacity : firstCapacity;
+          let end = start;
+          let height = 0;
+          while (end < heights.length && (end === start || height + heights[end]! + (end === heights.length - 1 ? reserve : 0) <= capacity)) {
+            height += heights[end]!;
+            end += 1;
+          }
+          groups.push({ start, end, height, capacity });
+          start = end;
+        }
+        // Work backward so the final sheet is balanced without changing order.
+        for (let groupIndex = groups.length - 1; groupIndex > 0; groupIndex -= 1) {
+          const previous = groups[groupIndex - 1]!;
+          const current = groups[groupIndex]!;
+          const tailReserve = groupIndex === groups.length - 1 ? reserve : 0;
+          while (previous.end - previous.start > 1) {
+            const height = heights[previous.end - 1]!;
+            const before = Math.abs(previous.height / previous.capacity - (current.height + tailReserve) / current.capacity);
+            const after = Math.abs((previous.height - height) / previous.capacity - (current.height + height + tailReserve) / current.capacity);
+            if (current.height + height + tailReserve > current.capacity || after >= before) break;
+            previous.end -= 1;
+            previous.height -= height;
+            current.start -= 1;
+            current.height += height;
+          }
+        }
+        groups.slice(1).forEach((group) => balancedBreaks.add(rowGroups[group.start]!.start));
+      }
+      node.rows.forEach((row, rowIndex) => {
+        if (balancedBreaks.has(rowIndex)) { nextPage(); drawRepeatedHeaderArtifact(); }
+        const groupHeight = groupStarts.get(rowIndex);
+        const groupTailReserve = (node.headerGroups || node.rowDetails) && rowGroups.at(-1)?.start === rowIndex ? reserveAfter : 0;
+        const requiredGroupHeight = groupHeight === undefined ? undefined : groupHeight + groupTailReserve;
+        if (rowIndex > 0 && requiredGroupHeight !== undefined && requiredGroupHeight <= contentTop - totalHeaderHeight - contentBottom && requiredGroupHeight > currentPage().cursorY - contentBottom) {
+          nextPage(); drawRepeatedHeaderArtifact();
+        }
+        const cellLines = rowLayouts[rowIndex]!;
         const maximumLineCount = Math.max(...cellLines.map((lines) => lines.length));
         const rowStruct = attach(table, createStructElement("TR"));
         const cellStructs = row.map((_, columnIndex) => attach(
@@ -984,12 +1355,17 @@ export async function createSemanticTaggedPdf(
             columnIndex === node.rowHeaderColumn ? { tableHeaderScope: "Row" } : {},
           ),
         ));
-        const fullRowHeight = maximumLineCount * META_STYLE.lineHeight + cellPadding * 2;
-        const freshPageRowHeight = CONTENT_TOP - headerHeight - CONTENT_BOTTOM;
-        const currentAvailableHeight = currentPage().cursorY - CONTENT_BOTTOM;
+        const fullRowHeight = maximumLineCount * tableStyle.lineHeight + cellPadding * 2;
+        const freshPageRowHeight = contentTop - totalHeaderHeight - contentBottom;
+        const currentAvailableHeight = currentPage().cursorY - contentBottom;
+        const attachedDetailHeight = detailLayouts[rowIndex] ? detailLayouts[rowIndex]!.length * tableStyle.lineHeight + cellPadding * 2 : 0;
+        const rowTailReserve = (node.headerGroups || node.rowDetails) && rowIndex === node.rows.length - 1 ? reserveAfter : 0;
+        const completeRowHeight = fullRowHeight + attachedDetailHeight + rowTailReserve;
+        const requiredRowHeight = completeRowHeight <= freshPageRowHeight ? completeRowHeight : fullRowHeight;
         if (
-          fullRowHeight > currentAvailableHeight
+          requiredRowHeight > currentAvailableHeight
           && currentAvailableHeight < freshPageRowHeight - 0.01
+          && (!(node.headerGroups || node.rowDetails) || fullRowHeight <= freshPageRowHeight)
         ) {
           nextPage();
           drawRepeatedHeaderArtifact();
@@ -999,23 +1375,26 @@ export async function createSemanticTaggedPdf(
         const drawContinuationContext = () => {
           const segments = continuationColumns.map((columnIndex) => {
             const compact = row[columnIndex]!.trim().replace(/\s+/gu, " ");
-            const summarized = compact.length > 96 ? `${compact.slice(0, 95)}…` : compact;
+            const summarized = !node.preserveContinuationContext && compact.length > 96 ? `${compact.slice(0, 95)}…` : compact;
             return `${node.headers[columnIndex]}: ${summarized || "boş"}`;
           });
           const contextLines = wrapText(
             `Devam — ${segments.join(" · ")}`,
             contentWidth - cellPadding * 2,
-            META_STYLE.fontSize,
+            tableStyle.fontSize,
             font,
           );
-          const contextHeight = contextLines.length * META_STYLE.lineHeight + cellPadding * 2;
+          const contextHeight = contextLines.length * tableStyle.lineHeight + cellPadding * 2;
+          if ((node.headerGroups || node.rowDetails) && contextHeight + tableStyle.lineHeight + cellPadding * 2 > contentTop - totalHeaderHeight - contentBottom) {
+            throw new Error("PDF tablo devam bağlamı bir veri satırıyla birlikte sayfaya sığmıyor.");
+          }
           const page = currentPage();
           const contextTop = page.cursorY;
           addArtifact(
             page,
-            `0.97 0.96 0.98 rg\n${PAGE_MARGIN.toFixed(2)} ${(contextTop - contextHeight).toFixed(2)} `
+            `0.97 0.96 0.98 rg\n${pageMargin.toFixed(2)} ${(contextTop - contextHeight).toFixed(2)} `
               + `${contentWidth.toFixed(2)} ${contextHeight.toFixed(2)} re f\n`
-              + `0.72 0.69 0.76 RG 0.5 w ${PAGE_MARGIN.toFixed(2)} `
+              + `0.72 0.69 0.76 RG 0.5 w ${pageMargin.toFixed(2)} `
               + `${(contextTop - contextHeight).toFixed(2)} ${contentWidth.toFixed(2)} `
               + `${contextHeight.toFixed(2)} re S`,
           );
@@ -1025,9 +1404,9 @@ export async function createSemanticTaggedPdf(
             cellStructs[node.rowHeaderColumn ?? continuationColumns[0] ?? 0]!,
             drawTextLines(
               contextLines,
-              PAGE_MARGIN + cellPadding,
-              contextTop - META_STYLE.fontSize - cellPadding,
-              META_STYLE,
+              pageMargin + cellPadding,
+              contextTop - tableStyle.fontSize - cellPadding,
+              tableStyle,
             ),
           );
           page.cursorY -= contextHeight;
@@ -1035,17 +1414,17 @@ export async function createSemanticTaggedPdf(
         let lineOffset = 0;
         while (lineOffset < maximumLineCount) {
           let availableLines = Math.floor(
-            (currentPage().cursorY - CONTENT_BOTTOM - cellPadding * 2) / META_STYLE.lineHeight,
+            (currentPage().cursorY - contentBottom - cellPadding * 2) / tableStyle.lineHeight,
           );
           if (availableLines < 1) {
             nextPage();
             drawRepeatedHeaderArtifact();
             availableLines = Math.floor(
-              (currentPage().cursorY - CONTENT_BOTTOM - cellPadding * 2) / META_STYLE.lineHeight,
+              (currentPage().cursorY - contentBottom - cellPadding * 2) / tableStyle.lineHeight,
             );
           }
           const chunkLineCount = Math.min(maximumLineCount - lineOffset, availableLines);
-          const rowHeight = chunkLineCount * META_STYLE.lineHeight + cellPadding * 2;
+          const rowHeight = chunkLineCount * tableStyle.lineHeight + cellPadding * 2;
           const page = currentPage();
           const rowTop = page.cursorY;
           drawRowBackground(page, rowTop, rowHeight, false);
@@ -1056,12 +1435,22 @@ export async function createSemanticTaggedPdf(
               page,
               pageIndex,
               cellStructs[columnIndex]!,
-              drawTextLines(
-                chunk,
-                columnX[columnIndex]! + cellPadding,
-                rowTop - META_STYLE.fontSize - cellPadding,
-                META_STYLE,
-              ),
+              node.fitBodyCellsWithinLines
+                ? chunk.map((line, lineIndex) => drawSingleLineCellText(
+                  line,
+                  columnX[columnIndex]! + cellPadding,
+                  rowTop - tableStyle.fontSize - cellPadding - lineIndex * tableStyle.lineHeight,
+                  columnWidths[columnIndex]! - cellPadding * 2,
+                  tableStyle,
+                  font,
+                  node.minimumBodyCellHorizontalScale ?? 35,
+                )).join("\n")
+                : drawTextLines(
+                  chunk,
+                  columnX[columnIndex]! + cellPadding,
+                  rowTop - tableStyle.fontSize - cellPadding,
+                  tableStyle,
+                ),
             );
           });
           page.cursorY -= rowHeight;
@@ -1072,54 +1461,82 @@ export async function createSemanticTaggedPdf(
             drawContinuationContext();
           }
         }
+        const detailLines = detailLayouts[rowIndex];
+        if (detailLines) {
+          const detailStruct = attach(attach(table, createStructElement("TR")), createStructElement("TD", { tableColumnSpan: node.headers.length }));
+          let detailOffset = 0;
+          while (detailOffset < detailLines.length) {
+            let available = Math.floor((currentPage().cursorY - contentBottom - cellPadding * 2) / tableStyle.lineHeight);
+            const remaining = detailLines.length - detailOffset;
+            // Keep a fitting band intact; oversized bands advance by at least one line per page.
+            if (available < 1 || (detailOffset === 0 && remaining > available && remaining * tableStyle.lineHeight + cellPadding * 2 <= freshPageRowHeight)) {
+              nextPage(); drawRepeatedHeaderArtifact(); drawContinuationContext();
+              available = Math.floor((currentPage().cursorY - contentBottom - cellPadding * 2) / tableStyle.lineHeight);
+            }
+            if (available < 1) throw new Error("PDF ayrıntı bandı için sayfada yeterli alan yok.");
+            const count = Math.min(remaining, available);
+            const height = count * tableStyle.lineHeight + cellPadding * 2;
+            const page = currentPage();
+            const top = page.cursorY;
+            addArtifact(page, `${theme ? `${rgb(theme.tableDetailFill)} rg ${rgb(theme.tableBorderColor)} RG 0.65 w` : "0.97 0.98 0.97 rg 0.72 0.69 0.76 RG 0.5 w"} ${pageMargin.toFixed(2)} ${(top - height).toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re B`);
+            addMarkedCommands(page, pageIndex, detailStruct, drawTextLines(detailLines.slice(detailOffset, detailOffset + count), pageMargin + cellPadding, top - tableStyle.fontSize - cellPadding, tableStyle));
+            page.cursorY -= height;
+            detailOffset += count;
+            if (detailOffset < detailLines.length) { nextPage(); drawRepeatedHeaderArtifact(); drawContinuationContext(); }
+          }
+        }
       });
-      currentPage().cursorY -= BODY_STYLE.gap;
+      currentPage().cursorY -= bodyStyle.gap;
       continue;
     }
     const height = Math.min(
       Math.max(node.height ?? 120, 48),
-      CONTENT_TOP - CONTENT_BOTTOM,
+      contentTop - contentBottom,
     );
-    ensureSpace(height + BODY_STYLE.gap);
+    ensureSpace(height + bodyStyle.gap);
     const figure = attach(
       documentStruct,
       createStructElement("Figure", { altText: node.altText }),
     );
     const page = currentPage();
     const bottom = page.cursorY - height;
+    figureBoxes.push({ pageIndex, x: pageMargin, y: bottom, width: pageWidth - pageMargin * 2, height, altText: node.altText });
     const caption = node.caption?.trim();
     const figureCommands = [
       "0.97 0.96 0.98 rg",
-      `${PAGE_MARGIN.toFixed(2)} ${bottom.toFixed(2)} ${(A4_WIDTH - PAGE_MARGIN * 2).toFixed(2)} ${height.toFixed(2)} re f`,
+      `${pageMargin.toFixed(2)} ${bottom.toFixed(2)} ${(pageWidth - pageMargin * 2).toFixed(2)} ${height.toFixed(2)} re f`,
       "0.49 0.39 0.61 RG 0.8 w",
-      `${PAGE_MARGIN.toFixed(2)} ${bottom.toFixed(2)} ${(A4_WIDTH - PAGE_MARGIN * 2).toFixed(2)} ${height.toFixed(2)} re S`,
+      `${pageMargin.toFixed(2)} ${bottom.toFixed(2)} ${(pageWidth - pageMargin * 2).toFixed(2)} ${height.toFixed(2)} re S`,
     ];
     if (caption) {
       const captionLines = wrapText(
         caption,
-        A4_WIDTH - PAGE_MARGIN * 2 - 20,
-        BODY_STYLE.fontSize,
+        pageWidth - pageMargin * 2 - 20,
+        bodyStyle.fontSize,
         font,
       );
       figureCommands.push(drawTextLines(
         captionLines,
-        PAGE_MARGIN + 10,
-        page.cursorY - BODY_STYLE.fontSize - 10,
-        BODY_STYLE,
+        pageMargin + 10,
+        page.cursorY - bodyStyle.fontSize - 10,
+        bodyStyle,
       ));
     }
     addMarkedCommands(page, pageIndex, figure, figureCommands.join("\n"));
-    page.cursorY = bottom - BODY_STYLE.gap;
+    page.cursorY = bottom - bodyStyle.gap;
   }
 
   pageDrafts.forEach((page, index) => {
+    if (document.omitPageFurniture) return;
+    const runningHeaderLines = page.headerText ? wrapText(page.headerText, pageWidth - pageMargin * 2, 7.5, font) : [];
+    if (runningHeaderLines.length) addArtifact(page, drawTextLines(runningHeaderLines, pageMargin, pageHeight - 14, { ...metaStyle, fontSize: 7.5, lineHeight: 10 }));
     const artifactFooter = document.artifactFooterText?.trim();
     addArtifact(
       page,
-      `0.42 0.39 0.44 rg\nBT /F0 8 Tf 1 0 0 1 ${PAGE_MARGIN.toFixed(2)} 28 Tm `
+      `${theme ? rgb(theme.metaColor) : "0.42 0.39 0.44"} rg\nBT /F0 8 Tf 1 0 0 1 ${pageMargin.toFixed(2)} 28 Tm `
         + `${textHex(artifactFooter ?? "MaarifOS")} Tj `
-        + `1 0 0 1 ${(A4_WIDTH - PAGE_MARGIN - 72).toFixed(2)} 28 Tm `
-        + `${textHex(`Sayfa ${index + 1}`)} Tj ET`,
+        + `1 0 0 1 ${(pageWidth - pageMargin - 72).toFixed(2)} 28 Tm `
+        + `${textHex(`Sayfa ${index + 1}${document.includeTotalPages ? ` / ${pageDrafts.length}` : ""}`)} Tj ET`,
     );
   });
 
@@ -1144,6 +1561,7 @@ export async function createSemanticTaggedPdf(
   const parentTreeId = reserve();
   const metadataId = reserve();
   const infoId = reserve();
+  const boldIds = boldFont ? { file: reserve(), descriptor: reserve(), map: reserve(), cid: reserve(), type0: reserve() } : null;
 
   const structElements = flattenStructElements(documentStruct);
   structElements.forEach((element) => {
@@ -1178,15 +1596,28 @@ export async function createSemanticTaggedPdf(
     `<< /Type /Font /Subtype /Type0 /BaseFont /Roboto-Regular /Encoding /Identity-H `
       + `/DescendantFonts [${cidFontId} 0 R] /ToUnicode ${toUnicodeId} 0 R >>`,
   );
+  if (boldFont && boldIds) {
+    setObject(boldIds.file, streamObject(`/Length1 ${boldFont.bytes.byteLength}`, boldFont.bytes));
+    setObject(boldIds.map, streamObject("", createCidToGidMap(codePointValues, boldFont)));
+    setObject(boldIds.descriptor, `<< /Type /FontDescriptor /FontName /Roboto-Bold /Flags 32 /FontWeight 700 /FontBBox [${boldFont.bbox.map(value => scaledFontMetric(value,boldFont)).join(" ")}] /ItalicAngle 0 /Ascent ${scaledFontMetric(boldFont.ascent,boldFont)} /Descent ${scaledFontMetric(boldFont.descent,boldFont)} /CapHeight ${scaledFontMetric(boldFont.capHeight,boldFont)} /StemV 140 /FontFile2 ${boldIds.file} 0 R /CIDSet ${cidSetId} 0 R >>`);
+    setObject(boldIds.cid, `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Roboto-Bold /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${boldIds.descriptor} 0 R /DW 0 /W [${renderWidths(codePointValues,boldFont)}] /CIDToGIDMap ${boldIds.map} 0 R >>`);
+    setObject(boldIds.type0, `<< /Type /Font /Subtype /Type0 /BaseFont /Roboto-Bold /Encoding /Identity-H /DescendantFonts [${boldIds.cid} 0 R] /ToUnicode ${toUnicodeId} 0 R >>`);
+  }
 
   pageDrafts.forEach((page, index) => {
+    const annotationIds = page.links.map(link => {
+      const id = reserve();
+      setObject(id, `<< /Type /Annot /Subtype /Link /Rect [${link.rect.map(value => value.toFixed(3)).join(" ")}] /Border [0 0 0] /A << /S /URI /URI (${pdfLiteral(link.uri)}) >> >>`);
+      return id;
+    });
     const content = encoder.encode(page.commands.join("\n"));
     setObject(contentIds[index]!, streamObject("", content));
     setObject(
       pageIds[index]!,
-      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${A4_WIDTH} ${A4_HEIGHT}] `
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] `
         + `/Tabs /S /StructParents ${index} `
-        + `/Resources << /Font << /F0 ${type0FontId} 0 R >> >> `
+        + `/Resources << /Font << /F0 ${type0FontId} 0 R${boldIds ? ` /F1 ${boldIds.type0} 0 R` : ""} >> >> `
+        + (annotationIds.length ? `/Annots [${annotationIds.map(id => `${id} 0 R`).join(" ")}] ` : "")
         + `/Contents ${contentIds[index]} 0 R >>`,
     );
   });
@@ -1210,6 +1641,7 @@ export async function createSemanticTaggedPdf(
     const tableAttributes = [
       element.tableSummary ? `/Summary ${utf16Hex(element.tableSummary)}` : "",
       element.tableHeaderScope ? `/Scope /${element.tableHeaderScope}` : "",
+      element.tableColumnSpan !== undefined ? `/ColSpan ${element.tableColumnSpan}` : "",
     ].filter(Boolean).join(" ");
     const attributes = tableAttributes ? ` /A << /O /Table ${tableAttributes} >>` : "";
     setObject(
@@ -1263,7 +1695,10 @@ export async function createSemanticTaggedPdf(
       + `/ViewerPreferences << /DisplayDocTitle true >> >>`,
   );
 
-  return serializePdfObjects(objects, catalogId, infoId);
+  const bytes = serializePdfObjects(objects, catalogId, infoId);
+  figureBoxesByPdf.set(bytes, figureBoxes);
+  registerSemanticPdfPreview(bytes, document, { fontBytes: loadedFont, ...(loadedBoldFont ? {boldFontBytes:loadedBoldFont} : {}) });
+  return bytes;
 }
 
 /** Üretilmiş ortak motor PDF'sinin sayfa ağacı sayısını güvenli biçimde okur. */
@@ -1276,3 +1711,4 @@ export function semanticTaggedPdfPageCount(bytes: Uint8Array): number {
   }
   return count;
 }
+

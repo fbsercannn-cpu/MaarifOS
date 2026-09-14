@@ -1,3 +1,4 @@
+import { resolveTeachingCivilDate, type ResolveSchoolDayInput } from "../../core/domain/school-calendar.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircledIcon,
@@ -177,6 +178,7 @@ export function PlanCreationScreen({
   initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
   enforceOfficialTeachingDays = false,
+  schoolCalendarContext,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -192,6 +194,7 @@ export function PlanCreationScreen({
   initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
   enforceOfficialTeachingDays?: boolean;
+  schoolCalendarContext?: Omit<ResolveSchoolDayInput, "civilDate">;
 }) {
   const introHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [ids] = useState(() => ({
@@ -390,8 +393,8 @@ export function PlanCreationScreen({
       : selectedStudentIds);
   const assignmentCount = selectedTargets.length * assignedStudentIds.length;
   const planDateValid = isCivilDate(planCivilDate);
-  const officialTeachingDate = planDateValid && enforceOfficialTeachingDays
-    ? resolveOfficialTeachingCivilDate(planCivilDate)
+  const officialTeachingDate = planDateValid && (schoolCalendarContext || enforceOfficialTeachingDays)
+    ? schoolCalendarContext ? resolveTeachingCivilDate({ ...schoolCalendarContext, civilDate: planCivilDate }) : resolveOfficialTeachingCivilDate(planCivilDate)
     : null;
   const planDateIsOfficialTeachingDay =
     !officialTeachingDate?.applies || officialTeachingDate.isTeachingDay;
@@ -611,8 +614,8 @@ export function PlanCreationScreen({
     saveBlockingItems.push({
       code: "plan.calendar-day",
       detail: nearestCivilDate
-        ? `${formatTurkishCivilDate(planCivilDate)} resmî MEB çalışma takviminde öğretim günü değildir. En yakın öğretim günü ${formatTurkishCivilDate(nearestCivilDate)}.`
-        : `${formatTurkishCivilDate(planCivilDate)} resmî MEB çalışma takviminde öğretim günü değildir.`,
+        ? `${formatTurkishCivilDate(planCivilDate)} sınıfın çalışma takviminde öğretim günü değildir. En yakın öğretim günü ${formatTurkishCivilDate(nearestCivilDate)}.`
+        : `${formatTurkishCivilDate(planCivilDate)} sınıfın çalışma takviminde öğretim günü değildir.`,
       ...(nearestCivilDate
         ? {
             actionLabel: "En yakın öğretim gününe al",
@@ -1840,6 +1843,7 @@ export function PlanCreationFlow({
   initialPedagogicalProvenance,
   teacherOwnedDailyFlowContext,
   enforceOfficialTeachingDays,
+  schoolCalendarContext,
 }: {
   civilDate: string;
   defaultStartTime: string;
@@ -1856,6 +1860,7 @@ export function PlanCreationFlow({
   initialPedagogicalProvenance?: PedagogicalPlanProvenance;
   teacherOwnedDailyFlowContext?: TeacherOwnedDailyFlowContext;
   enforceOfficialTeachingDays?: boolean;
+  schoolCalendarContext?: Omit<ResolveSchoolDayInput, "civilDate">;
 }) {
   const initial = useMemo<FlowScreen>(
     () => ({
@@ -1879,6 +1884,7 @@ export function PlanCreationFlow({
           initialPedagogicalProvenance={initialPedagogicalProvenance}
           teacherOwnedDailyFlowContext={teacherOwnedDailyFlowContext}
           enforceOfficialTeachingDays={enforceOfficialTeachingDays}
+          schoolCalendarContext={schoolCalendarContext}
         />
       ),
     }),
@@ -1898,6 +1904,7 @@ export function PlanCreationFlow({
       initialPedagogicalProvenance,
       teacherOwnedDailyFlowContext,
       enforceOfficialTeachingDays,
+      schoolCalendarContext,
     ],
   );
 

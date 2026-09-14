@@ -103,7 +103,7 @@ export function StudentProfileOverviewPanel(props: OverviewProps) {
           <strong>{props.observationCount}</strong>
         </button>
         <button type="button" onClick={props.onShowPendingLinks}>
-          <small>Bağlantı bekleyen</small>
+          <small>Seçerek bağla</small>
           <strong>{props.pendingLinkCount}</strong>
         </button>
       </section>

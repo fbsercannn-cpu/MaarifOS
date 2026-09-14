@@ -1,3 +1,4 @@
+import { contactAuthorityHistory } from "../teacher-followup/teacher-followup-service.ts";
 import {
   attendanceRecordKey,
   civilDateInIstanbul,
@@ -10,8 +11,16 @@ import {
   type AttendanceEvent,
   type AttendanceStatus,
 } from "../../core/domain/attendance.ts";
+import {
+  ACTIVE_CLASSROOM_SETTING_ID,
+  ACTIVE_CLASSROOM_SETTING_TYPE,
+} from "../../core/domain/classroom.ts";
+import {
+  academicYearEffectiveOperationalStart,
+  academicYearOperationalStatus,
+} from "../../core/domain/academic-year-operational.ts";
 import { canonicalJson } from "../../core/backup/canonical-json.ts";
-import type { StoredRecord } from "../../core/domain/model.ts";
+import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import {
   normalizeStudentProfile,
   studentProfileFromRecord,
@@ -28,6 +37,7 @@ import { migrateLegacyClassroomScopes } from "../../core/migrations/classroom-sc
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import {
   STUDENT_ENROLLMENT_VERSION,
+  latestStudentEnrollment,
   studentEnrollments,
   type StudentEnrollment,
 } from "../archive/academic-year-archive.ts";
@@ -461,6 +471,186 @@ function requireActiveClassroomScope(
     throw new Error("Bu işlem için önce aktif sınıf ve eğitim yılı yapılandırılmalıdır.");
   }
   return scope;
+}
+
+const ROSTER_CLOSED_YEAR_ERROR =
+  "Bu eğitim yılı kapatıldığı için çocuk listesi değiştirilemez. Yeni veya bugün etkin olan eğitim yılını seçin.";
+
+function requireWritableRosterScope(
+  snapshot: Pick<DataSnapshot, "academicYears" | "classrooms" | "settings">,
+  currentCivilDate: string,
+): ActiveClassroomScope {
+  const selected = snapshot.settings.find(
+    (record) =>
+      record.id === ACTIVE_CLASSROOM_SETTING_ID &&
+      record.settingType === ACTIVE_CLASSROOM_SETTING_TYPE &&
+      typeof record.academicYearId === "string",
+  );
+  const selectedAcademicYear = selected
+    ? snapshot.academicYears.find(
+        (record) => record.id === selected.academicYearId,
+      )
+    : undefined;
+  if (
+    selectedAcademicYear &&
+    (selectedAcademicYear.status === "archived" ||
+      typeof selectedAcademicYear.deletedAt === "string" ||
+      typeof selectedAcademicYear.closedOn === "string" ||
+      typeof selectedAcademicYear.archivedAt === "string")
+  ) {
+    throw new Error(ROSTER_CLOSED_YEAR_ERROR);
+  }
+
+  const scope = resolveActiveClassroomScope(snapshot);
+  if (!scope) {
+    throw new Error("Bu işlem için önce aktif sınıf ve eğitim yılı yapılandırılmalıdır.");
+  }
+  const academicYear = snapshot.academicYears.find(
+    (record) =>
+      record.id === scope.academicYearId &&
+      typeof record.deletedAt !== "string",
+  );
+  if (
+    !academicYear ||
+    !isCivilDate(academicYear.startDate) ||
+    !isCivilDate(academicYear.endDate) ||
+    academicYear.startDate > academicYear.endDate ||
+    (academicYear.operationalStartDate !== undefined &&
+      (!isCivilDate(academicYear.operationalStartDate) ||
+        academicYear.operationalStartDate > academicYear.endDate))
+  ) {
+    throw new Error(
+      "Çocuk listesi değiştirilemedi: seçili eğitim yılının tarihleri geçerli değil.",
+    );
+  }
+  if (academicYear.status !== undefined && academicYear.status !== "active") {
+    throw new Error(ROSTER_CLOSED_YEAR_ERROR);
+  }
+  const operationalStatus = academicYearOperationalStatus(
+    academicYear.startDate,
+    academicYear.endDate,
+    currentCivilDate,
+    typeof academicYear.operationalStartDate === "string"
+      ? academicYear.operationalStartDate
+      : undefined,
+  );
+  if (operationalStatus === "ended") {
+    throw new Error(
+      `Bu eğitim yılı ${academicYear.endDate} tarihinde sona erdiği için çocuk listesi değiştirilemez. Yeni veya bugün etkin olan eğitim yılını seçin.`,
+    );
+  }
+  return scope;
+}
+
+type EducationalWriteKind = "Yoklama" | "Gözlem";
+
+type WritableEducationalScope = {
+  scope: ActiveClassroomScope;
+  effectiveStartDate: string;
+  endDate: string;
+};
+
+const EDUCATIONAL_WRITE_CLOSED_YEAR_ERROR =
+  "Bu eğitim yılı kapatıldığı için yoklama veya gözlem kaydedilemez. Yeni veya bugün etkin olan eğitim yılını seçin.";
+
+function requireWritableEducationalScope(
+  snapshot: Pick<DataSnapshot, "academicYears" | "classrooms" | "settings">,
+  currentCivilDate: string,
+): WritableEducationalScope {
+  const selected = snapshot.settings.find(
+    (record) =>
+      record.id === ACTIVE_CLASSROOM_SETTING_ID &&
+      record.settingType === ACTIVE_CLASSROOM_SETTING_TYPE &&
+      typeof record.academicYearId === "string" &&
+      typeof record.deletedAt !== "string",
+  );
+  const selectedAcademicYear = selected
+    ? snapshot.academicYears.find(
+        (record) => record.id === selected.academicYearId,
+      )
+    : undefined;
+  if (
+    selectedAcademicYear &&
+    (selectedAcademicYear.status === "archived" ||
+      typeof selectedAcademicYear.deletedAt === "string" ||
+      typeof selectedAcademicYear.closedOn === "string" ||
+      typeof selectedAcademicYear.archivedAt === "string")
+  ) {
+    throw new Error(EDUCATIONAL_WRITE_CLOSED_YEAR_ERROR);
+  }
+
+  const scope = resolveActiveClassroomScope(snapshot);
+  if (!scope) {
+    throw new Error("Bu işlem için önce aktif sınıf ve eğitim yılı yapılandırılmalıdır.");
+  }
+  const academicYear = snapshot.academicYears.find(
+    (record) =>
+      record.id === scope.academicYearId &&
+      typeof record.deletedAt !== "string",
+  );
+  if (
+    !academicYear ||
+    !isCivilDate(academicYear.startDate) ||
+    !isCivilDate(academicYear.endDate) ||
+    academicYear.startDate > academicYear.endDate ||
+    (academicYear.operationalStartDate !== undefined &&
+      (!isCivilDate(academicYear.operationalStartDate) ||
+        academicYear.operationalStartDate > academicYear.endDate))
+  ) {
+    throw new Error(
+      "Yoklama veya gözlem kaydedilemedi: seçili eğitim yılının tarihleri geçerli değil.",
+    );
+  }
+  if (academicYear.status !== undefined && academicYear.status !== "active") {
+    throw new Error(EDUCATIONAL_WRITE_CLOSED_YEAR_ERROR);
+  }
+
+  const operationalStatus = academicYearOperationalStatus(
+    academicYear.startDate,
+    academicYear.endDate,
+    currentCivilDate,
+    typeof academicYear.operationalStartDate === "string"
+      ? academicYear.operationalStartDate
+      : undefined,
+  );
+  if (operationalStatus === "ended") {
+    throw new Error(
+      `Bu eğitim yılı ${academicYear.endDate} tarihinde sona erdi. Yoklama veya gözlem için yeni veya bugün etkin olan eğitim yılını seçin.`,
+    );
+  }
+  if (operationalStatus === "preparation") {
+    throw new Error(
+      `Bu eğitim yılı henüz başlamadı. Yoklama veya gözlem için eğitim yılını bugün başlatın ya da ${academicYear.startDate} tarihini bekleyin.`,
+    );
+  }
+
+  return {
+    scope,
+    effectiveStartDate: academicYearEffectiveOperationalStart({
+      startDate: academicYear.startDate,
+      operationalStartDate:
+        typeof academicYear.operationalStartDate === "string"
+          ? academicYear.operationalStartDate
+          : undefined,
+    }),
+    endDate: academicYear.endDate,
+  };
+}
+
+function assertEducationalWriteDateInScope(
+  writable: WritableEducationalScope,
+  writeCivilDate: string,
+  kind: EducationalWriteKind,
+): void {
+  if (
+    !isCivilDate(writeCivilDate) ||
+    writeCivilDate < writable.effectiveStartDate ||
+    writeCivilDate > writable.endDate
+  ) {
+    throw new Error(
+      `${kind} günü aktif eğitim yılının tarih aralığında olmalıdır.`,
+    );
+  }
 }
 
 function scopeFields(scope: ActiveClassroomScope | null): Record<string, unknown> {
@@ -1022,38 +1212,63 @@ export async function loadDashboardState(
 
 export async function persistStudentRosterChange(
   store: LocalDataStore,
-  options: { student: DashboardStudent; archived: boolean },
+  options: { student: DashboardStudent; archived: boolean; preserveCurrentProfile?: boolean; now?: Date },
 ): Promise<void> {
-  const now = new Date();
+  const now = options.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Çocuk listesi değişikliği için geçerli bir kayıt zamanı gerekli.");
+  }
   const updatedAt = now.toISOString();
-  const scope = requireActiveClassroomScope(await store.readSnapshot());
-  const profile = normalizeStudentProfile(
-    {
-      displayName: options.student.name,
-      firstName: options.student.firstName,
-      lastName: options.student.lastName,
-      preferredName: options.student.preferredName,
-      birthDate: options.student.birthDate,
-      optionalCode: options.student.optionalCode,
-      nationalIdentityNumber: options.student.nationalIdentityNumber,
-      enrollmentYear: options.student.enrollmentYear,
-      homeLanguages: options.student.homeLanguages,
-      interests: options.student.interests,
-      strengths: options.student.strengths,
-      supportPreferences: options.student.supportPreferences,
-      contacts: options.student.contacts,
-      careDetails: options.student.careDetails,
-      profilePhotoDataUrl: options.student.profilePhotoDataUrl,
-    },
-    civilDateInIstanbul(now),
-  );
-  await store.transaction("readwrite", ["students"], async (transaction) => {
-    const existing = (await transaction.getAll("students")).find(
-      (record) => record.id === options.student.id,
+  const currentCivilDate = civilDateInIstanbul(now);
+  await store.transaction("readwrite", [
+    "academicYears",
+    "classrooms",
+    "settings",
+    "students",
+  ], async (transaction) => {
+    const [academicYears, classrooms, settings, students] = await Promise.all([
+      transaction.getAll("academicYears"),
+      transaction.getAll("classrooms"),
+      transaction.getAll("settings"),
+      transaction.getAll("students"),
+    ]);
+    const scope = requireWritableRosterScope(
+      { academicYears, classrooms, settings },
+      currentCivilDate,
     );
+    const existing = students.find((record) => record.id === options.student.id);
+    if (options.preserveCurrentProfile && !existing) {
+      throw new Error("Öğrenci kaydı değişti veya kaldırıldı; sınıf listesi yenilenmelidir.");
+    }
     if (existing && !recordBelongsToClassroomScope(existing, scope)) {
       throw new Error("Başka bir sınıfa ait öğrenci bu sınıftan değiştirilemez.");
     }
+    const currentProfile = options.preserveCurrentProfile && existing
+      ? studentProfileFromRecord(existing)
+      : null;
+    if (options.preserveCurrentProfile && !currentProfile) {
+      throw new Error("Öğrencinin güncel profili doğrulanamadı; mevcut kayıt korundu.");
+    }
+    const profile = normalizeStudentProfile(
+      currentProfile ?? {
+        displayName: options.student.name,
+        firstName: options.student.firstName,
+        lastName: options.student.lastName,
+        preferredName: options.student.preferredName,
+        birthDate: options.student.birthDate,
+        optionalCode: options.student.optionalCode,
+        nationalIdentityNumber: options.student.nationalIdentityNumber,
+        enrollmentYear: options.student.enrollmentYear,
+        homeLanguages: options.student.homeLanguages,
+        interests: options.student.interests,
+        strengths: options.student.strengths,
+        supportPreferences: options.student.supportPreferences,
+        contacts: options.student.contacts,
+        careDetails: options.student.careDetails,
+        profilePhotoDataUrl: options.student.profilePhotoDataUrl,
+      },
+      currentCivilDate,
+    );
     const preserved: Record<string, unknown> = existing ? { ...existing } : {};
     delete preserved.attendanceStatus;
     delete preserved.legacyAssignmentStatus;
@@ -1074,11 +1289,10 @@ export async function persistStudentRosterChange(
     delete preserved.profilePhotoDataUrl;
     delete preserved.profileSchemaVersion;
     const enrollments = existing ? studentEnrollments(existing) : [];
-    const matchingEnrollment = enrollments.find(
-      (enrollment) =>
-        enrollment.academicYearId === scope.academicYearId &&
-        enrollment.classroomId === scope.classroomId,
-    );
+    const matchingEnrollment = latestStudentEnrollment(enrollments, scope);
+    if (options.archived && matchingEnrollment && currentCivilDate < matchingEnrollment.startedOn) {
+      throw new Error("Öğrenci üyeliği başlangıcından önce bitirilemez; kayıt korundu.");
+    }
     const enrollment: StudentEnrollment = {
       ...(matchingEnrollment ?? {}),
       id: matchingEnrollment?.id ?? crypto.randomUUID(),
@@ -1088,10 +1302,10 @@ export async function persistStudentRosterChange(
         matchingEnrollment?.startedOn ??
         (existing?.civilDate && isCivilDate(existing.civilDate)
           ? existing.civilDate
-          : civilDateInIstanbul(now)),
+          : currentCivilDate),
       status: options.archived ? "left" : "active",
       ...(options.archived
-        ? { endedOn: civilDateInIstanbul(now) }
+        ? { endedOn: currentCivilDate }
         : {}),
       schemaVersion: STUDENT_ENROLLMENT_VERSION,
     };
@@ -1136,7 +1350,7 @@ export async function persistStudentRosterChange(
         enrollments: nextEnrollments,
         createdAt: existing?.createdAt ?? updatedAt,
         updatedAt,
-        civilDate: existing?.civilDate ?? civilDateInIstanbul(now),
+        civilDate: existing?.civilDate ?? currentCivilDate,
         ...(typeof existing?.deletedAt === "string"
           ? { legacyRosterDeletedAt: existing.deletedAt }
           : {}),
@@ -1148,6 +1362,11 @@ export async function persistStudentRosterChange(
         ...scopeFields(scope),
       },
     ]);
+    const saved = (await transaction.getAll("students")).find(r => r.id === options.student.id);
+    if (saved) {
+      const history = contactAuthorityHistory(existing, saved, now);
+      if (history.length > 0) await transaction.putMany("settings", history);
+    }
   });
 }
 
@@ -1157,48 +1376,72 @@ export async function persistAttendanceUpdate(
     students: readonly DashboardStudent[];
     attendanceCivilDate: string;
     attendanceCompleted?: boolean;
+    now?: Date;
   },
 ): Promise<void> {
-  const snapshot = await store.readSnapshot();
-  const scope = requireActiveClassroomScope(snapshot);
-  const studentsById = new Map(snapshot.students.map((record) => [record.id, record]));
-  for (const student of options.students) {
-    const record = studentsById.get(student.id);
-    if (!record || !recordBelongsToClassroomScope(record, scope)) {
-      throw new Error("Yoklama listesinde aktif sınıfa ait olmayan öğrenci bulundu.");
-    }
+  const now = options.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Yoklama için geçerli bir kayıt zamanı gerekli.");
   }
-  const collections = options.attendanceCompleted === undefined
-    ? (["attendanceRecords"] as const)
-    : (["attendanceRecords", "settings"] as const);
-  await store.transaction("readwrite", collections, async (transaction) => {
-    const existingAttendance = await transaction.getAll("attendanceRecords");
+  const currentCivilDate = civilDateInIstanbul(now);
+  await store.transaction("readwrite", [
+    "academicYears",
+    "classrooms",
+    "settings",
+    "students",
+    "attendanceRecords",
+  ], async (transaction) => {
+    const [academicYears, classrooms, settings, students, existingAttendance] =
+      await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("classrooms"),
+        transaction.getAll("settings"),
+        transaction.getAll("students"),
+        transaction.getAll("attendanceRecords"),
+      ]);
+    const writable = requireWritableEducationalScope(
+      { academicYears, classrooms, settings },
+      currentCivilDate,
+    );
+    const studentsById = new Map(students.map((record) => [record.id, record]));
+    for (const student of options.students) {
+      const record = studentsById.get(student.id);
+      if (!record || !recordBelongsToClassroomScope(record, writable.scope)) {
+        throw new Error("Yoklama listesinde aktif sınıfa ait olmayan öğrenci bulundu.");
+      }
+    }
+    assertEducationalWriteDateInScope(
+      writable,
+      options.attendanceCivilDate,
+      "Yoklama",
+    );
     const plan = planAttendanceUpsert({
       students: options.students,
       existingRecords: existingAttendance.filter((record) =>
-        recordBelongsToClassroomScope(record, scope),
+        recordBelongsToClassroomScope(record, writable.scope),
       ),
       civilDate: options.attendanceCivilDate,
+      now,
     });
     await transaction.putMany(
       "attendanceRecords",
       plan.recordsToPut.map((record) => ({
         ...record,
-        ...scopeFields(scope),
+        ...scopeFields(writable.scope),
       })),
     );
     if (options.attendanceCompleted !== undefined) {
-      const existingSettings = await transaction.getAll("settings");
       const completion = createAttendanceCompletionSetting({
           completed: options.attendanceCompleted,
           civilDate: options.attendanceCivilDate,
-          existingSettings: existingSettings.filter((record) =>
-            recordBelongsToClassroomScope(record, scope),
+          existingSettings: settings.filter((record) =>
+            recordBelongsToClassroomScope(record, writable.scope),
           ),
+          now,
         });
       await transaction.putMany("settings", [{
         ...completion,
-        ...scopeFields(scope),
+        ...scopeFields(writable.scope),
       }]);
     }
   });
@@ -1207,22 +1450,51 @@ export async function persistAttendanceUpdate(
 export async function persistDashboardObservation(
   store: LocalDataStore,
   observation: DashboardObservation,
+  options: { now?: Date } = {},
 ): Promise<void> {
-  const now = new Date().toISOString();
-  const scope = requireActiveClassroomScope(await store.readSnapshot());
-  await store.transaction("readwrite", ["students", "observations"], async (transaction) => {
-    const student = (await transaction.getAll("students")).find(
+  const now = options.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Gözlem için geçerli bir kayıt zamanı gerekli.");
+  }
+  const observedAt = new Date(observation.createdAtUtc);
+  if (Number.isNaN(observedAt.getTime())) {
+    throw new Error("Gözlem için geçerli bir gözlem zamanı gerekli.");
+  }
+  const timestamp = now.toISOString();
+  const currentCivilDate = civilDateInIstanbul(now);
+  const observedCivilDate = civilDateInIstanbul(observedAt);
+  await store.transaction("readwrite", [
+    "academicYears",
+    "classrooms",
+    "settings",
+    "students",
+    "observations",
+  ], async (transaction) => {
+    const [academicYears, classrooms, settings, students, observations] =
+      await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("classrooms"),
+        transaction.getAll("settings"),
+        transaction.getAll("students"),
+        transaction.getAll("observations"),
+      ]);
+    const writable = requireWritableEducationalScope(
+      { academicYears, classrooms, settings },
+      currentCivilDate,
+    );
+    const student = students.find(
       (record) => record.id === observation.studentId,
     );
-    if (!student || !recordBelongsToClassroomScope(student, scope)) {
+    if (!student || !recordBelongsToClassroomScope(student, writable.scope)) {
       throw new Error("Gözlem yalnızca aktif sınıftaki bir öğrenciye bağlanabilir.");
     }
-    const existing = (await transaction.getAll("observations")).find(
+    const existing = observations.find(
       (record) => record.id === observation.id,
     );
-    if (existing && !recordBelongsToClassroomScope(existing, scope)) {
+    if (existing && !recordBelongsToClassroomScope(existing, writable.scope)) {
       throw new Error("Başka bir sınıfa ait gözlem bu sınıftan değiştirilemez.");
     }
+    assertEducationalWriteDateInScope(writable, observedCivilDate, "Gözlem");
     if (existing?.rawTextImmutable === true) {
       const sameStudent =
         Array.isArray(existing.studentIds) &&
@@ -1247,11 +1519,11 @@ export async function persistDashboardObservation(
         ...(observation.requiresStudentReview === true ? { requiresStudentReview: true } : {}),
         ...(observation.legacyStudentId ? { legacyStudentId: observation.legacyStudentId } : {}),
         createdAt: existing?.createdAt ?? observation.createdAtUtc,
-        updatedAt: now,
-        civilDate: civilDateInIstanbul(new Date(observation.createdAtUtc)),
+        updatedAt: timestamp,
+        civilDate: observedCivilDate,
         deletedAt: null,
         schemaVersion: 1,
-        ...scopeFields(scope),
+        ...scopeFields(writable.scope),
       },
     ]);
   });

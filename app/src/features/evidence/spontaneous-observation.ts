@@ -1,3 +1,4 @@
+import { resolveStudentMembershipOn } from "../../core/domain/student-membership.ts";
 import { isCivilDate } from "../../core/domain/attendance.ts";
 import {
   recordBelongsToClassroomScope,
@@ -51,6 +52,8 @@ function activeStudentInScope(
   students: readonly StoredRecord[],
   studentId: string,
   scope: ActiveClassroomScope,
+  civilDate: string,
+  academicYear: StoredRecord,
 ): StoredRecord | null {
   const student = students.find((record) => record.id === studentId);
   if (
@@ -64,27 +67,7 @@ function activeStudentInScope(
     return null;
   }
 
-  if (Array.isArray(student.enrollments)) {
-    const scopedEnrollments = student.enrollments.filter(
-      (value) =>
-        typeof value === "object" &&
-        value !== null &&
-        !Array.isArray(value) &&
-        (value as Record<string, unknown>).academicYearId ===
-          scope.academicYearId &&
-        (value as Record<string, unknown>).classroomId === scope.classroomId,
-    ) as Array<Record<string, unknown>>;
-    if (
-      scopedEnrollments.length > 0 &&
-      !scopedEnrollments.some(
-        (enrollment) =>
-          enrollment.status === "active" &&
-          enrollment.endedOn === undefined,
-      )
-    ) {
-      return null;
-    }
-  }
+  if (!resolveStudentMembershipOn(student, { ...scope, civilDate, academicYear }).eligible) return null;
 
   return student;
 }
@@ -186,12 +169,6 @@ export async function ensureSpontaneousObservationContext(
         transaction.getAll("plans"),
         transaction.getAll("activities"),
       ]);
-      if (!activeStudentInScope(students, studentId, scope)) {
-        throw new Error(
-          "Anlık gözlem yalnız aktif sınıftaki etkin bir çocuk için açılabilir.",
-        );
-      }
-
       const academicYear = academicYears.find(
         (record) => record.id === scope.academicYearId,
       );
@@ -211,6 +188,12 @@ export async function ensureSpontaneousObservationContext(
       ) {
         throw new Error(
           "Anlık gözlem günü aktif eğitim yılının tarih aralığında olmalıdır.",
+        );
+      }
+
+      if (!activeStudentInScope(students, studentId, scope, input.civilDate, academicYear)) {
+        throw new Error(
+          "Anlık gözlem yalnız aktif sınıftaki etkin bir çocuk için açılabilir.",
         );
       }
 

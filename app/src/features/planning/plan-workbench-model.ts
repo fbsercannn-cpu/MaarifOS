@@ -150,7 +150,7 @@ export function createPlanWorkbenchPresentation(
       ? {
           id: "daily",
           label: "Gün",
-          title: "Bugün tarihli plan bağlantı bekliyor",
+          title: "Bugünün planını haftasına bağla",
           detail: "Kayıt korundu; seçili haftalık planla bağı uyuşmadığı için bugünün akışına alınmadı.",
           meta: `${civilDateLabel(workspace.civilDate)} · Bağ incelemesi`,
           actionLabel: "Bağı takvimde incele",

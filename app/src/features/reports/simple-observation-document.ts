@@ -1,5 +1,9 @@
 import type { ActiveClassroomScope } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
+import { studentMembershipOverlaps, resolveStudentMembershipOn } from "../../core/domain/student-membership.ts";
+import { createSemanticTaggedPdf, type SemanticPdfNode, type SemanticTaggedPdfRuntime } from "../documents/semantic-tagged-pdf.ts";
+import { registerPdfPreviewRecipe, validatePdfSelection, type PdfPreviewRecipe } from "../documents/pdf-preview-model.ts";
+import { TEACHER_DOCUMENT_THEME, TEACHER_PRINT_THEME } from "../documents/document-theme.ts";
 
 export const SIMPLE_OBSERVATION_DOCUMENT_FORMAT = "html" as const;
 export const SIMPLE_OBSERVATION_DOCUMENT_MIME_TYPE =
@@ -155,7 +159,12 @@ function isLiveRecord(record: StoredRecord): boolean {
 function studentIsActiveInScope(
   student: StoredRecord,
   scope: ActiveClassroomScope,
+  academicYear?: StoredRecord,
+  period?: SimpleObservationPeriod,
 ): boolean {
+  if (academicYear && period && isCivilDate(String(academicYear.startDate)) && isCivilDate(String(academicYear.endDate))) {
+    return studentMembershipOverlaps(student, { ...scope, academicYear, periodStart: period.startCivilDate, periodEnd: period.endCivilDate });
+  }
   if (
     !isLiveRecord(student) ||
     student.active === false ||
@@ -202,6 +211,7 @@ function observationsForStudent(
   scope: ActiveClassroomScope,
   studentId: string,
   period: SimpleObservationPeriod,
+  isMemberOn?: (date: string) => boolean,
 ): ObservationExcerpt[] {
   return observations
     .map((record, sourceIndex) => ({ record, sourceIndex }))
@@ -217,6 +227,7 @@ function observationsForStudent(
         isCivilDate(record.civilDate) &&
         record.civilDate >= period.startCivilDate &&
         record.civilDate <= period.endCivilDate &&
+        (!isMemberOn || isMemberOn(record.civilDate)) &&
         nonEmptyText(record.rawText) !== null
       );
     })
@@ -471,7 +482,7 @@ function buildHtml(options: {
     <footer class="document-footer">
       <p class="production"><strong>Belge tarihi:</strong> ${escapeHtml(options.generatedDisplayDate)}</p>
       <section class="signature" aria-label="Öğretmen imza alanı">
-        <strong>Öğretmen</strong>
+        <strong>Okul Öncesi Öğretmeni</strong>
         <div class="signature-name">${escapeHtml(options.teacherName)}</div>
         <div class="signature-line" aria-hidden="true"></div>
         <div class="signature-label">İmza</div>
@@ -545,7 +556,7 @@ export function createSimpleObservationDocument(
   const student = input.snapshot.students.find(
     (record) => record.id === input.studentId,
   );
-  if (!student || !studentIsActiveInScope(student, input.scope)) {
+  if (!student || !studentIsActiveInScope(student, input.scope, academicYear, input.period)) {
     throw new Error("Seçili çocuk aktif sınıf kapsamında doğrulanamadı.");
   }
   const studentName = nonEmptyText(student.displayName);
@@ -572,6 +583,7 @@ export function createSimpleObservationDocument(
     input.scope,
     input.studentId,
     period,
+    isCivilDate(String(academicYear.startDate)) && isCivilDate(String(academicYear.endDate)) ? (civilDate) => resolveStudentMembershipOn(student, { ...input.scope, academicYear, civilDate }).eligible : undefined,
   );
   const teacherSections = {
     strengths: nonEmptyText(input.teacherSections?.strengths),
@@ -623,4 +635,52 @@ export function simpleObservationDocumentBlob(
   const bytes = new Uint8Array(file.bytes.byteLength);
   bytes.set(file.bytes);
   return new Blob([bytes.buffer], { type: file.mimeType });
+}
+
+export async function createSimpleObservationPdfDocument(input: SimpleObservationDocumentInput, options: {
+  runtime?: SemanticTaggedPdfRuntime; fields?: readonly string[]; appearance?: "color" | "ink-saving";
+} = {}) {
+  const validated = createSimpleObservationDocument(input);
+  const student = input.snapshot.students.find((record) => record.id === input.studentId)!;
+  const year = input.snapshot.academicYears.find((record) => record.id === input.scope.academicYearId)!;
+  const fields = options.fields ?? ["observations", "strengths", "supportAreas", "homeSuggestions"];
+  const nodes: SemanticPdfNode[] = [
+    { kind: "heading", level: 1, text: input.audience === "parent" ? "AİLE GÖZLEM ÖZETİ" : "İDARE GÖZLEM ÖZETİ" },
+    { kind: "paragraph", tone: "meta", text: `${input.schoolName}\n${input.classroomName} · ${input.academicYearName}` },
+    { kind: "paragraph", text: `Çocuğun adı soyadı: ${String(student.displayName)}\nDönem: ${input.period.startCivilDate} / ${input.period.endCivilDate}` },
+  ];
+  if (input.audience === "administration") nodes.push({ kind: "paragraph", text: `Öğrenci no: ${String(student.optionalCode ?? "—")}\nT.C. kimlik no: ${String(student.nationalIdentityNumber ?? "—")}` });
+  if (fields.includes("observations")) {
+    nodes.push({ kind: "heading", level: 2, text: "Gözlem özeti · Öğretmenin kaynak kayıtları" });
+    const records = observationsForStudent(input.snapshot.observations, input.scope, input.studentId, input.period,
+      isCivilDate(String(year.startDate)) && isCivilDate(String(year.endDate)) ? (civilDate) => resolveStudentMembershipOn(student, { ...input.scope, academicYear: year, civilDate }).eligible : undefined);
+    records.forEach((record) => nodes.push({ kind: "paragraph", tone: "meta", text: `${record.displayDate}${record.context ? ` · ${record.context}` : ""}` },
+      { kind: "paragraph", text: record.rawText }, ...(record.childQuote ? [{ kind: "paragraph" as const, text: `Çocuğun sözü: ${record.childQuote}` }] : [])));
+    if (!records.length) nodes.push({ kind: "paragraph", text: "Bu dönemde kayıtlı gözlem bulunmuyor." });
+  }
+  const choices = [{ id: "observations", label: "Gözlem kayıtları" }, { id: "strengths", label: "Güçlü yönler" }, { id: "supportAreas", label: "Desteklenecek alan" }, { id: "homeSuggestions", label: "Evde öneri" }];
+  for (const section of choices.slice(1)) if (fields.includes(section.id)) {
+    const text = input.teacherSections?.[section.id as keyof SimpleObservationTeacherSections];
+    if (text?.trim()) nodes.push({ kind: "heading", level: 2, text: section.label }, { kind: "paragraph", text });
+  }
+  nodes.push({ kind: "paragraph", text: `Okul Öncesi Öğretmeni: ${input.teacherName}\nİmza: ____________________` });
+  const bytes = await createSemanticTaggedPdf({ title: "MaarifOS Gözlem Özeti", language: "tr-TR", nodes,
+    theme: options.appearance === "ink-saving" ? TEACHER_PRINT_THEME : TEACHER_DOCUMENT_THEME,
+    includeTotalPages: true, artifactHeaderOnFirstPage: false,
+    artifactHeaderText: `${String(student.displayName)} · ${input.classroomName} · ${input.period.startCivilDate} / ${input.period.endCivilDate}`,
+  }, options.runtime);
+  const source = structuredClone({ ...input, generatedAt: validated.generatedAt });
+  const min = isCivilDate(String(year.operationalStartDate)) ? String(year.operationalStartDate) : String(year.startDate ?? input.period.startCivilDate);
+  const max = String(year.endDate ?? input.period.endCivilDate);
+  const recipe: PdfPreviewRecipe = {
+    supportsAppearance: true,
+    title: `${String(student.displayName)} · Gözlem özeti`, fields: choices,
+    fieldPresets: [{ id: "source-notes", label: "Yalnız gözlem kayıtları", fields: ["observations"] }],
+    students: [{ id: input.studentId, label: String(student.displayName) }],
+    period: { min, max }, initial: { fields, studentIds: [input.studentId], periodStart: input.period.startCivilDate, periodEnd: input.period.endCivilDate },
+    async build(selection) { validatePdfSelection(recipe, selection); return createSimpleObservationPdfDocument({ ...source,
+      period: { startCivilDate: selection.periodStart!, endCivilDate: selection.periodEnd! } }, { ...options, fields: selection.fields, appearance: selection.appearance }); },
+  };
+  registerPdfPreviewRecipe(bytes, recipe);
+  return { ...validated, format: "pdf" as const, mimeType: "application/pdf", bytes, fileName: validated.fileName.replace(/\.html$/u, ".pdf") };
 }

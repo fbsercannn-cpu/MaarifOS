@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { BirthdayNotice } from "../today/BirthdayNotice.tsx";
 import {
   CalendarIcon,
   CheckCircledIcon,
   ChevronRightIcon,
   GearIcon,
-  MagnifyingGlassIcon,
-  Pencil1Icon,
   PersonIcon,
+  Pencil1Icon,
   ReaderIcon,
 } from "@radix-ui/react-icons";
 
@@ -17,7 +17,6 @@ import type {
 import {
   ACTIVITY_STUDIO_CATEGORY_LABELS,
   filterActivityStudioItems,
-  type ActivityStudioAgeBand,
 } from "../activity-studio/activity-studio-model.ts";
 import {
   resolveActivityYearMonthLens,
@@ -25,7 +24,6 @@ import {
 } from "../activity-studio/activity-year-program.ts";
 import {
   PEDAGOGICAL_SCENARIOS,
-  PEDAGOGICAL_VARIANT_COUNT,
   createObservationCoverage,
   createPedagogicalDayFlow,
   createPedagogicalLoop,
@@ -39,21 +37,37 @@ import {
   createSetupProgressEvidence,
   createSetupProgressPresentation,
 } from "../onboarding/setup-progress-model.ts";
-import {
-  createMarifTeacherAgentBrief,
-  type MarifTeacherAgentAction,
-} from "../today/marif-teacher-agent.ts";
+import { createMarifTeacherAgentBrief } from "../today/marif-teacher-agent.ts";
 import {
   compactTodayProgramLabel,
   configuredClassroomFromToday,
   createTeacherCyclePresentation,
   createTodayControlCenterSummary,
 } from "../today/today-screen-model.ts";
+import {
+  createSimpleTodayPresentation,
+  type SimpleTodayAction,
+} from "./simple-today-model.ts";
+import { createTodayTeachingFocus, TODAY_TEACHING_COPY } from "./today-teaching-focus.ts";
+import { TodayRecordedFlow, TodayTeachingCard } from "./TodayTeachingCard.tsx";
+import type { LocalDataStore } from "../../core/repository/contracts.ts";
+import {
+  DEFAULT_TEACHER_HOME_PREFERENCES,
+  TEACHER_HOME_SHORTCUT_IDS,
+  loadTeacherHomePreferences,
+  saveTeacherHomePreferences,
+  type TeacherHomePreferencesModel,
+  type TeacherHomeShortcutId,
+} from "./teacher-home-preferences.ts";
 import "./simple-experience.css";
+import "./today-teaching.css";
 
 export interface SimpleTodayScreenActions {
+  onOpenStudentProfile?: TodayScreenActions["onOpenStudentProfile"];
   onOpenSettings: TodayScreenActions["onOpenSettings"];
+  onOpenClassroom: TodayScreenActions["onOpenClassroom"];
   onApplyReadyUpdate: TodayScreenActions["onApplyReadyUpdate"];
+  onActivateAcademicYear: TodayScreenActions["onActivateAcademicYear"];
   onOpenAttendance: TodayScreenActions["onOpenAttendance"];
   onOpenCalendar: TodayScreenActions["onOpenCalendar"];
   onOpenWeekDay: TodayScreenActions["onOpenWeekDay"];
@@ -65,15 +79,31 @@ export interface SimpleTodayScreenActions {
   onOpenTeacherCycleStage: TodayScreenActions["onOpenTeacherCycleStage"];
   onOpenSetupStep: TodayScreenActions["onOpenSetupStep"];
   onOpenActivityStudio(options?: ActivityStudioOpenOptions): void;
+  onOpenRecordedActivity: TodayScreenActions["onOpenActivityEvidence"];
+  onCompleteRecordedActivity(activityId: string): void;
 }
 
-export interface SimpleTodayScreenProps extends Omit<TodayScreenProps, "actions"> {
+export interface SimpleTodayScreenProps extends Omit<TodayScreenProps, "actions" | "slots"> {
   actions: SimpleTodayScreenActions;
+  preferenceStore?: LocalDataStore;
+  slots: TodayScreenProps["slots"] & {
+    thisWeek?: ReactNode;
+  };
 }
+
+const HOME_SHORTCUT_COPY: Record<TeacherHomeShortcutId, {
+  readonly label: string;
+  readonly detail: string;
+}> = {
+  attendance: { label: "Yoklama", detail: "Bugünün devamını işaretle" },
+  "daily-plan": { label: "Günün planı", detail: "Kayıtlı akışı aç veya hazırla" },
+  classroom: { label: "Sınıfım", detail: "Çocuk ve sınıf bilgilerini aç" },
+  calendar: { label: "Takvim", detail: "Planlanan günleri aç" },
+};
 
 function teacherGreeting(teacherName?: string): string {
   const firstName = teacherName?.trim().split(/\s+/u)[0];
-  return firstName ? `Günaydın ${firstName} Öğretmen` : "Günaydın öğretmenim";
+  return firstName ? `Merhaba ${firstName} Öğretmen` : "Merhaba öğretmenim";
 }
 
 function ageBandLabel(value?: string): string {
@@ -82,8 +112,13 @@ function ageBandLabel(value?: string): string {
   return /\bay$/iu.test(normalized) ? normalized : `${normalized} ay`;
 }
 
-function AssistantActionIcon({ action }: { action: MarifTeacherAgentAction }) {
-  if (action.kind === "attendance" || action.kind === "day-closure") {
+function AssistantActionIcon({ action }: { action: SimpleTodayAction }) {
+  if (
+    action.kind === "attendance" ||
+    action.kind === "day-closure" ||
+    action.kind === "start-year" ||
+    action.kind === "complete-recorded"
+  ) {
     return <CheckCircledIcon />;
   }
   if (action.kind === "calendar") return <CalendarIcon />;
@@ -93,11 +128,53 @@ function AssistantActionIcon({ action }: { action: MarifTeacherAgentAction }) {
   return <ReaderIcon />;
 }
 
-export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
+export function SimpleTodayScreen({
+  model,
+  actions,
+  slots,
+  preferenceStore,
+}: SimpleTodayScreenProps) {
   const [scenarioId, setScenarioId] =
     useState<PedagogicalScenarioId>("balanced");
   const [advancedSupportOpen, setAdvancedSupportOpen] = useState(false);
   const classroom = configuredClassroomFromToday(model.workspace);
+  const [homePreferences, setHomePreferences] = useState<TeacherHomePreferencesModel>({
+    scope: null,
+    ...DEFAULT_TEACHER_HOME_PREFERENCES,
+    expectedUpdatedAt: null,
+  });
+  const [shortcutDraft, setShortcutDraft] = useState<readonly TeacherHomeShortcutId[]>(
+    DEFAULT_TEACHER_HOME_PREFERENCES.pinnedShortcutIds,
+  );
+  const [preferenceBusy, setPreferenceBusy] = useState(false);
+  const [preferenceNotice, setPreferenceNotice] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (!preferenceStore) return undefined;
+    setPreferenceNotice("");
+    void loadTeacherHomePreferences(preferenceStore).then(
+      (loaded) => {
+        if (!active) return;
+        setHomePreferences(loaded);
+        setShortcutDraft(loaded.pinnedShortcutIds);
+      },
+      (reason) => {
+        if (!active) return;
+        setPreferenceNotice(
+          reason instanceof Error
+            ? reason.message
+            : "Ana ekran tercihleri bu cihazdan okunamadı.",
+        );
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [
+    preferenceStore,
+    classroom?.academicYearId,
+    classroom?.classroomId,
+  ]);
   const control = createTodayControlCenterSummary({
     workspace: model.workspace,
     attendance: model.attendance,
@@ -118,29 +195,6 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     cycle,
     dayClosure: model.dayClosure,
   });
-  const assistantReasons = [assistantBrief.rationale, ...assistantBrief.evidence]
-    .filter((reason, index, reasons) => reason && reasons.indexOf(reason) === index)
-    .slice(0, 2);
-  const assistantOwnsObservationAction =
-    (model.pendingObservationCount > 0 &&
-      assistantBrief.action.kind === "pending-observation") ||
-    (model.students.length === 0 &&
-      assistantBrief.action.kind === "setup" &&
-      assistantBrief.action.stepId === "students");
-  const contextualObservationAction = model.students.length === 0
-    ? {
-        label: "İlk çocuğu ekle",
-        run: () => actions.onOpenSetupStep("students"),
-      }
-    : model.pendingObservationCount > 0
-      ? {
-          label: "Program bağını tamamla",
-          run: actions.onOpenPendingObservation,
-        }
-      : {
-          label: "Hızlı gözlem",
-          run: actions.onOpenQuickObservation,
-        };
   const dailyPlanReady = model.teacherCycle.daily.planId !== null;
   const suggestedAgeBand = resolveActivityAgeBand(classroom?.ageGroup);
   const dailySuggestions = suggestedAgeBand
@@ -152,11 +206,28 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         model.workspace.civilDate,
       )
     : [];
+  const teachingFocus = createTodayTeachingFocus({
+    enabled: classroom?.operationalStatus === "active" && !model.educationalWritesDisabled && model.students.length > 0,
+    pendingObservationCount: model.pendingObservationCount,
+    blockedByPlanIntegrity: model.teacherCycle.daily.status === "conflict" || model.teacherCycle.daily.status === "chain-mismatch",
+    hasRecordedDailyPlan: dailyPlanReady,
+    dayNeedsReview: assistantBrief.action.kind === "day-closure" && assistantBrief.tone === "attention",
+    currentActivity: model.workspace.currentActivity,
+    planItems: model.workspace.planItems,
+    suggestions: classroom?.curriculumProfile?.framework === "tymm" ? dailySuggestions : [],
+  });
+  const presentation = createSimpleTodayPresentation({
+    hasClassroom: classroom !== null,
+    operationalStatus: classroom?.operationalStatus,
+    educationalWritesDisabled: model.educationalWritesDisabled,
+    studentCount: model.students.length,
+    dailyPlanReady,
+    attendanceMarked: model.attendance.marked,
+    attendanceTotal: model.attendance.total,
+    assistantBrief,
+    teachingFocus,
+  });
   const monthLens = resolveActivityYearMonthLens(model.workspace.civilDate);
-  const attendanceDetail =
-    model.attendance.total === 0
-      ? "Sınıf listesi bekleniyor"
-      : `${model.attendance.marked}/${model.attendance.total} çocuk işaretlendi`;
   const observationCoverage = createObservationCoverage(model.students);
   const pedagogicalSignals = createPedagogicalSignals({
     attendance: model.attendance,
@@ -164,6 +235,18 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     observationCoverage,
   });
   const pedagogicalLoop = createPedagogicalLoop(model.teacherCycle);
+  const currentPedagogicalStageIndex = pedagogicalLoop.findIndex(
+    (stage) => stage.state === "current",
+  );
+  const currentPedagogicalStage = currentPedagogicalStageIndex >= 0
+    ? pedagogicalLoop[currentPedagogicalStageIndex]
+    : null;
+  const nextPedagogicalStage = currentPedagogicalStageIndex >= 0
+    ? pedagogicalLoop[currentPedagogicalStageIndex + 1] ?? null
+    : null;
+  const completedPedagogicalStageCount = pedagogicalLoop.filter(
+    (stage) => stage.state === "done",
+  ).length;
   const pedagogicalDay = suggestedAgeBand
     ? createPedagogicalDayFlow({
         ageBand: suggestedAgeBand,
@@ -192,8 +275,27 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     actions.onOpenPlanFlow();
   };
 
-  const runAssistantAction = (action: MarifTeacherAgentAction) => {
+  const runAssistantAction = (action: SimpleTodayAction) => {
     switch (action.kind) {
+      case "studio":
+        actions.onOpenActivityStudio({ activityId: action.activityId, scenarioId });
+        return;
+      case "recorded-item":
+        if (action.item.activityId && action.item.canCaptureEvidence) {
+          void actions.onOpenRecordedActivity(action.item.activityId);
+        } else {
+          actions.onOpenTeacherCycleStage("daily");
+        }
+        return;
+      case "complete-recorded":
+        actions.onCompleteRecordedActivity(action.activityId);
+        return;
+      case "start-year":
+        void actions.onActivateAcademicYear();
+        return;
+      case "day-details":
+        setAdvancedSupportOpen((current) => !current);
+        return;
       case "setup":
         actions.onOpenSetupStep(action.stepId);
         return;
@@ -217,9 +319,87 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
     }
   };
 
+  const persistHomePreferences = async (next: {
+    lessonMode: boolean;
+    pinnedShortcutIds: readonly TeacherHomeShortcutId[];
+  }) => {
+    if (!preferenceStore || !homePreferences.scope || preferenceBusy) return;
+    setPreferenceBusy(true);
+    setPreferenceNotice("");
+    try {
+      const saved = await saveTeacherHomePreferences(preferenceStore, {
+        ...next,
+        expectedUpdatedAt: homePreferences.expectedUpdatedAt,
+      });
+      setHomePreferences(saved);
+      setShortcutDraft(saved.pinnedShortcutIds);
+      setPreferenceNotice("Ana ekran tercihiniz bu cihazda kaydedildi.");
+      if (saved.lessonMode) setAdvancedSupportOpen(false);
+    } catch (reason) {
+      try {
+        const current = await loadTeacherHomePreferences(preferenceStore);
+        setHomePreferences(current);
+        setShortcutDraft(current.pinnedShortcutIds);
+      } catch {
+        // İlk hata öğretmenin yapabileceği işlemi daha iyi açıkladığı için korunur.
+      }
+      setPreferenceNotice(
+        reason instanceof Error
+          ? reason.message
+          : "Ana ekran tercihi kaydedilemedi; mevcut seçimler korundu.",
+      );
+    } finally {
+      setPreferenceBusy(false);
+    }
+  };
+
+  const toggleShortcutDraft = (shortcutId: TeacherHomeShortcutId) => {
+    setPreferenceNotice("");
+    setShortcutDraft((current) => {
+      if (current.includes(shortcutId)) {
+        return current.filter((id) => id !== shortcutId);
+      }
+      if (current.length >= 2) {
+        setPreferenceNotice("Yeni kısayolu seçmeden önce mevcut iki kısayoldan birini kaldırın.");
+        return current;
+      }
+      return [...current, shortcutId];
+    });
+  };
+
+  const runHomeShortcut = (shortcutId: TeacherHomeShortcutId) => {
+    if (shortcutId === "attendance") {
+      actions.onOpenAttendance();
+      return;
+    }
+    if (shortcutId === "daily-plan") {
+      if (dailyPlanReady) actions.onOpenTeacherCycleStage("daily");
+      else actions.onOpenPlanFlow();
+      return;
+    }
+    if (shortcutId === "classroom") {
+      actions.onOpenClassroom();
+      return;
+    }
+    void actions.onOpenCalendar();
+  };
+
+  const completionEntries = [
+    presentation.primary,
+    ...presentation.followUps.map((entry) => entry),
+  ]
+    .filter((entry, index, all) =>
+      all.findIndex((candidate) => candidate.label === entry.label) === index &&
+      (index === 0 || !homePreferences.lessonMode ||
+        (entry.action.kind !== "day-details" &&
+          entry.action.kind !== "day-closure" &&
+          entry.action.kind !== "calendar")),
+    )
+    .slice(0, 3);
+
   return (
     <main
-      className="simple-today"
+      className="simple-today today-teaching"
       aria-labelledby="simple-today-title"
       data-testid="today-screen"
       data-setup-only={classroom ? "false" : "true"}
@@ -236,40 +416,27 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
             <strong>Bugün</strong>
           </span>
         </div>
-        <button
-          type="button"
-          className="simple-icon-button"
-          onClick={actions.onOpenSettings}
-          aria-label="Ayarları aç"
-        >
-          <GearIcon aria-hidden="true" />
-        </button>
+        {!homePreferences.lessonMode ? (
+          <button
+            type="button"
+            className="simple-icon-button"
+            onClick={actions.onOpenSettings}
+            aria-label="Ayarları aç"
+          >
+            <GearIcon aria-hidden="true" />
+          </button>
+        ) : <span className="simple-today__lesson-badge">Ders modu</span>}
       </header>
 
-      <section className="simple-today__context" aria-label="Bugünün sınıf bilgisi">
-        <div className="simple-today__context-item">
-          <span className="simple-today__context-icon" aria-hidden="true">
-            <PersonIcon />
-          </span>
-          <span>
-            <strong>{classroom?.classroomName ?? "Sınıf kurulumu"}</strong>
-            <small>
-              {classroom
-                ? `${model.students.length} çocuk · ${ageBandLabel(classroom.ageGroup)} · ${compactTodayProgramLabel(classroom.curriculumProgram)}`
-                : "Bilgileri bir kez girin; her belgede hazır olsun"}
-            </small>
-          </span>
-        </div>
-        <div className="simple-today__context-item is-date">
-          <span className="simple-today__context-icon" aria-hidden="true">
-            <CalendarIcon />
-          </span>
-          <span>
-            <strong>Bugün</strong>
-            <small>{model.civilDateLabel}</small>
-          </span>
-        </div>
+      <section className="today-teaching__context" aria-label="Bugünün sınıf bilgisi">
+        <p>{model.civilDateLabel}</p>
+        <strong>{classroom?.classroomName ?? "Sınıf kurulumu"}</strong>
+        <span>{classroom
+          ? `Kayıtlı ${model.students.length} · Bugünün yoklama kapsamı ${model.attendance.total} · ${ageBandLabel(classroom.ageGroup)} · ${compactTodayProgramLabel(classroom.curriculumProgram)}`
+          : "Bilgileri bir kez girin; her belgede hazır olsun"}</span>
       </section>
+
+      <BirthdayNotice students={model.students} civilDate={model.workspace.civilDate} onOpenStudent={actions.onOpenStudentProfile} />
 
       {model.updateReady ? (
         <button
@@ -290,115 +457,180 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         <h1 id="simple-today-title" data-route-heading tabIndex={-1}>
           {teacherGreeting(classroom?.teacherName)}
         </h1>
-        <div className="simple-today__brief-bar">
-          <p className="simple-today__brief-label">Bugün için kısa özet</p>
-          {!assistantOwnsObservationAction ? (
-            <button
-              type="button"
-              className="simple-today__brief-action"
-              onClick={contextualObservationAction.run}
-              disabled={model.dataBusy}
-            >
-              <Pencil1Icon aria-hidden="true" />
-              {contextualObservationAction.label}
-            </button>
-          ) : null}
-        </div>
-        <ul aria-label="Önerinin nedenleri">
-          {assistantReasons.map((reason) => (
+        {presentation.reasons.length > 0 ? <ul aria-label="Önerinin nedenleri">
+          {presentation.reasons.map((reason) => (
             <li key={reason}>
               <CheckCircledIcon aria-hidden="true" />
               <span>{reason}</span>
             </li>
           ))}
-        </ul>
+        </ul> : null}
       </section>
 
-      <section
-        className="simple-today__focus"
-        aria-label="Sıradaki en iyi adım"
-        data-tone={assistantBrief.tone}
-      >
-        <button
-          type="button"
-          onClick={() => runAssistantAction(assistantBrief.action)}
-          disabled={model.dataBusy}
-        >
-          <span className="simple-focus__icon" aria-hidden="true">
-            <AssistantActionIcon action={assistantBrief.action} />
-          </span>
-          <span className="simple-focus__copy">
-            <small>Sıradaki en iyi adım</small>
-            <strong>{assistantBrief.title}</strong>
-          </span>
-          <span className="simple-focus__action">
-            {assistantBrief.actionLabel}
-            <ChevronRightIcon aria-hidden="true" />
-          </span>
-        </button>
-      </section>
-
-      {classroom ? (
-        <section className="simple-today__desk" aria-labelledby="simple-teacher-desk-title">
+      {classroom?.operationalStatus === "active" ? (
+        <section className="simple-today__lesson-tools" aria-labelledby="simple-today-lesson-tools-title">
           <header>
             <div>
-              <span>ÖĞRETMEN MASASI</span>
-              <h2 id="simple-teacher-desk-title">Bugünün işi tek yerde</h2>
+              <h2 id="simple-today-lesson-tools-title">Ders sırasında</h2>
+              <p>Çocuğu gözlem açılınca seçin; yeni kayıt önceki çocuğa kendiliğinden yazılmaz.</p>
             </div>
-            <small>{model.civilDateLabel}</small>
+            <button
+              type="button"
+              className="simple-today__lesson-toggle"
+              aria-pressed={homePreferences.lessonMode}
+              disabled={!preferenceStore || !homePreferences.scope || preferenceBusy}
+              onClick={() => void persistHomePreferences({
+                lessonMode: !homePreferences.lessonMode,
+                pinnedShortcutIds: homePreferences.pinnedShortcutIds,
+              })}
+            >
+              {homePreferences.lessonMode ? "Ders modunu kapat" : "Ders modunu aç"}
+            </button>
           </header>
-          <div className="simple-today__desk-grid">
-            <button type="button" onClick={actions.onOpenAttendance} disabled={model.dataBusy}>
-              <span className="is-attendance" aria-hidden="true"><CheckCircledIcon /></span>
-              <p><strong>Yoklama</strong><small>{attendanceDetail}</small></p>
-              <b>{model.attendance.marked === model.attendance.total && model.attendance.total > 0 ? "Tamam" : "Aç"}</b>
-            </button>
+          <div className="simple-today__capture-shortcuts">
             <button
               type="button"
-              onClick={dailyPlanReady ? () => actions.onOpenTeacherCycleStage("daily") : actions.onOpenPlanFlow}
-              disabled={model.dataBusy}
+              className="is-observation"
+              aria-label="Hızlı gözlem"
+              onClick={actions.onOpenQuickObservation}
+              disabled={model.dataBusy || model.educationalWritesDisabled || model.students.length === 0}
             >
-              <span className="is-plan" aria-hidden="true"><ReaderIcon /></span>
-              <p><strong>Günün planı</strong><small>{model.teacherCycle.daily.title}</small></p>
-              <b>{dailyPlanReady ? "Hazır" : "Hazırla"}</b>
+              <Pencil1Icon aria-hidden="true" />
+              <span><strong>Hızlı gözlem</strong><small>Çocuk seç · davranışı yaz veya seç · kaydet</small></span>
+              <ChevronRightIcon aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              onClick={suggestedAgeBand
-                ? () => actions.onOpenActivityStudio()
-                : () => actions.onOpenSetupStep("classroom")}
-              disabled={model.dataBusy}
-            >
-              <span className="is-activity" aria-hidden="true"><MagnifyingGlassIcon /></span>
-              <p>
-                <strong>Etkinlik bankası</strong>
-                <small>{suggestedAgeBand
-                  ? "Yaş bandı ve tarih rotasyonuna göre çevrimdışı fikirler"
-                  : "Önce resmî yaş bandını seçin"}</small>
-              </p>
-              <b>{suggestedAgeBand ? "Aç" : "Tamamla"}</b>
-            </button>
+            {homePreferences.pinnedShortcutIds.map((shortcutId) => (
+              <button
+                type="button"
+                key={shortcutId}
+                onClick={() => runHomeShortcut(shortcutId)}
+                disabled={model.dataBusy || (shortcutId === "attendance" && model.educationalWritesDisabled)}
+              >
+                {shortcutId === "attendance" ? <CheckCircledIcon aria-hidden="true" />
+                  : shortcutId === "calendar" ? <CalendarIcon aria-hidden="true" />
+                  : shortcutId === "classroom" ? <PersonIcon aria-hidden="true" />
+                  : <ReaderIcon aria-hidden="true" />}
+                <span>
+                  <strong>{HOME_SHORTCUT_COPY[shortcutId].label}</strong>
+                  <small>{HOME_SHORTCUT_COPY[shortcutId].detail}</small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            ))}
           </div>
+          {!homePreferences.lessonMode ? (
+            <details className="simple-today__shortcut-editor">
+              <summary>Sabit iki kısayolu değiştir</summary>
+              <div role="group" aria-label="Ana ekran sabit kısayolları">
+                {TEACHER_HOME_SHORTCUT_IDS.map((shortcutId) => (
+                  <button
+                    type="button"
+                    key={shortcutId}
+                    aria-pressed={shortcutDraft.includes(shortcutId)}
+                    disabled={preferenceBusy}
+                    onClick={() => toggleShortcutDraft(shortcutId)}
+                  >
+                    {HOME_SHORTCUT_COPY[shortcutId].label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="simple-today__shortcut-save"
+                disabled={preferenceBusy || shortcutDraft.length !== 2 || !homePreferences.scope}
+                onClick={() => void persistHomePreferences({
+                  lessonMode: homePreferences.lessonMode,
+                  pinnedShortcutIds: shortcutDraft,
+                })}
+              >
+                {preferenceBusy ? "Kaydediliyor…" : "İki kısayolu kaydet"}
+              </button>
+            </details>
+          ) : null}
+          {preferenceNotice ? <p className="simple-today__preference-notice" role="status">{preferenceNotice}</p> : null}
         </section>
       ) : null}
 
-      {classroom ? (
-        <button
-          type="button"
-          className="simple-today__advanced-toggle"
-          aria-expanded={advancedSupportOpen}
-          onClick={() => setAdvancedSupportOpen((current) => !current)}
-        >
-          <span>
-            <strong>{advancedSupportOpen ? "Gelişmiş gün desteğini kapat" : "Bugünün akışını ve haftayı aç"}</strong>
-            <small>Etkinlik önerileri, pedagojik akış ve haftalık görünüm</small>
-          </span>
-          <ChevronRightIcon aria-hidden="true" />
-        </button>
+      {teachingFocus ? <TodayTeachingCard focus={teachingFocus} /> : null}
+
+      {teachingFocus?.kind === "recorded" ? <TodayRecordedFlow
+        items={model.workspace.planItems.filter((item) => item.flowBlockStatus !== "skipped" && item.flowBlockStatus !== "optional")}
+        currentId={teachingFocus.item.id}
+      /> : null}
+
+      <section className="simple-today__completion" aria-labelledby="simple-today-completion-title">
+        <header>
+          <h2 id="simple-today-completion-title">Bugünü tamamla</h2>
+          <small>En çok üç iş</small>
+        </header>
+        {completionEntries[0] ? (
+          <section
+            className="simple-today__focus"
+            aria-label="Sıradaki en iyi adım"
+            data-tone={assistantBrief.tone}
+          >
+            <button
+              type="button"
+              onClick={() => runAssistantAction(completionEntries[0]!.action)}
+              disabled={model.dataBusy}
+              aria-label={presentation.primary.label}
+              aria-expanded={completionEntries[0]!.action.kind === "day-details" ? advancedSupportOpen : undefined}
+              aria-controls={completionEntries[0]!.action.kind === "day-details" ? "simple-today-details" : undefined}
+            >
+              <span className="simple-focus__icon" aria-hidden="true">
+                <AssistantActionIcon action={completionEntries[0]!.action} />
+              </span>
+              <span className="simple-focus__copy">
+                <small>Sıradaki adım</small>
+                <strong>{completionEntries[0]!.label}</strong>
+                {completionEntries[0]!.detail ? <small>{completionEntries[0]!.detail}</small> : null}
+              </span>
+              <span className="simple-focus__action" aria-hidden="true"><ChevronRightIcon /></span>
+            </button>
+          </section>
+        ) : null}
+        {completionEntries.length > 1 ? (
+          <section className="simple-today__follow-ups" aria-label="Diğer iki adım">
+            {completionEntries.slice(1).map((entry) => (
+              <button
+                type="button"
+                key={entry.label}
+                onClick={() => runAssistantAction(entry.action)}
+                disabled={model.dataBusy}
+                aria-label={entry.label}
+                aria-expanded={entry.action.kind === "day-details" ? advancedSupportOpen : undefined}
+                aria-controls={entry.action.kind === "day-details" ? "simple-today-details" : undefined}
+              >
+                <span>
+                  <strong>{entry.label}</strong>
+                  {entry.detail ? <small>{entry.detail}</small> : null}
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            ))}
+          </section>
+        ) : null}
+      </section>
+
+      {!homePreferences.lessonMode && slots.thisWeek ? slots.thisWeek : null}
+
+      {!homePreferences.lessonMode && slots.followupInbox ? (
+        <details className="simple-today__ready-work">
+          <summary>
+            <span><strong>Hazır paketler ve diğer işler</strong><small>Gerektiğinde açın</small></span>
+            <ChevronRightIcon aria-hidden="true" />
+          </summary>
+          <div>{slots.followupInbox}</div>
+        </details>
       ) : null}
 
       {advancedSupportOpen ? (
-        <>
+        <div id="simple-today-details">
+
+      <div className="today-teaching__more-actions">
+        <button type="button" disabled={model.dataBusy} onClick={() => actions.onOpenTeacherCycleStage("daily")}><ReaderIcon aria-hidden="true" />{TODAY_TEACHING_COPY.dayPlan}<ChevronRightIcon aria-hidden="true" /></button>
+        <button type="button" disabled={model.dataBusy || model.educationalWritesDisabled} onClick={actions.onOpenQuickObservation}><PersonIcon aria-hidden="true" />{TODAY_TEACHING_COPY.observe}<ChevronRightIcon aria-hidden="true" /></button>
+      </div>
 
       {classroom ? (
         <section className="simple-today__suggestions" aria-labelledby="simple-today-suggestions-title">
@@ -461,7 +693,6 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
               <h2 id="simple-orchestra-title">Sınıfı okuyup akışı yeniden kur</h2>
               <p>Statik öneri değil; yoklama, plan, uygulama ve gözlem kanıtını aynı gün döngüsünde birleştirir.</p>
             </div>
-            <strong>{PEDAGOGICAL_VARIANT_COUNT.toLocaleString("tr-TR")}<small>uygulama yolu</small></strong>
           </header>
 
           <div className="simple-today__signals" aria-label="Canlı sınıf sinyalleri">
@@ -567,14 +798,62 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
             )}
           </div>
 
-          <ol className="simple-today__learning-loop" aria-label="Pedagojik öğrenme döngüsü">
-            {pedagogicalLoop.map((stage, index) => (
-              <li key={stage.id} data-state={stage.state}>
-                <span>{index + 1}</span>
-                <strong>{stage.label}</strong>
-              </li>
-            ))}
-          </ol>
+          <div className="simple-today__learning-loop" role="region" aria-label="Pedagojik öğrenme döngüsü">
+            <div className="simple-learning-loop__glance" aria-live="polite">
+              {currentPedagogicalStage ? (
+                <article data-stage-preview="current">
+                  <span>Şimdi</span>
+                  <strong>{currentPedagogicalStage.label}</strong>
+                  <small>Bugünün mevcut pedagojik aşaması</small>
+                </article>
+              ) : (
+                <article data-stage-preview="complete">
+                  <span>Bugünkü döngü</span>
+                  <strong>Tamamlandı</strong>
+                  <small>Yedi aşama da kanıtla kapandı</small>
+                </article>
+              )}
+              {nextPedagogicalStage ? (
+                <article data-stage-preview="next">
+                  <span>Sıradaki</span>
+                  <strong>{nextPedagogicalStage.label}</strong>
+                  <small>Mevcut aşama tamamlanınca açılır</small>
+                </article>
+              ) : null}
+            </div>
+            <details className="simple-learning-loop__details">
+              <summary>
+                <span>
+                  <strong>Yedi aşamanın tümünü göster</strong>
+                  <small>{completedPedagogicalStageCount}/7 tamamlandı</small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </summary>
+              <ol>
+                {pedagogicalLoop.map((stage, index) => (
+                  <li
+                    key={stage.id}
+                    data-state={stage.state}
+                    aria-current={stage.state === "current" ? "step" : undefined}
+                  >
+                    <span className="simple-learning-loop__index" aria-hidden="true">{index + 1}</span>
+                    <span className="simple-learning-loop__stage-copy">
+                      <strong>{stage.label}</strong>
+                      <small>
+                        {stage.state === "done"
+                          ? "Tamamlandı"
+                          : stage.state === "current"
+                            ? "Şimdi"
+                            : index === currentPedagogicalStageIndex + 1
+                              ? "Sıradaki"
+                              : "Bekliyor"}
+                      </small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </div>
         </section>
       ) : null}
 
@@ -610,7 +889,7 @@ export function SimpleTodayScreen({ model, actions }: SimpleTodayScreenProps) {
         </section>
       ) : null}
 
-        </>
+        </div>
       ) : null}
 
     </main>

@@ -303,8 +303,8 @@ export function ValueEvidenceLinkEditor({
           model?.mappingStatus ?? "machine_validated_pending_human_review"
         }
       >
-        <strong>İnsan uzman incelemesi bekleyen iç pilot.</strong>{" "}
-        Makine doğrulaması yayın, uzman onayı veya çocuk hakkında hüküm değildir.
+        <strong>Seçtiğiniz değer, eylem ve gerçek kanıt birlikte kaydedilir.</strong>{" "}
+        Kaynak bilgileri korunur; bu kayıt uzman doğrulaması veya çocuk hakkında hüküm oluşturmaz.
       </p>
       <p className="value-evidence-belief-warning">
         Türk-İslam kültüründeki komşuluk, emanet, paylaşma ve bayram gibi bağlamlar

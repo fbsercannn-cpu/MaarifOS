@@ -1,3 +1,4 @@
+import { MAX_ENCRYPTED_BACKUP_BYTES } from "../backup/backup-capacity.ts";
 export const LAST_SUCCESSFUL_ENCRYPTED_BACKUP_SCHEMA_VERSION = 1 as const;
 export const LAST_SUCCESSFUL_ENCRYPTED_BACKUP_STORAGE_KEY =
   "maarifos.backup.last-successful-encrypted.v1";
@@ -136,7 +137,7 @@ function isBackupHealthReceipt(value: unknown): value is BackupHealthReceipt {
     typeof value.encryptedByteLength === "number" &&
     Number.isInteger(value.encryptedByteLength) &&
     value.encryptedByteLength > 0 &&
-    value.encryptedByteLength <= 32 * 1024 * 1024 &&
+    value.encryptedByteLength <= MAX_ENCRYPTED_BACKUP_BYTES &&
     typeof value.payloadChecksum === "string" &&
     SHA256_PATTERN.test(value.payloadChecksum) &&
     typeof value.dataSchemaVersion === "number" &&

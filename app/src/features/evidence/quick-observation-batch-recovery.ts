@@ -62,6 +62,7 @@ function batchDraftPayload(draft: QuickObservationDraft): string {
     childQuote: draft.childQuote,
     observationType: draft.observationType,
     categoryIds: draft.categoryIds,
+    developmentSelection: draft.developmentSelection,
     observationTaxonomyVersion:
       draft.observationTaxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1,
   });

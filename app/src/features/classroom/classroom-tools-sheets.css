@@ -14,27 +14,68 @@
   gap: 8px;
 }
 
+.student-optional-details {
+  min-width: 0;
+  border-top: 1px solid var(--maarif-line-soft);
+}
+
+.student-optional-details > summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--maarif-teal-dark);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+  list-style: none;
+}
+
+.student-optional-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-optional-details > summary svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.student-optional-details[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.student-optional-details__content {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding-top: 8px;
+}
+
 .roster-add-form .student-profile-form-grid > label:last-child {
   grid-column: 1 / -1;
 }
 
-.student-quick-entry-close {
+.student-quick-entry-next {
   min-height: 44px;
   padding: 10px 14px;
-  color: var(--maarif-navy);
-  background: var(--maarif-white);
-  border: 1px solid var(--maarif-line);
+  color: var(--maarif-teal-dark);
+  background: transparent;
+  border: 0;
   border-radius: 12px;
   font: inherit;
   font-weight: 760;
 }
 
-.student-quick-entry-close:disabled {
+.student-quick-entry-next:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.student-quick-entry-close:focus-visible {
+.student-quick-entry-next:focus-visible,
+.student-optional-details > summary:focus-visible {
   outline: 3px solid rgba(11, 118, 110, 0.22);
   outline-offset: 2px;
 }

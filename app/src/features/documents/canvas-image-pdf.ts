@@ -1,4 +1,59 @@
+import { createSemanticTaggedPdf, type SemanticPdfNode, type SemanticTaggedPdfRuntime } from "./semantic-tagged-pdf.ts";
 const encoder = new TextEncoder();
+
+export interface ImagePdfTextBox {
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly fontSize?: number;
+}
+export interface SearchableImagePdfPage {
+  readonly image: Uint8Array;
+  /** Text rectangles and source dimensions use the same top-left coordinate system. */
+  readonly width: number;
+  readonly height: number;
+  readonly text: readonly ImagePdfTextBox[];
+}
+
+/** Preserve authored artwork while retaining the actual Unicode text at its measured positions. */
+export async function createSearchableImagePdf(
+  pages: readonly SearchableImagePdfPage[],
+  options: { readonly title: string; readonly orientation?: "portrait" | "landscape"; readonly creator?: string },
+  runtime: SemanticTaggedPdfRuntime = {},
+): Promise<Uint8Array> {
+  if (!pages.length) throw new Error("PDF için en az bir sayfa gereklidir.");
+  const width = options.orientation === "landscape" ? 841.89 : 595.28;
+  const height = options.orientation === "landscape" ? 595.28 : 841.89;
+  const nodes: SemanticPdfNode[] = [];
+  for (const [pageIndex, page] of pages.entries()) {
+    if (!page.image.length || !Number.isFinite(page.width) || !Number.isFinite(page.height) || page.width <= 0 || page.height <= 0) throw new Error("PDF sayfa görseli veya boyutları geçersiz.");
+    const text = page.text.filter(box => box.text.trim());
+    if (!text.length) {
+      nodes.push({ kind: "figure", altText: "Yazısız çizim alanı", height: 48, pageBreakBefore: pageIndex > 0, forcePageBreakBefore: true });
+      continue;
+    }
+    text.forEach((box, index) => nodes.push({ kind: "paragraph", text: box.text,
+      pageBreakBefore: pageIndex > 0 && index === 0, forcePageBreakBefore: true,
+      placement: { x: box.x / page.width * width, y: box.y / page.height * height,
+        width: box.width / page.width * width, height: box.height / page.height * height,
+        ...(box.fontSize ? { fontSize: box.fontSize / page.height * height } : {}), invisible: true },
+    }));
+  }
+  const textPdf = await createSemanticTaggedPdf({ title: options.title, creator: options.creator ?? "MaarifOS", orientation: options.orientation, omitPageFurniture: true, nodes }, runtime);
+  const { PDFDocument, PDFName, PDFOperator, PDFOperatorNames } = await import("pdf-lib");
+  const pdf = await PDFDocument.load(textPdf, { updateMetadata: false });
+  if (pdf.getPageCount() !== pages.length) throw new Error("PDF görsel ve metin sayfaları eşleşmedi.");
+  for (const [index, source] of pages.entries()) {
+    const page = pdf.getPage(index);
+    const image = await pdf.embedJpg(source.image);
+    page.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContent, [PDFName.of("Artifact")]));
+    page.drawImage(image, { x: 0, y: 0, width, height });
+    page.pushOperators(PDFOperator.of(PDFOperatorNames.EndMarkedContent));
+  }
+  return pdf.save({ useObjectStreams: false, addDefaultPage: false });
+}
 
 export const A4_PDF_CANVAS_WIDTH = 1240;
 export const A4_PDF_CANVAS_HEIGHT = 1754;
@@ -15,13 +70,10 @@ function joinBytes(parts: readonly Uint8Array[]): Uint8Array {
   return output;
 }
 
-function pdfStringEscape(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("(", "\\(")
-    .replaceAll(")", "\\)")
-    .replaceAll("\r", " ")
-    .replaceAll("\n", " ");
+function pdfUnicodeString(value: string): string {
+  let hex = "feff";
+  for (let index = 0; index < value.length; index += 1) hex += value.charCodeAt(index).toString(16).padStart(4, "0");
+  return `<${hex}>`;
 }
 
 /**
@@ -46,8 +98,8 @@ export interface A4ImagePdfOptions {
 
 /**
  * Dış bağımlılık olmadan, her A4 canvas sayfasını tek JPEG XObject olarak
- * taşıyan geçerli bir PDF 1.4 dosyası üretir. Kullanıcı verisi PDF metadata'sına
- * yazılmaz; hassas sınıf bilgileri yalnız sayfa görüntüsünde kalır.
+ * taşıyan geçerli bir PDF 1.4 dosyası üretir. title teknik belge türü olmalıdır;
+ * çağıran taraf çocuk/veli verisini bu metadata alanına koymamalıdır.
  */
 export function createA4ImagePdf(
   pageImages: readonly Uint8Array[],
@@ -120,7 +172,7 @@ export function createA4ImagePdf(
   objects.push({
     id: infoId,
     bytes: encoder.encode(
-      `<< /Title (${pdfStringEscape(options.title)}) /Creator (${pdfStringEscape(options.creator ?? "MaarifOS")}) >>`,
+      `<< /Title ${pdfUnicodeString(options.title)} /Creator ${pdfUnicodeString(options.creator ?? "MaarifOS")} >>`,
     ),
   });
   objects.sort((left, right) => left.id - right.id);

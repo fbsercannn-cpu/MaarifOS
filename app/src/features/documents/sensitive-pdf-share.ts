@@ -2,6 +2,7 @@ import {
   downloadBrowserFile,
   type BrowserFileDownload,
 } from "./browser-file-download.ts";
+import { requestPdfPreview } from "./pdf-preview-model.ts";
 
 export const SENSITIVE_CLASS_ROSTER_SHARE_WARNING =
   "Bu sınıf listesi T.C. kimlik numarası, veli/yakın adı ve telefon bilgisi içerir. Yalnız yetkili idareciye veya güvenli kurumsal hedefe gönderin; veli ya da mesajlaşma grubunda paylaşmayın. Paylaşmaya devam edilsin mi?";
@@ -57,8 +58,14 @@ function isUserCancellation(reason: unknown): boolean {
  */
 export async function shareSensitivePdfWithDownloadFallback(
   file: BrowserFileDownload,
-  environment: SensitivePdfShareEnvironment = browserSensitivePdfShareEnvironment(),
+  environment?: SensitivePdfShareEnvironment,
 ): Promise<SensitivePdfShareResult> {
+  if (!environment) {
+    let complete: (action: SensitivePdfShareResult) => void = () => undefined;
+    const result = new Promise<SensitivePdfShareResult>((resolve) => { complete = resolve; });
+    if (requestPdfPreview(file, { warning: SENSITIVE_CLASS_ROSTER_SHARE_WARNING, complete })) return result;
+  }
+  environment ??= browserSensitivePdfShareEnvironment();
   const bytes = copyBytes(file.bytes);
   const download = () => {
     environment.download({ ...file, bytes: copyBytes(bytes) });

@@ -1,0 +1,145 @@
+.simple-teacher-pilot {
+  overflow: hidden;
+  color: var(--maarif-navy);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #dfd5c9;
+  border-radius: 22px;
+  box-shadow: 0 8px 24px rgba(64, 45, 26, 0.055);
+}
+
+.simple-teacher-pilot > summary {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.simple-teacher-pilot > summary::-webkit-details-marker {
+  display: none;
+}
+
+.simple-teacher-pilot > summary > span,
+.simple-teacher-pilot > summary small,
+.simple-teacher-pilot > summary strong,
+.simple-teacher-pilot > summary em {
+  display: block;
+  min-width: 0;
+}
+
+.simple-teacher-pilot > summary small {
+  color: var(--maarif-plum);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.simple-teacher-pilot > summary strong {
+  margin-top: 3px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.simple-teacher-pilot > summary em {
+  margin-top: 4px;
+  color: var(--maarif-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.simple-teacher-pilot > summary > svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 160ms ease;
+}
+
+.simple-teacher-pilot[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.simple-teacher-pilot > summary:focus-visible {
+  outline: 3px solid rgba(14, 116, 110, 0.3);
+  outline-offset: -3px;
+}
+
+.simple-teacher-pilot__body {
+  display: grid;
+  gap: 16px;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--maarif-line-soft);
+}
+
+.simple-teacher-pilot__body section,
+.simple-teacher-pilot__body h3,
+.simple-teacher-pilot__body p {
+  margin: 0;
+}
+
+.simple-teacher-pilot__body section {
+  display: grid;
+  gap: 8px;
+}
+
+.simple-teacher-pilot__body h3 {
+  font-size: 14px;
+}
+
+.simple-teacher-pilot__status,
+.simple-teacher-pilot__policy {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 14px;
+}
+
+.simple-teacher-pilot__status {
+  margin-top: 14px !important;
+  color: #6f4c14;
+  background: #fff6df;
+  border: 1px solid #ebd39c;
+}
+
+.simple-teacher-pilot__tasks,
+.simple-teacher-pilot__thresholds {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.simple-teacher-pilot__tasks li,
+.simple-teacher-pilot__thresholds li {
+  padding-left: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.simple-teacher-pilot__tasks strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.simple-teacher-pilot__tasks p {
+  margin-top: 3px;
+  color: var(--maarif-muted);
+}
+
+.simple-teacher-pilot__policy {
+  color: #4a3578;
+  background: #f4f0fa;
+  border: 1px solid #d8cdeb;
+}
+
+@media (max-width: 360px) {
+  .simple-teacher-pilot > summary {
+    padding-inline: 13px;
+  }
+
+  .simple-teacher-pilot__body {
+    padding: 0 13px 13px;
+  }
+}

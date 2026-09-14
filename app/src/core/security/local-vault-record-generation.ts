@@ -57,6 +57,15 @@ interface LocalVaultRecordGenerationReservation {
   envelopeSha256: string | null;
 }
 
+/** In-memory capability; deliberately unavailable after a crash or reload. */
+export interface LocalVaultRetirementPreparation {
+  readonly token: symbol;
+}
+const retirementPreparations = new WeakMap<LocalVaultRetirementPreparation, {
+  database: IDBDatabase;
+  states: LocalVaultRecordGenerationState[];
+}>();
+
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener("success", () => resolve(request.result), {
@@ -611,13 +620,17 @@ export async function acceptLocalVaultRecordGeneration(
 
 function isStateInScope(
   state: LocalVaultRecordGenerationState,
-  scope: "students" | "recovery-students",
+  scope: LocalVaultRecordScope,
 ): boolean {
+  if (scope === "recovery-records") return state.collection.startsWith("recoverySnapshots/");
+  if (scope.startsWith("collection:")) return state.collection === scope.slice("collection:".length);
   return scope === "students"
     ? state.collection === "students"
     : state.collection.startsWith("recoverySnapshots/") &&
         state.collection.endsWith("/students");
 }
+
+export type LocalVaultRecordScope = "students" | "recovery-students" | "recovery-records" | `collection:${string}`;
 
 function presentContextIds(
   keyId: string,
@@ -642,10 +655,10 @@ export async function prepareLocalVaultRecordGenerationRetirements(
   database: IDBDatabase,
   input: {
     keyId: string;
-    scope: "students" | "recovery-students";
+    scope: LocalVaultRecordScope;
     presentRecords: readonly { collection: string; recordId: string }[];
   },
-): Promise<void> {
+): Promise<LocalVaultRetirementPreparation> {
   if (!input.keyId.trim()) {
     throw new LocalVaultSecurityError(
       "LOCAL_VAULT_RECORD_GENERATION_INVALID",
@@ -658,6 +671,7 @@ export async function prepareLocalVaultRecordGenerationRetirements(
     LOCAL_VAULT_RECORD_GENERATION_STATE_STORE_NAME,
   );
   const completion = transactionResult(transaction);
+  const preparedStates: LocalVaultRecordGenerationState[] = [];
   try {
     const store = transaction.objectStore(
       LOCAL_VAULT_RECORD_GENERATION_STATE_STORE_NAME,
@@ -691,16 +705,19 @@ export async function prepareLocalVaultRecordGenerationRetirements(
           "Yerel kasa emeklilik nesli alanı tükendi.",
         );
       }
-      await requestResult(
-        store.put({
+      const prepared: LocalVaultRecordGenerationState = {
           ...state,
           nextGeneration: retirementGeneration + 1,
           pendingRetirementGeneration: retirementGeneration,
           revision: state.revision + 1,
-        } satisfies LocalVaultRecordGenerationState),
-      );
+      };
+      await requestResult(store.put(prepared));
+      preparedStates.push(prepared);
     }
     await completion;
+    const receipt = Object.freeze({ token: Symbol("vault-retirement-preparation") });
+    retirementPreparations.set(receipt, { database, states: preparedStates });
+    return receipt;
   } catch (error) {
     try {
       transaction.abort();
@@ -712,11 +729,56 @@ export async function prepareLocalVaultRecordGenerationRetirements(
   }
 }
 
+/**
+ * Only the caller that observed a definite main-DB abort (or never started it)
+ * and rechecked its unchanged raw baseline may call this. It cannot undo an
+ * earlier intent, a finalized tombstone, or a subsequently changed generation.
+ * Reserved generations stay consumed; startup never invokes this recovery path.
+ */
+export async function cancelAbortedLocalVaultRetirements(
+  database: IDBDatabase,
+  receipts: readonly LocalVaultRetirementPreparation[],
+): Promise<void> {
+  const preparedStates = receipts.flatMap((receipt) => {
+    const prepared = retirementPreparations.get(receipt);
+    if (!prepared || prepared.database !== database) {
+      throw new LocalVaultSecurityError("LOCAL_VAULT_RECORD_GENERATION_INVALID",
+        "İptal edilen işlemin yerel kasa hazırlık kanıtı doğrulanamadı.");
+    }
+    return prepared.states;
+  });
+  if (preparedStates.length === 0) {
+    for (const receipt of receipts) retirementPreparations.delete(receipt);
+    return;
+  }
+  const { transaction } = openLocalVaultReadwriteTransaction(database, LOCAL_VAULT_RECORD_GENERATION_STATE_STORE_NAME);
+  const completion = transactionResult(transaction);
+  try {
+    const store = transaction.objectStore(LOCAL_VAULT_RECORD_GENERATION_STATE_STORE_NAME);
+    for (const prepared of preparedStates) {
+      const current: unknown = await requestResult(store.get(prepared.id));
+      assertState(current);
+      if (STATE_KEYS.some((key) => current[key as keyof LocalVaultRecordGenerationState] !== prepared[key as keyof LocalVaultRecordGenerationState])) {
+        throw new LocalVaultSecurityError("LOCAL_VAULT_REPLAY_DETECTED",
+          "Yerel kasa nesli değişti; iptal edilen işlemin silme hazırlığı geri alınmadı.");
+      }
+      await requestResult(store.put({ ...current, pendingRetirementGeneration: null,
+        revision: current.revision + 1 } satisfies LocalVaultRecordGenerationState));
+    }
+    await completion;
+    for (const receipt of receipts) retirementPreparations.delete(receipt);
+  } catch (error) {
+    try { transaction.abort(); } catch { /* Preserve the original failure. */ }
+    await completion.catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function reconcileLocalVaultRecordGenerationRetirements(
   database: IDBDatabase,
   input: {
     keyId: string;
-    scope: "students" | "recovery-students";
+    scope: LocalVaultRecordScope;
     presentRecords: readonly { collection: string; recordId: string }[];
   },
 ): Promise<void> {

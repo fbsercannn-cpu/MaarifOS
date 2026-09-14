@@ -25,6 +25,7 @@ import {
 } from "./attendance-panel-model";
 
 export interface AttendancePanelsProps {
+  calculationDetails?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   students: readonly DashboardStudent[];
@@ -72,6 +73,7 @@ export function AttendancePanels(props: AttendancePanelsProps) {
         description={`${props.formattedCivilDate} · Bir çocuğa dokunarak Geldi → Geç geldi → Gelmedi durumları arasında ilerleyin.`}
         snap={0.84}
       >
+        {props.calculationDetails ? <details className="attendance-calculation-disclosure"><summary>Devam hesabını gün gün incele</summary>{props.calculationDetails}</details> : null}
         <div className="attendance-list">
           {props.students.map((student) => (
             <div className="attendance-student-row" key={student.id}>

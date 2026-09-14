@@ -1,0 +1,13 @@
+.birthday-notice { margin: 16px 0; padding: 17px; border: 1px solid #e7d8c5; border-radius: 18px; background: #fffaf1; color: #463929; }
+.birthday-notice__heading { display: flex; align-items: center; gap: 10px; }
+.birthday-notice__heading > span { font-size: 24px; }
+.birthday-notice h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.birthday-notice p { margin: 4px 0 0; font-size: 12px; }
+.birthday-notice ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.birthday-notice li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid #eee1d1; }
+.birthday-notice li + li { margin-top: 10px; }
+.birthday-notice li div { min-width: 0; overflow-wrap: anywhere; }
+.birthday-notice li strong, .birthday-notice li span, .birthday-notice li small { display: block; }
+.birthday-notice li span { margin-top: 4px; font-size: 13px; }
+.birthday-notice li small { margin-top: 4px; font-size: 11px; }
+.birthday-notice button { min-height: 44px; flex: 0 0 auto; padding: 9px; border: 1px solid #ddccb7; border-radius: 10px; background: white; color: #65482a; font: inherit; font-size: 13px; }

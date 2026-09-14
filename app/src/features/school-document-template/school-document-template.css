@@ -1,0 +1,17 @@
+.school-template { display:grid; gap:14px; color:#203638; max-width:100%; overflow-wrap:anywhere; }
+.school-template h2,.school-template p { margin:0; }
+.school-template form,.school-template fieldset { display:grid; gap:16px; min-width:0; }
+.school-template fieldset { border:1px solid #d9e4e2; border-radius:16px; padding:16px; background:#fff; margin:0; }
+.school-template label { display:grid; gap:8px; font-size:14px; font-weight:650; min-width:0; }
+.school-template input,.school-template textarea,.school-template select { width:100%; max-width:100%; min-width:0; box-sizing:border-box; font:inherit; font-size:16px; border:1px solid #bbcfc9; border-radius:10px; padding:12px; background:#fff; color:#183b3d; }
+.school-template input[type=file] { font-size:13px; }
+.school-template button { min-height:44px; border:1px solid #adc8c1; border-radius:10px; padding:10px 14px; font:inherit; font-weight:650; background:#f3f8f6; color:#14514f; }
+.school-template button:focus-visible,.school-template select:focus-visible { outline:3px solid #5b9e96; outline-offset:2px; }
+.school-template button:disabled { opacity:.55; }
+.school-template .school-template-primary { background:#08756e; color:white; border-color:#08756e; }
+.school-template-help { color:#52716d; font-size:13px; line-height:1.5; }
+.school-template-logo { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.school-template-logo img { width:90px; height:70px; object-fit:contain; border:1px solid #dce7e4; }
+.school-template-actions { display:grid; grid-template-columns:1fr; gap:10px; }
+.school-template [role=alert] { border:1px solid #c74d4d; background:#fff3f3; padding:12px; border-radius:10px; }
+.school-template [role=status] { background:#eaf6ee; padding:12px; border-radius:10px; }

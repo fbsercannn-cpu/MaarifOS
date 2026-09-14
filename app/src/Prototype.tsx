@@ -1,3 +1,12 @@
+import type { ClassRosterLayoutId } from "./features/classroom/class-roster-layouts.ts";
+import { PdfPreviewHost } from "./features/documents/PdfPreviewHost.tsx";
+import { studentProfileCopy } from "./features/students/student-profile-copy.ts";
+import { MAX_ENCRYPTED_BACKUP_BYTES } from "./core/backup/backup-capacity.ts";
+import { attendanceExpectedStudentIdsOnDate } from "./features/attendance/attendance-day-breakdown.ts";
+import { FOLLOWUP_CHANGED_EVENT } from "./features/teacher-followup/teacher-followup-service.ts";
+import type { ManagementSection } from "./features/classroom-admin/ClassroomManagementWorkspace.tsx";
+import type { FollowupSection } from "./features/teacher-followup/TeacherFollowupWorkspace.tsx";
+import { downloadBrowserFile } from "./features/documents/browser-file-download.ts";
 import {
   lazy,
   Suspense,
@@ -9,6 +18,13 @@ import {
   type CSSProperties,
 } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import "./features/simple-experience/teacher-workspace-type.css";
+import {
+  getDevelopmentObservationPresets,
+  type DevelopmentObservationSelection,
+} from "./features/evidence/development-observation-presets.ts";
+import { getActivityContextObservationPresets } from "./features/evidence/activity-context-observation-model.ts";
+import type { Tymm2024AgeBand } from "./features/curriculum/tymm-2024-catalog.ts";
 import {
   ArchiveIcon,
   CalendarIcon,
@@ -89,7 +105,9 @@ import {
   type StudentContact,
 } from "./core/domain/student";
 import type { StudentCareFormState } from "./features/students/StudentProfileSafetyPanels.tsx";
-import type { StoredRecord } from "./core/domain/model";
+import { StudentAddressField } from "./features/students/StudentAddressField.tsx";
+import type { StudentHomeAddressParts } from "./core/domain/student-home-address.ts";
+import type { DataSnapshot, StoredRecord } from "./core/domain/model";
 import { resolveActiveClassroomScope } from "./core/domain/classroom-scope.ts";
 import {
   isCapabilityEnabled,
@@ -111,7 +129,6 @@ import {
   inspectStorageHealth,
   type StorageHealthState,
 } from "./core/storage/storage-health";
-import { createInitialAuthState, deriveWelcomeViewModel, reduceAuthState, type AuthState } from "./auth";
 import {
   dashboardAttendanceCounts,
   LEGACY_STORAGE_KEY,
@@ -259,6 +276,10 @@ import {
 } from "./features/curriculum/tymm-age-guide.ts";
 import { TYMM_2024_LEARNING_OUTCOMES } from "./features/curriculum/tymm-2024-catalog.ts";
 import {
+  TYMM_OFFICIAL_RESOURCE_CATALOG,
+  getTymmOfficialAgeResource,
+} from "./features/curriculum/tymm-official-resource-catalog.ts";
+import {
   activateAcademicYearNow,
   academicYearOperationalNotice,
   academicYearOperationalStatus,
@@ -290,7 +311,7 @@ import {
   type AcademicCalendarWorkspace,
 } from "./features/calendar/academic-calendar";
 import {
-  permanentlyDeleteArchivedStudent,
+  permanentlyDeleteStudent,
   previewPermanentStudentDeletion,
   type StudentDeletionImpact,
 } from "./features/students/student-lifecycle";
@@ -311,7 +332,18 @@ import {
 import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-provenance.ts";
 import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
 import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
+import { REPORT_EDITOR_COPY } from "./features/development/development-editor-copy.ts";
 
+const ClassroomDevelopmentPanel = lazy(() => import("./features/development/DevelopmentPanels.tsx").then((module) => ({ default: module.ClassroomDevelopmentPanel })));
+const StudentDevelopmentPanel = lazy(() => import("./features/development/DevelopmentPanels.tsx").then((module) => ({ default: module.StudentDevelopmentPanel })));
+const DevelopmentReportDialog = lazy(() => import("./features/development/DevelopmentReportDialog.tsx").then((module) => ({ default: module.DevelopmentReportDialog })));
+const DevelopmentObservationPicker = lazy(() =>
+  import("./features/evidence/DevelopmentObservationPicker.tsx").then((module) => ({
+    default: module.DevelopmentObservationPicker,
+  })),
+);
+
+const StudentImportSheet = lazy(() => import("./features/students/StudentImportSheet.tsx").then(module => ({ default: module.StudentImportSheet })));
 const ClassroomScreen = lazy(() =>
   import("./features/simple-experience/SimpleClassroomScreen.tsx").then((module) => ({
     default: module.SimpleClassroomScreen,
@@ -329,6 +361,29 @@ const TodayScreen = lazy(() =>
     default: module.SimpleTodayScreen,
   })),
 );
+const DeskDocumentCenter = lazy(() => import("./features/documents/DeskDocumentCenter.tsx").then(module => ({ default: module.DeskDocumentCenter })));
+const DocumentWorkshop = lazy(() => import("./features/documents/DocumentWorkshop.tsx").then(module => ({ default: module.DocumentWorkshop })));
+const FamilyMeetingFormPanel = lazy(() => import("./features/family-engagement/FamilyMeetingFormPanel.tsx").then(module => ({ default: module.FamilyMeetingFormPanel })));
+const MonthEndPackagePanel = lazy(() => import("./features/documents/MonthEndPackagePanel.tsx").then(module => ({ default: module.MonthEndPackagePanel })));
+const DocumentHistoryPanel = lazy(() => import("./features/documents/DocumentHistoryPanel.tsx").then(module => ({ default: module.DocumentHistoryPanel })));
+const TeacherReportCenterPanel = lazy(() => import("./features/teacher-report-center/TeacherReportCenterPanel.tsx").then(module => ({ default: module.TeacherReportCenterPanel })));
+const CloudAccountPanel = lazy(() => import("./features/cloud-account/CloudAccountPanel.tsx").then(module => ({ default: module.CloudAccountPanel })));
+const ClassDutySchedulePanel = lazy(() => import("./features/class-duty-schedule/ClassDutySchedulePanel.tsx").then(module => ({ default: module.ClassDutySchedulePanel })));
+const TomorrowReadyCard = lazy(() => import("./features/tomorrow-ready/TomorrowReadyCard.tsx").then(module => ({ default: module.TomorrowReadyCard })));
+const TomorrowSmallGroupPanel = lazy(() => import("./features/small-group-cards/SmallGroupCardsPanel.tsx").then(module => ({ default: module.SmallGroupCardsPanel })));
+const TomorrowHomeGamePanel = lazy(() => import("./features/home-game-cards/HomeGameCardsPanel.tsx").then(module => ({ default: module.HomeGameCardsPanel })));
+const ClassDutyWeekCard = lazy(() => import("./features/class-duty-schedule/ClassDutyWeekCard.tsx").then(module => ({ default: module.ClassDutyWeekCard })));
+const PreparedTeacherActions = lazy(() => import("./features/teacher-followup/PreparedTeacherActions.tsx").then(module => ({ default: module.PreparedTeacherActions })));
+const TeacherFollowupWorkspace = lazy(() => import("./features/teacher-followup/TeacherFollowupWorkspace.tsx").then(m => ({ default: m.TeacherFollowupWorkspace })));
+const BackupRecoveryPanel = lazy(() => import("./features/backup/BackupRecoveryPanel.tsx").then(m => ({ default: m.BackupRecoveryPanel })));
+const ClassroomManagementWorkspace = lazy(() => import("./features/classroom-admin/ClassroomManagementWorkspace.tsx").then(m => ({ default: m.ClassroomManagementWorkspace })));
+const ClassroomManagementInbox = lazy(() => import("./features/classroom-admin/ClassroomManagementWorkspace.tsx").then(m => ({ default: m.ClassroomManagementInbox })));
+const DocumentedConsentStatus = lazy(() => import("./features/classroom-admin/ClassroomManagementWorkspace.tsx").then(m => ({ default: m.DocumentedConsentStatus })));
+const FollowupInbox = lazy(() => import("./features/teacher-followup/TeacherFollowupWorkspace.tsx").then(m => ({ default: m.FollowupInbox })));
+const ActionCenter = lazy(() => import("./features/action-center/ActionCenter.tsx").then(m => ({ default: m.ActionCenter })));
+const PlanNextSteps = lazy(() => import("./features/planning/PlanNextSteps.tsx").then(m => ({ default: m.PlanNextSteps })));
+const WorkPackageCenter = lazy(() => import("./features/work-packages/WorkPackageCenter.tsx").then(m => ({ default: m.WorkPackageCenter })));
+const AttendanceCalculationPanel = lazy(() => import("./features/attendance/AttendanceCalculationPanel.tsx").then(m => ({ default: m.AttendanceCalculationPanel })));
 
 const ClassroomToolsSheets = lazy(() =>
   import("./features/classroom/ClassroomToolsSheets.tsx").then((module) => ({
@@ -659,6 +714,13 @@ type StudentProfileFormState = {
 
 const emptyStudentCareForm: StudentCareFormState = {
   homeAddress: "",
+  childPrivateNotes: "",
+  familySituationNotes: "",
+  parentsSeparated: false,
+  motherDeceased: false,
+  fatherDeceased: false,
+  martyrChild: false,
+  veteranChild: false,
   allergies: "",
   dietaryNeeds: "",
   medicationNotes: "",
@@ -1012,8 +1074,11 @@ type AppSurface =
   | "capture-menu"
   | "attendance"
   | "student-profile"
+  | "development-report"
   | "student-share"
   | "student-delete"
+  | "action-completion"
+  | "plan-guidance"
   | "settings"
   | "classroom"
   | "plans"
@@ -1038,8 +1103,11 @@ function appSurfaceFromHistoryState(state: unknown): AppSurface | null {
   return candidate === "capture-menu" ||
     candidate === "attendance" ||
     candidate === "student-profile" ||
+    candidate === "development-report" ||
     candidate === "student-share" ||
     candidate === "student-delete" ||
+    candidate === "action-completion" ||
+    candidate === "plan-guidance" ||
     candidate === "settings" ||
     candidate === "classroom" ||
     candidate === "plans" ||
@@ -1098,16 +1166,7 @@ function downloadText(fileName: string, contents: string) {
 }
 
 function downloadBytes(fileName: string, mimeType: string, bytes: Uint8Array) {
-  const blobBytes = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
-  const url = URL.createObjectURL(new Blob([blobBytes], { type: mimeType }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  downloadBrowserFile({ fileName, mimeType, bytes });
 }
 
 function formatTurkishCivilDate(civilDate: string) {
@@ -1157,7 +1216,7 @@ function createFlowHeader(title: string, step: string, onClose: () => void) {
   );
 }
 
-function createQuickObservationHeader(activityTitle: string, onClose: () => void) {
+function createQuickObservationHeader(_activityTitle: string, onClose: () => void) {
   return (flow: FlowControls) => (
     <div className="quick-observation-header">
       <img
@@ -1167,7 +1226,7 @@ function createQuickObservationHeader(activityTitle: string, onClose: () => void
       />
       <div>
         <strong>Hızlı Gözlem</strong>
-        <small>{activityTitle}</small>
+        <small>Çocuk seç · not ekle · kaydet</small>
       </div>
       <button
         type="button"
@@ -1185,6 +1244,10 @@ type EvidenceFlowActions = {
   close: () => Promise<boolean>;
   manageChildren: () => Promise<void>;
   registerDraftFlusher: (flusher: () => Promise<void>) => () => void;
+  resolveDateContext: (
+    civilDate: string,
+    studentId?: string,
+  ) => Promise<EvidenceActivitySummary>;
   capture: (
     activity: EvidenceActivitySummary,
     input: {
@@ -1196,6 +1259,7 @@ type EvidenceFlowActions = {
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
       taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
+      developmentSelection?: DevelopmentObservationSelection;
     },
   ) => Promise<void>;
   loadDraft: (
@@ -1215,6 +1279,7 @@ type EvidenceFlowActions = {
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
       taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
+      developmentSelection?: DevelopmentObservationSelection;
     },
   ) => Promise<QuickObservationDraft>;
   saveDraftBatch: (
@@ -1228,6 +1293,7 @@ type EvidenceFlowActions = {
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
       taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
+      developmentSelection?: DevelopmentObservationSelection;
     },
   ) => Promise<void>;
   captureBatch: (
@@ -1241,6 +1307,7 @@ type EvidenceFlowActions = {
       observationType: QuickObservationType;
       categoryIds: QuickObservationCategory[];
       taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
+      developmentSelection?: DevelopmentObservationSelection;
     },
   ) => Promise<number>;
   confirm: (
@@ -1256,6 +1323,28 @@ type EvidenceFlowActions = {
   ) => Promise<void>;
 };
 
+function shiftCivilDate(civilDate: string, dayDelta: number): string {
+  if (!isCivilDate(civilDate) || !Number.isInteger(dayDelta)) {
+    throw new Error("Gözlem tarihi geçersiz.");
+  }
+  const [year, month, day] = civilDate.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + dayDelta))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function observationInstantForCivilDate(civilDate: string, now: Date): string {
+  if (!isCivilDate(civilDate) || Number.isNaN(now.getTime())) {
+    throw new Error("Gözlem tarihi veya kayıt zamanı geçersiz.");
+  }
+  const today = civilDateInIstanbul(now);
+  if (civilDate > today) {
+    throw new Error("Gözlem tarihi bugünden ileri olamaz.");
+  }
+  if (civilDate === today) return now.toISOString();
+  return new Date(`${civilDate}T12:00:00+03:00`).toISOString();
+}
+
 type EvidenceCaptureDraft = {
   selectionMode: "single" | "selected-children";
   batchId: string;
@@ -1267,6 +1356,7 @@ type EvidenceCaptureDraft = {
   observationType: QuickObservationType;
   categoryIds: QuickObservationCategory[];
   taxonomyVersion: typeof OBSERVATION_TAXONOMY_VERSION_V2;
+      developmentSelection?: DevelopmentObservationSelection;
 };
 
 type EvidenceCaptureSeed = Pick<
@@ -1455,19 +1545,22 @@ function StudentAvatar({
 
 function EvidenceCaptureScreen({
   activity,
+  ageBand,
   initialStudentId,
   initialDraft,
   students,
   actions,
 }: {
   activity: EvidenceActivitySummary;
+  ageBand?: Tymm2024AgeBand;
   initialStudentId?: string;
   initialDraft?: EvidenceCaptureSeed;
   students: Student[];
   actions: EvidenceFlowActions;
 }) {
-  const eligibleStudents = activity.assignedStudentIds.length > 0
-    ? students.filter((student) => activity.assignedStudentIds.includes(student.id))
+  const [captureActivity, setCaptureActivity] = useState(activity);
+  const eligibleStudents = captureActivity.assignedStudentIds.length > 0
+    ? students.filter((student) => captureActivity.assignedStudentIds.includes(student.id))
     : students;
   const [observationId] = useState(() => crypto.randomUUID());
   const [batchId, setBatchId] = useState<string>(() => crypto.randomUUID());
@@ -1484,7 +1577,11 @@ function EvidenceCaptureScreen({
   const [observationType, setObservationType] =
     useState<QuickObservationType>("quick-note");
   const [categories, setCategories] = useState<QuickObservationCategory[]>([]);
+  const [developmentSelection, setDevelopmentSelection] = useState<DevelopmentObservationSelection>();
+  const [studentPickerOpen, setStudentPickerOpen] = useState(!initialStudentId);
   const [observationGuide, setObservationGuide] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [dateNotice, setDateNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [safeError, setSafeError] = useState("");
   const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
@@ -1510,6 +1607,7 @@ function EvidenceCaptureScreen({
     observationType,
     categoryIds: categories,
     taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+    developmentSelection,
   });
   const selectedStudent = eligibleStudents.find((student) => student.id === studentId);
   const selectedStudentCount =
@@ -1529,6 +1627,7 @@ function EvidenceCaptureScreen({
     observationType,
     categoryIds: categories,
     taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+    developmentSelection,
   };
   const visibleObservationGuides = useMemo(
     () =>
@@ -1547,6 +1646,10 @@ function EvidenceCaptureScreen({
           ],
     [categories],
   );
+  const preparedObservationPresets = useMemo(
+    () => getActivityContextObservationPresets(ageBand, captureActivity),
+    [ageBand, captureActivity],
+  );
 
   const persistDraftSnapshot = useCallback(
     async (draft: EvidenceCaptureDraft) => {
@@ -1564,9 +1667,9 @@ function EvidenceCaptureScreen({
       setDraftStatus("saving");
       try {
         if (draft.selectionMode === "single") {
-          await actionsRef.current.saveDraft(activity, draft);
+          await actionsRef.current.saveDraft(captureActivity, draft);
         } else {
-          await actionsRef.current.saveDraftBatch(activity, {
+          await actionsRef.current.saveDraftBatch(captureActivity, {
             batchId: draft.batchId,
             studentIds: draft.studentIds,
             rawText: draft.rawText,
@@ -1575,6 +1678,7 @@ function EvidenceCaptureScreen({
             observationType: draft.observationType,
             categoryIds: draft.categoryIds,
             taxonomyVersion: draft.taxonomyVersion,
+            developmentSelection: draft.developmentSelection,
           });
         }
         if (!finalizedRef.current) setDraftStatus("saved");
@@ -1583,7 +1687,7 @@ function EvidenceCaptureScreen({
         throw reason;
       }
     },
-    [activity],
+    [captureActivity],
   );
 
   const flushCurrentDraft = useCallback(async () => {
@@ -1598,6 +1702,90 @@ function EvidenceCaptureScreen({
       categoryIds: [...draft.categoryIds],
     });
   }, [persistDraftSnapshot]);
+
+  const changeObservationDate = async (nextCivilDate: string) => {
+    if (
+      nextCivilDate === captureActivity.civilDate ||
+      busy ||
+      draftStatus === "loading" ||
+      selectionMode === "selected-children"
+    ) return;
+    if (!isCivilDate(nextCivilDate)) {
+      setSafeError("Gözlem için geçerli bir tarih seçin.");
+      return;
+    }
+    setBusy(true);
+    setSafeError("");
+    setFeedback(null);
+    setDateNotice("");
+    try {
+      await flushCurrentDraft();
+      setDraftStatus("loading");
+      const nextActivity = await actionsRef.current.resolveDateContext(
+        nextCivilDate,
+        studentId || undefined,
+      );
+      const targetDraft = studentId
+        ? await actionsRef.current.loadDraft(nextActivity, studentId)
+        : null;
+      const targetPresets = getActivityContextObservationPresets(ageBand, nextActivity);
+      setCaptureActivity(nextActivity);
+      if (studentId) {
+        const loadedCategories =
+          targetDraft?.observationTaxonomyVersion === OBSERVATION_TAXONOMY_VERSION_V2
+            ? targetDraft.categoryIds.filter((category) =>
+                QUICK_OBSERVATION_CATEGORIES_V2.includes(
+                  category as (typeof QUICK_OBSERVATION_CATEGORIES_V2)[number],
+                ),
+              )
+            : [];
+        setRawText(targetDraft?.rawText ?? "");
+        setContext(targetDraft?.context ?? "");
+        setChildQuote(targetDraft?.childQuote ?? "");
+        setObservationType(targetDraft?.observationType ?? "quick-note");
+        setCategories(loadedCategories);
+        setDevelopmentSelection(
+          targetDraft?.developmentSelection &&
+            targetPresets.some(
+              (preset) => preset.id === targetDraft.developmentSelection?.presetId,
+            )
+            ? targetDraft.developmentSelection
+            : undefined,
+        );
+        setLegacyDetailsReviewRequired(
+          Boolean(targetDraft?.context.trim() || targetDraft?.childQuote.trim()),
+        );
+        setDraftStatus(targetDraft ? "saved" : "ready");
+      } else {
+        setDevelopmentSelection((current) =>
+          current && targetPresets.some((preset) => preset.id === current.presetId)
+            ? current
+            : undefined,
+        );
+        setDraftStatus("ready");
+      }
+      setObservationGuide("");
+      setDatePickerOpen(false);
+      setDateNotice(
+        targetDraft
+          ? `${formatTurkishCivilDate(nextCivilDate)} tarihindeki taslak açıldı.`
+          : studentId
+            ? `Önceki taslak korundu; ${formatTurkishCivilDate(nextCivilDate)} için yeni gözlem açıldı.`
+            : `${formatTurkishCivilDate(nextCivilDate)} gözlem tarihi seçildi.`,
+      );
+    } catch (reason) {
+      setDraftStatus("ready");
+      setSafeError("");
+      setFeedback(
+        createTeacherFeedback(reason, {
+          fallbackDetail:
+            "Gözlem tarihi değiştirilemedi. Mevcut taslak ve tarih korundu; yeniden deneyebilirsiniz.",
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     const draft = draftSnapshotRef.current;
@@ -1625,8 +1813,9 @@ function EvidenceCaptureScreen({
       }
     };
   }, [
-    activity,
+    captureActivity,
     categories,
+    developmentSelection,
     childQuote,
     context,
     groupStudentIds,
@@ -1662,6 +1851,7 @@ function EvidenceCaptureScreen({
     setLegacyDetailsReviewRequired(false);
     setObservationType("quick-note");
     setCategories([]);
+    setDevelopmentSelection(undefined);
     setObservationGuide("");
     setDraftStatus("loading");
     const seed =
@@ -1671,7 +1861,7 @@ function EvidenceCaptureScreen({
         ? initialDraft
         : null;
     try {
-      const draft = await actions.loadDraft(activity, nextStudentId);
+      const draft = await actions.loadDraft(captureActivity, nextStudentId);
       if (draftLoadSequenceRef.current !== loadSequence) return;
       if (draft || seed) {
         const loadedCategories =
@@ -1682,6 +1872,7 @@ function EvidenceCaptureScreen({
                 ),
               )
             : [];
+        setDevelopmentSelection(draft?.developmentSelection);
         setRawText(mergeEvidenceSeedParagraph(draft?.rawText, seed?.rawText));
         setContext(mergeEvidenceSeedParagraph(draft?.context, seed?.context));
         setChildQuote(
@@ -1809,7 +2000,7 @@ function EvidenceCaptureScreen({
     batchRestoreSequenceRef.current = loadSequence;
     setDraftStatus("loading");
     void actionsRef.current
-      .loadDraftBatch(activity)
+      .loadDraftBatch(captureActivity)
       .then((result) => {
         if (batchRestoreSequenceRef.current !== loadSequence) return;
         batchRestoreAppliedRef.current = true;
@@ -1827,6 +2018,7 @@ function EvidenceCaptureScreen({
         setChildQuote(draft.childQuote);
         setObservationType(draft.observationType);
         setCategories([...draft.categoryIds]);
+        setDevelopmentSelection(draft.developmentSelection);
         setDraftStatus("saved");
       })
       .catch((reason) => {
@@ -1846,7 +2038,7 @@ function EvidenceCaptureScreen({
         batchRestoreSequenceRef.current += 1;
       }
     };
-  }, [activity.id, activity.planId, initialStudentId]);
+  }, [captureActivity.id, captureActivity.planId, initialStudentId]);
 
   const toggleCategory = (category: QuickObservationCategory) => {
     setObservationGuide("");
@@ -1860,6 +2052,24 @@ function EvidenceCaptureScreen({
   const applyStarter = (starter: string) => {
     setRawText((current) => (current.trim() ? `${current.trim()} ${starter}` : starter));
   };
+
+  const selectDevelopment = (next: DevelopmentObservationSelection | undefined) => {
+    if (next && next.presetId !== developmentSelection?.presetId && ageBand) {
+      const presets = getDevelopmentObservationPresets(ageBand);
+      const selected = presets.find((preset) => preset.id === next.presetId);
+      const previous = presets.find((preset) => preset.id === developmentSelection?.presetId);
+      if (!selected) return;
+      setRawText((current) => !current.trim() || current === previous?.observationText
+        ? selected.observationText
+        : current.includes(selected.observationText) ? current : `${current}\n${selected.observationText}`);
+      setCategories((current) => Array.from(new Set([...current, ...selected.categoryIds])));
+      setObservationType("systematic");
+    }
+    setDevelopmentSelection(next);
+  };
+
+  const todayCivilDate = civilDateInIstanbul(new Date());
+  const yesterdayCivilDate = shiftCivilDate(todayCivilDate, -1);
 
   const isChildQuoteObservation = observationType === "child-quote";
   const observationQuestion = isChildQuoteObservation
@@ -1883,7 +2093,7 @@ function EvidenceCaptureScreen({
         : selectionMode === "selected-children" && !groupConfirmed
           ? "Aynı gözlemin seçili çocuklar için geçerli olduğunu onaylayın."
           : !rawText.trim()
-            ? "Gördüğünüz veya duyduğunuz olayı yazın."
+            ? "Gözlediğiniz davranışı seçin veya kendi notunuzu yazın."
             : legacyDetailsReviewRequired
               ? "Eski taslak ayrıntıları için ‘dahil et’ veya ‘çıkar’ seçimini yapın."
               : "";
@@ -1933,7 +2143,7 @@ function EvidenceCaptureScreen({
     finalizedRef.current = true;
     try {
       if (selectionMode === "single") {
-        await actions.capture(activity, {
+        await actions.capture(captureActivity, {
           observationId,
           studentId,
           rawText,
@@ -1942,9 +2152,10 @@ function EvidenceCaptureScreen({
           observationType,
           categoryIds: categories,
           taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+    developmentSelection,
         });
       } else {
-        await actions.captureBatch(activity, {
+        await actions.captureBatch(captureActivity, {
           batchId,
           studentIds: groupStudentIds,
           rawText,
@@ -1953,6 +2164,7 @@ function EvidenceCaptureScreen({
           observationType,
           categoryIds: categories,
           taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+    developmentSelection,
         });
       }
       await actions.close();
@@ -1976,21 +2188,63 @@ function EvidenceCaptureScreen({
     >
       <MobileScroll className="d1-flow-scroll quick-observation-scroll">
         <div className="quick-observation-content">
+          <section className="quick-date-choice" aria-labelledby="quick-date-choice-title">
+            <div>
+              <strong id="quick-date-choice-title">Gözlem günü</strong>
+              <small>{formatTurkishCivilDate(captureActivity.civilDate)}</small>
+            </div>
+            <div role="group" aria-label="Gözlem tarihi">
+              <button
+                type="button"
+                aria-pressed={captureActivity.civilDate === todayCivilDate}
+                disabled={busy || draftLoading || selectionMode === "selected-children"}
+                onClick={() => void changeObservationDate(todayCivilDate)}
+              >Bugün</button>
+              <button
+                type="button"
+                aria-pressed={captureActivity.civilDate === yesterdayCivilDate}
+                disabled={busy || draftLoading || selectionMode === "selected-children"}
+                onClick={() => void changeObservationDate(yesterdayCivilDate)}
+              >Dün</button>
+              <button
+                type="button"
+                aria-expanded={datePickerOpen}
+                disabled={busy || draftLoading || selectionMode === "selected-children"}
+                onClick={() => setDatePickerOpen((current) => !current)}
+              >Tarih seç</button>
+            </div>
+            {datePickerOpen ? (
+              <label>
+                Gerçek gözlem tarihi
+                <KeyboardInput
+                  type="date"
+                  aria-label="Gerçek gözlem tarihi"
+                  value={captureActivity.civilDate}
+                  max={todayCivilDate}
+                  disabled={busy || draftLoading || selectionMode === "selected-children"}
+                  onChange={(event) => void changeObservationDate(event.target.value)}
+                />
+              </label>
+            ) : null}
+            {selectionMode === "selected-children" ? (
+              <p>Toplu gözlem tarihini değiştirmek için önce tek çocuk kapsamına dönün.</p>
+            ) : dateNotice ? <p role="status">{dateNotice}</p> : null}
+          </section>
           <section
-            className={`quick-context-banner quick-context-banner--${activity.contextKind}`}
+            className={`quick-context-banner quick-context-banner--${captureActivity.contextKind}`}
             aria-label="Gözlem bağlamı"
           >
             <TargetIcon aria-hidden="true" />
             <span>
               <strong>
-                {activity.contextKind === "planned-activity"
+                {captureActivity.contextKind === "planned-activity"
                   ? "Plan etkinliğine bağlı gözlem"
                   : "Plan dışı anlık gözlem"}
               </strong>
               <small>
-                {activity.contextKind === "planned-activity"
-                  ? `${activity.startTime} · ${activity.title} · kanıt plan zincirinde korunur`
-                  : "Bugün için uygun gerçek etkinlik bulunmadı; bu kayıt ayrı anlık bağlamda korunur."}
+                {captureActivity.contextKind === "planned-activity"
+                  ? `${captureActivity.startTime} · ${captureActivity.title}`
+                  : "Bu güne ait anlık davranışı kaydedin."}
               </small>
             </span>
           </section>
@@ -2002,6 +2256,12 @@ function EvidenceCaptureScreen({
             </section>
           ) : (
             <>
+            {selectedStudent && !studentPickerOpen && selectionMode === "single" ? (
+              <div className="quick-selected-child">
+                <strong>{selectedStudent.name}</strong>
+                <button type="button" onClick={() => setStudentPickerOpen(true)} disabled={busy || draftLoading}>Çocuğu değiştir</button>
+              </div>
+            ) : (
             <section className="quick-student-section" aria-labelledby="quick-student-heading">
               <div className="quick-section-heading">
                 <div>
@@ -2105,12 +2365,39 @@ function EvidenceCaptureScreen({
               ) : null}
             </section>
 
+            )}
+
+            {preparedObservationPresets.length > 0 && selectedStudentCount > 0 ? (
+              <section className="quick-prepared-observations" aria-labelledby="quick-prepared-observations-title">
+                <header>
+                  <strong id="quick-prepared-observations-title">Etkinlikten hazır gözlem ifadeleri</strong>
+                  <small>Yalnız gerçekten gördüğünüz ifadeyi seçin; kaydetmeden önce metni değiştirebilirsiniz.</small>
+                </header>
+                <div>
+                  {preparedObservationPresets.map((preset) => (
+                    <button
+                      type="button"
+                      key={preset.id}
+                      aria-pressed={developmentSelection?.presetId === preset.id}
+                      disabled={draftLoading || busy}
+                      onClick={() => selectDevelopment({
+                        presetId: preset.id,
+                        ageBand: preset.ageBand,
+                      })}
+                    >
+                      <strong>{preset.label}</strong>
+                      <small>{preset.observationText}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section className="quick-note-card">
               <div className="quick-note-label-row">
                 <div>
-                  <span className="d1-kicker">2 · Yaz</span>
                   <label id="quick-note-heading" htmlFor="d1-observation-text">
-                    {observationQuestion}
+                    {developmentSelection ? "Gözlem notunuz" : observationQuestion}
                   </label>
                 </div>
                 <small>{rawText.length.toLocaleString("tr-TR")} karakter</small>
@@ -2121,13 +2408,15 @@ function EvidenceCaptureScreen({
                 value={rawText}
                 onChange={(event) => setRawText(event.target.value)}
                 placeholder={observationPlaceholder}
-                rows={6}
+                rows={3}
                 aria-describedby="quick-observation-guidance"
                 disabled={draftLoading || busy}
               />
               <p id="quick-observation-guidance">
                 {observationGuidance}
               </p>
+              <details className="quick-writing-help">
+                <summary>Yazmak için ipuçları</summary>
               {!isChildQuoteObservation ? (
                 <div className="quick-starter-grid" role="group" aria-label="Tarafsız cümle başlangıçları">
                   {QUICK_OBSERVATION_NEUTRAL_TEMPLATES.map((starter) => (
@@ -2175,6 +2464,7 @@ function EvidenceCaptureScreen({
                     : "Henüz bir odak seçmediniz; serbestçe de yazabilirsiniz."}
                 </p>
               </aside>
+              </details>
             </section>
 
             {legacyDetailsReviewRequired ? (
@@ -2228,6 +2518,24 @@ function EvidenceCaptureScreen({
                 <ChevronDownIcon aria-hidden="true" />
               </summary>
               <div className="quick-details-fields">
+                {ageBand && captureActivity.curriculumProfile.framework === "tymm" ? (
+                  <Suspense
+                    fallback={(
+                      <div className="route-loading" role="status">
+                        Gelişim bilgileri hazırlanıyor…
+                      </div>
+                    )}
+                  >
+                    <DevelopmentObservationPicker
+                      key={`${captureActivity.id}-${studentId}-${selectionMode}`}
+                      ageBand={ageBand}
+                      activityContext={captureActivity}
+                      selection={developmentSelection}
+                      disabled={draftLoading || busy || selectedStudentCount === 0}
+                      onSelect={selectDevelopment}
+                    />
+                  </Suspense>
+                ) : null}
                 <span className="quick-detail-label">Gözlem türü</span>
                 <div className="quick-type-grid" role="group" aria-label="Gözlem türleri">
                   {quickObservationTypes.map(({ id, label, icon: Icon }) => (
@@ -2300,7 +2608,9 @@ function EvidenceCaptureScreen({
                 : "Gözlemi kaydet"}
           </button>
           <small>
-            {selectionMode === "selected-children"
+            {developmentSelection
+              ? "Kaydet, seçili davranışı ve Maarif bağlantısını onaylar."
+              : selectionMode === "selected-children"
               ? "Program bağlantısı her çocuk için ayrı ayrı tamamlanabilir."
               : "Program bağlantısı daha sonra tamamlanabilir."}
           </small>
@@ -2571,7 +2881,7 @@ function AssessmentScreen({
           />
         </div>
 
-        <p className="d1-integrity-note"><ClockIcon aria-hidden="true" /> Tek not sınırlı bir kanıttır; taslak öğretmen incelemesi bekleyecek.</p>
+        <p className="d1-integrity-note"><CheckCircledIcon aria-hidden="true" /> Kaydettiğiniz değerlendirme seçili gözleme ve hedefe birlikte bağlanır.</p>
         {feedback ? (
           <TeacherFeedbackPanel
             feedback={feedback}
@@ -2580,7 +2890,7 @@ function AssessmentScreen({
           />
         ) : null}
         <button className="d1-primary" type="button" onClick={() => void save()} disabled={busy || !text.trim()}>
-          {busy ? "Kaydediliyor…" : "İnceleme taslağını oluştur"}
+          {busy ? "Kaydediliyor…" : "Değerlendirmeyi kaydet ve tamamla"}
         </button>
       </div>
     </MobileScroll>
@@ -2601,10 +2911,10 @@ function CompletionScreen({
       <div className="d1-flow-content d1-completion">
         <span className="d1-completion-icon"><CheckCircledIcon aria-hidden="true" /></span>
         <span className="d1-kicker">Kayıt zinciri tamamlandı</span>
-        <h1>{observation.studentName} için taslak hazır.</h1>
-        <p>Gözlem notu, öğretmenin onayladığı program bağlantısı ve değerlendirme taslağı birlikte korundu.</p>
+        <h1>{observation.studentName} için değerlendirme kaydedildi.</h1>
+        <p>Gözlem notu, seçtiğiniz program bağlantısı ve yazdığınız değerlendirme birlikte kaydedildi.</p>
         <section className="d1-context-card">
-          <strong>Öğretmen incelemesi bekliyor</strong>
+          <strong>Bağlantılar tamamlandı</strong>
           <span>1 gözlem notuna atıf</span>
           <em>
             {target.officialCatalogVerified
@@ -2688,6 +2998,7 @@ function createCompletionScreen(
 
 function EvidenceCaptureFlow({
   activity,
+  ageBand,
   pendingObservation,
   assessmentTarget,
   initialStudentId,
@@ -2696,6 +3007,7 @@ function EvidenceCaptureFlow({
   actions,
 }: {
   activity: EvidenceActivitySummary;
+  ageBand?: Tymm2024AgeBand;
   pendingObservation?: EvidenceObservationSummary;
   assessmentTarget?: CurriculumTargetSnapshot;
   initialStudentId?: string;
@@ -2720,6 +3032,7 @@ function EvidenceCaptureFlow({
             render: () => (
               <EvidenceCaptureScreen
                 activity={activity}
+                ageBand={ageBand}
                 initialStudentId={initialStudentId}
                 initialDraft={initialDraft}
                 students={students}
@@ -2730,6 +3043,7 @@ function EvidenceCaptureFlow({
     [
       actions,
       activity,
+      ageBand,
       assessmentTarget,
       initialDraft,
       initialStudentId,
@@ -3048,6 +3362,8 @@ export default function Prototype() {
   });
   const internalStaffExportEnabled = false;
   const store = useMemo(() => new IndexedDbDataStore(), []);
+  const [classDutyRequest,setClassDutyRequest]=useState<{kind:'fruit'|'child-of-week';scheduleId?:string;month?:string}|null>(null);
+  const [tomorrowTool,setTomorrowTool]=useState<{kind:'groups'|'family';civilDate:string}|null>(null);
   const backupServicePromiseRef = useRef<
     Promise<import("./core/backup/backup-service").BackupService> | null
   >(null);
@@ -3078,6 +3394,11 @@ export default function Prototype() {
   const appLockSessionRef = useRef<AppLockSession | null>(null);
   const d1ReturnFocusRef = useRef<HTMLElement | null>(null);
   const d1ReturnFocusSelectorRef = useRef<string | null>(null);
+  const d1ReturnFocusStudentIdRef = useRef<string | null>(null);
+  const studentProfileReturnFocusRef = useRef<HTMLElement | null>(null);
+  const studentProfileSheetRef = useRef<HTMLDivElement | null>(null);
+  const studentProfileExitDialogRef = useRef<HTMLElement | null>(null);
+  const studentProfileRestoreFocusOnCloseRef = useRef(false);
   const attendanceMutationSequenceRef = useRef(0);
   const dayRefreshInFlightRef = useRef(false);
   const historyInitializedRef = useRef(false);
@@ -3086,9 +3407,12 @@ export default function Prototype() {
   const surfaceTransitionRef = useRef<AppSurface | null>(null);
   const activeSurfaceRef = useRef<AppSurface | null>(null);
   const lastEvidenceFlowRequestRef = useRef<EvidenceFlowRequest | null>(null);
+  const lastCompletionRequestRef = useRef<{ studentId?: string; observationId?: string } | null>(null);
+  const lastPlanGuidanceDateRef = useRef<string | null>(null);
   const lastTymmChildSessionRef = useRef<TymmChildParticipationSession | null>(null);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [archivedStudents, setArchivedStudents] = useState<Student[]>([]);
+  const [studentArchiveCandidate, setStudentArchiveCandidate] = useState<Student | null>(null);
   const [attendanceCompleted, setAttendanceCompleted] = useState(false);
   const [attendanceCivilDate, setAttendanceCivilDate] = useState(
     fallbackDashboardState.attendanceCivilDate,
@@ -3104,6 +3428,52 @@ export default function Prototype() {
     useState<OfflineReadiness>("checking");
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [studentProfileOpen, setStudentProfileOpen] = useState(false);
+  const [familyMeetingAppointmentId, setFamilyMeetingAppointmentId] = useState<string | null>(null);
+  const studentSummaryLock = useRef(false);
+  const deskDocumentBlocked = useRef(true);
+  const [studentSummaryBusy, setStudentSummaryBusy] = useState(false);
+  const [managementRequest, setManagementRequest] = useState<{ studentId?: string; section?: ManagementSection } | null>(null);
+  const [followupRequest, setFollowupRequest] = useState<{ studentId?: string; section?: FollowupSection; civilDate?: string } | null>(null);
+  const [followupRevision, setFollowupRevision] = useState(0);
+  const [completionRequest, setCompletionRequest] = useState<{ studentId?: string; observationId?: string } | null>(null);
+  const [planGuidanceCivilDate, setPlanGuidanceCivilDate] = useState<string | null>(null);
+  const [calendarSnapshot, setCalendarSnapshot] = useState<DataSnapshot | null>(null);
+  useEffect(() => { const changed = () => setFollowupRevision(value => value + 1); window.addEventListener(FOLLOWUP_CHANGED_EVENT, changed); return () => window.removeEventListener(FOLLOWUP_CHANGED_EVENT, changed); }, []);
+  const [studentImportScope, setStudentImportScope] = useState<{ classroomId: string; academicYearId: string } | null>(null);
+  useEffect(() => {
+    if (
+      studentProfileOpen ||
+      !studentProfileRestoreFocusOnCloseRef.current
+    ) {
+      return;
+    }
+
+    studentProfileRestoreFocusOnCloseRef.current = false;
+    const returnFocusTarget = studentProfileReturnFocusRef.current;
+    const exitingDialog = studentProfileExitDialogRef.current;
+    if (!returnFocusTarget) {
+      studentProfileExitDialogRef.current = null;
+      return;
+    }
+
+    let animationFrame = 0;
+    const restoreFocusAfterExit = () => {
+      if (exitingDialog?.isConnected) {
+        animationFrame = window.requestAnimationFrame(restoreFocusAfterExit);
+        return;
+      }
+      studentProfileExitDialogRef.current = null;
+      studentProfileReturnFocusRef.current = null;
+      if (returnFocusTarget.isConnected) {
+        returnFocusTarget.focus({ preventScroll: true });
+      }
+    };
+    animationFrame = window.requestAnimationFrame(restoreFocusAfterExit);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [studentProfileOpen]);
+  const [developmentReportOpen, setDevelopmentReportOpen] = useState(false);
+  const [developmentReportStudentId, setDevelopmentReportStudentId] = useState<string | null>(null);
+  const [developmentReportPeriod, setDevelopmentReportPeriod] = useState<{ periodStart: string; periodEnd: string } | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentProfileForm, setStudentProfileForm] =
     useState<StudentProfileFormState>({
@@ -3160,6 +3530,8 @@ export default function Prototype() {
   const [tymmChildSession, setTymmChildSession] =
     useState<TymmChildParticipationSession | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarDutyLinks,setCalendarDutyLinks]=useState<Record<string,{kind:'fruit'|'child-of-week';scheduleId:string}>>({});
+  useEffect(()=>{if(!calendarOpen)return;let active=true;void Promise.all([store.readSnapshot(),import('./core/domain/class-duty-schedule.ts')]).then(([snapshot,module])=>{if(!active)return;const links:Record<string,{kind:'fruit'|'child-of-week';scheduleId:string}>={};for(const schedule of module.currentClassDutySchedules(snapshot))for(const row of schedule.workflow.rows)links[row.calendarEntryId]={kind:schedule.workflow.config.kind,scheduleId:schedule.workflow.scheduleId};setCalendarDutyLinks(links);}).catch(()=>{if(active)setCalendarDutyLinks({});});return()=>{active=false;};},[store,calendarOpen,followupRevision]);
   const calendarEntryTitleRef = useRef<HTMLInputElement>(null);
   const [academicCalendar, setAcademicCalendar] =
     useState<AcademicCalendarWorkspace>(emptyAcademicCalendar);
@@ -3196,6 +3568,8 @@ export default function Prototype() {
     useState("");
   const [newStudentGuardianName, setNewStudentGuardianName] = useState("");
   const [newStudentGuardianPhone, setNewStudentGuardianPhone] = useState("");
+  const [newStudentHomeAddress, setNewStudentHomeAddress] = useState("");
+  const [newStudentHomeAddressParts, setNewStudentHomeAddressParts] = useState<StudentHomeAddressParts | undefined>(undefined);
   const [newStudentError, setNewStudentError] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentAddOpen, setStudentAddOpen] = useState(false);
@@ -3243,6 +3617,7 @@ export default function Prototype() {
     useState<Exclude<PlanWorkbenchLevelId, "daily">>("annual");
   const [teacherPlanRecordsInitialMonthKey, setTeacherPlanRecordsInitialMonthKey] =
     useState<string | null>(null);
+  const [teacherPlanRecordsInitialPlanId, setTeacherPlanRecordsInitialPlanId] = useState<string | null>(null);
   const [scheduledPlanEditDraft, setScheduledPlanEditDraft] =
     useState<ScheduledPlanEditDraft | null>(null);
   const [teacherOwnedDailyFlowCopySources, setTeacherOwnedDailyFlowCopySources] =
@@ -3286,6 +3661,8 @@ export default function Prototype() {
     useState<Student | null>(null);
   const [studentDeletionImpact, setStudentDeletionImpact] =
     useState<StudentDeletionImpact | null>(null);
+  const [studentDeletionError, setStudentDeletionError] = useState("");
+  const permanentDeletionBusyRef = useRef(false);
   const [studentDeletionConfirmation, setStudentDeletionConfirmation] =
     useState("");
   const [studentShareOpen, setStudentShareOpen] = useState(false);
@@ -3372,12 +3749,6 @@ export default function Prototype() {
       ? "MaarifOS bu cihazda uygulama olarak çalışıyor."
       : "Windows, Android ve iPhone ana ekranına kurulabilir.",
   );
-  const [authState, setAuthState] = useState<AuthState>(() =>
-    createInitialAuthState({
-      network: navigator.onLine ? "online" : "offline",
-      googleReadiness: "coming_soon",
-    }),
-  );
   const backupReminder = useMemo(
     () => backupReminderState(lastSuccessfulBackupAt),
     [lastSuccessfulBackupAt],
@@ -3431,19 +3802,34 @@ export default function Prototype() {
     input.addEventListener("cancel", handleCancel);
     return () => input.removeEventListener("cancel", handleCancel);
   }, [localVaultRecoveryRequired]);
-  const authView = useMemo(() => deriveWelcomeViewModel(authState), [authState]);
   const dataHydrated =
     persistenceState.phase === "ready" || persistenceState.phase === "pending";
   const writesBlocked =
     !dataHydrated || persistenceState.phase === "error" || appLocked;
 
-  const counts = useMemo(() => dashboardAttendanceCounts(students), [students]);
+  useEffect(() => {
+    if (!dataHydrated) return;
+    let alive = true;
+    void store.readSnapshot().then(value => { if (alive) setCalendarSnapshot(value); }).catch(() => { if (alive) setCalendarSnapshot(null); });
+    return () => { alive = false; };
+  }, [store, dataHydrated, persistenceState.lastCommittedAt, followupRevision, attendanceCivilDate]);
+  const calendarScope = calendarSnapshot ? resolveActiveClassroomScope(calendarSnapshot) : null;
+  const schoolCalendarContext = calendarSnapshot && calendarScope ? { academicYear: calendarSnapshot.academicYears.find(r => r.id === calendarScope.academicYearId)!, classroomId: calendarScope.classroomId, calendarEntries: calendarSnapshot.calendarEntries } : undefined;
+  const attendanceRoster = useMemo(() => {
+    if (!calendarSnapshot || !calendarScope) return [];
+    const ids = new Set(attendanceExpectedStudentIdsOnDate(calendarSnapshot, calendarScope, attendanceCivilDate));
+    return [...students, ...archivedStudents].filter(student => ids.has(student.id));
+  }, [calendarSnapshot, calendarScope?.classroomId, calendarScope?.academicYearId, attendanceCivilDate, students, archivedStudents]);
+  const counts = useMemo(() => dashboardAttendanceCounts(attendanceRoster), [attendanceRoster]);
   const configuredClassroom = todayWorkspace.classroom.status === "configured"
     ? todayWorkspace.classroom
     : null;
   const tymmAgeGuides = listTymmAgeGuides();
   const selectedTymmGuide =
     getTymmAgeGuide(tymmGuideAgeBand) ?? tymmAgeGuides[0];
+  const selectedTymmOfficialAgeResource = getTymmOfficialAgeResource(
+    selectedTymmGuide.ageBand,
+  );
   const currentClassTymmAgeBand = curriculumAgeBandFromLabel(
     configuredClassroom?.ageGroup,
   );
@@ -3625,6 +4011,32 @@ export default function Prototype() {
     (legacyCurriculumTransitionRequired || academicPeriodChanged);
   const samePeriodCurriculumTransitionRequired =
     legacyCurriculumTransitionRequired && !academicPeriodChanged;
+  useEffect(() => {
+    if (
+      !classroomOpen ||
+      configuredClassroom?.operationalStatus !== "ended" ||
+      classroomForm.academicYearName !== configuredClassroom.academicYearName ||
+      classroomForm.academicYearStart !== configuredClassroom.academicYearStart ||
+      classroomForm.academicYearEnd !== configuredClassroom.academicYearEnd
+    ) {
+      return;
+    }
+
+    setClassroomForm((current) => ({
+      ...current,
+      academicYearName: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
+      academicYearStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+      academicYearEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+    }));
+    setAcademicYearTransitionConfirmed(false);
+    setClassroomError("");
+  }, [
+    classroomForm.academicYearEnd,
+    classroomForm.academicYearName,
+    classroomForm.academicYearStart,
+    classroomOpen,
+    configuredClassroom,
+  ]);
   const classroomSetupReadinessState = classroomSetupReadiness({
     schoolName: classroomForm.schoolName,
     teacherName: classroomForm.teacherName,
@@ -3819,6 +4231,10 @@ export default function Prototype() {
     ? "tymm-child"
     : evidenceFlowRequest
       ? "evidence-flow"
+    : completionRequest
+      ? "action-completion"
+    : planGuidanceCivilDate
+      ? "plan-guidance"
     : planFlowOpen
       ? "plan-flow"
       : teacherPlanRecordsOpen
@@ -3829,8 +4245,10 @@ export default function Prototype() {
           ? "premium-gate"
       : studentShareOpen
         ? "student-share"
-        : studentDeletionCandidate
+        : studentDeletionCandidate || studentArchiveCandidate
           ? "student-delete"
+      : developmentReportOpen
+        ? "development-report"
       : studentProfileOpen
         ? "student-profile"
         : attendanceOpen
@@ -3853,6 +4271,8 @@ export default function Prototype() {
                       ? "release-notes"
                       : null;
   activeSurfaceRef.current = activeSurface;
+  if (completionRequest) lastCompletionRequestRef.current = completionRequest;
+  if (planGuidanceCivilDate) lastPlanGuidanceDateRef.current = planGuidanceCivilDate;
   if (evidenceFlowRequest) {
     lastEvidenceFlowRequestRef.current = evidenceFlowRequest;
   }
@@ -4482,23 +4902,6 @@ export default function Prototype() {
   }, []);
 
   useEffect(() => {
-    const updateNetwork = () => {
-      setAuthState((current) =>
-        reduceAuthState(current, {
-          type: "NETWORK_CHANGED",
-          network: navigator.onLine ? "online" : "offline",
-        }),
-      );
-    };
-    window.addEventListener("online", updateNetwork);
-    window.addEventListener("offline", updateNetwork);
-    return () => {
-      window.removeEventListener("online", updateNetwork);
-      window.removeEventListener("offline", updateNetwork);
-    };
-  }, []);
-
-  useEffect(() => {
     const captureInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
@@ -4911,7 +5314,7 @@ export default function Prototype() {
     setVaultRecoveryConfirmation("");
     setVaultRecoveryError("");
     try {
-      if (file.size > 32 * 1024 * 1024) {
+      if (file.size > MAX_ENCRYPTED_BACKUP_BYTES) {
         throw new Error("RECOVERY_FILE_TOO_LARGE");
       }
       const source = await file.text();
@@ -4932,7 +5335,7 @@ export default function Prototype() {
       setAnnouncement("Şifreli kurtarma dosyası seçildi; parola bekleniyor.");
     } catch {
       setVaultRecoveryError(
-        "Yalnız en fazla 32 MB boyutunda, parola korumalı .maarifos yedeği kullanılabilir.",
+        `Yalnız en fazla ${MAX_ENCRYPTED_BACKUP_BYTES / 1024 / 1024} MiB boyutunda, parola korumalı .maarifos yedeği kullanılabilir.`,
       );
     } finally {
       setVaultRecoveryBusy(false);
@@ -5094,8 +5497,8 @@ export default function Prototype() {
     setRestorePassword("");
     setSecureBackupError("");
     try {
-      if (file.size > 32 * 1024 * 1024) {
-        throw new Error("Yedek dosyası 32 MB sınırını aşıyor.");
+      if (file.size > MAX_ENCRYPTED_BACKUP_BYTES) {
+        throw new Error(`Yedek dosyası ${MAX_ENCRYPTED_BACKUP_BYTES / 1024 / 1024} MiB sınırını aşıyor.`);
       }
       const source = await file.text();
       let candidate: unknown;
@@ -5612,6 +6015,13 @@ export default function Prototype() {
     guardianRelationshipInput: string,
     guardianKind: StudentContact["kind"],
   ): Promise<boolean> => {
+    if (configuredClassroom?.operationalStatus === "ended") {
+      const message =
+        "Bu eğitim yılı sona erdi. Çocuk listesini değiştirmek için yeni dönemi hazırlayın.";
+      setNewStudentError(message);
+      setAnnouncement(message);
+      return false;
+    }
     const name = newStudentName.trim();
     if (!name) return false;
     const nameParts = splitStudentDisplayName(name);
@@ -5638,8 +6048,9 @@ export default function Prototype() {
     }
     const guardianName = newStudentGuardianName.trim();
     const guardianPhone = newStudentGuardianPhone.trim();
-    if ((guardianName && !guardianPhone) || (!guardianName && guardianPhone)) {
-      setNewStudentError("Veli adı/telefonu eksik.");
+    const homeAddress = newStudentHomeAddress.trim();
+    if (homeAddress.length > 500) {
+      setNewStudentError("Birleşik adres 500 karakteri geçemez. Adres alanlarını kısaltın.");
       return false;
     }
     let normalizedGuardianPhone = "";
@@ -5663,17 +6074,18 @@ export default function Prototype() {
       ...(birthDate ? { birthDate } : {}),
       ...(optionalCode ? { optionalCode } : {}),
       ...(nationalIdentityNumber ? { nationalIdentityNumber } : {}),
-      ...(guardianName && normalizedGuardianPhone
+      ...(homeAddress ? { careDetails: { homeAddress, ...(newStudentHomeAddressParts ? { homeAddressParts: newStudentHomeAddressParts } : {}) } } : {}),
+      ...(guardianName || normalizedGuardianPhone
         ? {
             contacts: [
               {
                 id: crypto.randomUUID(),
                 kind: guardianKind,
                 relationship: guardianRelationshipInput,
-                name: guardianName,
+                ...(guardianName ? { name: guardianName } : {}),
                 phone: normalizedGuardianPhone,
-                isPrimary: true,
-                isEmergencyContact: true,
+                isPrimary: Boolean(normalizedGuardianPhone),
+                isEmergencyContact: Boolean(normalizedGuardianPhone),
               },
             ],
           }
@@ -5692,6 +6104,8 @@ export default function Prototype() {
       setNewStudentNationalIdentityNumber("");
       setNewStudentGuardianName("");
       setNewStudentGuardianPhone("");
+      setNewStudentHomeAddress("");
+      setNewStudentHomeAddressParts(undefined);
       setStudentAddOpen(false);
       setStudentSearch("");
       setAnnouncement(`${name} sınıfa eklendi.`);
@@ -5736,9 +6150,19 @@ export default function Prototype() {
     }
   };
 
+  const requestStudentProfileClose = () => {
+    keyboard.hide();
+    const dialog = studentProfileSheetRef.current?.closest('[role="dialog"]');
+    studentProfileExitDialogRef.current =
+      dialog instanceof HTMLElement ? dialog : null;
+    studentProfileRestoreFocusOnCloseRef.current = true;
+    setStudentProfileOpen(false);
+  };
+
   const openStudentProfile = (
     studentId: string,
     initialTab: Exclude<StudentProfileTab, "portfolio"> = "flow",
+    returnFocusTarget?: HTMLElement | null,
   ) => {
     const student =
       students.find((item) => item.id === studentId) ??
@@ -5747,6 +6171,17 @@ export default function Prototype() {
       setAnnouncement("Çocuk profili açılamadı.");
       return;
     }
+    const focusTarget =
+      returnFocusTarget ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    studentProfileReturnFocusRef.current =
+      focusTarget?.isConnected && focusTarget.tabIndex >= 0
+        ? focusTarget
+        : null;
+    studentProfileExitDialogRef.current = null;
+    studentProfileRestoreFocusOnCloseRef.current = false;
     keyboard.hide();
     const nameParts = {
       firstName:
@@ -5900,16 +6335,17 @@ export default function Prototype() {
       (contact) =>
         contact.phone.trim() ||
         contact.name?.trim() ||
+        contact.occupation?.trim() ||
         contact.isEmergencyContact ||
         contact.isAuthorizedPickup ||
         (contact.kind === "other" && contact.relationship.trim()),
     );
     const incompleteContact = contactsWithDetails.find(
-      (contact) => !contact.phone.trim(),
+      (contact) => !contact.phone.trim() && (contact.isPrimary || contact.isEmergencyContact),
     );
     if (incompleteContact) {
       setStudentProfileError(
-        `${incompleteContact.relationship || "Yakın"} için telefon numarası girin veya kaydı kaldırın.`,
+        `${incompleteContact.relationship || "Yakın"} öncelikli veya acil iletişim kişisi: telefon girin ya da bu işaretleri kaldırın.`,
       );
       return;
     }
@@ -5922,9 +6358,13 @@ export default function Prototype() {
             ? "Baba"
             : contact.relationship,
     }));
-    const careDetails = normalizeStudentCareDetails(
-      studentProfileForm.careDetails,
-    );
+    let careDetails: ReturnType<typeof normalizeStudentCareDetails>;
+    try {
+      careDetails = normalizeStudentCareDetails(studentProfileForm.careDetails);
+    } catch (reason) {
+      setStudentProfileError(reason instanceof Error ? reason.message : "Adres ve bakım bilgileri doğrulanamadı.");
+      return;
+    }
     const updatedStudent: Student = {
       ...selectedProfileStudent,
       name: composeStudentDisplayName(
@@ -6011,7 +6451,7 @@ export default function Prototype() {
       keyboard.hide();
       setRemovedStudentContact(null);
       setRemovedProfilePhoto(null);
-      setStudentProfileOpen(false);
+      requestStudentProfileClose();
       setAnnouncement(`${updatedStudent.name} profili kaydedildi.`);
     } catch (reason) {
       const message =
@@ -6034,6 +6474,12 @@ export default function Prototype() {
       contacts: current.contacts.map((contact) =>
         contact.id === contactId ? { ...contact, ...update } : contact,
       ),
+    }));
+  };
+
+  const updateStudentHomeAddress = (homeAddress: string, homeAddressParts?: StudentHomeAddressParts) => {
+    setStudentProfileForm(current => ({
+      ...current, careDetails: { ...current.careDetails, homeAddress, homeAddressParts },
     }));
   };
 
@@ -6214,17 +6660,25 @@ export default function Prototype() {
     setAnnouncement("Sınıf gözlem arşivi çocuklara göre gruplanmış metin olarak indirildi.");
   };
 
-  const archiveStudent = async (studentId: string) => {
+  const archiveStudent = (studentId: string) => {
     const student = students.find((item) => item.id === studentId);
-    if (!student) return;
+    if (!student || dataBusy) return;
+    keyboard.hide();
+    setStudentArchiveCandidate(student);
+  };
+
+  const confirmArchiveStudent = async () => {
+    const student = studentArchiveCandidate;
+    if (!student || dataBusy) return;
     setDataBusy(true);
     try {
-      await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: true }));
-      const remaining = students.filter((item) => item.id !== studentId);
-      setStudents(remaining);
-      setArchivedStudents((current) => [...current.filter((item) => item.id !== studentId), student]);
+      await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: true, preserveCurrentProfile: true }));
+      const refreshed = await loadDashboardState(store, fallbackDashboardState);
+      setStudents(refreshed.students);
+      setArchivedStudents(refreshed.archivedStudents);
       setStudentActionsOpenId(null);
-      setAnnouncement(`${student.name} sınıftan ayrıldı; geçmiş kayıtları korundu.`);
+      setStudentArchiveCandidate(null);
+      setAnnouncement(`${student.name} silinen öğrenciler bölümüne taşındı. Geri al ile sınıfa dönebilir; geçmiş kayıtları korundu.`);
     } catch {
       setAnnouncement("Çocuk sınıftan ayrılamadı; mevcut kayıt korundu.");
     } finally {
@@ -6237,9 +6691,10 @@ export default function Prototype() {
     if (!student) return;
     setDataBusy(true);
     try {
-      await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: false }));
-      setArchivedStudents((current) => current.filter((item) => item.id !== studentId));
-      setStudents((current) => [...current.filter((item) => item.id !== studentId), student]);
+      await enqueuePersistence(() => persistStudentRosterChange(store, { student, archived: false, preserveCurrentProfile: true }));
+      const refreshed = await loadDashboardState(store, fallbackDashboardState);
+      setStudents(refreshed.students);
+      setArchivedStudents(refreshed.archivedStudents);
       setAnnouncement(`${student.name} sınıfa geri alındı.`);
     } catch {
       setAnnouncement("Çocuk sınıfa geri alınamadı; geçmiş kayıt korundu.");
@@ -6468,6 +6923,8 @@ export default function Prototype() {
   };
 
   const openStudentDeletion = async (student: Student) => {
+    if (dataBusy || writesBlocked) return;
+    keyboard.hide();
     setDataBusy(true);
     try {
       const snapshot = await store.readSnapshot();
@@ -6475,6 +6932,10 @@ export default function Prototype() {
       setStudentDeletionCandidate(student);
       setStudentDeletionImpact(impact);
       setStudentDeletionConfirmation("");
+      setStudentArchiveCandidate(null);
+      setStudentDeletionError("");
+      setStudentProfileOpen(false);
+      setStudentActionsOpenId(null);
       setAnnouncement(
         `${student.name} için kalıcı silme etkisi hesaplandı.`,
       );
@@ -6490,34 +6951,45 @@ export default function Prototype() {
   };
 
   const confirmPermanentStudentDeletion = async () => {
-    if (!studentDeletionCandidate || !studentDeletionImpact) return;
+    if (!studentDeletionCandidate || !studentDeletionImpact || dataBusy || writesBlocked || permanentDeletionBusyRef.current || studentDeletionConfirmation !== studentDeletionImpact.displayName) return;
+    permanentDeletionBusyRef.current = true;
     setDataBusy(true);
+    setStudentDeletionError("");
     try {
       const result = await enqueuePersistence(() =>
-        permanentlyDeleteArchivedStudent(store, {
+        permanentlyDeleteStudent(store, {
           studentId: studentDeletionCandidate.id,
           confirmationName: studentDeletionConfirmation,
+          expectedFingerprint: studentDeletionImpact.fingerprint,
         }),
       );
-      const dashboard = await loadDashboardState(
-        store,
-        fallbackDashboardState,
-      );
-      setStudents(dashboard.students);
-      setArchivedStudents(dashboard.archivedStudents);
+      setStudents(current => current.filter(student => student.id !== studentDeletionCandidate.id));
+      setArchivedStudents(current => current.filter(student => student.id !== studentDeletionCandidate.id));
       setStudentDeletionCandidate(null);
       setStudentDeletionImpact(null);
       setStudentDeletionConfirmation("");
+      setSelectedStudentId(null);
+      setCompletionRequest(null);
+      setFollowupRevision(value => value + 1);
+      try {
+        await refreshD1Workspaces();
+      } catch {
+        setAnnouncement("Öğrenci kalıcı olarak silindi. Diğer ekranları güncellemek için uygulamayı yeniden açın.");
+        return;
+      }
       setAnnouncement(
         `${result.displayName} ve ${result.removedEntityCount} bağlı kayıt kalıcı olarak silindi.`,
       );
     } catch (reason) {
+      setStudentDeletionConfirmation("");
+      setStudentDeletionError(reason instanceof Error ? reason.message : "Öğrenci kalıcı olarak silinemedi.");
       setAnnouncement(
         reason instanceof Error
           ? reason.message
           : "Öğrenci kalıcı olarak silinemedi.",
       );
     } finally {
+      permanentDeletionBusyRef.current = false;
       setDataBusy(false);
     }
   };
@@ -6591,23 +7063,10 @@ export default function Prototype() {
       );
       setLastExportPackageId(result.exportPackageId);
       if (studentShareForm.destination === "whatsapp") {
-        const file = new File([result.dossier.text], result.dossier.fileName, {
-          type: "text/plain;charset=utf-8",
-        });
-        if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          await navigator.share({
-            title: result.dossier.title,
-            text: "MaarifOS öğrenci dosyası",
-            files: [file],
-          });
-          setAnnouncement("Öğrenci dosyası paylaşım ekranına gönderildi.");
-        } else {
-          downloadText(result.dossier.fileName, result.dossier.text);
-          setAnnouncement(
-            "Bu cihaz dosya paylaşımını desteklemedi; WhatsApp’ta ekleyebilmeniz için dosya indirildi.",
-          );
-        }
-      } else if (
+        const { createStudentDossierPdfDocument } = await import("./features/reports/student-dossier.ts");
+        const file = await createStudentDossierPdfDocument(result.dossier);
+        downloadBrowserFile(file);
+        setAnnouncement("Öğrenci dosyası PDF önizlemesi açıldı; aynı belgeyi paylaşabilirsiniz.");      } else if (
         studentShareForm.destination === "chatgpt" ||
         studentShareForm.destination === "gemini"
       ) {
@@ -6956,20 +7415,32 @@ export default function Prototype() {
     }));
   };
 
-  const completeCurrentActivity = async () => {
+  const completeRecordedActivity = async (activityId: string) => {
     if (educationalWriteNotice) {
       setAnnouncement(educationalWriteNotice);
       return;
     }
-    if (!currentActivity || writesBlocked) return;
-    const currentEvidenceActivity = evidenceWorkspace.activities.find(
-      (item) =>
-        item.id === (currentActivity.activityId ?? currentActivity.id),
+    if (writesBlocked) return;
+    const activityItem = todayWorkspace.planItems.find(
+      (item) => item.activityId === activityId || item.id === activityId,
     );
+    const currentEvidenceActivity = evidenceWorkspace.activities.find(
+      (item) => item.id === activityId,
+    );
+    if (!activityItem || !currentEvidenceActivity) {
+      setAnnouncement(
+        "Etkinliğin güncel kayıt bağlantısı bulunamadı; mevcut gözlemler korunuyor.",
+      );
+      return;
+    }
+    if (currentEvidenceActivity.status === "completed") {
+      setAnnouncement(`${activityItem.title} zaten tamamlandı.`);
+      return;
+    }
     const targetPremiumPack = premiumPackForEvidence(
       currentEvidenceActivity?.premiumProvenance,
     );
-    if (currentActivity.kind === "premium-flow-block") {
+    if (activityItem.kind === "premium-flow-block") {
       try {
         assertPremiumMutationAccessNow(targetPremiumPack ?? null);
       } catch {
@@ -6985,21 +7456,21 @@ export default function Prototype() {
         () =>
           setTodayActivityStatus(
             store,
-            currentActivity.activityId ?? currentActivity.id,
+            activityId,
             "completed",
           ),
         {
           educationalWrite: {},
-          ...(currentActivity.kind === "premium-flow-block"
+          ...(activityItem.kind === "premium-flow-block"
             ? { premiumPack: targetPremiumPack ?? null }
             : {}),
           failureDetail:
             "Etkinlik durumu bu cihaza kaydedilemedi. Yeni yazmalar durduruldu.",
-          successDetail: `${currentActivity.title} tamamlandı olarak kaydedildi.`,
+          successDetail: `${activityItem.title} tamamlandı olarak kaydedildi.`,
         },
       );
       await refreshD1Workspaces();
-      setAnnouncement(`${currentActivity.title} tamamlandı.`);
+      setAnnouncement(`${activityItem.title} tamamlandı; akış sıradaki adıma geçti.`);
     } catch {
       setAnnouncement("Etkinlik durumu kaydedilemedi; mevcut kayıt korundu.");
     } finally {
@@ -7023,8 +7494,54 @@ export default function Prototype() {
     setTeacherOwnedDailyFlowCopySources([]);
     setEvidenceFlowRequest(null);
     const returnFocusTarget = d1ReturnFocusRef.current;
+    const returnFocusStudentId = d1ReturnFocusStudentIdRef.current;
     d1ReturnFocusRef.current = null;
-    window.requestAnimationFrame(() => returnFocusTarget?.focus());
+    d1ReturnFocusStudentIdRef.current = null;
+    const restoreDevelopmentFocus = (remainingFrames: number) => {
+      const canReceiveReturnFocus = (
+        element: HTMLElement | null,
+      ): element is HTMLElement =>
+        Boolean(
+          element?.isConnected &&
+            !element.matches(":disabled, [aria-disabled='true']") &&
+            element.closest("[inert], [aria-hidden='true']") === null &&
+            element.getClientRects().length > 0,
+        );
+      const remountedDevelopmentTrigger = returnFocusStudentId
+        ? Array.from(
+            document.querySelectorAll<HTMLElement>(
+              "[data-student-development-trigger]",
+            ),
+          ).find(
+            (element) =>
+              element.dataset.studentDevelopmentTrigger ===
+              returnFocusStudentId &&
+              canReceiveReturnFocus(element),
+          )
+        : null;
+      const focusTarget =
+        remountedDevelopmentTrigger ??
+        (canReceiveReturnFocus(returnFocusTarget)
+          ? returnFocusTarget
+          : null);
+      if (focusTarget) {
+        focusTarget.focus({ preventScroll: true });
+      }
+      if (remainingFrames > 0) {
+        window.requestAnimationFrame(() =>
+          restoreDevelopmentFocus(remainingFrames - 1),
+        );
+        return;
+      }
+      if (focusTarget) return;
+      const routeHeading = document.querySelector<HTMLElement>(
+        "[data-route-heading]",
+      );
+      if (canReceiveReturnFocus(routeHeading)) {
+        routeHeading.focus({ preventScroll: true });
+      }
+    };
+    window.requestAnimationFrame(() => restoreDevelopmentFocus(8));
     return true;
   };
 
@@ -7045,10 +7562,14 @@ export default function Prototype() {
         : null;
     const restorableSurface =
       (normalizedSurface === "evidence-flow" && !evidenceRequest) ||
+      (normalizedSurface === "action-completion" && !lastCompletionRequestRef.current) ||
+      (normalizedSurface === "plan-guidance" && !lastPlanGuidanceDateRef.current) ||
       (normalizedSurface === "tymm-child" && !childSession)
         ? null
         : normalizedSurface;
 
+    setCompletionRequest(restorableSurface === "action-completion" ? lastCompletionRequestRef.current : null);
+    setPlanGuidanceCivilDate(restorableSurface === "plan-guidance" ? lastPlanGuidanceDateRef.current : null);
     setCaptureMenuOpen(restorableSurface === "capture-menu");
     setTymmGuideOpen(restorableSurface === "tymm-guide");
     setTymmChildSession(
@@ -7056,8 +7577,10 @@ export default function Prototype() {
     );
     setAttendanceOpen(restorableSurface === "attendance");
     setStudentProfileOpen(restorableSurface === "student-profile");
+    setDevelopmentReportOpen(restorableSurface === "development-report");
     setStudentShareOpen(restorableSurface === "student-share");
     if (restorableSurface !== "student-delete") {
+      setStudentArchiveCandidate(null);
       setStudentDeletionCandidate(null);
       setStudentDeletionImpact(null);
       setStudentDeletionConfirmation("");
@@ -7116,7 +7639,8 @@ export default function Prototype() {
       }
       if (
         currentSurface !== "plan-flow" &&
-        currentSurface !== "evidence-flow"
+        currentSurface !== "evidence-flow" &&
+        currentSurface !== "development-report"
       ) {
         applyHistoryTarget(targetSurface);
         return;
@@ -7599,6 +8123,15 @@ export default function Prototype() {
       return;
     }
 
+    const focusedReturnTarget =
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    if (!d1ReturnFocusRef.current?.isConnected) {
+      d1ReturnFocusRef.current = focusedReturnTarget;
+    }
+    d1ReturnFocusStudentIdRef.current = initialStudentId ?? null;
     keyboard.hide();
     surfaceTransitionRef.current = "evidence-flow";
     setCaptureMenuOpen(false);
@@ -7757,7 +8290,20 @@ export default function Prototype() {
     navigatePrimaryRoute("activities");
   };
 
-  const openPendingObservation = (
+  const openObservationActions = (observationId?: string, studentId?: string) => {
+    keyboard.hide();
+    setStudentProfileOpen(false);
+    setCaptureMenuOpen(false);
+    surfaceTransitionRef.current = "action-completion";
+    setCompletionRequest({ observationId, studentId });
+  };
+
+  const openPendingObservation = (requestedObservation?: EvidenceObservationSummary) => {
+    const observation = requestedObservation ?? evidenceWorkspace.pendingObservations[0];
+    openObservationActions(observation?.id, observation?.studentId);
+  };
+
+  const openObservationProgramLinks = (
     requestedObservation?: EvidenceObservationSummary,
   ) => {
     if (educationalWriteNotice) {
@@ -7795,6 +8341,7 @@ export default function Prototype() {
         ? document.activeElement
         : null;
     setStudentProfileOpen(false);
+    setCompletionRequest(null);
     surfaceTransitionRef.current = "evidence-flow";
     setEvidenceFlowRequest({ activity, pendingObservation: pending });
   };
@@ -7960,7 +8507,7 @@ export default function Prototype() {
     downloadBytes(file.fileName, file.mimeType, file.bytes);
     setAnnouncement(
       format === "pdf"
-        ? "Anekdot Kayıt Formu görsel PDF olarak indirildi."
+        ? "Anekdot Kayıt Formu PDF önizlemesi hazır; inceleyip indirebilir veya paylaşabilirsiniz."
         : "Anekdot Kayıt Formu düzenlenebilir Word belgesi olarak indirildi.",
     );
   };
@@ -8189,6 +8736,77 @@ export default function Prototype() {
       }
     },
     registerDraftFlusher,
+    resolveDateContext: async (civilDate, studentId) => {
+      if (!isCivilDate(civilDate)) {
+        throw new Error("Gözlem günü YYYY-AA-GG biçiminde olmalıdır.");
+      }
+      const now = new Date();
+      const today = civilDateInIstanbul(now);
+      if (civilDate > today) {
+        throw new Error("Gözlem günü bugünden ileri olamaz.");
+      }
+      const student = studentId
+        ? students.find((candidate) => candidate.id === studentId)
+        : students[0];
+      if (!student) {
+        throw new Error("Gözlem tarihi için önce etkin sınıftan bir çocuk seçin.");
+      }
+      const targetInstant = new Date(`${civilDate}T12:00:00+03:00`);
+      const liveEvidence = await loadEvidenceWorkspace(store, { now: targetInstant });
+      const resolution = resolveObservationContext(liveEvidence, {
+        ...(studentId ? { studentId } : {}),
+      });
+      if (resolution.kind === "use-activity") return resolution.activity;
+      if (resolution.kind === "choose-activity") {
+        throw new Error(
+          "Bu günde birden fazla uygun etkinlik var. Gözlemi plan veya takvimde ilgili etkinlikten açın.",
+        );
+      }
+      if (civilDate < today) {
+        const historicalActivities = liveEvidence.activities
+          .filter(
+            (activity) =>
+              activity.contextKind === "planned-activity" &&
+              (activity.assignedStudentIds.length === 0 ||
+                !studentId ||
+                activity.assignedStudentIds.includes(studentId)),
+          )
+          .sort(
+            (left, right) =>
+              left.startTime.localeCompare(right.startTime) ||
+              left.title.localeCompare(right.title, "tr-TR") ||
+              left.id.localeCompare(right.id),
+          );
+        if (historicalActivities.length === 1) return historicalActivities[0]!;
+        if (historicalActivities.length > 1) {
+          throw new Error(
+            "Bu geçmiş günde birden fazla etkinlik var. Gözlemi plan veya takvimde ilgili etkinlikten açın.",
+          );
+        }
+      }
+      if (educationalWriteNotice) throw new Error(educationalWriteNotice);
+      const context = await enqueuePersistence(
+        () => ensureSpontaneousObservationContext(store, {
+          studentId: student.id,
+          civilDate,
+          now,
+        }),
+        {
+          educationalWrite: {},
+          failureDetail:
+            "Seçilen günün gözlem bağlamı kaydedilemedi. Yeni yazmalar durduruldu.",
+          successDetail: `${formatTurkishCivilDate(civilDate)} için plan dışı gözlem alanı hazırlandı.`,
+        },
+      );
+      const refreshed = await loadEvidenceWorkspace(store, { now: targetInstant });
+      const activity = refreshed.activities.find(
+        (candidate) => candidate.id === context.activity.id,
+      );
+      if (!activity) {
+        throw new Error("Seçilen günün gözlem bağlamı yeniden açılamadı.");
+      }
+      return activity;
+    },
     loadDraft: (activity, studentId) =>
       loadQuickObservationDraft(store, {
         studentId,
@@ -8253,8 +8871,9 @@ export default function Prototype() {
         observationType,
         categoryIds,
         taxonomyVersion,
+        developmentSelection,
       } = input;
-      const observedAt = new Date().toISOString();
+      const observedAt = observationInstantForCivilDate(activity.civilDate, new Date());
       const result = await enqueuePersistence(
         async () => {
           await persistQuickObservationDraft(store, {
@@ -8265,6 +8884,7 @@ export default function Prototype() {
             observationType,
             categoryIds,
             taxonomyVersion,
+            developmentSelection,
             planId: activity.planId,
             activityId: activity.id,
           });
@@ -8304,10 +8924,12 @@ export default function Prototype() {
       const observation = refresh.observations[0];
       setObservationRefreshNotice(null);
       setAnnouncement(`${observation.studentName} için gözlem notu kaydedildi.`);
+      setFollowupRevision(value => value + 1);
+      setCompletionRequest({ studentId, observationId: observation.id });
     },
     captureBatch: async (activity, input) => {
       if (educationalWriteNotice) throw new Error(educationalWriteNotice);
-      const observedAt = new Date().toISOString();
+      const observedAt = observationInstantForCivilDate(activity.civilDate, new Date());
       const result = await enqueuePersistence(
         async () => {
           await persistQuickObservationDraftBatch(store, {
@@ -8349,6 +8971,8 @@ export default function Prototype() {
         return result.observations.length;
       }
       setObservationRefreshNotice(null);
+      setFollowupRevision(value => value + 1);
+      setCompletionRequest({});
       setAnnouncement(
         `${result.observations.length} çocuk için ayrı gözlem notları kaydedildi.`,
       );
@@ -8383,6 +9007,7 @@ export default function Prototype() {
       await enqueuePersistence(
         () =>
           createCitedAssessmentDraft(store, {
+            completeTeacherAssessment: true,
             draftId,
             studentId: observation.studentId,
             observationIds: [observation.id],
@@ -8429,8 +9054,7 @@ export default function Prototype() {
       setPremiumPlanOpen(false);
       setPlanFlowOpen(false);
       setCalendarOpen(false);
-      navigatePrimaryRoute("activities");
-      setAnnouncement("Etkinlik ve Materyal Stüdyosu açıldı.");
+      void openStudentObservation();
       return;
     }
     if (id === "classroom") {
@@ -8480,10 +9104,12 @@ export default function Prototype() {
   const openTeacherPlanRecords = (
     levelId: Exclude<PlanWorkbenchLevelId, "daily">,
     monthKey: string | null = null,
+    planId: string | null = null,
   ) => {
     keyboard.hide();
     setTeacherPlanRecordsInitialLevel(levelId);
     setTeacherPlanRecordsInitialMonthKey(monthKey);
+    setTeacherPlanRecordsInitialPlanId(planId);
     setPlansOpen(false);
     setDocumentsOpen(false);
     setPremiumGateOpen(false);
@@ -8491,6 +9117,16 @@ export default function Prototype() {
     surfaceTransitionRef.current = "teacher-plan-records";
     setTeacherPlanRecordsOpen(true);
     setAnnouncement("Bu cihazdaki öğretmen planları açıldı.");
+  };
+
+  const openGuidedDailyPlanning = (civilDate = preparationPlanningWindow.defaultCivilDate ?? todayWorkspace.civilDate) => {
+    keyboard.hide();
+    setTeacherPlanRecordsOpen(false);
+    setPlansOpen(false);
+    setCaptureMenuOpen(false);
+    setCompletionRequest(null);
+    surfaceTransitionRef.current = "plan-guidance";
+    setPlanGuidanceCivilDate(civilDate);
   };
 
   const openPlanWorkbenchLevel = (levelId: PlanWorkbenchLevelId) => {
@@ -8501,7 +9137,7 @@ export default function Prototype() {
     }
     if (destination === "premium-library") {
       if (levelId === "daily") {
-        void openPlanFlow();
+        openGuidedDailyPlanning();
       } else {
         openTeacherPlanRecords(levelId);
       }
@@ -8542,7 +9178,7 @@ export default function Prototype() {
       openTodayPlans();
       return;
     }
-    openPlanFlow();
+    openGuidedDailyPlanning();
   };
 
   const openDocumentWorkspaceItem = (itemId: DocumentWorkspaceItemId) => {
@@ -8573,19 +9209,20 @@ export default function Prototype() {
   const prepareSimpleClassRosterPdfInput = async () => {
     const snapshot = await store.readSnapshot();
     const scope = resolveActiveClassroomScope(snapshot);
-    if (!scope || !configuredClassroom) {
+    if (!scope) {
       setClassroomSetupSection("period");
       setClassroomOpen(true);
       throw new Error("Sınıf listesi için önce okul ve sınıf kurulumunu tamamlayın.");
     }
-    const schoolName = configuredClassroom.schoolName?.trim();
-    const teacherName = configuredClassroom.teacherName?.trim();
+    const documentClassroom = snapshot.classrooms.find(record => record.id === scope.classroomId && record.academicYearId === scope.academicYearId);
+    const schoolName = typeof documentClassroom?.schoolName === "string" ? documentClassroom.schoolName.trim() : "";
+    const teacherName = typeof documentClassroom?.teacherName === "string" ? documentClassroom.teacherName.trim() : "";
     if (!schoolName || !teacherName) {
       setClassroomSetupSection("period");
       setClassroomOpen(true);
       throw new Error("Belge için okul adı ve öğretmen adı soyadını bir kez yazın.");
     }
-    if (students.length === 0) {
+    if (!snapshot.students.some(record => record.classroomId === scope.classroomId && record.academicYearId === scope.academicYearId && record.active !== false && typeof record.deletedAt !== "string")) {
       navigatePrimaryRoute("classroom");
       setStudentAddOpen(true);
       throw new Error("Sınıf listesi için önce ilk çocuğu ekleyin.");
@@ -8599,23 +9236,25 @@ export default function Prototype() {
     };
   };
 
-  const downloadSimpleClassRoster = async () => {
-    const [input, { downloadSimpleClassRosterPdf }] = await Promise.all([
+  const downloadSimpleClassRoster = async (layout: ClassRosterLayoutId = "single-page-roster") => {
+    const [input, { downloadSimpleClassRosterPdf }, { classRosterInputForPurpose }] = await Promise.all([
       prepareSimpleClassRosterPdfInput(),
       import("./features/classroom/class-roster-file-actions.ts"),
+      import("./features/classroom/class-roster-layouts.ts"),
     ]);
-    const summary = await downloadSimpleClassRosterPdf(input);
+    const summary = await downloadSimpleClassRosterPdf(classRosterInputForPurpose({ ...input, columns: undefined }, layout), prepareSimpleClassRosterPdfInput);
     setAnnouncement(
-      `${summary.rowCount} öğrencilik, ${summary.pageCount} sayfalık imzalı sınıf listesi görsel PDF olarak indirildi.`,
+      `${summary.rowCount} öğrencilik sınıf listesi hazır. Alanları seçerek yazdırabilir, Excel'e çıkarabilir veya PDF indirebilirsiniz.`,
     );
   };
 
   const shareSimpleClassRoster = async () => {
-    const [input, { shareSimpleClassRosterPdf }] = await Promise.all([
+    const [input, { shareSimpleClassRosterPdf }, { classRosterInputForPurpose }] = await Promise.all([
       prepareSimpleClassRosterPdfInput(),
       import("./features/classroom/class-roster-file-actions.ts"),
+      import("./features/classroom/class-roster-layouts.ts"),
     ]);
-    const result = await shareSimpleClassRosterPdf(input);
+    const result = await shareSimpleClassRosterPdf(classRosterInputForPurpose(input, "single-page-roster"), prepareSimpleClassRosterPdfInput);
     setAnnouncement(
       result === "shared"
         ? "Sınıf listesi hassas veri onayıyla paylaşım ekranına gönderildi."
@@ -8646,13 +9285,13 @@ export default function Prototype() {
       throw new Error("Belge için okul adı ve öğretmen adı soyadını bir kez yazın.");
     }
     const [
-      { createSimpleObservationDocument },
+      { createSimpleObservationPdfDocument },
       { shareSimpleObservationDocumentWithDownloadFallback },
     ] = await Promise.all([
       import("./features/reports/simple-observation-document.ts"),
       import("./features/reports/simple-observation-share.ts"),
     ]);
-    const file = createSimpleObservationDocument({
+    const file = await createSimpleObservationPdfDocument({
       audience: request.audience,
       scope,
       snapshot,
@@ -8820,12 +9459,11 @@ export default function Prototype() {
     setAttendanceOpen(open);
   };
 
-  const openDayClosure = async () => {
+  const openDayClosure = async (civilDate=civilDateInIstanbul(new Date())) => {
     if (educationalWriteNotice) {
       setAnnouncement(educationalWriteNotice);
       return;
     }
-    const civilDate = civilDateInIstanbul(new Date());
     setDayClosureBusy(true);
     setDayClosureError("");
     try {
@@ -8854,7 +9492,7 @@ export default function Prototype() {
 
   const submitDayClosure = async () => {
     if (dayClosureBusy) return;
-    const civilDate = civilDateInIstanbul(new Date());
+    const civilDate = dayClosureWorkspace.civilDate;
     setDayClosureBusy(true);
     setDayClosureError("");
     try {
@@ -9175,14 +9813,30 @@ export default function Prototype() {
           {
             educationalWrite: {},
             failureDetail:
-              "Etkinlik uygulama oturumu bu cihaza kaydedilemedi. Çocuk Modu açılmadı.",
+              "Etkinlik uygulama oturumu bu cihaza kaydedilemedi. Gözlem başlatılmadı.",
             successDetail: `${activity.title} uygulama oturumu kaydedildi.`,
           },
         );
+        if (application.activity.status === "planned") {
+          await enqueuePersistence(
+            () =>
+              setTodayActivityStatus(
+                store,
+                application.identity.activityId,
+                "in_progress",
+              ),
+            {
+              educationalWrite: {},
+              failureDetail:
+                "Etkinlik uygulama durumu kaydedilemedi. Gözlem başlatılmadı.",
+              successDetail: `${activity.title} uygulanıyor olarak kaydedildi.`,
+            },
+          );
+        }
         await refreshD1Workspaces();
         setAnnouncement(
           application.created
-            ? `${activity.title} için izlenebilir uygulama oturumu ve gözetimli Çocuk Modu açıldı.`
+            ? `${activity.title} için uygulama oturumu hazır.`
             : `${activity.title} için bugünkü uygulama oturumu yeniden açıldı.`,
         );
         return application.identity;
@@ -9195,19 +9849,15 @@ export default function Prototype() {
           : undefined
       }
       onPrint={async (request) => {
-        const { openHtmlPrintWindow } = await import(
-          "./features/printing/open-html-print-window.ts"
+        const { previewHtmlPrintDocument } = await import(
+          "./features/documents/html-document-pdf.ts"
         );
-        const result = openHtmlPrintWindow({
+        await previewHtmlPrintDocument({
           html: request.printable.html,
           title: `${request.activity.title} · MaarifOS`,
+          fileName: request.printable.fileName,
         });
-        if (!result.opened) {
-          throw new Error(
-            "Yazdırma penceresi açılamadı. Tarayıcıda açılır pencerelere izin verip yeniden deneyin.",
-          );
-        }
-        setAnnouncement(`${request.activity.title} yazdırma görünümü açıldı.`);
+        setAnnouncement(`${request.activity.title} PDF önizlemesi hazırlandı.`);
       }}
       onChildChoice={(request) => {
         setAnnouncement(
@@ -9268,10 +9918,388 @@ export default function Prototype() {
       }
     />
   );
+  const renderClassroomSetupFields = () => (
+    <>
+            <section
+              id="classroom-setup-period"
+              className="classroom-form-section"
+              aria-labelledby="classroom-setup-period-title"
+            >
+              <div className="classroom-form-section-heading">
+                <span className="d1-kicker">TEMEL BİLGİLER</span>
+                <h3 id="classroom-setup-period-title">Okul, öğretmen ve sınıf</h3>
+                <p>Bu bilgileri bir kez yazın; plan ve idare çıktılarında otomatik kullanılsın.</p>
+              </div>
+              <label htmlFor="school-name">Okul adı</label>
+              <KeyboardInput
+                id="school-name"
+                autoFocus={!academicYearTransitionRequired}
+                value={classroomForm.schoolName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, schoolName: event.target.value }))}
+                placeholder="Örn. Cumhuriyet Anaokulu"
+                autoComplete="organization"
+              />
+              <label htmlFor="teacher-name">Öğretmen adı soyadı</label>
+              <KeyboardInput
+                id="teacher-name"
+                value={classroomForm.teacherName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, teacherName: event.target.value }))}
+                placeholder="Örn. Emine Akın"
+                autoComplete="name"
+              />
+              <label htmlFor="classroom-name">Sınıf adı</label>
+              <KeyboardInput
+                id="classroom-name"
+                value={classroomForm.classroomName}
+                onChange={(event) => setClassroomForm((current) => ({ ...current, classroomName: event.target.value }))}
+                placeholder="Örn. Güneş Sınıfı"
+                autoComplete="off"
+              />
+              <label htmlFor="age-group">Maarif Modeli yaş grubu</label>
+              <select
+                id="age-group"
+                value={classroomForm.ageGroup}
+                onChange={(event) =>
+                  setClassroomForm((current) => ({
+                    ...current,
+                    ageGroup: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Yaş grubunu seçin</option>
+                <option>36–48 ay</option>
+                <option>48–60 ay</option>
+                <option>60–72 ay</option>
+              </select>
+            </section>
+
+          <section className="official-calendar-preset">
+            <div>
+              <span className="d1-kicker">OTOMATİK HAZIR</span>
+              <strong>2026–2027 MEB resmî takvimi</strong>
+              <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
+            </div>
+            {officialAcademicCalendarApplied ? (
+              <span className="official-calendar-applied" role="status">
+                <CheckCircledIcon aria-hidden="true" /> Uygulandı
+              </span>
+            ) : (
+              <button type="button" onClick={applyOfficialAcademicCalendar}>
+                2026–2027 dönemini hazırla
+              </button>
+            )}
+            <a
+              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="MEB duyurusunu yeni sekmede aç"
+            >
+              MEB duyurusunu aç
+            </a>
+          </section>
+
+          <details className="classroom-calendar-details">
+            <summary>
+              <span>
+                <strong>Takvim ayrıntıları</strong>
+                <small>{classroomForm.academicYearName}</small>
+              </span>
+            </summary>
+            {configuredClassroom && !officialAcademicCalendarApplied ? (
+              <div className="classroom-current-period" role="status">
+                <CalendarIcon aria-hidden="true" />
+                <span>
+                  <strong>Bu sınıf {configuredClassroom.academicYearName} dönemine bağlı</strong>
+                  Yeni dönemi hazırlamak eski yılı sessizce değiştirmez; kaydederken arşivleme ve öğrenci taşıma onayı istenir.
+                </span>
+              </div>
+            ) : null}
+            <label htmlFor="academic-year-name">Eğitim yılı</label>
+            <KeyboardInput
+              id="academic-year-name"
+              value={classroomForm.academicYearName}
+              onChange={(event) => {
+                setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }));
+                setAcademicYearTransitionConfirmed(false);
+              }}
+              autoComplete="off"
+            />
+            <div className="settings-grid">
+              <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
+                <KeyboardInput
+                  id="academic-year-start"
+                  type="date"
+                  value={classroomForm.academicYearStart}
+                  onChange={(event) => {
+                    setClassroomForm((current) => ({ ...current, academicYearStart: event.target.value }));
+                    setAcademicYearTransitionConfirmed(false);
+                  }}
+                />
+              </label>
+              <label htmlFor="academic-year-end">Eğitim yılı bitişi
+                <KeyboardInput
+                  id="academic-year-end"
+                  type="date"
+                  value={classroomForm.academicYearEnd}
+                  onChange={(event) => {
+                    setClassroomForm((current) => ({ ...current, academicYearEnd: event.target.value }));
+                    setAcademicYearTransitionConfirmed(false);
+                  }}
+                />
+              </label>
+            </div>
+            {classroomFormOperationalNotice ? (
+              <div className="academic-year-form-warning" role="alert">
+                <CalendarIcon aria-hidden="true" />
+                <span>
+                  <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazır" : "Seçili tarihler bugün etkin değil"}</strong>
+                  {classroomForm.academicYearStart > attendanceCivilDate
+                    ? `Sınıf, çocuk listesi ve plan omurgası hazır. Resmî başlangıcı bekleyebilir veya bu sınıfı bugün gerçek kayıt kullanımına açabilirsiniz.`
+                    : classroomFormOperationalNotice}
+                </span>
+                {configuredClassroom?.operationalStatus === "preparation" ? (
+                  <button
+                    type="button"
+                    disabled={dataBusy}
+                    onClick={() => void startAcademicYearWorkToday()}
+                  >
+                    Çalışmayı bugün başlat
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </details>
+
+          <details
+            className="classroom-advanced-settings"
+          >
+            <summary>
+              <span>
+                <strong>İleri ayarlar</strong>
+                <small>
+                  {classroomForm.scheduleKind === "morning"
+                    ? "Sabahçı"
+                    : classroomForm.scheduleKind === "afternoon"
+                      ? "Öğleci"
+                      : classroomForm.scheduleKind === "custom"
+                        ? "Özel saatler"
+                        : "Tam gün · 08:30–16:30"}
+                </small>
+              </span>
+              <ChevronRightIcon aria-hidden="true" />
+            </summary>
+            <section
+              id="classroom-setup-schedule"
+              className="classroom-form-section"
+              aria-labelledby="classroom-setup-schedule-title"
+            >
+              <div className="classroom-form-section-heading">
+                <h3 id="classroom-setup-schedule-title">Günlük çalışma düzeni</h3>
+                <p>Yalnız okulunuzun düzeni farklıysa değiştirin.</p>
+              </div>
+              <label htmlFor="schedule-kind">Çalışma düzeni</label>
+              <select
+                id="schedule-kind"
+                value={classroomForm.scheduleKind}
+                onChange={(event) => chooseScheduleKind(event.target.value as ClassroomScheduleKind | "")}
+              >
+                <option value="">Çalışma düzenini seçin</option>
+                <option value="morning">Sabahçı</option>
+                <option value="afternoon">Öğleci</option>
+                <option value="full_day">Tam gün</option>
+                <option value="custom">Özel saatler</option>
+              </select>
+              <div className="settings-grid">
+                <label htmlFor="schedule-start">Başlangıç
+                  <KeyboardInput
+                    id="schedule-start"
+                    type="time"
+                    value={classroomForm.startTime}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, startTime: event.target.value }))}
+                    disabled={!classroomForm.scheduleKind}
+                  />
+                </label>
+                <label htmlFor="schedule-end">Bitiş
+                  <KeyboardInput
+                    id="schedule-end"
+                    type="time"
+                    value={classroomForm.endTime}
+                    onChange={(event) => setClassroomForm((current) => ({ ...current, endTime: event.target.value }))}
+                    disabled={!classroomForm.scheduleKind}
+                  />
+                </label>
+              </div>
+              <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
+
+            </section>
+          </details>
+
+    </>
+  );
+  const renderClassroomFormFeedback = () => (
+    <>
+          {classroomError ? <p role="alert">{classroomError}</p> : null}
+          <div className="classroom-form-navigation">
+            <button
+              className="sheet-primary"
+              type="submit"
+              aria-describedby="classroom-setup-submit-hint"
+              disabled={
+                dataBusy ||
+                writesBlocked ||
+                !classroomSetupReadinessState.schedule ||
+                (academicYearTransitionRequired && !academicYearTransitionConfirmed)
+              }
+            >
+              {samePeriodCurriculumTransitionRequired
+                ? "Maarif Modeli sınıfını oluştur"
+                : academicYearTransitionRequired
+                  ? "Yeni eğitim yılına geç"
+                  : "Sınıfımı hazırla"}
+            </button>
+            <small id="classroom-setup-submit-hint" aria-live="polite">
+              {classroomSetupSubmitHint}
+            </small>
+          </div>
+    </>
+  );
+
   const securityGateOpen =
     appLocked ||
     persistenceState.phase === "hydrating" ||
     persistenceState.phase === "error";
+
+  deskDocumentBlocked.current = securityGateOpen || writesBlocked || dataBusy;
+  const openDeskPlan = (planId: string) => {
+    setCompletionRequest(null); setStudentProfileOpen(false);
+    void store.readSnapshot().then(async snapshot => {
+      const saved = snapshot.plans.find(plan => plan.id === planId);
+      if (!saved) throw new Error("Plan artık bulunamıyor.");
+      if (saved.planType === "daily") {
+        const workspace = await loadScheduledPlanWorkspace(store);
+        setScheduledPlanWorkspace(workspace);
+        const plan = workspace.plans.find(item => item.planId === planId);
+        if (plan) return viewScheduledPlanFlow(plan);
+        return openAcademicCalendar(saved.civilDate);
+      }
+      const level = saved.planType === "annual" || saved.planType === "monthly" ? saved.planType : "weekly";
+      openTeacherPlanRecords(level, null, planId);
+    }).catch(error => setAnnouncement(error instanceof Error ? error.message : "Plan açılamadı."));
+  };
+  const openStudentSummaryDocument = async (studentId: string) => {
+    if (studentSummaryLock.current || writesBlocked || dataBusy) return;
+    studentSummaryLock.current = true; setStudentSummaryBusy(true);
+    try {
+      const snapshot = await store.readSnapshot();
+      const scope = resolveActiveClassroomScope(snapshot);
+      if (!scope) throw new Error("Öğrenci özeti için sınıfı açın.");
+      const { createStudentSummaryRecipe } = await import("./features/student-summary/student-summary-document.ts");
+      const { requestPdfDocument } = await import("./features/documents/pdf-preview-model.ts");
+      const recipe = await createStudentSummaryRecipe(store, { scope, studentId });
+      if (!deskDocumentBlocked.current) { keyboard.hide(); await requestPdfDocument(recipe); }
+    } catch (error) { setAnnouncement(error instanceof Error ? error.message : "Öğrenci özeti hazırlanamadı."); }
+    finally { studentSummaryLock.current = false; setStudentSummaryBusy(false); }
+  };
+
+  const renderActionCenter = (scope: { studentId?: string; observationId?: string } = {}) => (
+    <Suspense fallback={<p role="status">Yapılacak işler hazırlanıyor…</p>}>
+      {!scope.observationId && <PreparedTeacherActions store={store} studentId={scope.studentId}
+        refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`}
+        disabled={writesBlocked || dataBusy || educationalWritesDisabled}
+        onChanged={() => { setFollowupRevision(value => value + 1); return refreshD1Workspaces(); }}
+        onOpenPlan={planId => {
+          setCompletionRequest(null); setStudentProfileOpen(false);
+          void store.readSnapshot().then(async snapshot => {
+            const saved = snapshot.plans.find(plan => plan.id === planId);
+            if (saved?.planType === "daily") {
+              const workspace = await loadScheduledPlanWorkspace(store);
+              setScheduledPlanWorkspace(workspace);
+              const plan = workspace.plans.find(item => item.planId === planId);
+              if (plan) return viewScheduledPlanFlow(plan);
+              return openAcademicCalendar(saved.civilDate);
+            }
+            const level = saved?.planType === "annual" || saved?.planType === "monthly" ? saved.planType : "weekly";
+            openTeacherPlanRecords(level, null, planId);
+          }).catch(() => setAnnouncement("Plan kayıtlı; Planlar bölümünden yeniden açabilirsiniz."));
+        }}
+        onOpenObservation={(studentId, activityId) => { void openActivityEvidence(activityId, studentId); }}
+        onOpenFamily={appointmentId => { keyboard.hide(); setStudentProfileOpen(false); setFamilyMeetingAppointmentId(appointmentId); }}
+        onPrepareInvitation={(appointmentId, scheduledOn) => {
+          void (async () => {
+            const snapshot = await store.readSnapshot();
+            const currentScope = resolveActiveClassroomScope(snapshot);
+            if (!currentScope) throw new Error("Görüşme daveti için sınıfı açın.");
+            const { familyAppointmentPdfRecipe } = await import("./features/family-engagement/family-engagement-document.ts");
+            const { requestPdfDocument } = await import("./features/documents/pdf-preview-model.ts");
+            await requestPdfDocument(familyAppointmentPdfRecipe(snapshot, { scope: currentScope, scheduledOn, appointmentId }));
+          })().catch(error => setAnnouncement(error instanceof Error ? error.message : "Davet hazırlanamadı."));
+        }} />}
+      <ActionCenter store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`}
+        disabled={writesBlocked || dataBusy || educationalWritesDisabled} {...scope}
+        onOpenObservation={observationId => openObservationActions(observationId)}
+        onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("İşlem kaydedildi; ekranı yeniden açarak güncelleyebilirsiniz.")); }}
+        onOpenProgramLinks={observationId => {
+          const observation = allEvidenceObservations.find(item => item.id === observationId);
+          if (observation) openObservationProgramLinks(observation);
+        }}
+        onOpenPlans={planId => {
+          setCompletionRequest(null); setStudentProfileOpen(false);
+          void store.readSnapshot().then(async snapshot => {
+            const saved = snapshot.plans.find(plan => plan.id === planId);
+            if (saved?.planType === "daily") {
+              const workspace = await loadScheduledPlanWorkspace(store);
+              setScheduledPlanWorkspace(workspace);
+              const plan = workspace.plans.find(item => item.planId === planId);
+              if (plan) return viewScheduledPlanFlow(plan);
+              return openAcademicCalendar(saved.civilDate);
+            }
+            const level = saved?.planType === "annual" || saved?.planType === "monthly" ? saved.planType : "weekly";
+            openTeacherPlanRecords(level, null, planId);
+          }).catch(() => setAnnouncement("Plan kayıtlı; Planlar bölümünden yeniden açabilirsiniz."));
+        }} />
+    </Suspense>
+  );
+
+  const renderPlanNextSteps = (civilDate: string, requestedLevel?: "daily") => (
+    <Suspense fallback={<p role="status">Sıradaki plan adımı hazırlanıyor…</p>}>
+      <WorkPackageCenter store={store} civilDate={civilDate} mode="planning"
+        refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`}
+        disabled={writesBlocked || dataBusy || planWritesDisabled}
+        onChanged={() => {
+          setFollowupRevision(value => value + 1);
+          void refreshD1Workspaces().catch(() => setAnnouncement("Plan kaydedildi; görünüm yenilenemedi."));
+        }}
+        onOpenPlans={planId => {
+          setPlanGuidanceCivilDate(null);
+          void loadScheduledPlanWorkspace(store).then(workspace => {
+            setScheduledPlanWorkspace(workspace);
+            const plan = workspace.plans.find(item => item.planId === planId);
+            if (plan) return viewScheduledPlanFlow(plan);
+            return openAcademicCalendar(civilDate);
+          }).catch(() => setAnnouncement("Plan kayıtlı; Planlar bölümünden yeniden açabilirsiniz."));
+        }} />
+      <PlanNextSteps store={store} civilDate={civilDate} requestedLevel={requestedLevel}
+        refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} density="compact"
+        disabled={writesBlocked || dataBusy || planWritesDisabled} disabledReason={educationalWriteNotice ?? undefined}
+        onChanged={() => {
+          setFollowupRevision(value => value + 1);
+          void refreshD1Workspaces().catch(() => setAnnouncement("Plan kaydedildi; görünüm yenilenemedi."));
+        }}
+        onOpenPlan={target => {
+          setPlanGuidanceCivilDate(null);
+          if (target.level !== "daily") {
+            openTeacherPlanRecords(target.level, null, target.planId);
+            return;
+          }
+          void loadScheduledPlanWorkspace(store).then(workspace => {
+            setScheduledPlanWorkspace(workspace);
+            const plan = workspace.plans.find(item => item.planId === target.planId);
+            if (plan) return viewScheduledPlanFlow(plan);
+            return openAcademicCalendar(target.civilDate);
+          }).catch(() => setAnnouncement("Günlük plan kayıtlı; Planlar bölümünden yeniden açabilirsiniz."));
+        }} />
+    </Suspense>
+  );
 
   if (sharedInviteRequired && !sharedInviteGranted) {
     return (
@@ -9298,6 +10326,7 @@ export default function Prototype() {
         aria-hidden={securityGateOpen || tymmChildSession ? true : undefined}
       >
       <RouteFocusBoundary routeId={route.id}>
+        {!securityGateOpen ? <PdfPreviewHost historyStore={store} historyScope={calendarScope ?? undefined} sourceRevision={`${persistenceState.lastCommittedAt ?? "initial"}:${followupRevision}:${attendanceCivilDate}:${calendarScope?.classroomId ?? ""}`} /> : null}
         <MobileScroll className="maarif-scroll">
           {route.id === "classroom" ? (
             <Suspense
@@ -9321,8 +10350,11 @@ export default function Prototype() {
                 hasActiveSearch={Boolean(normalizedStudentSearch)}
                 openActionsStudentId={studentActionsOpenId}
                 isBusy={dataBusy}
+                classAgeBand={currentClassTymmAgeBand}
                 educationalWritesDisabled={educationalWritesDisabled}
                 educationalWriteNotice={educationalWriteNotice}
+                rosterWritesDisabled={configuredClassroom?.operationalStatus === "ended"}
+                rosterWriteNotice="Bu eğitim yılı sona erdi. Çocuk listesini değiştirmek için yeni dönemi hazırlayın."
                 getObservationCount={(studentId) =>
                   observationCountByStudent.get(studentId) ?? 0
                 }
@@ -9335,12 +10367,40 @@ export default function Prototype() {
                   );
                   return sourceStudent ? <StudentAvatar student={sourceStudent} /> : null;
                 }}
+                developmentCoverage={<ClassroomDevelopmentPanel store={store} civilDate={attendanceCivilDate}
+                  refreshKey={evidenceWorkspace} rosterKey={students} disabled={dataBusy || educationalWritesDisabled}
+                  onOpenStudent={(id) => openStudentProfile(id)} onQuickObservation={(id) => void openStudentObservation(id)} />}
+                followupInbox={<>{renderActionCenter()}<FollowupInbox store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(studentId, section) => setFollowupRequest({ studentId, section })} /><ClassroomManagementInbox onOpenCalendarSettings={()=>{setClassroomSetupSection("period");setClassroomOpen(true);}} store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(section, studentId) => setManagementRequest({ section, studentId })} /></>}
                 onSearchQueryChange={setStudentSearch}
+                onOpenImport={() => {
+                  keyboard.hide();
+                  void store.readSnapshot().then(async snapshot => {
+                    const { resolveActiveClassroomScope } = await import("./core/domain/classroom-scope.ts");
+                    const scope = resolveActiveClassroomScope(snapshot);
+                    if (scope) setStudentImportScope(scope);
+                    else setAnnouncement("Önce sınıfınızı hazırlayın.");
+                  }).catch(() => setAnnouncement("Sınıf bilgileri okunamadı."));
+                }}
+                onOpenClassroomSetup={() => {
+                  setClassroomSetupSection("period");
+                  setClassroomOpen(true);
+                  setAnnouncement("Sınıf ve eğitim yılı bilgileri açıldı.");
+                }}
+                onOpenDuties={()=>{keyboard.hide();setClassDutyRequest({kind:'fruit'});}}
                 onOpenAddStudent={() => {
+                  if (configuredClassroom?.operationalStatus === "ended") {
+                    setClassroomSetupSection("period");
+                    setClassroomOpen(true);
+                    setAnnouncement(
+                      "Bu eğitim yılı sona erdi. Çocuk listesini değiştirmek için yeni dönemi hazırlayın.",
+                    );
+                    return;
+                  }
                   setStudentActionsOpenId(null);
                   setStudentAddOpen(true);
                 }}
                 onOpenAttendance={() => changeAttendanceOpen(true)}
+                onPrepareRoster={downloadSimpleClassRoster}
                 onOpenExport={() => {
                   void downloadSimpleClassRoster().catch((reason) => {
                     setAnnouncement(
@@ -9348,11 +10408,20 @@ export default function Prototype() {
                     );
                   });
                 }}
-                onOpenProfile={(studentId, section) => {
+                onOpenProfile={(studentId, section, returnFocusTarget) => {
                   setStudentActionsOpenId(null);
-                  openStudentProfile(studentId, section);
+                  openStudentProfile(
+                    studentId,
+                    section,
+                    returnFocusTarget,
+                  );
                 }}
-                onOpenObservation={openStudentObservation}
+                onOpenObservation={(studentId, returnFocusTarget) => {
+                  d1ReturnFocusRef.current = returnFocusTarget ?? null;
+                  d1ReturnFocusStudentIdRef.current = studentId;
+                  return openStudentObservation(studentId);
+                }}
+                onOpenQuickObservation={() => openStudentObservation()}
                 onToggleStudentActions={(studentId) =>
                   setStudentActionsOpenId((current) =>
                     current === studentId ? null : studentId,
@@ -9361,7 +10430,7 @@ export default function Prototype() {
                 onArchiveStudent={archiveStudent}
                 onRestoreStudent={restoreStudent}
                 onDeleteStudent={(student) => {
-                  const sourceStudent = archivedStudents.find(
+                  const sourceStudent = [...students, ...archivedStudents].find(
                     (candidate) => candidate.id === student.id,
                   );
                   if (sourceStudent) void openStudentDeletion(sourceStudent);
@@ -9388,6 +10457,9 @@ export default function Prototype() {
             >
               <>
                 <PlanWorkspaceScreen
+                  store={store}
+                  nextSteps={renderPlanNextSteps(preparationPlanningWindow.defaultCivilDate ?? todayWorkspace.civilDate)}
+                  refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`}
                   workspace={{
                     ...teacherWorkCycle,
                     documents: {
@@ -9411,7 +10483,7 @@ export default function Prototype() {
                   }
                   onOpenDocuments={() => {
                     navigate("documents");
-                    setAnnouncement("Çıktılar.");
+                    setAnnouncement("Belgeler.");
                   }}
                   onOpenActivityStudio={openCaptureEntry}
                   onOpenBuiltInMaarifLibrary={() => openPremiumPlans("overview")}
@@ -9423,6 +10495,8 @@ export default function Prototype() {
                     );
                   }}
                 />
+                {renderActionCenter()}
+                <FollowupInbox store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(studentId, section) => setFollowupRequest({ studentId, section: section ?? "preparation" })} />
                 <section
                   className="tymm-guide-entry"
                   aria-labelledby="tymm-guide-entry-heading"
@@ -9433,12 +10507,9 @@ export default function Prototype() {
                       <ReaderIcon />
                     </span>
                     <span>
-                      <small>Resmî program · tam yaş matrisi</small>
-                      <h2 id="tymm-guide-entry-heading">TYMM 2024 Yaş Rehberi</h2>
-                      <p>
-                        Üç resmî yaş bandı, yedi alan ve çocukla gözetimli büyük
-                        seçimler tek yerde.
-                      </p>
+                      <small>Resmî program ve plan kaynağı</small>
+                      <h2 id="tymm-guide-entry-heading">TYMM yaş rehberi</h2>
+                      <p>Yaş bandına göre öğrenme çıktıları ve MEB örnek plan bağlantıları.</p>
                     </span>
                   </div>
                   <div className="tymm-guide-entry-ages" aria-label="Resmî TYMM yaş bantları">
@@ -9457,7 +10528,7 @@ export default function Prototype() {
                     data-testid="tymm-guide-open"
                     onClick={openTymmAgeGuide}
                   >
-                    Tüm yaşları ve çocuk ekranını aç
+                    Yaş rehberini aç
                     <ChevronRightIcon aria-hidden="true" />
                   </button>
                 </section>
@@ -9472,6 +10543,29 @@ export default function Prototype() {
               }
             >
               <DocumentWorkspaceScreen
+                documentPurposeTools={{classroom:<>
+                  <button type="button" className="sheet-primary" onClick={()=>setClassDutyRequest({kind:'fruit'})}>Meyve ve haftanın çocuğu çizelgesi</button>
+                  <DocumentWorkshop store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy || educationalWritesDisabled}
+                    onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Kaydınız tamamlandı; görünümü yeniden açabilirsiniz.")); }}
+                    onOpenCenters={() => { keyboard.hide(); setManagementRequest({ section: "centers" }); }} onPlanDate={openGuidedDailyPlanning} onOpenStudent={studentId => { keyboard.hide(); openStudentProfile(studentId, "contacts"); }} onOpenAttendance={() => { keyboard.hide(); changeAttendanceOpen(true); }} onOpenPlan={openDeskPlan} onOpenMeeting={appointmentId => { keyboard.hide(); setFamilyMeetingAppointmentId(appointmentId); }} onOpenPickup={(studentId, civilDate) => { keyboard.hide(); setFollowupRequest({ studentId, section: "pickup", civilDate }); }} />
+                  <DeskDocumentCenter store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy || educationalWritesDisabled}
+                    onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Plan kaydedildi; ekranı yeniden açarak güncelleyebilirsiniz.")); }}
+                    onOpenPlan={openDeskPlan} onOpenDate={openAcademicCalendar} onPlanDate={openGuidedDailyPlanning} />
+                </>,family:<DocumentWorkshop purpose="family" store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy || educationalWritesDisabled}
+                    onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Aile kaydı tamamlandı; görünümü yeniden açabilirsiniz.")); }}
+                    onOpenPlan={openDeskPlan} onOpenPickup={(studentId,civilDate)=>setFollowupRequest({studentId,section:"pickup",civilDate})}
+                    onOpenMeeting={appointmentId=>setFamilyMeetingAppointmentId(appointmentId)} onOpenStudent={studentId=>openStudentProfile(studentId,"contacts")} />,
+                administration:<TeacherReportCenterPanel store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy}
+                    onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Rapor kaydı tamamlandı; görünümü yeniden açabilirsiniz.")); }}
+                    onOpenPlan={openDeskPlan} onPreparePlan={openGuidedDailyPlanning} onOpenObservation={openObservationActions}
+                    onOpenCapture={()=>void openStudentObservation()}
+                    onOpenAssessment={civilDate=>{void openDayClosure(civilDate);}}
+                    onOpenStudentReport={studentId=>{keyboard.hide();setDevelopmentReportStudentId(studentId);setDevelopmentReportPeriod(null);setDevelopmentReportOpen(true);}}
+                    onOpenMonthlyEvaluation={monthlyPlanId=>openTeacherPlanRecords("monthly",null,monthlyPlanId)} />,
+                archive:<><MonthEndPackagePanel store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy}
+                    onComplete={(_kind, month) => openTeacherPlanRecords("monthly", month)} />
+                  {calendarScope && <DocumentHistoryPanel store={store} scope={calendarScope} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} />}
+                </>}}
                 workspace={{
                   ...teacherWorkCycle,
                   documents: {
@@ -9507,6 +10601,7 @@ export default function Prototype() {
                   setAnnouncement("Belge hazırlama alanı açıldı.");
                 }}
                 onDownloadClassRoster={downloadSimpleClassRoster}
+                onPrepareRoster={downloadSimpleClassRoster}
                 onShareClassRoster={shareSimpleClassRoster}
                 onDownloadPlan={downloadSimplePlan}
                 onPrepareOutput={(id) => {
@@ -9587,6 +10682,7 @@ export default function Prototype() {
               fallback={<div className="surface-loading" role="status">Bugünün işleri hazırlanıyor…</div>}
             >
             <TodayScreen
+              preferenceStore={store}
               model={{
                 workspace: todayWorkspace,
                 civilDateLabel: formatTurkishCivilDate(attendanceCivilDate),
@@ -9636,7 +10732,11 @@ export default function Prototype() {
                   setSettingsInitialSection("overview");
                   setProfileOpen(true);
                 },
+                onOpenClassroom: () => navigatePrimaryRoute("classroom"),
                 onApplyReadyUpdate: applyReadyUpdate,
+                onActivateAcademicYear: () => {
+                  void startAcademicYearWorkToday();
+                },
                 onOpenAttendance: () => changeAttendanceOpen(true),
                 onOpenCalendar: () => openAcademicCalendar(attendanceCivilDate),
                 onOpenWeekDay: (civilDate) => openAcademicCalendar(civilDate),
@@ -9652,14 +10752,19 @@ export default function Prototype() {
                 onOpenStudentObservation: (studentId) => {
                   void openStudentObservation(studentId);
                 },
-                onOpenPlanFlow: () => openPlanFlow(),
+                onOpenPlanFlow: () => openGuidedDailyPlanning(),
                 onOpenActivityStudio: openCaptureEntry,
+                onOpenStudentProfile: (studentId) => openStudentProfile(studentId),
+                onOpenRecordedActivity: (activityId) => openActivityEvidence(activityId),
+                onCompleteRecordedActivity: (activityId) => {
+                  void completeRecordedActivity(activityId);
+                },
                 onOpenTeacherCycleStage: (stage) => {
                   if (stage === "daily") {
                     if (todayWorkspace.planItems.length > 0) {
                       openTodayPlans();
                     } else {
-                      openPlanFlow();
+                      openGuidedDailyPlanning();
                     }
                     return;
                   }
@@ -9674,7 +10779,9 @@ export default function Prototype() {
                 },
                 onOpenSetupStep: openSetupProgressStep,
               }}
-              slots={{ formatStudentAge: formatChildAge }}
+              slots={{ formatStudentAge: formatChildAge,
+                thisWeek:<Suspense fallback={null}><TomorrowReadyCard store={store} civilDate={attendanceCivilDate} refreshKey={followupRevision} disabled={writesBlocked||dataBusy||educationalWritesDisabled} onChanged={()=>setFollowupRevision(v=>v+1)} onOpenPlan={openDeskPlan} onOpenPlanning={openGuidedDailyPlanning} onOpenSmallGroups={civilDate=>setTomorrowTool({kind:'groups',civilDate})} onOpenHomeGames={civilDate=>setTomorrowTool({kind:'family',civilDate})} onOpenDuties={(kind,scheduleId,civilDate)=>setClassDutyRequest({kind,scheduleId,month:civilDate?.slice(0,7)})}/><ClassDutyWeekCard store={store} civilDate={attendanceCivilDate} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(kind,scheduleId)=>setClassDutyRequest({kind,scheduleId})}/></Suspense>,
+                followupInbox: <>{renderActionCenter()}<FollowupInbox store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(studentId, section) => setFollowupRequest({ studentId, section })} /><ClassroomManagementInbox onOpenCalendarSettings={()=>{setClassroomSetupSection("period");setClassroomOpen(true);}} store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={(section, studentId) => setManagementRequest({ section, studentId })} /></> }}
             />
             </Suspense>
           )}
@@ -9685,7 +10792,7 @@ export default function Prototype() {
         {visiblePrimaryNavigation().map((item) => {
           const active =
             item.id === "capture"
-              ? route.id === "activities" || captureMenuOpen
+              ? evidenceFlowRequest !== null || captureMenuOpen
               : item.id === "plans"
                 ? !documentsOpen &&
                   (route.id === "plans" ||
@@ -9703,7 +10810,6 @@ export default function Prototype() {
               key={item.id}
               className={`${item.id === "capture" ? "nav-add" : ""}${active ? " is-active" : ""}`.trim()}
               onClick={() => handleNav(item.id, item.label)}
-              aria-label={item.id === "capture" ? "Etkinlikler" : undefined}
               aria-current={active ? "page" : undefined}
             >
               {item.id === "today" ? (
@@ -9715,7 +10821,7 @@ export default function Prototype() {
               ) : item.id === "documents" ? (
                 <ArchiveIcon aria-hidden="true" />
               ) : (
-                <MagicWandIcon aria-hidden="true" />
+                <Pencil1Icon aria-hidden="true" />
               )}
               <span>{item.label}</span>
             </button>
@@ -10049,13 +11155,12 @@ export default function Prototype() {
             </span>
           </section>
 
-          <div className="tymm-age-tabs" role="tablist" aria-label="TYMM yaş bandı">
+          <div className="tymm-age-tabs" role="group" aria-label="TYMM yaş bandı">
             {tymmAgeGuides.map((guide) => (
               <button
                 type="button"
-                role="tab"
                 key={guide.ageBand}
-                aria-selected={selectedTymmGuide.ageBand === guide.ageBand}
+                aria-pressed={selectedTymmGuide.ageBand === guide.ageBand}
                 onClick={() => selectTymmGuideAge(guide.ageBand)}
               >
                 <strong>{guide.ageLabel}</strong>
@@ -10068,6 +11173,9 @@ export default function Prototype() {
             <div>
               <span className="d1-kicker">Seçili resmî bant</span>
               <h3 id="tymm-guide-summary-heading">{selectedTymmGuide.ageLabel}</h3>
+              <small className="tymm-guide-summary__editorial-label">
+                MaarifOS uygulama notu · resmî gelişim basamağı değildir
+              </small>
               <p>{selectedTymmGuide.developmentalUseNote}</p>
             </div>
             <strong aria-label={`${selectedTymmGuide.totalLearningOutcomeCount} öğrenme çıktısı`}>
@@ -10076,65 +11184,132 @@ export default function Prototype() {
             </strong>
           </section>
 
-          <section className="tymm-domain-section" aria-labelledby="tymm-domain-heading">
-            <div className="tymm-section-heading">
-              <span>
-                <small>Eksiksiz öğrenme çıktısı sayımı</small>
-                <h3 id="tymm-domain-heading">Yedi öğrenme alanı</h3>
-              </span>
-              <TargetIcon aria-hidden="true" />
-            </div>
-            <p className="catalog-scope-note">
-              Bu sayı yalnız resmî öğrenme çıktılarını kapsar ve kaynak özetiyle
-              izlenir. Diğer program bileşenleri insan incelemesi tamamlandıkça
-              ayrıca eklenecektir.
-            </p>
-            <div className="tymm-domain-tabs" role="tablist" aria-label="Öğrenme alanları">
-              {selectedTymmGuide.domainOutcomeCounts.map((item) => (
-                <button
-                  type="button"
-                  role="tab"
-                  key={item.domain}
-                  aria-selected={tymmGuideDomain === item.domain}
-                  onClick={() => setTymmGuideDomain(item.domain)}
-                >
-                  <span>{item.domain}</span>
-                  <strong>{item.learningOutcomeCount}</strong>
-                </button>
-              ))}
-            </div>
-            <div className="tymm-outcome-list" role="tabpanel">
-              <p>
-                <strong>{tymmGuideDomain}</strong>
-                <span>{selectedTymmOutcomes.length} resmî öğrenme çıktısı</span>
-              </p>
-              <ol>
-                {selectedTymmOutcomes.map((outcome) => (
-                  <li key={`${outcome.ageBand}-${outcome.code}`}>
-                    <span>{outcome.code}</span>
-                    <p>{outcome.title}</p>
-                    <small>Program s. {outcome.sourcePage}</small>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <a
-              className="tymm-source-link"
-              href={selectedTymmGuide.officialProvenance.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
+          {selectedTymmOfficialAgeResource ? (
+            <details
+              className="tymm-official-examples"
+              data-testid="tymm-official-examples"
             >
-              <Link2Icon aria-hidden="true" />
+              <summary>
+                <span>
+                  <strong>Resmî örnek planlar</strong>
+                  <small>
+                    {selectedTymmOfficialAgeResource.ageLabel} · yaş sayfası ve 4 MEB örneği
+                  </small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </summary>
+              <div className="tymm-official-examples__content">
+                <p>
+                  Bu bağlantılar MEB’de yayımlanan örneklere gider. Örnekler
+                  uygulamaya otomatik kurulmaz; sınıfınıza göre inceleyip
+                  düzenlemeniz gerekir.
+                </p>
+                <div className="tymm-official-examples__links">
+                  <a
+                    href={selectedTymmOfficialAgeResource.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${selectedTymmOfficialAgeResource.title} (yeni sekmede)`}
+                  >
+                    <span>
+                      <strong>{selectedTymmOfficialAgeResource.title}</strong>
+                      <small>Seçili yaşın resmî MEB sayfası</small>
+                    </span>
+                    <Link2Icon aria-hidden="true" />
+                  </a>
+                  {selectedTymmOfficialAgeResource.examples.map((example) => (
+                    <a
+                      key={example.id}
+                      href={example.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${example.title} (yeni sekmede)`}
+                    >
+                      <span>
+                        <strong>{example.title}</strong>
+                        <small>MEB’de yayımlanmış plan örneği · dış bağlantı</small>
+                      </span>
+                      <Link2Icon aria-hidden="true" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </details>
+          ) : null}
+
+          <details
+            className="tymm-program-details"
+            data-testid="tymm-program-details"
+          >
+            <summary>
               <span>
-                <strong>Resmî program PDF’sini aç</strong>
+                <strong>Program ayrıntıları</strong>
                 <small>
-                  Kontrol: {formatTurkishCivilDate(selectedTymmGuide.officialProvenance.sourceCheckedOn)}
-                  {" · "}yaşa ait sayfalar {selectedTymmGuide.officialProvenance.ageBandSourcePages.join(", ")}
+                  7 öğrenme alanı · {selectedTymmGuide.totalLearningOutcomeCount} resmî öğrenme çıktısı
                 </small>
               </span>
               <ChevronRightIcon aria-hidden="true" />
-            </a>
-          </section>
+            </summary>
+            <section className="tymm-domain-section" aria-labelledby="tymm-domain-heading">
+              <div className="tymm-section-heading">
+                <span>
+                  <small>Eksiksiz öğrenme çıktısı sayımı</small>
+                  <h3 id="tymm-domain-heading">Yedi öğrenme alanı</h3>
+                </span>
+                <TargetIcon aria-hidden="true" />
+              </div>
+              <p className="catalog-scope-note">
+                Bu sayı yalnız resmî öğrenme çıktılarını kapsar ve kaynak özetiyle
+                izlenir. Diğer program bileşenleri insan incelemesi tamamlandıkça
+                ayrıca eklenecektir.
+              </p>
+              <div className="tymm-domain-tabs" role="group" aria-label="Öğrenme alanları">
+                {selectedTymmGuide.domainOutcomeCounts.map((item) => (
+                  <button
+                    type="button"
+                    key={item.domain}
+                    aria-pressed={tymmGuideDomain === item.domain}
+                    onClick={() => setTymmGuideDomain(item.domain)}
+                  >
+                    <span>{item.domain}</span>
+                    <strong>{item.learningOutcomeCount}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="tymm-outcome-list">
+                <p>
+                  <strong>{tymmGuideDomain}</strong>
+                  <span>{selectedTymmOutcomes.length} resmî öğrenme çıktısı</span>
+                </p>
+                <ol>
+                  {selectedTymmOutcomes.map((outcome) => (
+                    <li key={`${outcome.ageBand}-${outcome.code}`}>
+                      <span>{outcome.code}</span>
+                      <p>{outcome.title}</p>
+                      <small>Program s. {outcome.sourcePage}</small>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <a
+                className="tymm-source-link"
+                href={TYMM_OFFICIAL_RESOURCE_CATALOG.programPdf.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Resmî program PDF’sini yeni sekmede aç"
+              >
+                <Link2Icon aria-hidden="true" />
+                <span>
+                  <strong>Resmî program PDF’sini aç</strong>
+                  <small>
+                    Kontrol: {formatTurkishCivilDate(TYMM_OFFICIAL_RESOURCE_CATALOG.sourceCheckedOn)}
+                    {" · "}yaşa ait sayfalar {selectedTymmGuide.officialProvenance.ageBandSourcePages.join(", ")}
+                  </small>
+                </span>
+                <ChevronRightIcon aria-hidden="true" />
+              </a>
+            </section>
+          </details>
 
           <section className="tymm-participation-section" aria-labelledby="tymm-participation-heading">
             <div className="tymm-section-heading">
@@ -10379,7 +11554,7 @@ export default function Prototype() {
               d1ReturnFocusRef.current =
                 document.querySelector<HTMLElement>(".nav-add");
               setCaptureMenuOpen(false);
-              openPlanFlow();
+              openGuidedDailyPlanning();
             }}
             disabled={planWritesDisabled}
             aria-describedby="capture-plan-readiness"
@@ -10469,273 +11644,139 @@ export default function Prototype() {
         open={classroomOpen}
         onOpenChange={(open) => {
           setClassroomOpen(open);
-          if (!open) setClassroomSetupSection("period");
+          if (!open) {
+            setClassroomSetupSection("period");
+            setAcademicYearTransitionConfirmed(false);
+          }
         }}
-        title="Sınıfını hazırla"
-        description="Dört temel bilgiyi bir kez yazın; Maarif Modeli ve resmî takvim kendiliğinden hazırlansın."
+        title={
+          academicYearTransitionRequired
+            ? samePeriodCurriculumTransitionRequired
+              ? "Maarif Modeli sınıfını oluştur"
+              : "Yeni eğitim yılına geç"
+            : "Sınıfını hazırla"
+        }
+        description={
+          academicYearTransitionRequired
+            ? "Eski kayıtları koruyarak sınıfı tek onayla yeni kapsama taşıyın."
+            : "Dört temel bilgiyi bir kez yazın; Maarif Modeli ve resmî takvim kendiliğinden hazırlansın."
+        }
         snap={0.9}
       >
         <form
-          className="classroom-form"
+          className={`classroom-form${academicYearTransitionRequired ? " is-transition" : ""}`}
           onSubmit={(event) => {
             event.preventDefault();
             void saveClassroom();
           }}
         >
-          <div className="classroom-form-simple-intro" role="status">
-            <CheckCircledIcon aria-hidden="true" />
-            <span>
-              <strong>Türkiye Yüzyılı Maarif Modeli hazır</strong>
-              Resmî program profili, 2026–2027 takvimi ve tam gün çalışma düzeni otomatik seçildi.
-            </span>
-          </div>
-
-            <section
-              id="classroom-setup-period"
-              className="classroom-form-section"
-              aria-labelledby="classroom-setup-period-title"
-            >
-              <div className="classroom-form-section-heading">
-                <span className="d1-kicker">TEMEL BİLGİLER</span>
-                <h3 id="classroom-setup-period-title">Okul, öğretmen ve sınıf</h3>
-                <p>Bu bilgileri bir kez yazın; plan ve idare çıktılarında otomatik kullanılsın.</p>
-              </div>
-              <label htmlFor="school-name">Okul adı</label>
-              <KeyboardInput
-                id="school-name"
-                autoFocus
-                value={classroomForm.schoolName}
-                onChange={(event) => setClassroomForm((current) => ({ ...current, schoolName: event.target.value }))}
-                placeholder="Örn. Cumhuriyet Anaokulu"
-                autoComplete="organization"
-              />
-              <label htmlFor="teacher-name">Öğretmen adı soyadı</label>
-              <KeyboardInput
-                id="teacher-name"
-                value={classroomForm.teacherName}
-                onChange={(event) => setClassroomForm((current) => ({ ...current, teacherName: event.target.value }))}
-                placeholder="Örn. Emine Akın"
-                autoComplete="name"
-              />
-              <label htmlFor="classroom-name">Sınıf adı</label>
-              <KeyboardInput
-                id="classroom-name"
-                value={classroomForm.classroomName}
-                onChange={(event) => setClassroomForm((current) => ({ ...current, classroomName: event.target.value }))}
-                placeholder="Örn. Güneş Sınıfı"
-                autoComplete="off"
-              />
-              <label htmlFor="age-group">Maarif Modeli yaş grubu</label>
-              <select
-                id="age-group"
-                value={classroomForm.ageGroup}
-                onChange={(event) =>
-                  setClassroomForm((current) => ({
-                    ...current,
-                    ageGroup: event.target.value,
-                  }))
-                }
+          {academicYearTransitionRequired ? (
+            <>
+              <section
+                className="academic-year-transition-compact"
+                aria-labelledby="academic-year-transition-title"
               >
-                <option value="">Yaş grubunu seçin</option>
-                <option>36–48 ay</option>
-                <option>48–60 ay</option>
-                <option>60–72 ay</option>
-              </select>
-            </section>
-
-          <section className="official-calendar-preset">
-            <div>
-              <span className="d1-kicker">OTOMATİK HAZIR</span>
-              <strong>2026–2027 MEB resmî takvimi</strong>
-              <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
-            </div>
-            {officialAcademicCalendarApplied ? (
-              <span className="official-calendar-applied" role="status">
-                <CheckCircledIcon aria-hidden="true" /> Uygulandı
-              </span>
-            ) : (
-              <button type="button" onClick={applyOfficialAcademicCalendar}>
-                2026–2027 dönemini hazırla
-              </button>
-            )}
-            <a
-              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              MEB duyurusunu aç
-            </a>
-          </section>
-
-          <details className="classroom-calendar-details">
-            <summary>
-              <span>
-                <strong>Takvim ayrıntıları</strong>
-                <small>{classroomForm.academicYearName}</small>
-              </span>
-            </summary>
-            {configuredClassroom && !officialAcademicCalendarApplied ? (
-              <div className="classroom-current-period" role="status">
-                <CalendarIcon aria-hidden="true" />
-                <span>
-                  <strong>Bu sınıf {configuredClassroom.academicYearName} dönemine bağlı</strong>
-                  Yeni dönemi hazırlamak eski yılı sessizce değiştirmez; kaydederken arşivleme ve öğrenci taşıma onayı istenir.
-                </span>
-              </div>
-            ) : null}
-            <label htmlFor="academic-year-name">Eğitim yılı</label>
-            <KeyboardInput
-              id="academic-year-name"
-              value={classroomForm.academicYearName}
-              onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearName: event.target.value }))}
-              autoComplete="off"
-            />
-            <div className="settings-grid">
-              <label htmlFor="academic-year-start">Eğitim yılı başlangıcı
-                <KeyboardInput
-                  id="academic-year-start"
-                  type="date"
-                  value={classroomForm.academicYearStart}
-                  onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearStart: event.target.value }))}
-                />
-              </label>
-              <label htmlFor="academic-year-end">Eğitim yılı bitişi
-                <KeyboardInput
-                  id="academic-year-end"
-                  type="date"
-                  value={classroomForm.academicYearEnd}
-                  onChange={(event) => setClassroomForm((current) => ({ ...current, academicYearEnd: event.target.value }))}
-                />
-              </label>
-            </div>
-            {classroomFormOperationalNotice ? (
-              <div className="academic-year-form-warning" role="alert">
-                <CalendarIcon aria-hidden="true" />
-                <span>
-                  <strong>{classroomForm.academicYearStart > attendanceCivilDate ? "Yeni dönem hazır" : "Seçili tarihler bugün etkin değil"}</strong>
-                  {classroomForm.academicYearStart > attendanceCivilDate
-                    ? `Sınıf, çocuk listesi ve plan omurgası hazır. Resmî başlangıcı bekleyebilir veya bu sınıfı bugün gerçek kayıt kullanımına açabilirsiniz.`
-                    : classroomFormOperationalNotice}
-                </span>
-                {configuredClassroom?.operationalStatus === "preparation" ? (
-                  <button
-                    type="button"
-                    disabled={dataBusy}
-                    onClick={() => void startAcademicYearWorkToday()}
-                  >
-                    Çalışmayı bugün başlat
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </details>
-
-          <details
-            className="classroom-advanced-settings"
-            open={academicYearTransitionRequired || undefined}
-          >
-            <summary>
-              <span>
-                <strong>İleri ayarlar</strong>
-                <small>
-                  {classroomForm.scheduleKind === "morning"
-                    ? "Sabahçı"
-                    : classroomForm.scheduleKind === "afternoon"
-                      ? "Öğleci"
-                      : classroomForm.scheduleKind === "custom"
-                        ? "Özel saatler"
-                        : "Tam gün · 08:30–16:30"}
-                </small>
-              </span>
-              <ChevronRightIcon aria-hidden="true" />
-            </summary>
-            <section
-              id="classroom-setup-schedule"
-              className="classroom-form-section"
-              aria-labelledby="classroom-setup-schedule-title"
-            >
-              <div className="classroom-form-section-heading">
-                <h3 id="classroom-setup-schedule-title">Günlük çalışma düzeni</h3>
-                <p>Yalnız okulunuzun düzeni farklıysa değiştirin.</p>
-              </div>
-              <label htmlFor="schedule-kind">Çalışma düzeni</label>
-              <select
-                id="schedule-kind"
-                value={classroomForm.scheduleKind}
-                onChange={(event) => chooseScheduleKind(event.target.value as ClassroomScheduleKind | "")}
-              >
-                <option value="">Çalışma düzenini seçin</option>
-                <option value="morning">Sabahçı</option>
-                <option value="afternoon">Öğleci</option>
-                <option value="full_day">Tam gün</option>
-                <option value="custom">Özel saatler</option>
-              </select>
-              <div className="settings-grid">
-                <label htmlFor="schedule-start">Başlangıç
-                  <KeyboardInput
-                    id="schedule-start"
-                    type="time"
-                    value={classroomForm.startTime}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, startTime: event.target.value }))}
-                    disabled={!classroomForm.scheduleKind}
-                  />
-                </label>
-                <label htmlFor="schedule-end">Bitiş
-                  <KeyboardInput
-                    id="schedule-end"
-                    type="time"
-                    value={classroomForm.endTime}
-                    onChange={(event) => setClassroomForm((current) => ({ ...current, endTime: event.target.value }))}
-                    disabled={!classroomForm.scheduleKind}
-                  />
-                </label>
-              </div>
-              <p>Bu düzen yalnız sınıf ayarlarından değiştirilir; Bugün ekranında bilgi olarak gösterilir.</p>
-              {academicYearTransitionRequired ? (
+                <header>
+                  <span className="d1-kicker">
+                    {samePeriodCurriculumTransitionRequired
+                      ? "MAARİF MODELİ GEÇİŞİ"
+                      : "EĞİTİM YILI GEÇİŞİ"}
+                  </span>
+                  <h3 id="academic-year-transition-title">
+                    {samePeriodCurriculumTransitionRequired
+                      ? "Yeni Maarif Modeli sınıfı hazır"
+                      : "Yeni dönem hazır"}
+                  </h3>
+                </header>
+                <div
+                  className="academic-year-transition-compact__flow"
+                  aria-label={
+                    samePeriodCurriculumTransitionRequired
+                      ? "Eski programdan yeni Maarif Modeli sınıfına geçiş"
+                      : "Eski dönemden yeni döneme geçiş"
+                  }
+                >
+                  <div>
+                    <small>
+                      {samePeriodCurriculumTransitionRequired
+                        ? "Arşivlenecek kapsam"
+                        : "Eski dönem"}
+                    </small>
+                    <strong>{configuredClassroom?.academicYearName}</strong>
+                    <span>
+                      {samePeriodCurriculumTransitionRequired
+                        ? "EÇE kayıtları"
+                        : configuredClassroom
+                          ? `${formatTurkishCivilDate(configuredClassroom.academicYearStart)}–${formatTurkishCivilDate(configuredClassroom.academicYearEnd)}`
+                          : ""}
+                    </span>
+                  </div>
+                  <ChevronRightIcon aria-hidden="true" />
+                  <div className="is-next">
+                    <small>
+                      {samePeriodCurriculumTransitionRequired
+                        ? "Yeni kapsam"
+                        : "Yeni dönem"}
+                    </small>
+                    <strong>{classroomForm.academicYearName}</strong>
+                    <span>
+                      {samePeriodCurriculumTransitionRequired
+                        ? "Türkiye Yüzyılı Maarif Modeli"
+                        : `${formatTurkishCivilDate(classroomForm.academicYearStart)}–${formatTurkishCivilDate(classroomForm.academicYearEnd)}`}
+                    </span>
+                  </div>
+                </div>
                 <label className="academic-year-transition-confirm">
                   <input
                     type="checkbox"
+                    autoFocus
                     checked={academicYearTransitionConfirmed}
-                    onChange={(event) => setAcademicYearTransitionConfirmed(event.target.checked)}
+                    onChange={(event) =>
+                      setAcademicYearTransitionConfirmed(event.target.checked)
+                    }
+                    aria-label="Çocukları yeni sınıfa taşımayı ve eski kayıtları arşivlemeyi onayla"
+                    aria-describedby="academic-year-transition-impact"
                   />
                   <span>
                     <strong>
-                      {samePeriodCurriculumTransitionRequired
-                        ? "Yeni Maarif Modeli sınıfını oluştur"
-                        : "Yeni eğitim yılına güvenli geçiş yap"}
+                      {students.length} çocuğu {samePeriodCurriculumTransitionRequired
+                        ? "yeni Maarif Modeli sınıfına"
+                        : "yeni eğitim yılına"} taşı
                     </strong>
-                    {samePeriodCurriculumTransitionRequired
-                      ? ` Mevcut EÇE sınıfı salt okunur arşivlensin; ${students.length} etkin öğrenci aynı dönemdeki yeni TYMM sınıfına taşınsın. Eski plan, gözlem ve portfolyolar EÇE kapsamında korunsun.`
-                      : ` Mevcut yıl ve sınıf arşivlensin; ${students.length} etkin öğrenci yeni yıla taşınsın. Eski gözlem, portfolyo ve değerlendirmeler kendi yılı içinde korunsun.`}
+                    <small id="academic-year-transition-impact">
+                      Eski plan, gözlem, portfolyo ve değerlendirmeler kendi
+                      kapsamında korunur; yalnız etkin çocuk listesi yeni sınıfa bağlanır.
+                    </small>
                   </span>
                 </label>
-              ) : null}
-            </section>
-          </details>
-
-          {classroomError ? <p role="alert">{classroomError}</p> : null}
-          <div className="classroom-form-navigation">
-            <button
-              className="sheet-primary"
-              type="submit"
-              aria-describedby="classroom-setup-submit-hint"
-              disabled={
-                dataBusy ||
-                writesBlocked ||
-                !classroomSetupReadinessState.schedule ||
-                (academicYearTransitionRequired && !academicYearTransitionConfirmed)
-              }
-            >
-              {samePeriodCurriculumTransitionRequired
-                ? "Maarif Modeli sınıfını oluştur"
-                : academicYearTransitionRequired
-                  ? "Yeni eğitim yılına geç"
-                  : "Sınıfımı hazırla"}
-            </button>
-            <small id="classroom-setup-submit-hint" aria-live="polite">
-              {classroomSetupSubmitHint}
-            </small>
-          </div>
+              </section>
+              {renderClassroomFormFeedback()}
+              <details className="classroom-setup-edit-details">
+                <summary>
+                  <span>
+                    <strong>Ayrıntıları değiştir</strong>
+                    <small>Okul, öğretmen, takvim ve çalışma saatleri</small>
+                  </span>
+                  <ChevronRightIcon aria-hidden="true" />
+                </summary>
+                <div className="classroom-setup-edit-details__content">
+                  {renderClassroomSetupFields()}
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <div className="classroom-form-simple-intro" role="status">
+                <CheckCircledIcon aria-hidden="true" />
+                <span>
+                  <strong>Türkiye Yüzyılı Maarif Modeli hazır</strong>
+                  Resmî program profili, 2026–2027 takvimi ve tam gün çalışma düzeni otomatik seçildi.
+                </span>
+              </div>
+              {renderClassroomSetupFields()}
+              {renderClassroomFormFeedback()}
+            </>
+          )}
         </form>
       </BottomSheet>
 
@@ -10810,7 +11851,7 @@ export default function Prototype() {
             <button
               className="sheet-primary plans-create-button"
               type="button"
-              onClick={() => openPlanFlow()}
+              onClick={() => openGuidedDailyPlanning()}
               disabled={planWritesDisabled}
               aria-describedby={
                 planWritesDisabled ? "plans-create-readiness" : undefined
@@ -10954,6 +11995,14 @@ export default function Prototype() {
         </BottomSheet>
       ) : null}
 
+      <BottomSheet open={!!tomorrowTool&&!securityGateOpen} onOpenChange={open=>{if(!open)setTomorrowTool(null);}} title={tomorrowTool?.kind==='groups'?'Yarının küçük grubu':'Yarının aile kartı'} description={tomorrowTool?.civilDate??''} snap={0.94}>
+        {tomorrowTool&&!securityGateOpen&&<Suspense fallback={<p role="status">Hazırlık açılıyor…</p>}>{tomorrowTool.kind==='groups'?<TomorrowSmallGroupPanel store={store} civilDate={tomorrowTool.civilDate} refreshKey={followupRevision} disabled={writesBlocked||dataBusy||educationalWritesDisabled} onChanged={()=>setFollowupRevision(v=>v+1)} onOpenPlan={id=>{setTomorrowTool(null);openDeskPlan(id);}}/>:<TomorrowHomeGamePanel store={store} civilDate={tomorrowTool.civilDate} refreshKey={followupRevision} disabled={writesBlocked||dataBusy||educationalWritesDisabled} onChanged={()=>setFollowupRevision(v=>v+1)} onOpenPlanning={date=>{setTomorrowTool(null);openGuidedDailyPlanning(date);}}/>}</Suspense>}
+      </BottomSheet>
+      <BottomSheet open={!!classDutyRequest&&!securityGateOpen} onOpenChange={open=>{if(!open)setClassDutyRequest(null);}} title="Sınıf görev çizelgeleri" description="Çocukları ve günleri seçin; dağılımı kaydedin, değiştirin ve çıktısını alın." snap={0.94}>
+        {classDutyRequest&&!securityGateOpen&&<Suspense fallback={<p role="status">Görev çizelgeleri hazırlanıyor…</p>}><ClassDutySchedulePanel store={store} initialMonth={classDutyRequest.month} initialKind={classDutyRequest.kind} initialScheduleId={classDutyRequest.scheduleId} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked||dataBusy||educationalWritesDisabled}
+          onChanged={()=>{setFollowupRevision(v=>v+1);void refreshD1Workspaces().catch(()=>setAnnouncement("Çizelge kaydedildi. Ekranı yeniden açarak güncelleyebilirsiniz."));}}
+          onOpenCalendar={date=>{setClassDutyRequest(null);void openAcademicCalendar(date);}} /></Suspense>}
+      </BottomSheet>
       <BottomSheet
         open={calendarOpen}
         onOpenChange={(open) => {
@@ -10978,6 +12027,7 @@ export default function Prototype() {
               href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
               target="_blank"
               rel="noreferrer"
+              aria-label="MEB resmî kaynağını yeni sekmede aç"
             >
               MEB
             </a>
@@ -11103,7 +12153,7 @@ export default function Prototype() {
                   {entry.note ? <p>{entry.note}</p> : null}
                 </div>
                 <div>
-                  <select
+                  {calendarDutyLinks[entry.id]?<button type="button" onClick={()=>{setCalendarOpen(false);setClassDutyRequest(calendarDutyLinks[entry.id]!);}}>Görevi çizelgede düzenle</button>:<><select
                     aria-label={`${entry.title} durumu`}
                     value={entry.status}
                     onChange={(event) =>
@@ -11128,6 +12178,7 @@ export default function Prototype() {
                   >
                     <TrashIcon aria-hidden="true" />
                   </button>
+                  </>}
                 </div>
               </article>
             ))}
@@ -11343,9 +12394,9 @@ export default function Prototype() {
               <button
                 type="button"
                 key={student.id}
-                onClick={() => {
+                onClick={(event) => {
                   setDocumentsOpen(false);
-                  openStudentProfile(student.id);
+                  openStudentProfile(student.id, "flow", event.currentTarget);
                 }}
               >
                 <StudentAvatar student={student} />
@@ -11377,6 +12428,23 @@ export default function Prototype() {
         </section>
       </BottomSheet>
 
+      {studentImportScope && !securityGateOpen ? <Suspense fallback={<p role="status">Excel aktarımı hazırlanıyor…</p>}>
+        <StudentImportSheet civilDate={attendanceCivilDate} classroomName={configuredClassroom?.classroomName ?? "Aktif sınıf"}
+          existing={[...students, ...archivedStudents]}
+          onClose={() => { keyboard.hide(); setStudentImportScope(null); }}
+          onCommit={async selections => {
+            if (writesBlocked || dataBusy) throw new Error("Kayıt alanı henüz hazır değil. Lütfen yeniden deneyin.");
+            setDataBusy(true);
+            try {
+              const { commitStudentImport } = await import("./features/students/student-import-service.ts");
+              const imported = await enqueuePersistence(() => commitStudentImport(store, { selections, scope: studentImportScope }));
+              setStudents(current => [...current, ...imported.filter(student => !current.some(existing => existing.id === student.id))]);
+              setStudentSearch("");
+              setAnnouncement(`${imported.length} öğrenci veli bilgileriyle sınıfa eklendi.`);
+            } finally { setDataBusy(false); }
+          }} />
+      </Suspense> : null}
+
       {classroomToolsMounted || studentAddOpen || classExportPreviewOpen ? (
         <Suspense fallback={null}>
           <ClassroomToolsSheets
@@ -11389,6 +12457,8 @@ export default function Prototype() {
             newStudentNationalIdentityNumber={newStudentNationalIdentityNumber}
             newStudentGuardianName={newStudentGuardianName}
             newStudentGuardianPhone={newStudentGuardianPhone}
+            newStudentHomeAddress={newStudentHomeAddress}
+            newStudentHomeAddressParts={newStudentHomeAddressParts}
             newStudentError={newStudentError}
             civilDate={attendanceCivilDate}
             exportStartDate={classExportStartDate}
@@ -11414,6 +12484,7 @@ export default function Prototype() {
             onNewStudentNationalIdentityNumberChange={setNewStudentNationalIdentityNumber}
             onNewStudentGuardianNameChange={setNewStudentGuardianName}
             onNewStudentGuardianPhoneChange={setNewStudentGuardianPhone}
+            onNewStudentHomeAddressChange={(value, parts) => { setNewStudentHomeAddress(value); setNewStudentHomeAddressParts(parts); }}
             onAddStudent={addStudent}
             onExportStartDateChange={setClassExportStartDate}
             onExportEndDateChange={setClassExportEndDate}
@@ -11456,21 +12527,67 @@ export default function Prototype() {
         </Suspense>
       ) : null}
 
+      <BottomSheet key={completionRequest ? "completion-open" : "completion-closed"}
+        open={completionRequest !== null && evidenceFlowRequest === null && !securityGateOpen}
+        onOpenChange={open => { if (!open) setCompletionRequest(null); }}
+        title="Gözlemden sonraki adım" description="Hazır seçeneklerden seçin; MaarifOS kayıtları ve bağlantıları tamamlasın." snap={0.9}>
+        {completionRequest && evidenceFlowRequest === null && !securityGateOpen ? renderActionCenter(completionRequest) : null}
+      </BottomSheet>
+
+      <BottomSheet open={planGuidanceCivilDate !== null && !securityGateOpen}
+        onOpenChange={open => { if (!open) setPlanGuidanceCivilDate(null); }}
+        title="Planı adım adım tamamla" description="Hazır seçeneği seçin; kayıt ve sonraki adım birlikte hazırlansın." snap={0.92}>
+        {planGuidanceCivilDate && !securityGateOpen ? renderPlanNextSteps(planGuidanceCivilDate, "daily") : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={studentArchiveCandidate !== null}
+        onOpenChange={(open) => { if (!open && !dataBusy) setStudentArchiveCandidate(null); }}
+        title="Öğrenciyi sil"
+        description="Öğrenci sınıf listesinden kaldırılır ve geri alınabilir arşive taşınır."
+        snap={0.56}
+      >
+        {studentArchiveCandidate ? (
+          <div className="student-delete-sheet">
+            <section className="student-delete-warning">
+              <TrashIcon aria-hidden="true" />
+              <div>
+                <h3>{studentArchiveCandidate.name}</h3>
+                <p>Gözlemler, yoklamalar, fotoğraflar, aile bilgileri ve diğer kayıtlar korunur.
+                  Sınıfım ekranındaki Silinen / ayrılan öğrenciler bölümünden Geri al ile yeniden sınıfa ekleyebilirsiniz.</p>
+              </div>
+            </section>
+            <button className="student-delete-confirm" type="button" disabled={dataBusy}
+              onClick={() => void confirmArchiveStudent()}>
+              {dataBusy ? "Taşınıyor…" : "Sil ve geri alınabilir arşive taşı"}
+            </button>
+            <button className="student-contact-add" type="button" disabled={dataBusy}
+              onClick={() => setStudentArchiveCandidate(null)}>Vazgeç</button>
+            <button className="student-delete-confirm" type="button" disabled={dataBusy || writesBlocked}
+              onClick={() => void openStudentDeletion(studentArchiveCandidate)}>{studentProfileCopy.permanentlyDeleteStudent}</button>
+          </div>
+        ) : null}
+      </BottomSheet>
+
       <BottomSheet
         open={studentDeletionCandidate !== null}
         onOpenChange={(open) => {
-          if (!open) {
+          if (!open && !dataBusy) {
             setStudentDeletionCandidate(null);
             setStudentDeletionImpact(null);
             setStudentDeletionConfirmation("");
           }
         }}
         title="Kalıcı öğrenci silme"
-        description="Bu işlem geri alınamaz; önce etki özeti ve ad onayı gösterilir"
+        description="Etki özetini inceleyin, seçiminizi onaylayıp kalıcı silmeyi tamamlayın."
         snap={0.82}
       >
         {studentDeletionCandidate && studentDeletionImpact ? (
           <div className="student-delete-sheet">
+            {studentDeletionError ? <div role="alert"><p>{studentDeletionError}</p>
+              <button type="button" className="student-contact-add" disabled={dataBusy || writesBlocked}
+                onClick={() => void openStudentDeletion(studentDeletionCandidate)}>Güncel silme kapsamını yeniden hazırla</button>
+            </div> : null}
             <section className="student-delete-warning">
               <TrashIcon aria-hidden="true" />
               <div>
@@ -11486,6 +12603,7 @@ export default function Prototype() {
               </div>
             </section>
             <div className="student-delete-impact" aria-label="Silme etkisi">
+              <div><strong>{studentDeletionImpact.relatedRecordCount}</strong><span>incelenen ilişkili kayıt</span></div>
               <div><strong>{studentDeletionImpact.attendanceCount}</strong><span>devam kaydı</span></div>
               <div><strong>{studentDeletionImpact.observationCount}</strong><span>gözlem</span></div>
               <div><strong>{studentDeletionImpact.mediaCount}</strong><span>medya</span></div>
@@ -11499,25 +12617,21 @@ export default function Prototype() {
                 Paylaşımlı kayıtlar diğer öğrenciler için korunur; silinen
                 öğrenci üyeliği çıkarılır:{" "}
                 {studentDeletionImpact.sharedObservationCount} ortak gözlem,{" "}
-                {studentDeletionImpact.sharedMediaCount} ortak medya.
+                {studentDeletionImpact.sharedMediaCount} ortak medya. Ortak kayıtların metni korunur;
+                metin içinde ayrıca yazılmış öğrenci adları kendiliğinden ayıklanmaz.
               </p>
             ) : null}
-            <label>
-              Onaylamak için öğrencinin adını aynen yazın
-              <KeyboardInput
-                value={studentDeletionConfirmation}
-                onChange={(event) =>
-                  setStudentDeletionConfirmation(event.target.value)
-                }
-                placeholder={studentDeletionImpact.displayName}
-                autoComplete="off"
-              />
+            <label className="student-delete-consent">
+              <input type="checkbox" disabled={dataBusy || writesBlocked}
+                checked={studentDeletionConfirmation === studentDeletionImpact.displayName}
+                onChange={event => setStudentDeletionConfirmation(event.target.checked ? studentDeletionImpact.displayName : "")} />
+              {studentProfileCopy.permanentDeleteConsent}
             </label>
             <button
               className="student-delete-confirm"
               type="button"
               disabled={
-                dataBusy ||
+                dataBusy || writesBlocked ||
                 studentDeletionConfirmation.trim() !==
                   studentDeletionImpact.displayName
               }
@@ -11531,17 +12645,41 @@ export default function Prototype() {
       </BottomSheet>
 
       <BottomSheet
+        // Dispose the completed profile surface so an exit animation cannot retain
+        // a closed, empty dialog or revive it during a rapid report return.
+        key={studentProfileOpen ? "profile-open" : developmentReportOpen ? "profile-during-report" : "profile-closed"}
         open={studentProfileOpen}
         onOpenChange={(open) => {
-          if (!open) keyboard.hide();
-          setStudentProfileOpen(open);
+          if (!open) {
+            requestStudentProfileClose();
+            return;
+          }
+          setStudentProfileOpen(true);
         }}
         title={selectedProfileStudent ? `${selectedProfileStudent.name} profili` : "Çocuk profili"}
         description="Kimlik, sınıf bağlamı ve kanıt izi tek yerde"
         snap={0.94}
       >
         {selectedProfileStudent ? (
-          <div className="student-profile-sheet">
+          <div className="student-profile-sheet" ref={studentProfileSheetRef}>
+            <button type="button" className="secondary-action" disabled={writesBlocked || dataBusy || studentSummaryBusy} onClick={() => void openStudentSummaryDocument(selectedProfileStudent.id)}>{studentSummaryBusy ? "Özet hazırlanıyor…" : "Öğrencinin tek sayfalık özetini hazırla"}</button>
+            {renderActionCenter({ studentId: selectedProfileStudent.id })}
+            {studentProfileTab === "flow" ? <Suspense fallback={null}>
+              <StudentDevelopmentPanel key={selectedProfileStudent.id} store={store}
+                studentId={selectedProfileStudent.id} civilDate={attendanceCivilDate} refreshKey={evidenceWorkspace} rosterKey={students}
+                disabled={dataBusy || educationalWritesDisabled}
+                onQuickObservation={(id) => void openStudentObservation(id)}
+                onCreateReport={(id, period) => {
+                  keyboard.hide();
+                  setDevelopmentReportStudentId(id);
+                  setDevelopmentReportPeriod(period);
+                  setStudentProfileOpen(false);
+                  setDevelopmentReportOpen(true);
+                }}
+                onOpenObservation={(id) => openObservationActions(id, selectedProfileStudent.id)} />
+            </Suspense> : null}
+            <details className="student-profile-context-details" open={studentProfileTab !== "flow" ? true : undefined}>
+              <summary>{REPORT_EDITOR_COPY.profileDetails}</summary>
             <Suspense fallback={null}>
               <StudentProfileOverviewPanel
                 avatar={
@@ -11591,6 +12729,10 @@ export default function Prototype() {
               error={studentAttendanceHistoryError}
               formatCivilDate={formatTurkishCivilDate}
             />
+            <details className="attendance-calculation-disclosure"><summary>Bu çocuğun devam hesabını incele</summary><Suspense fallback={null}><AttendanceCalculationPanel store={store} civilDate={attendanceCivilDate} studentId={selectedProfileStudent.id} refreshKey={persistenceState.lastCommittedAt} /></Suspense></details>
+            <button className="student-share-trigger" type="button" onClick={() => { requestStudentProfileClose(); setManagementRequest({ studentId: selectedProfileStudent.id, section: "growth" }); }}><span><strong>Boy–kilo ve veli izinleri</strong><small>Dönem ölçümleri · grafikler · belgeye bağlı izinler</small></span><ChevronRightIcon aria-hidden="true" /></button>
+            <Suspense fallback={null}><DocumentedConsentStatus store={store} studentId={selectedProfileStudent.id} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} onOpen={() => { requestStudentProfileClose(); setManagementRequest({ studentId: selectedProfileStudent.id, section: "consents" }); }} /></Suspense>
+            <button className="student-share-trigger" type="button" onClick={() => { requestStudentProfileClose(); setFollowupRequest({ studentId: selectedProfileStudent.id, section: "contacts" }); }}><span><strong>İletişim ve öğretmen takibi</strong><small>Güncellik · teslim · veli görüşmesi · uyum · eğitim adımı</small></span><ChevronRightIcon aria-hidden="true" /></button>
 
             {isCapabilityEnabled("documentCenter") ||
             isCapabilityEnabled("aiFeedback") ? (
@@ -11625,19 +12767,6 @@ export default function Prototype() {
 
             {studentProfileTab === "flow" ? (
               <>
-            <button
-              className="student-profile-observe"
-              type="button"
-              onClick={() => void openStudentObservation(selectedProfileStudent.id)}
-              disabled={dataBusy || educationalWritesDisabled || archivedStudents.some(
-                (student) => student.id === selectedProfileStudent.id,
-              )}
-            >
-              <PlusIcon aria-hidden="true" />
-              {selectedProfileStudent.preferredName ??
-                selectedProfileStudent.name} için hızlı gözlem
-            </button>
-
             <section
               className="student-observation-archive"
               aria-labelledby="student-observation-archive-heading"
@@ -11649,8 +12778,7 @@ export default function Prototype() {
                     Gözlem arşivi
                   </h3>
                   <p>
-                    {selectedStudentObservations.length} değiştirilemez kayıt ·
-                    tarih ve saat sırasıyla
+                    {selectedStudentObservations.length} gözlem · {studentProfileCopy.observationArchiveHelp}
                   </p>
                 </div>
                 <ArchiveIcon aria-hidden="true" />
@@ -11746,7 +12874,7 @@ export default function Prototype() {
                     const pendingAssessment =
                       workflowStatus === "değerlendirme-bekliyor";
                     return (
-                      <li key={observation.id}>
+                      <li key={observation.id} id={`student-observation-${observation.id}`} tabIndex={-1}>
                         <span className="student-observation-time-dot" aria-hidden="true" />
                         <article>
                           <div>
@@ -11768,6 +12896,16 @@ export default function Prototype() {
                           </div>
                           <small>{observation.activityTitle}</small>
                           <p>{observation.rawText}</p>
+                          {observation.developmentSelection ? (
+                            <details>
+                              <summary>Maarif gelişim bilgisi</summary>
+                              {observation.confirmedCurriculumTargets.map((target) => (
+                                <p key={target.id}>{target.domain} · {target.referenceCode} · {target.referenceTitle}</p>
+                              ))}
+                              {observation.developmentSupportLabel ? <p>Bu gözlemde destek: {observation.developmentSupportLabel}</p> : null}
+                              <p>Bu kayıt tek bir gözlemdir; dönemsel gelişim değerlendirmesi değildir.</p>
+                            </details>
+                          ) : null}
                           {observation.context ? (
                             <details>
                               <summary>Bağlam ve ayrıntı</summary>
@@ -11777,6 +12915,11 @@ export default function Prototype() {
                               ) : null}
                             </details>
                           ) : null}
+                          <button type="button"
+                            onClick={() => openObservationActions(observation.id, observation.studentId)}>
+                            <Pencil1Icon aria-hidden="true" />
+                            {studentProfileCopy.observationActions}
+                          </button>
                           {pendingLink && isCapabilityEnabled("planEvidenceDetails") ? (
                             <button
                               type="button"
@@ -11814,6 +12957,16 @@ export default function Prototype() {
                       ? "Tümü filtresine dönerek tamamlanan kayıtları görebilirsiniz."
                       : "İlk not kaydedildiğinde tarih ve saatiyle burada görünür."}
                   </span>
+                  <button type="button" onClick={() => {
+                    if (selectedStudentObservations.length > 0) {
+                      setStudentObservationFilter("all");
+                      setStudentObservationMonth("all");
+                    } else {
+                      void openStudentObservation(selectedProfileStudent.id);
+                    }
+                  }}>
+                    {selectedStudentObservations.length > 0 ? studentProfileCopy.showAllObservations : studentProfileCopy.addFirstObservation}
+                  </button>
                 </div>
               )}
               {visibleSelectedStudentObservations.length > studentObservationLimit ? (
@@ -12297,6 +13450,10 @@ export default function Prototype() {
                 </label>
               </div>
 
+              <StudentAddressField id="student-profile-home-address" value={studentProfileForm.careDetails.homeAddress}
+                parts={studentProfileForm.careDetails.homeAddressParts}
+                disabled={dataBusy} onChange={updateStudentHomeAddress} />
+
               <label htmlFor="student-profile-languages">
                 Evde kullanılan diller
                 <small>
@@ -12383,6 +13540,10 @@ export default function Prototype() {
                 <Suspense fallback={null}>
                   <StudentProfileSafetyPanels
                     mode="contacts"
+                    studentSurname={studentProfileForm.lastName}
+                    homeAddress={studentProfileForm.careDetails.homeAddress}
+                    homeAddressParts={studentProfileForm.careDetails.homeAddressParts}
+                    onHomeAddressChange={updateStudentHomeAddress}
                     contacts={studentProfileForm.contacts}
                     removedContact={removedStudentContact}
                     onUpdateContact={updateStudentContact}
@@ -12399,6 +13560,7 @@ export default function Prototype() {
                   <StudentProfileSafetyPanels
                     mode="care"
                     careDetails={studentProfileForm.careDetails}
+                    onHomeAddressChange={updateStudentHomeAddress}
                     onCareDetailsChange={(field, value) =>
                       setStudentProfileForm((current) => ({
                         ...current,
@@ -12476,9 +13638,17 @@ export default function Prototype() {
               </button>
             </form>
             ) : null}
+            </details>
           </div>
         ) : null}
       </BottomSheet>
+
+      {developmentReportOpen && developmentReportStudentId ? <Suspense fallback={null}>
+        <DevelopmentReportDialog store={store} studentId={developmentReportStudentId}
+          civilDate={attendanceCivilDate} suspended={securityGateOpen} initialPeriod={developmentReportPeriod} registerDraftFlusher={registerDraftFlusher}
+          runWrite={(task) => enqueuePersistence(task, { failureDetail: "Gözlem özeti bu cihaza kaydedilemedi.", successDetail: "Gözlem özeti bu cihazda korundu." })}
+          onClose={() => { keyboard.hide(); setDevelopmentReportOpen(false); if (!native) setStudentProfileOpen(true); }} />
+      </Suspense> : null}
 
       <BottomSheet
         open={studentShareOpen}
@@ -12936,10 +14106,20 @@ export default function Prototype() {
         ) : null}
       </BottomSheet>
 
+      <BottomSheet open={familyMeetingAppointmentId !== null && !securityGateOpen} onOpenChange={open => { if (!open) setFamilyMeetingAppointmentId(null); }} title="Veli görüşme formu" description="Gündemi inceleyin, sonucu kaydedin ve takip işlerini tamamlayın." snap={0.94}>
+        {familyMeetingAppointmentId && !securityGateOpen ? <Suspense fallback={<p role="status">Görüşme formu hazırlanıyor…</p>}><FamilyMeetingFormPanel key={familyMeetingAppointmentId} store={store} appointmentId={familyMeetingAppointmentId} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy || educationalWritesDisabled} onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Görüşme kaydedildi; ekranı yeniden açarak güncelleyebilirsiniz.")); }} onClose={() => setFamilyMeetingAppointmentId(null)} /></Suspense> : null}
+      </BottomSheet>
+      <BottomSheet key={managementRequest ? "classroom-management-open" : "classroom-management-closed"} open={managementRequest !== null} onOpenChange={open => { if (!open) { keyboard.hide(); setManagementRequest(null); } }} title="Sınıf yönetimi" description="Sınıf düzeni, aile iletişimi, ölçümler ve belgeler" snap={0.94}>
+        {managementRequest ? <Suspense fallback={<p role="status">Sınıf yönetimi açılıyor…</p>}><ClassroomManagementWorkspace store={store} initialStudentId={managementRequest.studentId} initialSection={managementRequest.section} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy} onChanged={() => { setFollowupRevision(v => v + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Sınıf kaydı saklandı; ekranı yeniden açarak güncelleyebilirsiniz.")); }} /></Suspense> : null}
+      </BottomSheet>
+      <BottomSheet key={followupRequest ? "teacher-followup-open" : "teacher-followup-closed"} open={followupRequest !== null} onOpenChange={open => { if (!open) { keyboard.hide(); setFollowupRequest(null); } }} title="Öğretmen takip defteri" description="Çocuk, aile ve haftalık hazırlık kayıtları" snap={0.94}>
+        {followupRequest ? <Suspense fallback={<p role="status">Takip defteri açılıyor…</p>}><TeacherFollowupWorkspace store={store} initialStudentId={followupRequest.studentId} initialSection={followupRequest.section} initialPickupCivilDate={followupRequest.civilDate} refreshKey={persistenceState.lastCommittedAt} disabled={writesBlocked || dataBusy} onOpenStudent={id => { setFollowupRequest(null); openStudentProfile(id, "contacts"); }} onOpenPlans={() => { setFollowupRequest(null); navigate("plans"); }} onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Kayıt saklandı; plan ekranını yeniden açarak güncelleyebilirsiniz.")); }} /></Suspense> : null}
+      </BottomSheet>
       <AttendancePanels
         open={attendanceOpen}
         onOpenChange={changeAttendanceOpen}
-        students={students}
+        students={attendanceRoster}
+        calculationDetails={attendanceOpen ? <Suspense fallback={null}><AttendanceCalculationPanel store={store} civilDate={attendanceCivilDate} refreshKey={persistenceState.lastCommittedAt} /></Suspense> : null}
         civilDate={attendanceCivilDate}
         formattedCivilDate={formatTurkishCivilDate(attendanceCivilDate)}
         statusLabels={statusLabels}
@@ -12978,6 +14158,7 @@ export default function Prototype() {
         snap={0.86}
       >
         <div className="security-panel">
+          {profileOpen ? <Suspense fallback={null}><BackupRecoveryPanel getBackupService={getBackupService} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} /></Suspense> : null}
           <section className="security-section" aria-labelledby="classroom-settings-heading">
             <div className="security-heading-row">
               <div>
@@ -13100,27 +14281,8 @@ export default function Prototype() {
             </small>
           </section>
 
-          {isCapabilityEnabled("googleAuth") ? (
-          <section className="security-section" aria-labelledby="account-heading">
-            <div className="security-heading-row">
-              <div>
-                <h3 id="account-heading">Öğretmen hesabı</h3>
-                <p>{authView.privacySummary}</p>
-              </div>
-              <span className="optional-badge">İsteğe bağlı</span>
-            </div>
-            <button
-              className="google-account-button"
-              type="button"
-              disabled={!authView.googleAction.enabled}
-              onClick={() => setAuthState((current) => reduceAuthState(current, { type: "REQUEST_GOOGLE" }))}
-            >
-              <img src="/assets/google-g-logo.png" alt="" aria-hidden="true" />
-              <span>{authView.googleAction.label}</span>
-            </button>
-            <small className="provider-status">{authView.googleAction.statusText}</small>
-          </section>
-          ) : null}
+          {profileOpen&&!securityGateOpen&&<Suspense fallback={<p role="status">Hesap seçenekleri açılıyor…</p>}><CloudAccountPanel store={store} version={CURRENT_RELEASE.version} disabled={writesBlocked||dataBusy||securityGateOpen} canWrite={()=>!deskDocumentBlocked.current}
+            onChanged={()=>{setAnnouncement("Cihaz kayıtları eşitlendi. Güncel sınıf açılıyor.");window.location.reload();}} /></Suspense>}
 
           <section className="security-section" aria-labelledby="install-heading">
             <div className="security-heading-row">
@@ -13600,6 +14762,8 @@ export default function Prototype() {
                 scheduledPlans={scheduledPlanWorkspace.plans}
                 initialLevel={teacherPlanRecordsInitialLevel}
                 initialMonthKey={teacherPlanRecordsInitialMonthKey}
+                initialPlanId={teacherPlanRecordsInitialPlanId}
+                onContinueToDaily={openGuidedDailyPlanning}
                 contentPack={premiumFounderAccess?.pack ?? null}
                 educationalWritesDisabled={planWritesDisabled}
                 educationalWriteNotice={educationalWriteNotice}
@@ -13827,6 +14991,7 @@ export default function Prototype() {
               )}
             >
               <PlanCreationFlow
+                schoolCalendarContext={schoolCalendarContext}
                 civilDate={
                   scheduledPlanEditDraft?.civilDate ??
                   defaultPlanFlowCivilDate
@@ -13962,6 +15127,7 @@ export default function Prototype() {
             </Dialog.Description>
             <EvidenceCaptureFlow
               activity={evidenceFlowRequest.activity}
+              ageBand={currentClassTymmAgeBand ?? undefined}
               pendingObservation={evidenceFlowRequest.pendingObservation}
               assessmentTarget={evidenceFlowRequest.assessmentTarget}
               initialStudentId={evidenceFlowRequest.initialStudentId}

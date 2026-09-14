@@ -108,7 +108,7 @@ export function createTeacherCyclePresentation(
       ? {
           id: "daily",
           label: "Günlük",
-          title: "Bugün tarihli plan bağlantı bekliyor",
+          title: "Bugünün planını haftasına bağla",
           detail: "Kayıt korundu; seçili haftalık plan zincirine bağlı olmadığı için bugünün akışına alınmadı.",
           actionLabel: "Bağı takvimde incele",
           tone: "attention",
@@ -409,7 +409,7 @@ export function createTodayControlCenterSummary(options: {
       title:
         item?.title ??
         (referencedDaily?.status === "chain-mismatch"
-          ? "Bugün tarihli plan bağlantı bekliyor"
+          ? "Bugünün planını haftasına bağla"
           : referencedDaily?.status === "future-only"
             ? `Bugün plan yok; sıradaki plan ${
                 referencedDaily.referenceCivilDate
@@ -425,11 +425,11 @@ export function createTodayControlCenterSummary(options: {
       count: pendingObservationCount,
       title:
         pendingObservationCount > 0
-          ? `${pendingObservationCount} gözlem program bağlantısı bekliyor`
-          : "Bağlantı bekleyen gözlem yok",
+          ? `${pendingObservationCount} gözlem için hedef seç ve bağla`
+          : "Gözlemlerin program bağlantıları tamam",
       detail:
         pendingObservationCount > 0
-          ? "Değerlendirme ve belge zinciri için tamamlayın."
+          ? "Gözlemi açın, kaynak hedefini seçin ve bağlantıyı kaydedin."
           : "Bekleyen gözlem yok.",
     },
   };

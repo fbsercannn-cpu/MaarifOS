@@ -76,6 +76,7 @@ export interface TodayScreenActions {
 }
 
 export interface TodayScreenSlots {
+  followupInbox?: ReactNode;
   renderStudentAvatar?: (
     student: TodayStudentCard,
     className: string,

@@ -1,0 +1,547 @@
+import { isCivilDate } from "./attendance.ts";
+import {
+  CLASSROOM_TIME_ZONE,
+  isClassroomSchedule,
+  type ClassroomSchedule,
+} from "./classroom.ts";
+import type { StoredRecord } from "./model.ts";
+import {
+  MEB_2026_2027_SOURCE_CHECKED_ON,
+  MEB_2026_2027_SOURCE_URL,
+  OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
+} from "./official-school-calendar.ts";
+import type { TeacherOwnedWeeklyPlan } from "./teacher-owned-plan.ts";
+
+const OFFICIAL_HOLIDAY_SOURCE_URL =
+  "https://vakithesaplama.diyanet.gov.tr/icerik.php?icerik=159";
+const OFFICIAL_HOLIDAY_SOURCE_CHECKED_ON = "2026-08-16";
+
+interface FullDayHolidayPeriod {
+  readonly id: string;
+  readonly title: string;
+  readonly startDate: string;
+  readonly endDate: string;
+}
+
+/**
+ * MEB okul çalışma takvimi semantiğini izler: 29 Ekim, 23 Nisan ve 19 Mayıs
+ * tören/okul günü olarak paydada kalır. Yalnız öğretimi bütünüyle kesen yılbaşı,
+ * 1 Mayıs ve tam gün dinî bayram günleri çıkarılır; arefe yarım günü kalır.
+ */
+export const FULL_DAY_HOLIDAYS_2026_2027: readonly FullDayHolidayPeriod[] = [
+  {
+    id: "new-year",
+    title: "Yılbaşı tatili",
+    startDate: "2027-01-01",
+    endDate: "2027-01-01",
+  },
+  {
+    id: "ramadan-feast",
+    title: "Ramazan Bayramı",
+    startDate: "2027-03-09",
+    endDate: "2027-03-11",
+  },
+  {
+    id: "labour-day",
+    title: "Emek ve Dayanışma Günü",
+    startDate: "2027-05-01",
+    endDate: "2027-05-01",
+  },
+  {
+    id: "sacrifice-feast",
+    title: "Kurban Bayramı",
+    startDate: "2027-05-16",
+    endDate: "2027-05-19",
+  },
+] as const;
+
+export interface ExplicitNoSchoolPeriod {
+  readonly id: string;
+  readonly title: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly sourceKind?: "external" | "teacher-local";
+  readonly sourceUrl?: string;
+  readonly sourceCheckedOn: string;
+}
+
+export interface TeachingDaySourceReference {
+  readonly authority: string;
+  readonly url: string;
+  readonly checkedOn: string;
+}
+
+export type TeachingDayResolutionProvenance =
+  | {
+      readonly mode: "official-meb-2026-2027";
+      readonly profileId: typeof OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id;
+      readonly instructionalPhase: "adaptation" | "term" | "no-school" | "mixed";
+      readonly basis: "adaptation-and-term-weekdays-minus-breaks-and-full-day-holidays";
+      readonly sources: readonly TeachingDaySourceReference[];
+      readonly excludedPeriodIds: readonly string[];
+    }
+  | {
+      readonly mode: "custom-year-weekday-fallback";
+      readonly profileId: null;
+      readonly basis: "monday-friday-with-explicit-no-school-periods";
+      readonly sources: readonly TeachingDaySourceReference[];
+      readonly excludedPeriodIds: readonly string[];
+    };
+
+export interface TeacherWeekTeachingDayResolution {
+  readonly expectedCivilDates: readonly string[];
+  readonly lastExpectedCivilDate: string | null;
+  readonly evaluationOpensAtUtc: string | null;
+  readonly scheduleEndTime: string | null;
+  readonly timeZone: typeof CLASSROOM_TIME_ZONE;
+  readonly provenance: TeachingDayResolutionProvenance;
+}
+
+export interface OfficialTeachingCivilDateResolution {
+  readonly applies: boolean;
+  readonly civilDate: string;
+  readonly isTeachingDay: boolean;
+  readonly nearestCivilDate: string | null;
+}
+
+export interface ResolveTeacherWeekTeachingDaysInput {
+  readonly academicYear: Pick<
+    StoredRecord,
+    "id"
+  > & {
+    readonly name?: unknown;
+    readonly startDate?: unknown;
+    readonly endDate?: unknown;
+    readonly operationalStartDate?: unknown;
+  };
+  readonly weekly: Pick<
+    TeacherOwnedWeeklyPlan,
+    "id" | "periodStart" | "periodEnd"
+  >;
+  readonly classroomSchedule?: unknown;
+  readonly explicitNoSchoolPeriods?: readonly ExplicitNoSchoolPeriod[];
+}
+
+function dateRange(startDate: string, endDate: string): string[] {
+  const result: string[] = [];
+  const cursor = new Date(`${startDate}T12:00:00.000Z`);
+  const endMillis = Date.parse(`${endDate}T12:00:00.000Z`);
+  while (cursor.getTime() <= endMillis) {
+    result.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
+
+function isWeekday(civilDate: string): boolean {
+  const day = new Date(`${civilDate}T12:00:00.000Z`).getUTCDay();
+  return day >= 1 && day <= 5;
+}
+
+function includesDate(
+  period: { readonly startDate: string; readonly endDate: string },
+  civilDate: string,
+): boolean {
+  return period.startDate <= civilDate && civilDate <= period.endDate;
+}
+
+function assertCivilPeriod(
+  startDate: unknown,
+  endDate: unknown,
+  label: string,
+): { readonly startDate: string; readonly endDate: string } {
+  if (
+    !isCivilDate(startDate) ||
+    !isCivilDate(endDate) ||
+    startDate > endDate
+  ) {
+    throw new Error(`${label} geçerli bir sivil tarih aralığı olmalıdır.`);
+  }
+  return { startDate, endDate };
+}
+
+function assertExplicitNoSchoolPeriods(
+  periods: readonly ExplicitNoSchoolPeriod[],
+): void {
+  for (const [index, period] of periods.entries()) {
+    assertCivilPeriod(
+      period.startDate,
+      period.endDate,
+      `${index + 1}. okul olmayan dönem`,
+    );
+    if (!period.id.trim() || !period.title.trim()) {
+      throw new Error("Okul olmayan dönem kimliği ve başlığı boş bırakılamaz.");
+    }
+    if (!isCivilDate(period.sourceCheckedOn)) {
+      throw new Error("Okul olmayan dönem kaynak kontrol tarihi geçersiz.");
+    }
+    if (period.sourceKind === "teacher-local") {
+      if (period.sourceUrl !== undefined) {
+        throw new Error("Yerel okul takvimi kaydı haricî kaynak bağlantısı taşıyamaz.");
+      }
+      continue;
+    }
+    if (!period.sourceUrl) {
+      throw new Error("Okul olmayan dönem güvenli bir kaynak bağlantısı taşımalıdır.");
+    }
+    let source: URL;
+    try {
+      source = new URL(period.sourceUrl);
+    } catch {
+      throw new Error("Okul olmayan dönem güvenli bir kaynak bağlantısı taşımalıdır.");
+    }
+    if (
+      source.protocol !== "https:" ||
+      source.username.length > 0 ||
+      source.password.length > 0
+    ) {
+      throw new Error("Okul olmayan dönem güvenli bir kaynak bağlantısı taşımalıdır.");
+    }
+  }
+}
+
+export function academicYearUsesOfficialCalendar(
+  academicYear: ResolveTeacherWeekTeachingDaysInput["academicYear"],
+): boolean {
+  return (
+    typeof academicYear.startDate === "string" &&
+    typeof academicYear.endDate === "string" &&
+    academicYear.startDate >= OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate &&
+    academicYear.startDate <= OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalStartDate &&
+    academicYear.endDate <= OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate &&
+    academicYear.endDate >=
+      OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalEndDate
+  );
+}
+
+export type SchoolDayReason = "adaptation" | "term" | "custom-weekday" | "weekend" |
+  "official-break" | "full-day-holiday" | "local-closure" | "explicit-closure" |
+  "outside-teaching-period" | "before-operational-start" | "after-academic-year" | "invalid-calendar";
+export interface SchoolDayResolution {
+  readonly civilDate: string;
+  readonly isTeachingDay: boolean;
+  readonly reason: SchoolDayReason;
+  readonly reasons: readonly SchoolDayReason[];
+  readonly sourceIds: readonly string[];
+  readonly sources: readonly TeachingDaySourceReference[];
+  readonly official: boolean;
+}
+export interface ResolveSchoolDayInput {
+  readonly academicYear: ResolveTeacherWeekTeachingDaysInput["academicYear"];
+  readonly civilDate: string;
+  readonly classroomId?: string;
+  readonly calendarEntries?: readonly StoredRecord[];
+  readonly explicitNoSchoolPeriods?: readonly ExplicitNoSchoolPeriod[];
+}
+
+/** One dated school-day policy for planning, attendance, evidence and exported totals. */
+export function resolveSchoolDay(input: ResolveSchoolDayInput): SchoolDayResolution {
+  const { academicYear, civilDate } = input;
+  const official = academicYearUsesOfficialCalendar(academicYear);
+  const result = (reasons: SchoolDayReason[], sourceIds: string[] = [], sources: TeachingDaySourceReference[] = []): SchoolDayResolution => ({
+    civilDate, isTeachingDay: reasons.every(reason => ["adaptation", "term", "custom-weekday"].includes(reason)),
+    reason: reasons[0], reasons, sourceIds, sources, official,
+  });
+  if (!isCivilDate(civilDate) || !isCivilDate(academicYear.startDate) || !isCivilDate(academicYear.endDate) ||
+    academicYear.startDate > academicYear.endDate || (academicYear.operationalStartDate !== undefined &&
+      (!isCivilDate(academicYear.operationalStartDate) || academicYear.operationalStartDate > academicYear.endDate))) return result(["invalid-calendar"]);
+  const operationalStart = isCivilDate(academicYear.operationalStartDate) ? academicYear.operationalStartDate : academicYear.startDate;
+  if (civilDate < operationalStart) return result(["before-operational-start"]);
+  if (civilDate > academicYear.endDate) return result(["after-academic-year"]);
+  try { assertExplicitNoSchoolPeriods(input.explicitNoSchoolPeriods ?? []); } catch { return result(["invalid-calendar"]); }
+  const local = input.classroomId ? localNoSchoolPeriodsFromCalendarEntries(input.calendarEntries ?? [], {
+    academicYearId: academicYear.id, classroomId: input.classroomId,
+  }) : [];
+  const explicit = [...(input.explicitNoSchoolPeriods ?? []), ...local].filter(period => includesDate(period, civilDate));
+  const reasons: SchoolDayReason[] = [];
+  const sourceIds: string[] = [];
+  const sources: TeachingDaySourceReference[] = [];
+  for (const period of explicit) {
+    reasons.push(period.sourceKind === "teacher-local" ? "local-closure" : "explicit-closure");
+    sourceIds.push(period.id);
+    sources.push({ authority: period.title, url: period.sourceKind === "teacher-local" ? `urn:maarifos:calendar-entry:${period.id}` : period.sourceUrl!, checkedOn: period.sourceCheckedOn });
+  }
+  if (!isWeekday(civilDate)) reasons.push("weekend");
+  if (official) {
+    const events = OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events.filter(period => includesDate(period, civilDate));
+    const breaks = events.filter(event => event.kind === "break");
+    const holidays = FULL_DAY_HOLIDAYS_2026_2027.filter(period => includesDate(period, civilDate));
+    if (breaks.length) { reasons.push("official-break"); sourceIds.push(...breaks.map(item => item.id)); }
+    if (holidays.length) { reasons.push("full-day-holiday"); sourceIds.push(...holidays.map(item => item.id)); }
+    const teaching = events.find(event => event.kind === "adaptation" || event.kind === "term");
+    if (!teaching) reasons.push("outside-teaching-period");
+    sources.push({ authority: "Millî Eğitim Bakanlığı", url: MEB_2026_2027_SOURCE_URL, checkedOn: MEB_2026_2027_SOURCE_CHECKED_ON });
+    if (holidays.length) sources.push({ authority: "Diyanet İşleri Başkanlığı", url: OFFICIAL_HOLIDAY_SOURCE_URL, checkedOn: OFFICIAL_HOLIDAY_SOURCE_CHECKED_ON });
+    if (!reasons.length && teaching) { reasons.push(teaching.kind === "adaptation" ? "adaptation" : "term"); sourceIds.push(teaching.id); }
+  } else if (!reasons.length) reasons.push("custom-weekday");
+  return result([...new Set(reasons)], [...new Set(sourceIds)], sources);
+}
+
+export function schoolCivilDates(start: string, end: string): string[] {
+  assertCivilPeriod(start, end, "Takvim dönemi");
+  if (Date.parse(`${end}T12:00:00.000Z`) - Date.parse(`${start}T12:00:00.000Z`) > 3660 * 86_400_000) throw new Error("Takvim dökümü en fazla on yıllık dönem olabilir.");
+  return dateRange(start, end);
+}
+
+function scheduleEndInstant(
+  civilDate: string | null,
+  schedule: ClassroomSchedule | null,
+): string | null {
+  if (!civilDate || !schedule) return null;
+  // Europe/Istanbul 2016'dan beri kalıcı UTC+03:00 kullanır. Classroom domain'i
+  // başka bir saat dilimine izin vermediği için bu dönüşüm deterministiktir.
+  return new Date(`${civilDate}T${schedule.endTime}:00+03:00`).toISOString();
+}
+
+export function resolveTeacherWeekTeachingDays(
+  input: ResolveTeacherWeekTeachingDaysInput,
+): TeacherWeekTeachingDayResolution {
+  const weeklyPeriod = assertCivilPeriod(
+    input.weekly.periodStart,
+    input.weekly.periodEnd,
+    "Haftalık plan dönemi",
+  );
+  const academicYearPeriod = assertCivilPeriod(
+    input.academicYear.startDate,
+    input.academicYear.endDate,
+    "Eğitim yılı dönemi",
+  );
+  const effectiveStart = isCivilDate(input.academicYear.operationalStartDate) && input.academicYear.operationalStartDate < academicYearPeriod.startDate
+    ? input.academicYear.operationalStartDate : academicYearPeriod.startDate;
+  if (
+    weeklyPeriod.startDate < effectiveStart ||
+    weeklyPeriod.endDate > academicYearPeriod.endDate
+  ) {
+    throw new Error("Haftalık plan etkin eğitim yılının sınırları dışında kalamaz.");
+  }
+
+  const explicitNoSchoolPeriods = input.explicitNoSchoolPeriods ?? [];
+  assertExplicitNoSchoolPeriods(explicitNoSchoolPeriods);
+  const weekdays = dateRange(
+    weeklyPeriod.startDate,
+    weeklyPeriod.endDate,
+  ).filter(isWeekday);
+  const official = academicYearUsesOfficialCalendar(input.academicYear);
+  const teachingPeriods = official
+    ? OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events.filter(
+        (event) => event.kind === "adaptation" || event.kind === "term",
+      )
+    : [];
+  const breakPeriods = official
+    ? OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events.filter(
+        (event) => event.kind === "break",
+      )
+    : [];
+  const expectedCivilDates = weekdays.filter(civilDate => resolveSchoolDay({
+    academicYear: input.academicYear, civilDate, explicitNoSchoolPeriods,
+  }).isTeachingDay);
+  const lastExpectedCivilDate = expectedCivilDates.at(-1) ?? null;
+  const schedule = isClassroomSchedule(input.classroomSchedule)
+    ? input.classroomSchedule
+    : null;
+
+  const explicitSources = explicitNoSchoolPeriods.map(
+    (period): TeachingDaySourceReference => ({
+      authority: period.sourceKind === "teacher-local"
+        ? `Öğretmenin okul takvimi · ${period.title}`
+        : period.title,
+      url: period.sourceKind === "teacher-local"
+        ? `urn:maarifos:calendar-entry:${period.id}`
+        : period.sourceUrl!,
+      checkedOn: period.sourceCheckedOn,
+    }),
+  );
+  const matchingTeachingKinds = new Set(
+    teachingPeriods
+      .filter((period) =>
+        expectedCivilDates.some((civilDate) => includesDate(period, civilDate)),
+      )
+      .map((period) => period.kind),
+  );
+  const instructionalPhase = matchingTeachingKinds.size === 0
+    ? "no-school"
+    : matchingTeachingKinds.size > 1
+      ? "mixed"
+      : matchingTeachingKinds.has("adaptation")
+        ? "adaptation"
+        : "term";
+  const provenance: TeachingDayResolutionProvenance = official
+    ? {
+        mode: "official-meb-2026-2027",
+        profileId: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id,
+        instructionalPhase,
+        basis:
+          "adaptation-and-term-weekdays-minus-breaks-and-full-day-holidays",
+        sources: [
+          {
+            authority: "Millî Eğitim Bakanlığı",
+            url: MEB_2026_2027_SOURCE_URL,
+            checkedOn: MEB_2026_2027_SOURCE_CHECKED_ON,
+          },
+          {
+            authority: "Diyanet İşleri Başkanlığı · 2027 resmî tatilleri",
+            url: OFFICIAL_HOLIDAY_SOURCE_URL,
+            checkedOn: OFFICIAL_HOLIDAY_SOURCE_CHECKED_ON,
+          },
+          ...explicitSources,
+        ],
+        excludedPeriodIds: [
+          ...breakPeriods.map((period) => period.id),
+          ...FULL_DAY_HOLIDAYS_2026_2027.map((period) => period.id),
+          ...explicitNoSchoolPeriods.map((period) => period.id),
+        ],
+      }
+    : {
+        mode: "custom-year-weekday-fallback",
+        profileId: null,
+        basis: "monday-friday-with-explicit-no-school-periods",
+        sources: [
+          {
+            authority: "Öğretmenin etkin eğitim yılı kaydı",
+            url: `urn:maarifos:academic-year:${input.academicYear.id}`,
+            checkedOn: input.weekly.periodStart,
+          },
+          ...explicitSources,
+        ],
+        excludedPeriodIds: explicitNoSchoolPeriods.map((period) => period.id),
+      };
+
+  return {
+    expectedCivilDates,
+    lastExpectedCivilDate,
+    evaluationOpensAtUtc: scheduleEndInstant(lastExpectedCivilDate, schedule),
+    scheduleEndTime: schedule?.endTime ?? null,
+    timeZone: CLASSROOM_TIME_ZONE,
+    provenance,
+  };
+}
+
+let officialTeachingCivilDatesCache: readonly string[] | null = null;
+
+/**
+ * Günlük, haftalık ve yıllık planların aynı tarih kümesini kullanması için
+ * 2026–2027 okul öncesi öğretim günlerini tek kanonik çözümleyiciden üretir.
+ */
+export function officialTeachingCivilDates2026_2027(): readonly string[] {
+  if (officialTeachingCivilDatesCache) return officialTeachingCivilDatesCache;
+  officialTeachingCivilDatesCache = Object.freeze([
+    ...resolveTeacherWeekTeachingDays({
+      academicYear: {
+        id: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id,
+        name: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.academicYearName,
+        startDate: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+        endDate: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate,
+      },
+      weekly: {
+        id: `${OFFICIAL_ACADEMIC_CALENDAR_2026_2027.id}-all-teaching-days`,
+        periodStart: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate,
+        periodEnd: OFFICIAL_ACADEMIC_CALENDAR_2026_2027.instructionalEndDate,
+      },
+    }).expectedCivilDates,
+  ]);
+  return officialTeachingCivilDatesCache;
+}
+
+function civilDateDistance(left: string, right: string): number {
+  return Math.abs(
+    Date.parse(`${left}T12:00:00.000Z`) -
+      Date.parse(`${right}T12:00:00.000Z`),
+  );
+}
+
+export function resolveOfficialTeachingCivilDate(
+  civilDate: string,
+): OfficialTeachingCivilDateResolution {
+  if (
+    !isCivilDate(civilDate) ||
+    civilDate < OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataStartDate ||
+    civilDate > OFFICIAL_ACADEMIC_CALENDAR_2026_2027.dataEndDate
+  ) {
+    return {
+      applies: false,
+      civilDate,
+      isTeachingDay: false,
+      nearestCivilDate: null,
+    };
+  }
+
+  const teachingCivilDates = officialTeachingCivilDates2026_2027();
+  const isTeachingDay = teachingCivilDates.includes(civilDate);
+  if (isTeachingDay) {
+    return {
+      applies: true,
+      civilDate,
+      isTeachingDay: true,
+      nearestCivilDate: civilDate,
+    };
+  }
+
+  const nextCivilDateIndex = teachingCivilDates.findIndex(
+    (candidate) => candidate > civilDate,
+  );
+  const nextCivilDate = nextCivilDateIndex >= 0
+    ? teachingCivilDates[nextCivilDateIndex] ?? null
+    : null;
+  const previousCivilDate = nextCivilDateIndex === -1
+    ? teachingCivilDates.at(-1) ?? null
+    : teachingCivilDates[nextCivilDateIndex - 1] ?? null;
+  const nearestCivilDate = previousCivilDate && nextCivilDate
+    ? civilDateDistance(civilDate, nextCivilDate) <=
+        civilDateDistance(civilDate, previousCivilDate)
+      ? nextCivilDate
+      : previousCivilDate
+    : nextCivilDate ?? previousCivilDate;
+
+  return {
+    applies: true,
+    civilDate,
+    isTeachingDay: false,
+    nearestCivilDate,
+  };
+}
+
+/** Same nearest-day suggestion as the planner, constrained to the actual year and local closures. */
+export function resolveTeachingCivilDate(input: ResolveSchoolDayInput): OfficialTeachingCivilDateResolution {
+  const day = resolveSchoolDay(input);
+  if (day.isTeachingDay) return { applies: true, civilDate: input.civilDate, isTeachingDay: true, nearestCivilDate: input.civilDate };
+  let candidates: string[] = [];
+  const start = isCivilDate(input.academicYear.operationalStartDate) ? input.academicYear.operationalStartDate : input.academicYear.startDate;
+  if (isCivilDate(start) && isCivilDate(input.academicYear.endDate) && isCivilDate(input.civilDate)) {
+    try { candidates = schoolCivilDates(start, input.academicYear.endDate).filter(civilDate => resolveSchoolDay({ ...input, civilDate }).isTeachingDay); } catch { candidates = []; }
+  }
+  candidates.sort((left, right) => civilDateDistance(input.civilDate, left) - civilDateDistance(input.civilDate, right) || right.localeCompare(left));
+  return { applies: true, civilDate: input.civilDate, isTeachingDay: false, nearestCivilDate: candidates[0] ?? null };
+}
+
+export function localNoSchoolPeriodsFromCalendarEntries(
+  records: readonly StoredRecord[],
+  scope: { readonly academicYearId: string; readonly classroomId: string },
+): ExplicitNoSchoolPeriod[] {
+  return records
+    .filter(
+      (record) =>
+        record.entryType === "no_school" &&
+        record.status !== "cancelled" &&
+        typeof record.deletedAt !== "string" &&
+        record.academicYearId === scope.academicYearId &&
+        record.classroomId === scope.classroomId &&
+        typeof record.title === "string" &&
+        isCivilDate(record.startDate) &&
+        isCivilDate(record.endDate) &&
+        record.startDate <= record.endDate &&
+        isCivilDate(record.civilDate),
+    )
+    .map((record) => ({
+      id: record.id,
+      title: record.title as string,
+      startDate: record.startDate as string,
+      endDate: record.endDate as string,
+      sourceKind: "teacher-local" as const,
+      sourceCheckedOn: record.civilDate,
+    }))
+    .sort(
+      (left, right) =>
+        left.startDate.localeCompare(right.startDate) ||
+        left.id.localeCompare(right.id),
+    );
+}

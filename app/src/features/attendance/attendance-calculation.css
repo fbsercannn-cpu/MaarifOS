@@ -1,0 +1,24 @@
+.attendance-calculation { display:grid; gap:12px; min-width:0; border:1px solid #d7e3dd; border-radius:16px; padding:14px; background:#fff; color:#173f38; }
+.attendance-calculation header { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.attendance-calculation h3,.attendance-calculation p { margin:0; }
+.attendance-calculation h3 { font-size:18px; line-height:1.35; }
+.attendance-calculation p,.attendance-calculation small { font-size:12px; line-height:1.55; color:#51665e; }
+.attendance-calculation button,.attendance-calculation select,.attendance-calculation input { min-height:44px; border:1px solid #bfcec5; border-radius:10px; padding:8px; font:inherit; font-size:13px; background:#fff; color:inherit; min-width:0; max-width:100%; }
+.attendance-calculation label { display:grid; gap:6px; font-size:13px; }
+.attendance-calculation__filters { display:flex; flex-wrap:wrap; gap:6px; }
+.attendance-calculation button[aria-pressed="true"] { background:#086e60; border-color:#086e60; color:#fff; }
+.attendance-calculation__dates,.attendance-calculation__totals { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.attendance-calculation__totals > div { display:grid; gap:3px; border:1px solid #d6e2db; border-radius:12px; background:#f3f8f5; padding:10px; }
+.attendance-calculation__totals strong { font-size:23px; }.attendance-calculation__totals span { font-size:12px; }
+.attendance-calculation__days { display:grid; gap:8px; }
+.attendance-calculation__day { border:1px solid #dce5df; border-radius:12px; padding:10px; }
+.attendance-calculation summary { min-height:44px; cursor:pointer; font-size:13px; line-height:1.5; padding:5px 0; }
+.attendance-calculation__day > summary > span { display:block; font-size:12px; color:#566b62; }
+.attendance-calculation ul { padding-left:18px; margin:6px 0; }
+.attendance-calculation__day > ul { list-style:none; padding:0; display:grid; gap:9px; }
+.attendance-calculation__day > ul > li { padding:9px 0; border-top:1px solid #e4ebe7; }
+.attendance-calculation__day li > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; font-size:13px; }
+.attendance-calculation code { display:block; overflow-wrap:anywhere; font-size:11px; }
+.attendance-calculation__warning { color:#865319 !important; }
+.attendance-calculation__source-review { background:#fff8ed; border:1px solid #eadcc3; border-radius:12px; padding:10px; }
+@media(max-width:360px) { .attendance-calculation__dates { grid-template-columns:minmax(0,1fr); } }

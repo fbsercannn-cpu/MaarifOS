@@ -1,3 +1,5 @@
+import { wordDocumentStyles, wordRunningHeader, wordRunningFooter } from "../documents/word-document-design.ts";
+import { DOCUMENT_COLORS } from "../documents/document-theme.ts";
 import type {
   PremiumActivityTemplate,
   PremiumAnnualMonth,
@@ -107,6 +109,12 @@ export interface PremiumPlanPdfPageLayout {
 }
 
 const encoder = new TextEncoder();
+
+export const MAARIF_WORD_VIBRANT_THEME = Object.freeze({
+  ...DOCUMENT_COLORS,
+  muted: "466278",
+  white: "FFFFFF",
+});
 
 export function preparePremiumPlanExportDocument(
   pack: PremiumContentPack,
@@ -271,7 +279,7 @@ function addActivityValuesDesign(
     ),
   );
   target.push({
-    text: "Editoryal durum: Makine doğrulaması tamamlandı; altı rollü insan uzman incelemesi bekliyor. Bu durum öğretmen onayı veya çocuk hakkında değer hükmü değildir.",
+    text: "Editoryal durum: Makine doğrulaması tamamlandı; uzman doğrulaması bulunmayan düzenlenebilir içerik. Bu durum öğretmen onayı veya çocuk hakkında değer hükmü değildir.",
     style: "meta",
   });
 }
@@ -507,7 +515,7 @@ export function buildPremiumPlanExportParagraphs(
     {
       text: document.valuesMappingStatus === "legacy-unmapped"
         ? "Değer tasarımı: Eski içerik sürümünde değer snapshot'ı bulunmuyor; geriye dönük eşleme üretilmedi."
-        : "Değer tasarımı: Makine doğrulamalı; altı rollü insan uzman incelemesi bekliyor.",
+        : "Değer tasarımı: Makine doğrulamalı; uzman doğrulaması bulunmayan düzenlenebilir içerik.",
       style: "meta",
     },
     {
@@ -544,7 +552,7 @@ export function buildPremiumPlanExportParagraphs(
     paragraphs.push({ text: month.purpose, style: "body", keepWithNext: true });
     paragraphs.push({
       text: month.releaseStatus === "internal-review-ready"
-        ? "İçerik durumu: Makine doğrulaması tamamlandı; altı rollü insan uzman incelemesi bekliyor"
+        ? "İçerik durumu: Makine doğrulaması tamamlandı; uzman doğrulaması bulunmayan düzenlenebilir içerik"
         : month.releaseStatus === "ready"
           ? "İçerik durumu: Eski pilot içerik kullanılabilir; değer tasarımı bulunmuyor"
           : "İçerik durumu: Planlı yayın",
@@ -693,6 +701,14 @@ function createZip(files: readonly { name: string; contents: string }[]): Uint8A
   ]);
 }
 
+function wordRunsForText(text: string, runProperties = ""): string {
+  return text.split(/\r\n|\r|\n/).map((line, index) => `${
+    index > 0 ? "<w:r><w:br/></w:r>" : ""
+  }<w:r>${runProperties ? `<w:rPr>${runProperties}</w:rPr>` : ""}<w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r>`).join("");
+}
+
+
+
 export function createPremiumPlanDocx(
   paragraphs: readonly PremiumPlanExportParagraph[],
 ): Uint8Array {
@@ -704,19 +720,36 @@ export function createPremiumPlanDocx(
         : paragraph.style === "heading2"
           ? "Heading2"
           : "Normal";
-    const pageBreak = paragraph.pageBreakBefore ? '<w:pageBreakBefore/>' : "";
-    const prefix = paragraph.style === "bullet" ? "• " : "";
-    const color = paragraph.style === "meta" ? '<w:color w:val="666666"/>' : "";
-    return `<w:p><w:pPr><w:pStyle w:val="${style}"/>${pageBreak}</w:pPr><w:r><w:rPr>${color}</w:rPr><w:t xml:space="preserve">${xmlEscape(prefix + paragraph.text)}</w:t></w:r></w:p>`;
+    const pageBreak = paragraph.pageBreakBefore || paragraph.forcePageBreakBefore
+      ? "<w:pageBreakBefore/>"
+      : "";
+    const keepNext = paragraph.keepWithNext ? "<w:keepNext/>" : "";
+    const numbering = paragraph.style === "bullet"
+      ? '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
+      : "";
+    const color = paragraph.style === "meta"
+      ? `<w:color w:val="${MAARIF_WORD_VIBRANT_THEME.muted}"/>`
+      : "";
+    return `<w:p><w:pPr><w:pStyle w:val="${style}"/>${keepNext}${pageBreak}${numbering}</w:pPr>${wordRunsForText(paragraph.text, color)}</w:p>`;
   }).join("");
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`;
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="22"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:color w:val="392458"/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:color w:val="4F3475"/><w:sz w:val="30"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:color w:val="5C4085"/><w:sz w:val="24"/></w:rPr></w:style></w:styles>`;
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="480" w:footer="480"/><w:cols w:space="720"/></w:sectPr></w:body></w:document>`;
+  const stylesXml = wordDocumentStyles();
+  const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:tabs><w:tab w:val="num" w:pos="720"/></w:tabs><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/><w:color w:val="${MAARIF_WORD_VIBRANT_THEME.teal}"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
+  const settingsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:updateFields w:val="true"/></w:settings>';
+  const headerXml = wordRunningHeader("MaarifOS · Öğretmen planı", paragraphs.find(p => p.style === "meta" && /Sınıf|Dönem|20\d{2}/u.test(p.text))?.text ?? paragraphs.find(p => p.style === "title")?.text);
+  const footerXml = wordRunningFooter("MaarifOS");
+  const coreProperties = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>MaarifOS öğretmen planı</dc:title><dc:subject>TYMM 2024 öğretmen planı ve değerlendirme belgesi</dc:subject><dc:creator>MaarifOS</dc:creator><cp:lastModifiedBy>MaarifOS</cp:lastModifiedBy><dc:language>tr-TR</dc:language><cp:category>Öğretmen planı</cp:category><cp:keywords>MaarifOS; TYMM 2024; öğretmen planı</cp:keywords></cp:coreProperties>`;
   return createZip([
-    { name: "[Content_Types].xml", contents: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>' },
-    { name: "_rels/.rels", contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: "[Content_Types].xml", contents: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>' },
+    { name: "_rels/.rels", contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rIdCore" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>' },
     { name: "word/document.xml", contents: documentXml },
     { name: "word/styles.xml", contents: stylesXml },
-    { name: "word/_rels/document.xml.rels", contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+    { name: "word/numbering.xml", contents: numberingXml },
+    { name: "word/settings.xml", contents: settingsXml },
+    { name: "word/header1.xml", contents: headerXml },
+    { name: "word/footer1.xml", contents: footerXml },
+    { name: "word/_rels/document.xml.rels", contents: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rIdHeader" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>' },
+    { name: "docProps/core.xml", contents: coreProperties },
   ]);
 }
 
@@ -1042,3 +1075,5 @@ export async function generatePremiumPlanExportFile(
     document: exportDocument,
   };
 }
+
+

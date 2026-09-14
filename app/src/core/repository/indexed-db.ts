@@ -32,8 +32,9 @@ import {
   type StudentVaultMigrationState,
   type StudentVaultReadyState,
 } from "../security/student-sensitive-vault.ts";
-import type { LocalVaultSealedRecord } from "../security/local-vault-envelope.ts";
+import { hasLocalVaultEnvelope, LocalVaultSecurityError, type LocalVaultSealedRecord } from "../security/local-vault-envelope.ts";
 import { openLocalVaultReadwriteTransaction } from "../security/local-vault-idb.ts";
+import type { LocalVaultRetirementPreparation } from "../security/local-vault-record-generation.ts";
 import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
@@ -54,6 +55,7 @@ export const DEFAULT_DATABASE_NAME = "maarifos-local";
 export const RECOVERY_SNAPSHOT_STORE_NAME =
   "__maarifosRecoverySnapshots";
 export const STUDENT_VAULT_STATE_STORE_NAME = "__maarifosVaultState";
+export const ALL_COLLECTIONS_VAULT_READY_STATE_ID = "all-collections-v2";
 
 function deleteIndexedDatabase(
   indexedDb: IDBFactory,
@@ -364,7 +366,7 @@ function applyMigration(
     ensureCollectionIndexes(transaction);
     return;
   }
-  if (toVersion === 7) {
+  if (toVersion === 7 || toVersion === 8) {
     ensureCollectionStores(database);
     ensureCollectionIndexes(transaction);
     if (!database.objectStoreNames.contains(STUDENT_VAULT_STATE_STORE_NAME)) {
@@ -414,45 +416,6 @@ function validCivilDate(value: string): void {
   }
 }
 
-class IndexedDbTransaction implements DataTransaction {
-  constructor(private readonly transaction: IDBTransaction) {}
-
-  async getAll<Collection extends CollectionName>(
-    collection: Collection,
-  ): Promise<EntityMap[Collection][]> {
-    const records = await requestResult(
-      this.transaction
-        .objectStore(collection)
-        .getAll() as IDBRequest<EntityMap[Collection][]>,
-    );
-    return structuredClone(records);
-  }
-
-  async putMany<Collection extends CollectionName>(
-    collection: Collection,
-    records: readonly EntityMap[Collection][],
-  ): Promise<void>;
-  async putMany(
-    collection: CollectionName,
-    records: readonly StoredRecord[],
-  ): Promise<void>;
-  async putMany(
-    collection: CollectionName,
-    records: readonly StoredRecord[],
-  ): Promise<void> {
-    const store = this.transaction.objectStore(collection);
-    for (const record of records) {
-      await requestResult(store.put(structuredClone(record)));
-    }
-  }
-
-  async clear<Collection extends CollectionName>(
-    collection: Collection,
-  ): Promise<void> {
-    await requestResult(this.transaction.objectStore(collection).clear());
-  }
-}
-
 type RawCollectionState = Partial<
   Record<CollectionName, StoredRecord[]>
 >;
@@ -468,10 +431,6 @@ function recordsEqual(
   right: readonly unknown[],
 ): boolean {
   return canonicalJson(left) === canonicalJson(right);
-}
-
-function studentSubject(studentId: string): string {
-  return `student:${studentId}`;
 }
 
 class StagedDataTransaction implements DataTransaction {
@@ -604,7 +563,7 @@ export class IndexedDbDataStore
 
     const scopedCollections = uniqueCollections(collections);
     const database = await this.open();
-    if (scopedCollections.includes("students")) {
+    {
       const execute = async (): Promise<T> => {
         const baseline = await this.readRawCollections(
           database,
@@ -647,26 +606,9 @@ export class IndexedDbDataStore
       };
       return mode === "readwrite"
         ? this.enqueueStudentWrite(execute)
-        : execute();
+        : this.withVaultLock(execute, "shared");
     }
 
-    const nativeTransaction = database.transaction(scopedCollections, mode);
-    const completion = transactionResult(nativeTransaction);
-    const transaction = new IndexedDbTransaction(nativeTransaction);
-
-    try {
-      const result = await task(transaction);
-      await completion;
-      return result;
-    } catch (error) {
-      try {
-        nativeTransaction.abort();
-      } catch {
-        // İşlem zaten tamamlandıysa abort InvalidStateError üretir; asıl hatayı koru.
-      }
-      await completion.catch(() => undefined);
-      throw error;
-    }
   }
 
   async readSnapshot(): Promise<DataSnapshot> {
@@ -748,6 +690,14 @@ export class IndexedDbDataStore
   async saveRecoverySnapshot(
     snapshot: RecoverySnapshotRecord,
     options: { retentionLimit?: number } = {},
+  ): Promise<RecoverySnapshotMetadata> {
+    await this.openRecoveryDatabase();
+    return this.enqueueStudentWrite(() => this.saveRecoverySnapshotLocked(snapshot, options));
+  }
+
+  private async saveRecoverySnapshotLocked(
+    snapshot: RecoverySnapshotRecord,
+    options: { retentionLimit?: number },
   ): Promise<RecoverySnapshotMetadata> {
     const {
       recoverySnapshotMetadata,
@@ -838,6 +788,11 @@ export class IndexedDbDataStore
   }
 
   async deleteRecoverySnapshot(id: string): Promise<void> {
+    await this.openRecoveryDatabase();
+    return this.enqueueStudentWrite(() => this.deleteRecoverySnapshotLocked(id));
+  }
+
+  private async deleteRecoverySnapshotLocked(id: string): Promise<void> {
     validUuid(id, "Kurtarma snapshot kimliği");
     const database = await this.openRecoveryDatabase();
     const baseline = await this.readRawRecoverySnapshots(database);
@@ -849,6 +804,11 @@ export class IndexedDbDataStore
   async deleteRecoverySnapshotsContainingStudent(
     studentId: string,
   ): Promise<number> {
+    await this.openRecoveryDatabase();
+    return this.enqueueStudentWrite(() => this.deleteRecoverySnapshotsContainingStudentLocked(studentId));
+  }
+
+  private async deleteRecoverySnapshotsContainingStudentLocked(studentId: string): Promise<number> {
     validUuid(studentId, "Öğrenci kimliği");
     const database = await this.openRecoveryDatabase();
     const baseline = await this.readRawRecoverySnapshots(database);
@@ -869,8 +829,8 @@ export class IndexedDbDataStore
     task: (transaction: DataTransaction) => Promise<T>,
   ): Promise<StudentRecoveryPurgeResult<T>> {
     validUuid(studentId, "Öğrenci kimliği");
+    const database = await this.openRecoveryDatabase();
     return this.enqueueStudentWrite(async () => {
-      const database = await this.openRecoveryDatabase();
       const baselineCollections = await this.readRawCollections(
         database,
         COLLECTION_NAMES,
@@ -955,21 +915,20 @@ export class IndexedDbDataStore
   }
 
   private enqueueStudentWrite<T>(task: () => Promise<T>): Promise<T> {
-    const execute = (): Promise<T> => {
-      const locks = globalThis.navigator?.locks;
-      if (!locks) return task();
-      return locks.request(
-        `maarifos:${this.databaseName}:student-sensitive-write`,
-        { mode: "exclusive" },
-        () => task(),
-      );
-    };
+    const execute = (): Promise<T> => this.withVaultLock(task, "exclusive");
     const run = this.studentWriteQueue.then(execute, execute);
     this.studentWriteQueue = run.then(
       () => undefined,
       () => undefined,
     );
     return run;
+  }
+
+  private withVaultLock<T>(task: () => Promise<T>, mode: "shared" | "exclusive"): Promise<T> {
+    const locks = globalThis.navigator?.locks;
+    if (!locks) throw new LocalVaultSecurityError("LOCAL_VAULT_LOCK_UNAVAILABLE",
+      "Güvenli yerel veri kilidi bu tarayıcıda kullanılamıyor. Güncel Chrome, Edge veya Safari ile açın; mevcut veriler değiştirilmedi.");
+    return locks.request(`maarifos:${this.databaseName}:student-sensitive-write`, { mode }, () => task());
   }
 
   private async readRawCollections(
@@ -1004,15 +963,10 @@ export class IndexedDbDataStore
     collections: readonly CollectionName[],
   ): Promise<RawCollectionState> {
     const opened: RawCollectionState = structuredClone(rawState);
-    if (collections.includes("students")) {
-      opened.students = await Promise.all(
-        (rawState.students ?? []).map((student) =>
-          this.getSensitiveVault().openStudentRecord(
-            student,
-            studentSubject(student.id),
-          ),
-        ),
-      );
+    for (const collection of collections) {
+      opened[collection] = await Promise.all((rawState[collection] ?? []).map((record) =>
+        this.getSensitiveVault().openCollectionRecord(record, collection),
+      ));
     }
     return opened;
   }
@@ -1024,21 +978,21 @@ export class IndexedDbDataStore
     baselineRawState?: RawCollectionState,
   ): Promise<RawCollectionState> {
     const sealed: RawCollectionState = structuredClone(publicState);
-    if (collections.includes("students")) {
+    for (const collection of collections) {
       const baselinePublicById = new Map(
-        (baselinePublicState?.students ?? []).map((student) => [
+        (baselinePublicState?.[collection] ?? []).map((student) => [
           student.id,
           student,
         ]),
       );
       const baselineRawById = new Map(
-        (baselineRawState?.students ?? []).map((student) => [
+        (baselineRawState?.[collection] ?? []).map((student) => [
           student.id,
           student,
         ]),
       );
-      sealed.students = await Promise.all(
-        (publicState.students ?? []).map((student) => {
+      sealed[collection] = await Promise.all(
+        (publicState[collection] ?? []).map((student) => {
           const baselinePublic = baselinePublicById.get(student.id);
           const baselineRaw = baselineRawById.get(student.id);
           if (
@@ -1048,10 +1002,7 @@ export class IndexedDbDataStore
           ) {
             return structuredClone(baselineRaw);
           }
-          return this.getSensitiveVault().sealStudentRecord(
-            student,
-            studentSubject(student.id),
-          );
+          return this.getSensitiveVault().sealCollectionRecord(student, collection);
         }),
       );
     }
@@ -1069,37 +1020,43 @@ export class IndexedDbDataStore
     },
   ): Promise<void> {
     const scopedCollections = uniqueCollections(collections);
-    if (scopedCollections.includes("students")) {
-      await this.getSensitiveVault().prepareCommittedStudentRecordRetirements(
-        finalState.students ?? [],
-      );
-    }
-    if (recovery) {
-      await this.getSensitiveVault().prepareCommittedRecoverySnapshotRetirements(
-        recovery.final,
-      );
-    }
     const storeNames: string[] = [...scopedCollections];
     if (recovery) storeNames.push(RECOVERY_SNAPSHOT_STORE_NAME);
-    const nativeTransaction = openLocalVaultReadwriteTransaction(
-      database,
-      storeNames,
-    ).transaction;
-    const completion = transactionResult(nativeTransaction);
+    const preparations: LocalVaultRetirementPreparation[] = [];
+    const requests: Promise<unknown>[] = [];
+    const track = <T>(promise: Promise<T>): Promise<T> => {
+      // A later synchronous put() error must not leave earlier requests unhandled.
+      void promise.catch(() => undefined);
+      requests.push(promise);
+      return promise;
+    };
+    let nativeTransaction: IDBTransaction | undefined;
+    let settled: Promise<"committed" | "aborted"> | undefined;
     try {
+      for (const collection of scopedCollections) {
+        preparations.push(await this.getSensitiveVault().prepareCollectionRetirements(collection, finalState[collection] ?? []));
+      }
+      if (recovery) preparations.push(await this.getSensitiveVault().prepareCommittedRecoverySnapshotRetirements(recovery.final));
+      nativeTransaction = openLocalVaultReadwriteTransaction(database, storeNames).transaction;
+      const writeTransaction = nativeTransaction;
+      settled = new Promise((resolve) => {
+        writeTransaction.addEventListener("complete", () => resolve("committed"), { once: true });
+        writeTransaction.addEventListener("abort", () => resolve("aborted"), { once: true });
+      });
+      const completion = track(transactionResult(writeTransaction));
       const collectionReads = scopedCollections.map((collection) =>
-        requestResult(
-          nativeTransaction.objectStore(collection).getAll() as IDBRequest<
+        track(requestResult(
+          writeTransaction.objectStore(collection).getAll() as IDBRequest<
             StoredRecord[]
           >,
-        ),
+        )),
       );
       const recoveryRead = recovery
-        ? requestResult(
-            nativeTransaction
+        ? track(requestResult(
+            writeTransaction
               .objectStore(RECOVERY_SNAPSHOT_STORE_NAME)
               .getAll() as IDBRequest<RecoverySnapshotRecord[]>,
-          )
+          ))
         : undefined;
       const currentCollections = await Promise.all(collectionReads);
       const currentRecovery = recoveryRead ? await recoveryRead : undefined;
@@ -1129,27 +1086,25 @@ export class IndexedDbDataStore
 
       const writes: Promise<unknown>[] = [];
       for (const collection of scopedCollections) {
-        const store = nativeTransaction.objectStore(collection);
-        writes.push(requestResult(store.clear()));
+        const store = writeTransaction.objectStore(collection);
+        writes.push(track(requestResult(store.clear())));
         for (const record of finalState[collection] ?? []) {
-          writes.push(requestResult(store.put(structuredClone(record))));
+          writes.push(track(requestResult(store.put(structuredClone(record)))));
         }
       }
       if (recovery) {
-        const store = nativeTransaction.objectStore(
+        const store = writeTransaction.objectStore(
           RECOVERY_SNAPSHOT_STORE_NAME,
         );
-        writes.push(requestResult(store.clear()));
+        writes.push(track(requestResult(store.clear())));
         for (const snapshot of recovery.final) {
-          writes.push(requestResult(store.put(structuredClone(snapshot))));
+          writes.push(track(requestResult(store.put(structuredClone(snapshot)))));
         }
       }
       await Promise.all(writes);
       await completion;
-      if (scopedCollections.includes("students")) {
-        await this.getSensitiveVault().acceptCommittedStudentRecords(
-          finalState.students ?? [],
-        );
+      for (const collection of scopedCollections) {
+        await this.getSensitiveVault().acceptCollectionRecords(collection, finalState[collection] ?? []);
       }
       if (recovery) {
         await this.getSensitiveVault().acceptCommittedRecoverySnapshots(
@@ -1158,11 +1113,26 @@ export class IndexedDbDataStore
       }
     } catch (error) {
       try {
-        nativeTransaction.abort();
+        nativeTransaction?.abort();
       } catch {
         // Tamamlanmış işlemin özgün hatasını koru.
       }
-      await completion.catch(() => undefined);
+      const outcome = settled ? await settled : "not-started";
+      await Promise.allSettled(requests);
+      if (outcome !== "committed" && preparations.length > 0) {
+        // The exclusive vault lock still belongs to this live writer. Recheck the
+        // complete raw preimage before cancelling only this attempt's intents.
+        const proof = database.transaction(storeNames, "readonly");
+        const proofCompletion = transactionResult(proof);
+        void proofCompletion.catch(() => undefined);
+        const values = await Promise.all(storeNames.map((name) => requestResult(proof.objectStore(name).getAll())));
+        await proofCompletion;
+        const unchanged = scopedCollections.every((collection, index) => recordsEqual(values[index], baseline[collection] ?? [])) &&
+          (!recovery || recordsEqual(values[scopedCollections.length], recovery.baseline));
+        if (!unchanged) throw new LocalVaultSecurityError("LOCAL_VAULT_REPLAY_DETECTED",
+          "İptal edilen işlemden sonra yerel veri değişti; silme hazırlığı güvenlik nedeniyle geri alınmadı.");
+        await this.getSensitiveVault().cancelAbortedRetirements(preparations);
+      }
       throw error;
     }
   }
@@ -1181,6 +1151,94 @@ export class IndexedDbDataStore
       commitCutover: (input) =>
         this.commitStudentVaultCutover(database, input),
     });
+    await this.ensureAllCollectionsVault(database);
+  }
+
+  private async ensureAllCollectionsVault(database: IDBDatabase): Promise<void> {
+    const stores = [...COLLECTION_NAMES, RECOVERY_SNAPSHOT_STORE_NAME, STUDENT_VAULT_STATE_STORE_NAME];
+    const read = database.transaction(stores, "readonly");
+    const done = transactionResult(read);
+    const [rawArrays, recovery, marker] = await Promise.all([
+      Promise.all(COLLECTION_NAMES.map((name) => requestResult(read.objectStore(name).getAll() as IDBRequest<StoredRecord[]>))),
+      requestResult(read.objectStore(RECOVERY_SNAPSHOT_STORE_NAME).getAll() as IDBRequest<RecoverySnapshotRecord[]>),
+      requestResult(read.objectStore(STUDENT_VAULT_STATE_STORE_NAME).get(ALL_COLLECTIONS_VAULT_READY_STATE_ID) as IDBRequest<StoredRecord | undefined>),
+    ]);
+    await done;
+    const vault = this.getSensitiveVault();
+    const identity = await vault.collectionVaultIdentity();
+    const readyMarker = { id: ALL_COLLECTIONS_VAULT_READY_STATE_ID, state: "ready", version: 1,
+      collections: [...COLLECTION_NAMES], ...identity };
+    const ready = marker !== undefined;
+    if (!ready && await vault.allCollectionsReady()) {
+      throw new LocalVaultSecurityError("LOCAL_VAULT_STATE_INVALID", "Tam kasa hazır işareti kayıp; eski/açık metin veriye geri dönülmedi.");
+    }
+    if (marker) {
+      if (canonicalJson(marker) !== canonicalJson(readyMarker)) {
+        throw new LocalVaultSecurityError("LOCAL_VAULT_SCOPE_MISMATCH", "Tam veri kasasının koleksiyon kapsamı doğrulanamadı.");
+      }
+    }
+    const targetArrays: StoredRecord[][] = [];
+    const targetRecovery = structuredClone(recovery);
+    const prepare = async (record: StoredRecord, collection: string): Promise<StoredRecord> => {
+      if (hasLocalVaultEnvelope(record)) {
+        await vault.openCollectionRecord(record, collection);
+        return structuredClone(record);
+      }
+      if (ready) throw new LocalVaultSecurityError("LOCAL_VAULT_MIXED_VERSION", "Hazır tam veri kasasında açık metin kayıt bulundu; erişim durduruldu.");
+      const sealed = await vault.sealCollectionRecord(record, collection);
+      // Decrypt without promoting the generation before the atomic cutover.
+      const verified = await vault.verifyPreparedCollectionRecord(sealed, collection);
+      if (canonicalJson(verified) !== canonicalJson(record)) throw new Error("Tam veri kasası geçişinde kaynak mutabakatı başarısız.");
+      return sealed;
+    };
+    for (const [index, collection] of COLLECTION_NAMES.entries()) {
+      const records: StoredRecord[] = [];
+      for (const record of rawArrays[index]) records.push(await prepare(record, collection));
+      targetArrays.push(records);
+    }
+    for (const snapshot of targetRecovery) {
+      for (const collection of COLLECTION_NAMES) {
+        const records = snapshot?.envelope?.payload?.[collection];
+        if (records === undefined) continue;
+        if (!Array.isArray(records)) throw new Error("Kurtarma kopyasının koleksiyon kapsamı eksik.");
+        const sealed: StoredRecord[] = [];
+        for (const record of records) sealed.push(await prepare(record, `recoverySnapshots/${snapshot.id}/${collection}`));
+        snapshot.envelope.payload[collection] = sealed;
+      }
+    }
+    if (!ready) {
+      await this.sensitiveVaultOptions?.onMigrationCheckpoint?.("all-vault:prepared");
+      const write = openLocalVaultReadwriteTransaction(database, stores).transaction;
+      const completed = transactionResult(write);
+      try {
+        const [currentArrays, currentRecovery, currentMarker] = await Promise.all([
+          Promise.all(COLLECTION_NAMES.map((name) => requestResult(write.objectStore(name).getAll() as IDBRequest<StoredRecord[]>))),
+          requestResult(write.objectStore(RECOVERY_SNAPSHOT_STORE_NAME).getAll() as IDBRequest<RecoverySnapshotRecord[]>),
+          requestResult(write.objectStore(STUDENT_VAULT_STATE_STORE_NAME).get(ALL_COLLECTIONS_VAULT_READY_STATE_ID)),
+        ]);
+        if (!recordsEqual(currentArrays, rawArrays) || !recordsEqual(currentRecovery, recovery) || currentMarker !== undefined) {
+          throw new Error("Tam veri kasası geçişinde kaynak değişti; hiçbir koleksiyon değiştirilmedi. Yeniden deneyin.");
+        }
+        for (const [index, name] of COLLECTION_NAMES.entries()) {
+          const store = write.objectStore(name);
+          await requestResult(store.clear());
+          for (const record of targetArrays[index]) await requestResult(store.put(record));
+        }
+        const recoveryStore = write.objectStore(RECOVERY_SNAPSHOT_STORE_NAME);
+        await requestResult(recoveryStore.clear());
+        for (const snapshot of targetRecovery) await requestResult(recoveryStore.put(snapshot));
+        await requestResult(write.objectStore(STUDENT_VAULT_STATE_STORE_NAME).put(readyMarker));
+        await completed;
+      } catch (error) {
+        try { write.abort(); } catch { /* Preserve the original failure. */ }
+        await completed.catch(() => undefined);
+        throw error;
+      }
+      await this.sensitiveVaultOptions?.onMigrationCheckpoint?.("all-vault:committed");
+    }
+    for (const [index, name] of COLLECTION_NAMES.entries()) await vault.acceptCollectionRecords(name, targetArrays[index]);
+    await vault.acceptCommittedRecoverySnapshots(targetRecovery);
+    await vault.allCollectionsReady(true);
   }
 
   private async readStudentVaultMigrationState(
@@ -1373,22 +1431,22 @@ export class IndexedDbDataStore
     indexName: string,
     key: IDBValidKey,
   ): Promise<EntityMap[Collection][]> {
-    const database = await this.open();
-    const nativeTransaction = database.transaction(collection, "readonly");
-    const completion = transactionResult(nativeTransaction);
-    const objectStore = nativeTransaction.objectStore(collection);
-    if (!objectStore.indexNames.contains(indexName)) {
+    const definition = INDEXES_BY_COLLECTION[collection]?.find((index) => index.name === indexName);
+    if (!definition) {
       throw new Error(
         `${collection} koleksiyonu için ${indexName} indeksi kullanılamıyor.`,
       );
     }
-    const records = await requestResult(
-      objectStore.index(indexName).getAll(IDBKeyRange.only(key)) as IDBRequest<
-        EntityMap[Collection][]
-      >,
+    return this.transaction("readonly", [collection], async (transaction) =>
+      (await transaction.getAll(collection)).filter((record) => {
+        const value = typeof definition.keyPath === "string" ? record[definition.keyPath]
+          : definition.keyPath.map((part) => record[part]);
+        if (value === undefined || (Array.isArray(value) && value.some(item => item === undefined))) return false;
+        return definition.options?.multiEntry && Array.isArray(value)
+          ? value.some((item) => canonicalJson(item) === canonicalJson(key))
+          : canonicalJson(value ?? null) === canonicalJson(key);
+      }),
     );
-    await completion;
-    return structuredClone(records);
   }
 
   private async readAllRecoverySnapshots(): Promise<
@@ -1469,7 +1527,7 @@ export class IndexedDbDataStore
                   "Yeni veri sürümü için eski sekme bağlantısı güvenle kapatıldı.",
               });
             });
-            void this.ensureStudentVaultV2(database).then(
+            void this.enqueueStudentWrite(() => this.ensureStudentVaultV2(database)).then(
               () => {
                 if (settled) {
                   database.close();

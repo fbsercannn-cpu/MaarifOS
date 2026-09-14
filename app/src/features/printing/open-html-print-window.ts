@@ -1,3 +1,5 @@
+import { hasPdfPreviewPresenter } from "../documents/pdf-preview-model.ts";
+
 export type HtmlPrintWindowResult =
   | Readonly<{ opened: true }>
   | Readonly<{ opened: false; reason: "popup-blocked" }>;
@@ -47,8 +49,14 @@ function browserHtmlPrintEnvironment(): HtmlPrintEnvironment {
  */
 export function openHtmlPrintWindow(
   options: OpenHtmlPrintWindowOptions,
-  environment: HtmlPrintEnvironment = browserHtmlPrintEnvironment(),
+  environment?: HtmlPrintEnvironment,
 ): HtmlPrintWindowResult {
+  if (!environment && hasPdfPreviewPresenter()) {
+    void import("../documents/html-document-pdf.ts").then(({ previewHtmlPrintDocument }) => previewHtmlPrintDocument(options))
+      .catch(() => window.alert("PDF önizlemesi açılamadı. Baskı alanını yeniden açıp deneyin."));
+    return { opened: true };
+  }
+  environment ??= browserHtmlPrintEnvironment();
   const blobUrl = environment.createBlobUrl(
     options.html,
     "text/html;charset=utf-8",

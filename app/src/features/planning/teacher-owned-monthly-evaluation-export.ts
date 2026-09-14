@@ -51,7 +51,7 @@ const OFFICIAL_SOURCE = Object.freeze({
   version: "2024",
   evaluationPages: "136-139",
   annex: "Ek 18 - Aylık Plan Kontrol Çizelgesi",
-  annexPages: "344-349",
+  annexPages: "343-348",
 } as const);
 
 export type TeacherOwnedMonthlyEvaluationExportSelection =

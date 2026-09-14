@@ -1,3 +1,4 @@
+import { resolveStudentMembershipOn, studentMembershipOverlaps } from "../../core/domain/student-membership.ts";
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
 import {
   isTeacherMonthlyEvaluation,
@@ -91,6 +92,15 @@ export interface AppendTeacherOwnedPlanMonthsInput {
   annualPlanId: string;
   expectedUpdatedAt: string;
   months: readonly TeacherOwnedMonthlyPlanDraft[];
+  now?: Date;
+}
+
+export interface AppendTeacherOwnedPlanWeeksInput {
+  annualPlanId: string;
+  monthlyPlanId: string;
+  expectedAnnualUpdatedAt: string;
+  expectedMonthlyUpdatedAt: string;
+  weeks: readonly TeacherOwnedWeeklyPlanDraft[];
   now?: Date;
 }
 
@@ -703,6 +713,17 @@ export async function createTeacherOwnedPlanGraph(
     ["academicYears", "classrooms", "settings", "plans"],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
+      if (
+        (input.expectedAcademicYearId !== undefined &&
+          input.expectedAcademicYearId !== scope.academicYearId) ||
+        (input.expectedClassroomId !== undefined &&
+          input.expectedClassroomId !== scope.classroomId)
+      ) {
+        fail(
+          "concurrent-update",
+          "Etkin sınıf seçimden sonra değişti; plan omurgası yeni kapsam doğrulanmadan kaydedilmedi.",
+        );
+      }
       const [academicYears, plans] = await Promise.all([
         transaction.getAll("academicYears"),
         transaction.getAll("plans"),
@@ -1007,6 +1028,176 @@ export async function appendTeacherOwnedPlanMonths(
         nextAnnual.id,
       );
       if (!result) fail("graph-integrity", "Yıllık plan ayları yeniden yüklenemedi.");
+      return result;
+    },
+  );
+}
+
+/**
+ * Mevcut bir aylık öğretmen planına eksik hafta omurgalarını tek transaction
+ * içinde ekler. Yıllık ve aylık sürümler seçim anından beri değiştiyse hiçbir
+ * kayıt yazmaz; var olan hafta kimliklerini ve içeriklerini korur.
+ */
+export async function appendTeacherOwnedPlanWeeks(
+  store: LocalDataStore,
+  input: AppendTeacherOwnedPlanWeeksInput,
+): Promise<TeacherOwnedPlanGraph> {
+  if (!UUID_PATTERN.test(input.annualPlanId) || !UUID_PATTERN.test(input.monthlyPlanId)) {
+    fail("invalid-input", "Yıllık ve aylık plan kimlikleri UUID biçiminde olmalıdır.");
+  }
+  requiredText(input.expectedAnnualUpdatedAt, "Beklenen yıllık plan güncelleme zamanı");
+  requiredText(input.expectedMonthlyUpdatedAt, "Beklenen aylık plan güncelleme zamanı");
+  if (!Array.isArray(input.weeks) || input.weeks.length === 0) {
+    fail("invalid-input", "Eklenecek en az bir haftalık plan gereklidir.");
+  }
+  const timestamp = validTimestamp(input.now ?? new Date());
+  return store.transaction(
+    "readwrite",
+    ["academicYears", "classrooms", "settings", "plans"],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [academicYears, storedPlans] = await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("plans"),
+      ]);
+      const academicYear = academicYears.find(
+        (record) =>
+          record.id === scope.academicYearId && typeof record.deletedAt !== "string",
+      );
+      if (!academicYear) {
+        fail("active-scope-required", "Etkin eğitim yılı bulunamadı.");
+      }
+      const existing = activeTeacherPlans(storedPlans, scope);
+      const graph = graphFromRecords(existing, input.annualPlanId);
+      if (!graph) {
+        fail("plan-not-found", "Genişletilecek yıllık öğretmen planı bulunamadı.");
+      }
+      const monthGroup = graph.months.find(
+        ({ monthly }) => monthly.id === input.monthlyPlanId,
+      );
+      if (!monthGroup) {
+        fail("plan-not-found", "Genişletilecek aylık öğretmen planı bulunamadı.");
+      }
+      if (
+        graph.annual.updatedAt !== input.expectedAnnualUpdatedAt ||
+        monthGroup.monthly.updatedAt !== input.expectedMonthlyUpdatedAt
+      ) {
+        fail(
+          "concurrent-update",
+          "Plan zinciri başka bir işlemde güncellendi; son sürüm yüklenmeden hafta eklenmedi.",
+        );
+      }
+      if (
+        Date.parse(timestamp) <= Date.parse(graph.annual.updatedAt) ||
+        Date.parse(timestamp) <= Date.parse(monthGroup.monthly.updatedAt)
+      ) {
+        fail(
+          "invalid-input",
+          "Hafta ekleme zamanı plan zincirinin son güncelleme zamanından sonra olmalıdır.",
+        );
+      }
+      const existingWeekKeys = new Set(monthGroup.weeks.map((week) => week.weekKey));
+      if (input.weeks.some((week) => existingWeekKeys.has(week.weekKey))) {
+        fail(
+          "duplicate-or-overlap",
+          "Aylık planda bulunan bir hafta ikinci kez eklenemez.",
+        );
+      }
+      const combinedWeeks = [
+        ...monthGroup.weeks.map((week) => ({
+          title: week.title,
+          weekKey: week.weekKey,
+          periodStart: week.periodStart,
+          periodEnd: week.periodEnd,
+          teacherContent: structuredClone(week.teacherContent),
+        })),
+        ...input.weeks.map((week) => structuredClone(week)),
+      ].sort((left, right) => left.periodStart.localeCompare(right.periodStart));
+      const combinedDrafts: TeacherOwnedMonthlyPlanDraft[] = graph.months.map(
+        ({ monthly, weeks }) => ({
+          title: monthly.title,
+          monthKey: monthly.monthKey,
+          periodStart: monthly.periodStart,
+          periodEnd: monthly.periodEnd,
+          teacherContent: structuredClone(monthly.teacherContent),
+          weeks: monthly.id === monthGroup.monthly.id
+            ? combinedWeeks
+            : weeks.map((week) => ({
+                title: week.title,
+                weekKey: week.weekKey,
+                periodStart: week.periodStart,
+                periodEnd: week.periodEnd,
+                teacherContent: structuredClone(week.teacherContent),
+              })),
+        }),
+      );
+      validateCreationInput(
+        {
+          title: graph.annual.title,
+          periodStart: graph.annual.periodStart,
+          periodEnd: graph.annual.periodEnd,
+          teacherContent: graph.annual.teacherContent,
+          months: combinedDrafts,
+        },
+        academicYear,
+      );
+
+      const newWeeks: TeacherOwnedWeeklyPlan[] = input.weeks.map((week) => ({
+        id: crypto.randomUUID(),
+        planType: "weekly",
+        planOrigin: TEACHER_AUTHORED_PLAN_ORIGIN,
+        annualPlanId: graph.annual.id,
+        monthlyPlanId: monthGroup.monthly.id,
+        title: requiredText(week.title, "Haftalık plan başlığı"),
+        weekKey: requiredText(week.weekKey, "Haftalık plan anahtarı"),
+        periodStart: week.periodStart,
+        periodEnd: week.periodEnd,
+        civilDate: week.periodStart,
+        teacherContent: cloneContent(week.teacherContent, "Haftalık plan içeriği"),
+        weeklyEvaluations: [],
+        nextPlanDecisionRequired: true,
+        status: "active",
+        academicYearId: graph.annual.academicYearId,
+        classroomId: graph.annual.classroomId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null,
+        schemaVersion: TEACHER_OWNED_PLAN_SCHEMA_VERSION,
+        revisionNumber: 1,
+        revisionHistory: [],
+      }));
+      const idByWeekKey = new Map([
+        ...monthGroup.weeks.map((week) => [week.weekKey, week.id] as const),
+        ...newWeeks.map((week) => [week.weekKey, week.id] as const),
+      ]);
+      const nextMonthly: TeacherOwnedMonthlyPlan = {
+        ...cloneTeacherOwnedPlan(monthGroup.monthly),
+        weeklySectionIds: combinedWeeks.map((week) => idByWeekKey.get(week.weekKey)!),
+        revisionNumber: monthGroup.monthly.revisionNumber + 1,
+        revisionHistory: [
+          ...monthGroup.monthly.revisionHistory.map((snapshot) => structuredClone(snapshot)),
+          {
+            revisionNumber: monthGroup.monthly.revisionNumber,
+            title: monthGroup.monthly.title,
+            teacherContent: structuredClone(monthGroup.monthly.teacherContent),
+            periodStart: monthGroup.monthly.periodStart,
+            periodEnd: monthGroup.monthly.periodEnd,
+            updatedAt: monthGroup.monthly.updatedAt,
+            capturedAt: timestamp,
+          },
+        ],
+        updatedAt: timestamp,
+      };
+      await transaction.putMany("plans", [nextMonthly, ...newWeeks]);
+      const result = graphFromRecords(
+        [
+          ...existing.filter((record) => record.id !== nextMonthly.id),
+          nextMonthly,
+          ...newWeeks,
+        ],
+        graph.annual.id,
+      );
+      if (!result) fail("graph-integrity", "Aylık plan haftaları yeniden yüklenemedi.");
       return result;
     },
   );
@@ -2072,20 +2263,8 @@ function normalizeMonthlyCriteria(
   });
 }
 
-function activeStudentRecords(
-  students: readonly StoredRecord[],
-  scope: ActiveClassroomScope,
-): StoredRecord[] {
-  return students
-    .filter(
-      (student) =>
-        typeof student.deletedAt !== "string" &&
-        student.enrollmentStatus !== "left" &&
-        student.enrollmentStatus !== "completed" &&
-        student.enrollmentStatus !== "transferred" &&
-        recordBelongsToClassroomScope(student, scope),
-    )
-    .sort((left, right) => left.id.localeCompare(right.id));
+function activeStudentRecords(students: readonly StoredRecord[], scope: ActiveClassroomScope, academicYear: StoredRecord, monthly: TeacherOwnedMonthlyPlan): StoredRecord[] {
+  return students.filter(student => studentMembershipOverlaps(student, { ...scope, academicYear, periodStart: monthly.periodStart, periodEnd: monthly.periodEnd })).sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function summarizeTeacherMonthlyCoverage(
@@ -2120,6 +2299,8 @@ function summarizeTeacherMonthlyCoverage(
 }
 
 function projectTeacherMonthlyObservations(input: {
+  students: readonly StoredRecord[];
+  academicYear: StoredRecord;
   monthly: TeacherOwnedMonthlyPlan;
   plans: readonly StoredRecord[];
   activities: readonly StoredRecord[];
@@ -2202,6 +2383,8 @@ function projectTeacherMonthlyObservations(input: {
       : typeof observation.studentId === "string" && UUID_PATTERN.test(observation.studentId)
         ? [observation.studentId]
         : [];
+    const eligibleStudentIds = studentIds.filter(id => input.students.some(student => student.id === id && resolveStudentMembershipOn(student, { ...input.scope, academicYear: input.academicYear, civilDate: observation.civilDate }).eligible));
+    if (!eligibleStudentIds.length || observation.civilDate < input.monthly.periodStart || observation.civilDate > input.monthly.periodEnd) return [];
     const curriculumLinks = (linksByObservation.get(observation.id) ?? [])
       .map((link): TeacherMonthlyReviewCurriculumLink => ({
         id: requiredText(link.id, "Program bağı kimliği"),
@@ -2223,7 +2406,7 @@ function projectTeacherMonthlyObservations(input: {
       weeklyPlanId: weekly.id,
       weekTitle: weekly.title,
       activityTitle: typeof activity.title === "string" ? activity.title : "Etkinlik",
-      studentIds: [...new Set(studentIds)].sort((left, right) => left.localeCompare(right)),
+      studentIds: [...new Set(eligibleStudentIds)].sort((left, right) => left.localeCompare(right)),
       curriculumLinks,
     }];
   }).sort(
@@ -2268,7 +2451,10 @@ export async function loadTeacherMonthlyReviewContext(
   ) {
     fail("plan-not-found", "Değerlendirilecek öğretmen aylık planı bulunamadı.");
   }
+  const academicYear = snapshot.academicYears.find(record => record.id === scope.academicYearId);
+  if (!academicYear) fail("graph-integrity", "Aylık değerlendirmenin eğitim yılı bulunamadı.");
   const observations = projectTeacherMonthlyObservations({
+    students: snapshot.students, academicYear,
     monthly,
     plans: snapshot.plans,
     activities: snapshot.activities,
@@ -2276,7 +2462,7 @@ export async function loadTeacherMonthlyReviewContext(
     links: snapshot.evidenceCurriculumLinks,
     scope,
   });
-  const activeStudents = activeStudentRecords(snapshot.students, scope).map((student) => ({
+  const activeStudents = activeStudentRecords(snapshot.students, scope, academicYear, monthly).map((student) => ({
     id: student.id,
     displayName:
       typeof student.displayName === "string" && student.displayName.trim()
@@ -2356,7 +2542,8 @@ export async function recordTeacherMonthlyEvaluation(
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [students, plans, activities, observations, links] = await Promise.all([
+      const [academicYears, students, plans, activities, observations, links] = await Promise.all([
+        transaction.getAll("academicYears"),
         transaction.getAll("students"),
         transaction.getAll("plans"),
         transaction.getAll("activities"),
@@ -2421,7 +2608,10 @@ export async function recordTeacherMonthlyEvaluation(
           "Sonraki ayda önceki bir öneri kararı var; yeni öneriden önce mevcut karar sonuçlandırılmalıdır.",
         );
       }
+      const academicYear = academicYears.find(record => record.id === scope.academicYearId);
+      if (!academicYear) fail("graph-integrity", "Aylık değerlendirmenin eğitim yılı bulunamadı.");
       const available = projectTeacherMonthlyObservations({
+        students, academicYear,
         monthly: monthlyRecord,
         plans,
         activities,
@@ -2457,7 +2647,7 @@ export async function recordTeacherMonthlyEvaluation(
           "Seçilen her aylık gözlem için bu gözleme ait en az bir öğretmen onaylı program bağı gerekir.",
         );
       }
-      const activeStudents = activeStudentRecords(students, scope);
+      const activeStudents = activeStudentRecords(students, scope, academicYear, monthlyRecord);
       const coverage = summarizeTeacherMonthlyCoverage(
         selectedWithLinks,
         activeStudents.map((student) => student.id),
@@ -2468,7 +2658,7 @@ export async function recordTeacherMonthlyEvaluation(
       ) {
         fail(
           "invalid-input",
-          "Yeterli kanıt için en az iki gözlem, iki farklı gün, iki farklı hafta ve aktif sınıftaki her çocuğun temsili gerekir.",
+          "Yeterli kanıt için en az iki gözlem, iki farklı gün, iki farklı hafta ve dönem içinde sınıfa kayıtlı her çocuğun temsili gerekir.",
         );
       }
       const selectedRecords = [

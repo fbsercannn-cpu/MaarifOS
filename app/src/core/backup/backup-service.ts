@@ -1,3 +1,5 @@
+import { assertDocumentHistoryIntegrity } from "../../features/documents/document-history-service.ts";
+import {assertStudentErasureIntegrity} from '../domain/student-erasure.ts';
 import {
   COLLECTION_NAMES,
   createEmptySnapshot,
@@ -30,6 +32,8 @@ import {
 import { migrateLegacyClassroomScopes } from "../migrations/classroom-scope-migration";
 import { canonicalClone, canonicalJson } from "./canonical-json";
 import { sha256Hex } from "./crypto";
+import { assertBackupCapacity, createBackupRecoverySummary, assertBackupRecoveryMatch, type BackupRecoverySummary } from "./backup-capacity";
+import { assertDevelopmentReportBackupIntegrity } from "../../features/development/development-report";
 import {
   decryptBackupText,
   encryptBackupText,
@@ -41,9 +45,14 @@ import {
   assertBackupEnvelopeStructure,
   BACKUP_FORMAT,
   BACKUP_VERSION,
+  CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION,
   DATA_SCHEMA_VERSION,
   LEGACY_DATA_SCHEMA_VERSION,
   VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
+  PRE_DEVELOPMENT_DATA_SCHEMA_VERSION,
+  DEVELOPMENT_DATA_SCHEMA_VERSION,
+  PRE_WORKFLOW_DATA_SCHEMA_VERSION,
+  TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION,
   type BackupEnvelope,
   type RestoreMode,
   type RestoreReport,
@@ -236,6 +245,17 @@ async function upgradeLegacyBackupEnvelope(
   if (envelope.manifest.dataSchemaVersion === DATA_SCHEMA_VERSION) {
     return canonicalClone(envelope);
   }
+  if (envelope.manifest.dataSchemaVersion === PRE_DEVELOPMENT_DATA_SCHEMA_VERSION ||
+    envelope.manifest.dataSchemaVersion === DEVELOPMENT_DATA_SCHEMA_VERSION ||
+    envelope.manifest.dataSchemaVersion === PRE_WORKFLOW_DATA_SCHEMA_VERSION ||
+    envelope.manifest.dataSchemaVersion === TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION ||
+    envelope.manifest.dataSchemaVersion === CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION) {
+    // Additive V6–V10 migrations preserve payload/checksum and invent no workflow evidence.
+    return {
+      manifest: { ...envelope.manifest, dataSchemaVersion: DATA_SCHEMA_VERSION },
+      payload: canonicalClone(envelope.payload),
+    };
+  }
   const legacyPayload = canonicalClone(envelope.payload);
   const payload: DataSnapshot = {
     ...createEmptySnapshot(),
@@ -312,6 +332,7 @@ async function upgradeLegacyBackupEnvelope(
 }
 
 export class BackupService {
+  private verifiedRestore: BackupRecoverySummary | null = null;
   private readonly clock: () => Date;
   private readonly civilDateProvider: (date: Date) => string;
   private readonly recoveryRetentionLimit: number;
@@ -349,24 +370,30 @@ export class BackupService {
       payload,
     };
     assertBackupEnvelope(envelope);
+    await assertStudentErasureIntegrity(envelope.payload);
     await assertExternalFeedbackContentHashes(envelope.payload);
     await assertValueEvidenceDesignDigests(envelope.payload);
+    await assertDevelopmentReportBackupIntegrity(envelope.payload);
+    await assertDocumentHistoryIntegrity(envelope.payload);
     const selfCheck = await sha256Hex(canonicalJson(envelope.payload));
     if (selfCheck !== envelope.manifest.payloadChecksum) {
       throw new Error("Yedek oluşturulurken bütünlük doğrulaması başarısız oldu.");
     }
+    assertBackupCapacity(canonicalJson(envelope));
     return canonicalClone(envelope);
   }
 
   serializeBackup(envelope: BackupEnvelope): string {
-    return canonicalJson(envelope);
+    const serialized = canonicalJson(envelope);
+    assertBackupCapacity(serialized);
+    return serialized;
   }
 
   async exportEncryptedBackup(
     password: string,
   ): Promise<EncryptedBackupEnvelope> {
     const backup = await this.exportBackup();
-    return encryptBackupText(
+    const encrypted = await encryptBackupText(
       this.serializeBackup(backup),
       {
         appVersion: backup.manifest.appVersion,
@@ -374,6 +401,10 @@ export class BackupService {
       },
       password,
     );
+    // A successful export must pass the exact same decoder and restore schema.
+    const restored = await this.parseAndDecryptBackup(encrypted, password);
+    assertBackupRecoveryMatch(await createBackupRecoverySummary(backup), await createBackupRecoverySummary(restored));
+    return encrypted;
   }
 
   serializeEncryptedBackup(envelope: EncryptedBackupEnvelope): string {
@@ -390,9 +421,7 @@ export class BackupService {
 
   async parseAndVerifyBackup(input: string | BackupEnvelope): Promise<BackupEnvelope> {
     let candidate: unknown;
-    if (typeof input === "string" && input.length > 20 * 1024 * 1024) {
-      throw new Error("Yedek dosyası izin verilen 20 MB sınırını aşıyor.");
-    }
+    assertBackupCapacity(typeof input === "string" ? input : canonicalJson(input));
     try {
       candidate = typeof input === "string" ? JSON.parse(input) : canonicalClone(input);
     } catch {
@@ -406,9 +435,41 @@ export class BackupService {
     const upgraded = await upgradeLegacyBackupEnvelope(candidate);
     const normalized = await normalizeLegacyBackupScopes(upgraded);
     assertBackupEnvelope(normalized);
+    await assertStudentErasureIntegrity(normalized.payload);
     await assertExternalFeedbackContentHashes(normalized.payload);
     await assertValueEvidenceDesignDigests(normalized.payload);
+    await assertDevelopmentReportBackupIntegrity(normalized.payload);
+    await assertDocumentHistoryIntegrity(normalized.payload);
     return canonicalClone(normalized);
+  }
+
+  async recoverySummary(): Promise<BackupRecoverySummary> {
+    return createBackupRecoverySummary(await this.exportBackup());
+  }
+
+  get lastRestoreVerification(): BackupRecoverySummary | null {
+    return this.verifiedRestore ? canonicalClone(this.verifiedRestore) : null;
+  }
+
+  private async verifyStoredRestore<T extends RestoreReport>(report: T, expected: BackupRecoverySummary, backup: BackupEnvelope): Promise<T> {
+    const payload = await this.store.readSnapshot();
+    const actual = await createBackupRecoverySummary({ ...backup, payload,
+      manifest: { ...backup.manifest, entityCounts: entityCounts(payload), payloadChecksum: await sha256Hex(canonicalJson(payload)) } });
+    assertBackupRecoveryMatch(expected, actual);
+    this.verifiedRestore = actual;
+    return report;
+  }
+
+  /** Isolated in-memory drill; live records and recovery points never change. */
+  async verifyEncryptedRecovery(input: string | EncryptedBackupEnvelope, password: string): Promise<BackupRecoverySummary> {
+    const incoming = await this.parseAndDecryptBackup(input, password);
+    const expected = await createBackupRecoverySummary(incoming);
+    const isolated = new BackupSnapshotStore(createEmptySnapshot());
+    const verifier = new BackupService(isolated, this.options);
+    await verifier.restoreBackup(incoming, { mode: "replace", createRecoverySnapshot: false });
+    const actual = await verifier.recoverySummary();
+    assertBackupRecoveryMatch(expected, actual);
+    return actual;
   }
 
   async createRecoverySnapshot(
@@ -480,6 +541,7 @@ export class BackupService {
     input: string | BackupEnvelope,
     options: RestoreOptions,
   ): Promise<RestoreReport> {
+    this.verifiedRestore = null;
     const backup = await this.parseAndVerifyBackup(input);
     if (options.mode !== "replace" && options.mode !== "merge") {
       throw new Error("Geri yükleme modu replace veya merge olmalıdır.");
@@ -517,7 +579,9 @@ export class BackupService {
     const restorePreimageCanonical = canonicalJson(restorePreimageSnapshot);
 
     if (options.mode === "replace") {
-      return this.store.transaction(
+      const expectedPayload = { ...backup.payload, attendanceRecords: resolveAttendanceRecords(backup.payload.attendanceRecords).records };
+      const expected = await createBackupRecoverySummary({ ...backup, payload: expectedPayload });
+      const report = await this.store.transaction(
         "readwrite",
         COLLECTION_NAMES,
         async (transaction) => {
@@ -553,6 +617,7 @@ export class BackupService {
           };
         },
       );
+      return this.verifyStoredRestore(report, expected, backup);
     }
 
     // Merge doğrulaması WebCrypto beklediği için native IndexedDB readwrite
@@ -601,11 +666,19 @@ export class BackupService {
       },
       payload: candidateSnapshot,
     });
+    await assertStudentErasureIntegrity(candidateSnapshot);
     await assertExternalFeedbackContentHashes(candidateSnapshot);
     await assertValueEvidenceDesignDigests(candidateSnapshot);
+    await assertDevelopmentReportBackupIntegrity(candidateSnapshot);
+    await assertDocumentHistoryIntegrity(candidateSnapshot);
+
+    const expectedPayload = { ...candidateSnapshot,
+      attendanceRecords: (toInsertByCollection.get("attendanceRecords")?.length ?? 0) > 0
+        ? resolveAttendanceRecords(candidateSnapshot.attendanceRecords).records : candidateSnapshot.attendanceRecords };
+    const expected = await createBackupRecoverySummary({ ...backup, payload: expectedPayload });
 
     const preimageCanonical = canonicalJson(preimageSnapshot);
-    return this.store.transaction(
+    const writtenReport = await this.store.transaction(
       "readwrite",
       COLLECTION_NAMES,
       async (transaction) => {
@@ -631,5 +704,6 @@ export class BackupService {
         return report;
       },
     );
+    return this.verifyStoredRestore(writtenReport, expected, backup);
   }
 }

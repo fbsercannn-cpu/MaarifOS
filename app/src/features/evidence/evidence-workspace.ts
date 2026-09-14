@@ -1,5 +1,6 @@
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
 import { isLocalTime } from "../../core/domain/classroom.ts";
+import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import {
   recordBelongsToClassroomScope,
   resolveActiveClassroomScope,
@@ -17,6 +18,10 @@ import type {
   CurriculumAssignmentMode,
   CurriculumTargetSnapshot,
 } from "../curriculum/curriculum-catalog.ts";
+import {
+  TYMM_2024_DOMAINS,
+  type Tymm2024Domain,
+} from "../curriculum/tymm-2024-catalog.ts";
 import type { PremiumPackAccessReference } from "../premium-access/entitlement.ts";
 import {
   normalizeCurriculumProfile,
@@ -31,6 +36,16 @@ import {
   type ObservationWorkflowStatus,
 } from "./observation-workflow-status.ts";
 import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
+import {
+  DEVELOPMENT_OBSERVATION_SUPPORT_OPTIONS,
+  parseDevelopmentObservationSelection,
+  resolveDevelopmentObservationProgramMapping,
+  type DevelopmentObservationSelection,
+} from "./development-observation-presets.ts";
+import {
+  assertDevelopmentObservationContext,
+  isDevelopmentObservationCurriculumLink,
+} from "./development-observation-record.ts";
 
 export type EvidenceActivityStatus = "planned" | "in_progress" | "completed";
 
@@ -47,6 +62,7 @@ export interface EvidenceActivitySummary {
   assignedStudentIds: string[];
   assignmentMode: CurriculumAssignmentMode | "legacy-unscoped";
   contextKind: "planned-activity" | "spontaneous-observation";
+  observationDomainHint?: Tymm2024Domain;
   premiumProvenance?: EvidencePremiumProvenance;
 }
 
@@ -66,6 +82,9 @@ export interface EvidenceObservationSummary {
   childQuote?: string;
   observationType: QuickObservationType;
   observationCategories: QuickObservationCategory[];
+  developmentSelection?: DevelopmentObservationSelection;
+  /** Öğretmenin bu olay için seçtiği destek; başarı/değerlendirme düzeyi değildir. */
+  developmentSupportLabel?: string;
   observedAt: string;
   civilDate: string;
   curriculumProfile: CurriculumProfileSnapshot;
@@ -99,6 +118,16 @@ function profileFromRecord(record: StoredRecord | undefined): CurriculumProfileS
   } catch {
     return null;
   }
+}
+
+function observationDomainHintFromRecord(
+  record: StoredRecord,
+): Tymm2024Domain | undefined {
+  const value = record.observationDomainHint;
+  return typeof value === "string" &&
+    (TYMM_2024_DOMAINS as readonly string[]).includes(value)
+    ? (value as Tymm2024Domain)
+    : undefined;
 }
 
 function premiumPackReference(value: unknown): PremiumPackAccessReference | null {
@@ -200,6 +229,7 @@ function activitySummary(
       ? activity.assignmentMode
       : "legacy-unscoped";
   const premiumProvenance = premiumProvenanceFromRecords(plan, activity);
+  const observationDomainHint = observationDomainHintFromRecord(activity);
   const contextKind = isAuthenticSpontaneousObservationActivity(
     activity,
     scopedPlans,
@@ -222,6 +252,7 @@ function activitySummary(
     assignedStudentIds,
     assignmentMode,
     contextKind,
+    ...(observationDomainHint ? { observationDomainHint } : {}),
     ...(premiumProvenance ? { premiumProvenance } : {}),
   };
 }
@@ -235,12 +266,34 @@ function teacherConfirmedLinks(
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function teacherConfirmedTarget(
+export function teacherConfirmedTarget(
   link: StoredRecord,
   plannedTargets: readonly CurriculumTargetSnapshot[],
   profile: CurriculumProfileSnapshot,
-  observationCivilDate: string,
+  observation: StoredRecord,
+  context: Pick<DataSnapshot, "classrooms" | "plans" | "activities">,
 ): CurriculumTargetSnapshot | null {
+  if (hasDevelopmentLinkMarkers(link, observation)) {
+    if (profile.framework !== "tymm" || !isDevelopmentObservationCurriculumLink(link)) {
+      return null;
+    }
+    try {
+      const selection = parseDevelopmentObservationSelection(observation.developmentSelection);
+      if (canonicalJson(selection) !== canonicalJson(link.developmentSelection)) return null;
+      assertDevelopmentObservationContext({
+        selection,
+        observation,
+        ...context,
+        validateCurrentAgeBand: false,
+      });
+      // The saved snapshot has been checked against the catalogue; return a
+      // fresh canonical target without turning it into a planned target.
+      return resolveDevelopmentObservationProgramMapping(selection.presetId, selection.ageBand).target;
+    } catch {
+      return null;
+    }
+  }
+
   const plannedTarget = plannedTargets.find(
     (target) =>
       (target.id === link.plannedTargetId ||
@@ -278,12 +331,27 @@ function teacherConfirmedTarget(
     sourceLabel: "Öğretmen beyanı · resmî katalogda doğrulanmadı",
     sourceCheckedOn: isCivilDate(link.civilDate)
       ? link.civilDate
-      : observationCivilDate,
+      : observation.civilDate as string,
     catalogCompleteness: "partial",
     verificationStatus: "teacher-declared-unverified",
     referenceOrigin: "teacher-declared",
     officialCatalogVerified: false,
   };
+}
+
+function hasDevelopmentLinkMarkers(link: StoredRecord, observation: StoredRecord): boolean {
+  return link.developmentSelection !== undefined || link.targetSnapshot !== undefined ||
+    (observation.developmentSelection !== undefined && link.plannedTargetId === undefined &&
+      link.referenceOrigin === "official-catalog");
+}
+
+function developmentSelectionFromRecord(record: StoredRecord): DevelopmentObservationSelection | null {
+  if (record.developmentSelection === undefined) return null;
+  try {
+    return parseDevelopmentObservationSelection(record.developmentSelection);
+  } catch {
+    return null;
+  }
 }
 
 export function resolveEvidenceWorkspace(
@@ -361,7 +429,25 @@ export function resolveEvidenceWorkspace(
         typeof student.displayName === "string" && student.displayName.trim()
           ? student.displayName.trim()
           : "Çocuk";
-      const confirmedLinks = teacherConfirmedLinks(scopedLinks, record.id);
+      const developmentSelection = developmentSelectionFromRecord(record);
+      const developmentSupportLabel = DEVELOPMENT_OBSERVATION_SUPPORT_OPTIONS.find(
+        (option) => option.id === developmentSelection?.support,
+      )?.label;
+      const confirmedEntries = teacherConfirmedLinks(scopedLinks, record.id)
+        .map((link) => ({
+          link,
+          target: teacherConfirmedTarget(
+            link,
+            activity.curriculumTargets,
+            activity.curriculumProfile,
+            record,
+            snapshot,
+          ),
+        }))
+        // Invalid new-style links must not present a completed programme
+        // connection. Legacy planned/teacher-declared links keep their path.
+        .filter(({ link, target }) => target !== null || !hasDevelopmentLinkMarkers(link, record));
+      const confirmedLinks = confirmedEntries.map(({ link }) => link);
       const assessmentDraftIds = observationAssessmentDraftIds(
         scopedAssessmentDrafts,
         record.id,
@@ -384,20 +470,15 @@ export function resolveEvidenceWorkspace(
         observationCategories: Array.isArray(record.observationCategories)
           ? record.observationCategories.filter(isQuickObservationCategory)
           : [],
+        ...(developmentSelection ? { developmentSelection } : {}),
+        ...(developmentSupportLabel ? { developmentSupportLabel } : {}),
         observedAt: record.observedAt as string,
         civilDate: record.civilDate,
         curriculumProfile: activity.curriculumProfile,
         plannedCurriculumTargets: activity.curriculumTargets,
         confirmedCurriculumLinkIds: confirmedLinks.map((link) => link.id),
-        confirmedCurriculumTargets: confirmedLinks
-          .map((link) =>
-            teacherConfirmedTarget(
-              link,
-              activity.curriculumTargets,
-              activity.curriculumProfile,
-              record.civilDate,
-            ),
-          )
+        confirmedCurriculumTargets: confirmedEntries
+          .map(({ target }) => target)
           .filter((target): target is CurriculumTargetSnapshot => target !== null),
         assessmentDraftIds,
         workflowStatus: deriveObservationWorkflowStatus({

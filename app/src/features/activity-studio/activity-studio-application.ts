@@ -14,6 +14,10 @@ import type {
   ActivityStudioAgeBand,
   ActivityStudioItem,
 } from "./activity-studio-model.ts";
+import {
+  TYMM_2024_DOMAINS,
+  type Tymm2024Domain,
+} from "../curriculum/tymm-2024-catalog.ts";
 import type {
   ParticipationRouteId,
   PedagogicalScenarioId,
@@ -36,7 +40,10 @@ export interface ActivityStudioApplicationIdentity {
 }
 
 export interface EnsureActivityStudioApplicationInput {
-  readonly activity: Pick<ActivityStudioItem, "id" | "title" | "contentOrigin">;
+  readonly activity: Pick<
+    ActivityStudioItem,
+    "id" | "title" | "contentOrigin" | "tymmDomains"
+  >;
   readonly civilDate: string;
   readonly ageBand: ActivityStudioAgeBand;
   readonly scenarioId: PedagogicalScenarioId;
@@ -63,6 +70,40 @@ function validSourceActivityId(value: string): string {
     throw new Error("Etkinlik Stüdyosu kaynak kimliği geçersiz.");
   }
   return normalized;
+}
+
+function isTymm2024Domain(value: unknown): value is Tymm2024Domain {
+  return (
+    typeof value === "string" &&
+    (TYMM_2024_DOMAINS as readonly string[]).includes(value)
+  );
+}
+
+function observationDomainHintFromActivity(
+  activity: EnsureActivityStudioApplicationInput["activity"],
+): Tymm2024Domain {
+  const firstDomain = Array.isArray(activity.tymmDomains)
+    ? activity.tymmDomains[0]
+    : undefined;
+  if (!isTymm2024Domain(firstDomain)) {
+    throw new Error("Etkinliğin ilk TYMM öğrenme alanı geçersiz.");
+  }
+  return firstDomain;
+}
+
+function assertStoredObservationDomainHint(
+  record: StoredRecord,
+  expected: Tymm2024Domain,
+): void {
+  if (record.observationDomainHint === undefined) return;
+  if (
+    !isTymm2024Domain(record.observationDomainHint) ||
+    record.observationDomainHint !== expected
+  ) {
+    throw new Error(
+      "Etkinlik uygulamasının gözlem alanı kaynağıyla uyuşmuyor; mevcut kayıt değiştirilmeden inceleme gerekir.",
+    );
+  }
 }
 
 function timeInIstanbul(now: Date): string {
@@ -147,6 +188,7 @@ export async function ensureActivityStudioApplication(
   if (input.activity.contentOrigin !== "MaarifOS-original") {
     throw new Error("Yalnız kaynağı doğrulanmış MaarifOS etkinliği uygulanabilir.");
   }
+  const observationDomainHint = observationDomainHintFromActivity(input.activity);
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) {
     throw new Error("Etkinlik uygulaması için geçerli bir kayıt zamanı gerekli.");
@@ -234,9 +276,25 @@ export async function ensureActivityStudioApplication(
             "Etkinlik uygulama bağlamı eksik; mevcut kayıtlar değiştirilmeden inceleme gerekir.",
           );
         }
+        assertStoredObservationDomainHint(plan, observationDomainHint);
+        assertStoredObservationDomainHint(activity, observationDomainHint);
+        const backfilledPlan =
+          plan.observationDomainHint === undefined
+            ? { ...plan, observationDomainHint, updatedAt: timestamp }
+            : plan;
+        const backfilledActivity =
+          activity.observationDomainHint === undefined
+            ? { ...activity, observationDomainHint, updatedAt: timestamp }
+            : activity;
+        if (backfilledPlan !== plan) {
+          await transaction.putMany("plans", [backfilledPlan]);
+        }
+        if (backfilledActivity !== activity) {
+          await transaction.putMany("activities", [backfilledActivity]);
+        }
         result = {
-          plan,
-          activity,
+          plan: backfilledPlan,
+          activity: backfilledActivity,
           identity: {
             sessionId: activity.studioApplicationId,
             planId: plan.id,
@@ -259,6 +317,7 @@ export async function ensureActivityStudioApplication(
         ageBand: input.ageBand,
         scenarioId: input.scenarioId,
         participationRouteId: input.participationRouteId,
+        observationDomainHint,
       } as const;
       const plan: StoredRecord = {
         id: planId,

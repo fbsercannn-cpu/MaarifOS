@@ -24,6 +24,15 @@ import type {
   DataTransaction,
   LocalDataStore,
 } from "../../core/repository/contracts.ts";
+import {
+  parseDevelopmentObservationSelection,
+  type DevelopmentObservationSelection,
+} from "./development-observation-presets.ts";
+import {
+  assertDevelopmentObservationContext,
+  loadDevelopmentObservationGraphFactory,
+  prepareDevelopmentObservationRecord,
+} from "./development-observation-record.ts";
 
 export {
   QUICK_OBSERVATION_CATEGORIES,
@@ -45,6 +54,7 @@ export interface PersistQuickObservationDraftInput {
   observationType: QuickObservationType;
   categoryIds: readonly QuickObservationCategory[];
   taxonomyVersion?: ObservationTaxonomyVersion;
+  developmentSelection?: DevelopmentObservationSelection;
   now?: Date;
 }
 
@@ -86,6 +96,7 @@ export interface PersistQuickObservationDraftBatchInput {
   observationType: QuickObservationType;
   categoryIds: readonly QuickObservationCategory[];
   taxonomyVersion?: ObservationTaxonomyVersion;
+  developmentSelection?: DevelopmentObservationSelection;
   batchId?: string;
   now?: Date;
 }
@@ -329,6 +340,7 @@ function batchDraftPayload(draft: QuickObservationDraft): string {
     childQuote: draft.childQuote,
     observationType: draft.observationType,
     categoryIds: draft.categoryIds,
+    developmentSelection: draft.developmentSelection,
     observationTaxonomyVersion:
       draft.observationTaxonomyVersion ?? OBSERVATION_TAXONOMY_VERSION_V1,
   });
@@ -376,6 +388,8 @@ export async function persistQuickObservationDraft(
   );
   const now = validDate(input.now ?? new Date(), "Taslak kayıt zamanı");
   const timestamp = now.toISOString();
+  const developmentSelection = input.developmentSelection === undefined ? undefined :
+    parseDevelopmentObservationSelection(input.developmentSelection);
   let result: QuickObservationDraft | null = null;
 
   await store.transaction(
@@ -427,12 +441,20 @@ export async function persistQuickObservationDraft(
         observationType: input.observationType,
         categoryIds,
         observationTaxonomyVersion: taxonomyVersion,
+        ...(developmentSelection ? { developmentSelection } : {}),
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
         civilDate: existing?.civilDate ?? civilDateInIstanbul(now),
         deletedAt: null,
         schemaVersion: QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION,
       };
+      if (developmentSelection) {
+        const classrooms = await transaction.getAll("classrooms");
+        assertDevelopmentObservationContext({
+          selection: developmentSelection, observation: result,
+          classrooms, plans, activities,
+        });
+      }
       await transaction.putMany("settings", [result]);
     },
   );
@@ -462,6 +484,8 @@ export async function persistQuickObservationDraftBatch(
   );
   const now = validDate(input.now ?? new Date(), "Toplu taslak kayıt zamanı");
   const timestamp = now.toISOString();
+  const developmentSelection = input.developmentSelection === undefined ? undefined :
+    parseDevelopmentObservationSelection(input.developmentSelection);
   let drafts: QuickObservationBatchDraft[] | null = null;
 
   await store.transaction(
@@ -548,6 +572,7 @@ export async function persistQuickObservationDraftBatch(
           observationType: input.observationType,
           categoryIds: [...categoryIds],
           observationTaxonomyVersion: taxonomyVersion,
+          ...(developmentSelection ? { developmentSelection } : {}),
           batchId,
           captureScope: "selected-children",
           createdAt: existing?.createdAt ?? timestamp,
@@ -557,6 +582,15 @@ export async function persistQuickObservationDraftBatch(
           schemaVersion: QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION,
         };
       });
+      if (developmentSelection) {
+        const classrooms = await transaction.getAll("classrooms");
+        for (const draft of drafts) {
+          assertDevelopmentObservationContext({
+            selection: developmentSelection, observation: draft,
+            classrooms, plans, activities,
+          });
+        }
+      }
       const removedDrafts = openDraftsForBatch
         .filter((draft) => !studentIds.includes(draft.studentId))
         .map((draft) => ({
@@ -620,6 +654,7 @@ export async function finalizeQuickObservationDraft(
     "Gözlem zamanı",
   );
   const timestamp = now.toISOString();
+  const graphReferenceFactory = await loadDevelopmentObservationGraphFactory();
   let observation: StoredRecord | null = null;
 
   await store.transaction(
@@ -632,6 +667,7 @@ export async function finalizeQuickObservationDraft(
       "plans",
       "activities",
       "observations",
+      "evidenceCurriculumLinks",
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
@@ -685,6 +721,7 @@ export async function finalizeQuickObservationDraft(
         observationTaxonomyVersion:
           draft.observationTaxonomyVersion ??
           OBSERVATION_TAXONOMY_VERSION_V1,
+        ...(draft.developmentSelection ? { developmentSelection: { ...draft.developmentSelection } } : {}),
         observedAt,
         workflowStatus: "captured",
         academicYearId: scope.academicYearId,
@@ -695,7 +732,13 @@ export async function finalizeQuickObservationDraft(
         deletedAt: null,
         schemaVersion: 2,
       };
+      const developmentLink = draft.developmentSelection
+        ? await prepareDevelopmentObservationRecord(transaction, {
+            observation, selection: draft.developmentSelection, now, graphReferenceFactory,
+          })
+        : null;
       await transaction.putMany("observations", [observation]);
+      if (developmentLink) await transaction.putMany("evidenceCurriculumLinks", [developmentLink]);
       await transaction.putMany(
         "settings",
         [{
@@ -737,6 +780,7 @@ export async function finalizeQuickObservationDraftBatch(
     "Gözlem zamanı",
   );
   const timestamp = now.toISOString();
+  const graphReferenceFactory = await loadDevelopmentObservationGraphFactory();
   let finalizedObservations: StoredRecord[] | null = null;
 
   await store.transaction(
@@ -749,6 +793,7 @@ export async function finalizeQuickObservationDraftBatch(
       "plans",
       "activities",
       "observations",
+      "evidenceCurriculumLinks",
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
@@ -815,6 +860,7 @@ export async function finalizeQuickObservationDraftBatch(
         observationTaxonomyVersion:
           draft.observationTaxonomyVersion ??
           OBSERVATION_TAXONOMY_VERSION_V1,
+        ...(draft.developmentSelection ? { developmentSelection: { ...draft.developmentSelection } } : {}),
         batchId,
         captureScope: "selected-children",
         observedAt,
@@ -827,8 +873,17 @@ export async function finalizeQuickObservationDraftBatch(
         deletedAt: null,
         schemaVersion: 2,
       }));
-
+      const developmentLinks: StoredRecord[] = [];
+      for (const observation of finalizedObservations) {
+        const selection = observation.developmentSelection;
+        if (selection !== undefined) {
+          developmentLinks.push(await prepareDevelopmentObservationRecord(transaction, {
+            observation, selection: parseDevelopmentObservationSelection(selection), now, graphReferenceFactory,
+          }));
+        }
+      }
       await transaction.putMany("observations", finalizedObservations);
+      if (developmentLinks.length) await transaction.putMany("evidenceCurriculumLinks", developmentLinks);
       await transaction.putMany(
         "settings",
         drafts.map((draft) => ({

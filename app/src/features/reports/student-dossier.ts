@@ -1,4 +1,10 @@
-import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
+import { civilDateInIstanbul, isCivilDate, resolveAttendanceRecords } from "../../core/domain/attendance.ts";
+import { resolveStudentMembershipOn } from "../../core/domain/student-membership.ts";
+import { documentedSharingConsentSummary } from "../../core/domain/consent-trips.ts";
+import { createTextPdfDocument } from "../documents/text-document-pdf.ts";
+import { registerPdfPreviewRecipe, validatePdfSelection, type PdfPreviewRecipe } from "../documents/pdf-preview-model.ts";
+import type { SemanticTaggedPdfRuntime } from "../documents/semantic-tagged-pdf.ts";
+import { buildAttendanceDayBreakdown } from "../attendance/attendance-day-breakdown.ts";
 import { canonicalJson } from "../../core/backup/canonical-json.ts";
 import { sha256Hex } from "../../core/backup/crypto.ts";
 import {
@@ -82,6 +88,8 @@ interface DossierPrivacyContext {
   forbiddenNames: string[];
   phoneDigitSequences: string[];
 }
+
+const dossierPdfSources = new WeakMap<StudentDossier, { archive: StudentLongitudinalArchive; options: StudentDossierOptions; generatedAt: Date; privacyContext?: DossierPrivacyContext; assertExportAllowed?: PdfPreviewRecipe["assertExportAllowed"] }>();
 
 interface AnecdoteProgramSourceTrace {
   framework: string;
@@ -1078,6 +1086,7 @@ export function buildStudentDossier(
         record.studentIds[0] === student.id &&
         record.academicYearId === academicYearId &&
         record.classroomId === classroomId &&
+        resolveStudentMembershipOn(student, { academicYearId, classroomId, academicYear, civilDate: record.civilDate }).eligible &&
         dateInRange(record, options.periodStart, options.periodEnd),
     )
     .sort(
@@ -1085,7 +1094,7 @@ export function buildStudentDossier(
         left.civilDate.localeCompare(right.civilDate) ||
         left.id.localeCompare(right.id),
     );
-  const attendance = archive.attendanceRecords.filter(
+  const attendanceCandidates = archive.attendanceRecords.filter(
     (record) =>
       typeof record.deletedAt !== "string" &&
       record.studentId === student.id &&
@@ -1103,6 +1112,27 @@ export function buildStudentDossier(
       observationIds.has(record.observationId) &&
       dateInRange(record, options.periodStart, options.periodEnd),
   );
+  const resolvedAttendance = resolveAttendanceRecords(attendanceCandidates);
+  const accountingSnapshot = createEmptySnapshot();
+  accountingSnapshot.academicYears = archive.academicYears;
+  accountingSnapshot.classrooms = archive.classrooms;
+  accountingSnapshot.students = [student];
+  accountingSnapshot.attendanceRecords = archive.attendanceRecords;
+  accountingSnapshot.calendarEntries = archive.calendarEntries ?? [];
+  const attendanceAccounting = buildAttendanceDayBreakdown(accountingSnapshot, {
+    scope: { academicYearId, classroomId }, studentId: student.id,
+    periodStart: options.periodStart, periodEnd: options.periodEnd, asOfCivilDate: civilDateInIstanbul(generatedAt),
+  });
+  const countedIds = new Set(attendanceAccounting.days.flatMap((day) => day.rows.filter((row) => row.classification === "counted").map((row) => row.canonicalRecordId)));
+  const attendance = [...resolvedAttendance.latestByKey.values()].filter((record) => countedIds.has(record.id));
+  const attendanceDuplicateIds = resolvedAttendance.records
+    .filter((record) => record._MUKERRER_INCELE === true)
+    .map((record) => record.id);
+  const attendanceLines = [...attendanceSummary(attendance),
+    `Devam: ${attendanceAccounting.totals.attendanceNumerator} / ${attendanceAccounting.totals.attendanceDenominator} işaretlenmiş geçerli gün (geldi ve geç geldi).`,
+    `Yoklama kapsamı: ${attendanceAccounting.totals.coverageNumerator} / ${attendanceAccounting.totals.coverageDenominator} beklenen eğitim günü.`,
+    `İşaretlenmemiş gün: ${attendanceAccounting.totals.missingStudentDays}. İşaretlenmemiş günler devamsızlık sayılmaz.`,
+  ];
   const approvedAnecdotes = options.includeObservations
     ? approvedAnecdoteDossierEntries(
         archive,
@@ -1293,9 +1323,15 @@ export function buildStudentDossier(
       ? [
           "",
           "DEVAM ÖZETİ",
-          ...(attendanceSummary(attendance).length > 0
-            ? attendanceSummary(attendance)
+          ...(attendanceLines.length > 0
+            ? attendanceLines
             : ["Bu aralıkta devam kaydı bulunmuyor."]),
+          ...(attendanceDuplicateIds.length > 0
+            ? [`Mükerrer incelemesi: ${attendanceDuplicateIds.length} ek kayıt kaynakta korunur; her çocuk ve gün için en güncel geçerli kayıt bir kez sayılır.`]
+            : []),
+          ...(resolvedAttendance.invalidRecords.length > 0
+            ? [`Veri kontrolü: ${resolvedAttendance.invalidRecords.length} geçersiz kayıt sayıma alınmadı; kaynak kayıtlar incelenmelidir.`]
+            : []),
         ]
       : []),
     ...(options.includeObservations
@@ -1355,7 +1391,7 @@ export function buildStudentDossier(
     }
     assertExternalAiDossierRedaction(text, effectivePrivacyContext);
   }
-  return {
+  const dossier: StudentDossier = {
     title,
     fileName: `${safeFileStem(name)}-${options.audience}-${options.periodEnd}.txt`,
     text,
@@ -1367,7 +1403,7 @@ export function buildStudentDossier(
         ? valueEvidenceLinks.map((record) => record.id)
         : [],
       attendanceRecords: options.includeAttendance
-        ? attendance.map((record) => record.id)
+        ? attendanceCandidates.map((record) => record.id)
         : [],
       portfolioSelections: options.includePortfolio
         ? portfolio.map((record) => record.id)
@@ -1392,6 +1428,16 @@ export function buildStudentDossier(
       identityMode: options.identityMode,
       includeContacts: options.includeContacts,
       includeAttendance: options.includeAttendance,
+      ...(options.includeAttendance ? {
+        attendanceAccounting: { totals: attendanceAccounting.totals, sourceIssues: attendanceAccounting.sourceIssues },
+        attendanceResolution: {
+          rule: "latest-valid-per-student-civil-date",
+          sourceCount: attendanceCandidates.length,
+          countedDayCount: attendance.length,
+          duplicateReviewIds: attendanceDuplicateIds,
+          invalidRecordIds: resolvedAttendance.invalidRecords.map((record) => record.id),
+        },
+      } : {}),
       includeObservations: options.includeObservations,
       includePortfolio: options.includePortfolio,
       includeExternalFeedback: options.includeExternalFeedback,
@@ -1399,6 +1445,44 @@ export function buildStudentDossier(
       generatedAt: generatedAt.toISOString(),
     },
   };
+  dossierPdfSources.set(dossier, { archive: structuredClone(archive), options: { ...options }, generatedAt: new Date(generatedAt), privacyContext });
+  return dossier;
+}
+
+/** Printable file representation retains the destination's existing identity/contact policy. */
+export async function createStudentDossierPdfDocument(dossier: StudentDossier, runtime?: SemanticTaggedPdfRuntime) {
+  const file = await createTextPdfDocument(dossier, runtime);
+  const source = dossierPdfSources.get(dossier);
+  if (!source) return file;
+  const options = source.options;
+  const choices = [{ id: "summary", label: "Öğrenci ve dönem bilgileri" },
+    ...(options.includeContacts ? [{ id: "includeContacts", label: "Yetkili yakın bilgileri" }] : []),
+    ...(options.includeAttendance ? [{ id: "includeAttendance", label: "Yoklama özeti" }] : []),
+    ...(options.includeObservations ? [{ id: "includeObservations", label: "Gözlem kayıtları" }] : []),
+    ...(options.includePortfolio ? [{ id: "includePortfolio", label: "Portfolyo seçkileri" }] : []),
+    ...(options.includeExternalFeedback ? [{ id: "includeExternalFeedback", label: "Kaydedilmiş geri bildirimler" }] : [])];
+  const recipe: PdfPreviewRecipe = {
+    assertExportAllowed: source.assertExportAllowed,
+    title: dossier.title, fields: choices,
+    description: "Kimlik ve paylaşım amacı önceki seçiminizle korunur. Bu ekranda yalnız izin verdiğiniz alanlar ve dönem daraltılabilir.",
+    students: [{ id: source.archive.student.id, label: resolveStudentName(source.archive.student, options) }],
+    period: { min: options.periodStart, max: options.periodEnd },
+    initial: { fields: choices.map((choice) => choice.id), studentIds: [source.archive.student.id], periodStart: options.periodStart, periodEnd: options.periodEnd },
+    async build(selection) {
+      validatePdfSelection(recipe, selection);
+      const next = buildStudentDossier(source.archive, { ...options,
+        periodStart: selection.periodStart!, periodEnd: selection.periodEnd!,
+        includeContacts: options.includeContacts && selection.fields.includes("includeContacts"),
+        includeAttendance: options.includeAttendance && selection.fields.includes("includeAttendance"),
+        includeObservations: options.includeObservations && selection.fields.includes("includeObservations"),
+        includePortfolio: options.includePortfolio && selection.fields.includes("includePortfolio"),
+        includeExternalFeedback: options.includeExternalFeedback && selection.fields.includes("includeExternalFeedback"),
+      }, source.generatedAt, source.privacyContext);
+      return createTextPdfDocument(next, runtime);
+    },
+  };
+  registerPdfPreviewRecipe(file.bytes, recipe);
+  return file;
 }
 
 export async function createStudentDossier(
@@ -1431,6 +1515,10 @@ export async function createStudentDossier(
   }
   const academicYearId = student.academicYearId;
   const classroomId = student.classroomId;
+  if (input.options.includePortfolio) {
+    const consent = documentedSharingConsentSummary(preimage, { scope: { academicYearId, classroomId }, studentId: input.studentId, purpose: "portfolio-sharing", civilDate: civilDateInIstanbul(now) });
+    if (consent.state !== "no-document" && !consent.allowed) throw new Error(`Portfolyo dosyaya eklenemedi: ${consent.reason} Veli izinlerinden güncel belge kaydını kontrol edin veya portfolyo seçimini kaldırın.`);
+  }
   const privacyContext = isExternalAiDossierDestination(
     input.options.destination,
   )
@@ -1497,6 +1585,14 @@ export async function createStudentDossier(
       },
     ]);
   });
+  const pdfSource = dossierPdfSources.get(dossier);
+  if (pdfSource) pdfSource.assertExportAllowed = async selection => {
+    const current = await store.readSnapshot();
+    if (!current.students.some(s => s.id === input.studentId && typeof s.deletedAt !== "string")) throw new Error("Çocuk kaydı değişti. Belgeyi güncel kayıttan yeniden hazırlayın.");
+    if (!selection.fields.includes("includePortfolio")) return;
+    const consent = documentedSharingConsentSummary(current, { scope: { academicYearId, classroomId }, studentId: input.studentId, purpose: "portfolio-sharing", civilDate: civilDateInIstanbul(new Date()) });
+    if (consent.state !== "no-document" && !consent.allowed) throw new Error(`Portfolyo paylaşım izni değişti: ${consent.reason} Belgeyi güncel izinle yeniden hazırlayın.`);
+  };
   return { dossier, exportPackageId };
 }
 

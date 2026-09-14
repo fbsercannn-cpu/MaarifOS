@@ -2204,7 +2204,7 @@ export function PremiumPlanCenterScreen({
                 aria-labelledby="premium-monthly-document-export-title"
               >
                 <div>
-                  <span>MEB 2024 · Ek 18 s. 344-349</span>
+                  <span>MEB 2024 · Ek 18 s. 343-348</span>
                   <h3 id="premium-monthly-document-export-title">
                     Aylık plan kontrol çizelgesi ve öğretmen değerlendirme eki
                   </h3>

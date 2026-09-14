@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { teacherSupportStepsText } from "../../core/domain/teacher-followup.ts";
 import {
   ArchiveIcon,
   CalendarIcon,
@@ -87,11 +88,13 @@ export interface TeacherOwnedPlanScreenProps {
   scheduledPlans: readonly ScheduledPlanSummary[];
   initialLevel: Exclude<PlanWorkbenchLevelId, "daily">;
   initialMonthKey?: string | null;
+  initialPlanId?: string | null;
   contentPack?: PremiumContentPack | null;
   educationalWritesDisabled?: boolean;
   educationalWriteNotice?: string | null;
   documentContext?: TeacherOwnedPlanDocumentContext;
   onClose(): void;
+  onContinueToDaily?(civilDate?: string): void;
   onOpenProviderLibrary?(
     initialSection?: "overview" | "weekly" | "monthly",
     builtInPackReference?: BuiltInMaarifPlanPackReference,
@@ -145,7 +148,7 @@ function formatCivilDate(civilDate: string): string {
 function narrativeFromRecord(record: TeacherOwnedPlanRecord): string {
   const narrative = record.teacherContent.narrative;
   if (typeof narrative === "string") return narrative;
-  return Object.values(record.teacherContent)
+  return Object.entries(record.teacherContent).filter(([key]) => key !== "followupSupportSteps").map(([, value]) => value)
     .flatMap((value) =>
       Array.isArray(value)
         ? value.map((item) => String(item))
@@ -173,11 +176,13 @@ export function TeacherOwnedPlanScreen({
   scheduledPlans,
   initialLevel,
   initialMonthKey = null,
+  initialPlanId = null,
   contentPack = null,
   educationalWritesDisabled = false,
   educationalWriteNotice = null,
   documentContext = {},
   onClose,
+  onContinueToDaily,
   onOpenProviderLibrary,
   showProviderLibrary = false,
   onViewDailyPlan,
@@ -409,6 +414,22 @@ export function TeacherOwnedPlanScreen({
       );
     });
   }, [initialMonthKey, teacherGraph, workspace.civilDate]);
+
+  useEffect(() => {
+    if (!initialPlanId || !teacherGraph) return;
+    const parent = teacherGraph.months.find(month => month.weeks.some(week => week.id === initialPlanId));
+    if (parent) setExpandedMonthId(parent.monthly.id);
+  }, [initialPlanId, teacherGraph]);
+
+  useEffect(() => {
+    if (!initialPlanId || !expandedMonthId || busy) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`teacher-week-${initialPlanId}`);
+      target?.scrollIntoView({ block: "center" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialPlanId, expandedMonthId, busy]);
 
   useEffect(() => {
     if (!initialMonthKey || !teacherGraph) return undefined;
@@ -1430,9 +1451,10 @@ export function TeacherOwnedPlanScreen({
                   ) : null}
                   <div className="teacher-owned-plan-weeks">
                    {weeks.map((weekly) => (
-                     <div className="teacher-owned-plan-week-record" key={weekly.id}>
+                     <div className="teacher-owned-plan-week-record" key={weekly.id} id={`teacher-week-${weekly.id}`} tabIndex={-1}>
                       <span><CalendarIcon aria-hidden="true" /><strong>{weekly.title}</strong></span>
                       <small>{formatCivilDate(weekly.periodStart)} – {formatCivilDate(weekly.periodEnd)} · revizyon {weekly.revisionNumber}</small>
+                      {teacherSupportStepsText(weekly.teacherContent) ? <details open={initialPlanId === weekly.id ? true : undefined}><summary>Plana eklenen bireysel destek adımları</summary><p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{teacherSupportStepsText(weekly.teacherContent)}</p></details> : null}
                        <button
                          type="button"
                          aria-label={`${weekly.title} haftalık planını düzenle`}
@@ -1440,6 +1462,25 @@ export function TeacherOwnedPlanScreen({
                        >
                          <Pencil1Icon aria-hidden="true" /> Haftalık planı düzenle
                        </button>
+                       {onContinueToDaily ? (
+                         <button
+                           type="button"
+                           onClick={() => onContinueToDaily(
+                             workspace.civilDate >= weekly.periodStart &&
+                             workspace.civilDate <= weekly.periodEnd
+                               ? workspace.civilDate
+                               : weekly.periodStart,
+                           )}
+                           disabled={educationalWritesDisabled}
+                           aria-describedby={
+                             educationalWritesDisabled
+                               ? "teacher-owned-evaluation-write-notice"
+                               : undefined
+                           }
+                         >
+                           Bu haftadan günlük plan hazırla
+                         </button>
+                       ) : null}
                        <button
                          type="button"
                          className="teacher-owned-plan-review-button"
@@ -2296,6 +2337,7 @@ export function TeacherOwnedPlanScreen({
               onChange={(event) => setRevisionNarrative(event.target.value)}
               maxLength={4000}
             />
+            {teacherSupportStepsText(editingPlan.teacherContent) ? <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{teacherSupportStepsText(editingPlan.teacherContent)}</p> : null}
             <div className="teacher-owned-plan-revision-actions">
               <button type="button" onClick={() => setEditingPlan(null)} disabled={saveBusy}>Vazgeç</button>
               <button

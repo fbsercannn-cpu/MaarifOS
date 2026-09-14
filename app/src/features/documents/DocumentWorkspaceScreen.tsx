@@ -13,6 +13,10 @@ import {
   createDocumentWorkspacePresentation,
   type DocumentWorkspaceItemId,
 } from "./document-workspace-model.ts";
+import {
+  DOCUMENT_AUTHORIZED_CHANNEL_NOTICE,
+  DOCUMENT_USE_PHASES,
+} from "./document-use-policy.ts";
 import "./document-workspace.css";
 
 export interface DocumentWorkspaceScreenProps {
@@ -58,6 +62,23 @@ export function DocumentWorkspaceScreen({
           <em>{presentation.pendingCount} işlem · {presentation.emptyCount} başlangıç</em>
         </div>
       </header>
+
+      <section className="document-workspace-use-policy" aria-labelledby="document-workspace-use-policy-title">
+        <div className="document-workspace-heading">
+          <div>
+            <span>Sınıf içi kullanım sınırı</span>
+            <h2 id="document-workspace-use-policy-title">Hazırla, basılı kullan, sonra kaydet</h2>
+          </div>
+          <small>Telefon sınıf içinde zorunlu değil</small>
+        </div>
+        <ol>
+          {DOCUMENT_USE_PHASES.map((phase) => <li key={phase.id}>
+            <strong>{phase.label}</strong>
+            <p>{phase.detail}</p>
+          </li>)}
+        </ol>
+        <p className="document-workspace-channel-notice">{DOCUMENT_AUTHORIZED_CHANNEL_NOTICE}</p>
+      </section>
 
       <section className="document-workspace-readiness" aria-labelledby="document-workspace-readiness-title">
         <div className="document-workspace-heading">

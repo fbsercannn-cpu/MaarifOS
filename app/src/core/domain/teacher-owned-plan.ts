@@ -175,6 +175,9 @@ export interface CreateTeacherOwnedPlanGraphInput {
   periodEnd: string;
   teacherContent: TeacherPlanContent;
   months: readonly TeacherOwnedMonthlyPlanDraft[];
+  /** Seçim ile atomik yazma arasında etkin kapsam değişirse yanlış sınıfa yazmayı önler. */
+  expectedAcademicYearId?: string;
+  expectedClassroomId?: string;
   now?: Date;
 }
 

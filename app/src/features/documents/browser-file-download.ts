@@ -1,3 +1,5 @@
+import { requestPdfPreview } from "./pdf-preview-model.ts";
+
 export const BROWSER_FILE_DOWNLOAD_URL_LIFETIME_MS = 30_000;
 
 export interface BrowserFileDownloadAnchor {
@@ -37,8 +39,10 @@ function browserFileDownloadEnvironment(): BrowserFileDownloadEnvironment {
  */
 export function downloadBrowserFile(
   file: BrowserFileDownload,
-  environment: BrowserFileDownloadEnvironment = browserFileDownloadEnvironment(),
+  environment?: BrowserFileDownloadEnvironment,
 ): void {
+  if (!environment && requestPdfPreview(file)) return;
+  environment ??= browserFileDownloadEnvironment();
   const bytes = new Uint8Array(file.bytes.byteLength);
   bytes.set(file.bytes);
   const objectUrl = environment.createObjectUrl(

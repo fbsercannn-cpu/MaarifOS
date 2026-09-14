@@ -83,12 +83,6 @@ export function createActivityStudioObservationSeed(
     );
   }
 
-  if (observedLines.length === 0) {
-    observedLines.push(
-      "Bu etkinlik için düzenlenebilir gözlem taslağı açıldı. Öğretmen yalnız doğrudan gözlediği olayı yazıp doğrulamalıdır.",
-    );
-  }
-
   return {
     rawText: observedLines.join("\n\n"),
     context: contextLines.join("\n"),

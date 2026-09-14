@@ -27,6 +27,7 @@ import {
 } from "../evidence/evidence-flow.ts";
 import {
   STUDENT_ENROLLMENT_VERSION,
+  latestStudentEnrollment,
   studentEnrollments,
   type StudentEnrollment,
 } from "../archive/academic-year-archive.ts";
@@ -1049,11 +1050,7 @@ export async function transitionAcademicYearConfiguration(
       const carrySet = new Set(carryStudentIds);
       const changedStudents = currentStudents.map((student) => {
         const enrollments = studentEnrollments(student);
-        const currentEnrollment = enrollments.find(
-          (enrollment) =>
-            enrollment.academicYearId === currentScope.academicYearId &&
-            enrollment.classroomId === currentScope.classroomId,
-        );
+        const currentEnrollment = latestStudentEnrollment(enrollments, currentScope);
         const closedEnrollment: StudentEnrollment = {
           ...(currentEnrollment ?? {}),
           id: currentEnrollment?.id ?? crypto.randomUUID(),

@@ -2,6 +2,7 @@ import {
   downloadBrowserFile,
   type BrowserFileDownload,
 } from "../documents/browser-file-download.ts";
+import { requestPdfPreview } from "../documents/pdf-preview-model.ts";
 import type {
   SimpleObservationDocumentAudience,
   SimpleObservationDocumentFile,
@@ -78,11 +79,16 @@ function warningForAudience(
 export async function shareSimpleObservationDocumentWithDownloadFallback(
   file: Pick<
     SimpleObservationDocumentFile,
-    "audience" | "bytes" | "fileName" | "mimeType"
-  >,
-  environment: SimpleObservationShareEnvironment =
-    browserSimpleObservationShareEnvironment(),
+    "audience" | "bytes" | "fileName"
+  > & { mimeType: string },
+  environment?: SimpleObservationShareEnvironment,
 ): Promise<SimpleObservationShareResult> {
+  if (!environment) {
+    let complete: (action: SimpleObservationShareResult) => void = () => undefined;
+    const result = new Promise<SimpleObservationShareResult>((resolve) => { complete = resolve; });
+    if (requestPdfPreview(file, { warning: warningForAudience(file.audience), complete })) return result;
+  }
+  environment ??= browserSimpleObservationShareEnvironment();
   const bytes = copyBytes(file.bytes);
   const download = (): "downloaded" => {
     environment.download({

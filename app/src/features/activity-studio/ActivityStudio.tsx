@@ -11,14 +11,11 @@ import {
   CheckIcon,
   Cross2Icon,
   CubeIcon,
-  FileTextIcon,
   GlobeIcon,
   LapTimerIcon,
   MagicWandIcon,
   MagnifyingGlassIcon,
   Pencil1Icon,
-  PlayIcon,
-  PlusIcon,
   ScissorsIcon,
   SewingPinIcon,
 } from "@radix-ui/react-icons";
@@ -53,11 +50,13 @@ import type { ActivityStudioApplicationIdentity } from "./activity-studio-applic
 import {
   PARTICIPATION_ROUTES,
   PEDAGOGICAL_SCENARIOS,
-  createActivityContextAdaptation,
   type ParticipationRouteId,
   type PedagogicalScenarioId,
 } from "../pedagogical-os/pedagogical-orchestrator.ts";
-import { KeyboardInput } from "../../mobile";
+import { KeyboardInput, useKeyboard } from "../../mobile";
+import { ActivityTeacherGuide } from "./ActivityTeacherGuide.tsx";
+import { startActivityTeacherObservation } from "./activity-teacher-guide.ts";
+import { ACTIVITY_TEACHER_GUIDE_COPY } from "./activity-teacher-guide.copy.ts";
 import "./activity-studio.css";
 
 type ControllerResult = void | Promise<void>;
@@ -144,6 +143,7 @@ export function ActivityStudio({
   onChildModeChange,
   emptyStateAction,
 }: ActivityStudioProps) {
+  const keyboard = useKeyboard();
   const componentId = useId();
   const headingId = `${componentId}-heading`;
   const statusId = `${componentId}-status`;
@@ -154,9 +154,10 @@ export function ActivityStudio({
     useState<ActivityStudioCategoryFilter>("tumu");
   const [collection, setCollection] =
     useState<ActivityStudioCollectionFilter>(initialCollection);
-  const [query, setQuery] = useState(() =>
-    ACTIVITY_STUDIO_ITEMS.find((item) => item.id === initialActivityId)?.title ?? "",
-  );
+  const [query, setQuery] = useState("");
+  const [teacherActivityId, setTeacherActivityId] =
+    useState<string | null>(initialActivityId ?? null);
+  const [guideToolsOpen, setGuideToolsOpen] = useState(false);
   const [scenarioId, setScenarioId] =
     useState<PedagogicalScenarioId>(initialScenarioId);
   const [participationRouteId, setParticipationRouteId] =
@@ -177,6 +178,9 @@ export function ActivityStudio({
   const childModeReturnFocusRef = useRef<HTMLElement | null>(null);
   const childModeReturnActivityIdRef = useRef<string | null>(null);
   const childModeWasOpenRef = useRef(false);
+  const guideWasOpenRef = useRef(false);
+  const guideReturnActivityIdRef = useRef<string | null>(null);
+  const catalogueHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
     if (initialAgeBand) setAgeBand(initialAgeBand);
@@ -186,8 +190,15 @@ export function ActivityStudio({
     () => filterActivityStudioItems({ ageBand, category, collection, query }),
     [ageBand, category, collection, query],
   );
+  const teacherActivity = teacherActivityId
+    ? ACTIVITY_STUDIO_ITEMS.find((activity) =>
+        activity.id === teacherActivityId && activity.ageBands.includes(ageBand),
+      ) ?? null
+    : null;
   const childActivity = childActivityId
-    ? activities.find((activity) => activity.id === childActivityId) ?? null
+    ? ACTIVITY_STUDIO_ITEMS.find((activity) =>
+        activity.id === childActivityId && activity.ageBands.includes(ageBand),
+      ) ?? null
     : null;
   const childSession = childActivity
     ? createActivityStudioChildSession(childActivity.id, ageBand)
@@ -200,12 +211,28 @@ export function ActivityStudio({
   };
 
   const childModeOpen = Boolean(childActivity && childSession);
+  const guideOpen = Boolean(teacherActivity);
 
   const visibleActivities = activities.slice(0, visibleCount);
 
   useEffect(() => {
     setVisibleCount(6);
   }, [ageBand, category, collection, query, scenarioId, participationRouteId]);
+
+  useEffect(() => {
+    const wasOpen = guideWasOpenRef.current;
+    guideWasOpenRef.current = guideOpen;
+    if (!wasOpen || guideOpen) return;
+    const returnId = guideReturnActivityIdRef.current;
+    guideReturnActivityIdRef.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      const trigger = Array.from(document.querySelectorAll<HTMLElement>(
+        "[data-activity-guide-trigger]",
+      )).find((element) => element.dataset.activityGuideTrigger === returnId);
+      (trigger ?? catalogueHeadingRef.current)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [guideOpen]);
 
   useEffect(() => {
     onChildModeChange?.(childModeOpen);
@@ -244,19 +271,46 @@ export function ActivityStudio({
                 element.dataset.activityChildTrigger === returnActivityId,
             )
           : null;
-        const focusTarget = returnTarget?.isConnected
-          ? returnTarget
-          : remountedTarget;
+        // WebKit does not always focus a button when it is clicked, so the
+        // captured activeElement can still be <body>. Prefer the exact trigger.
+        const focusTarget = remountedTarget ??
+          (returnTarget?.isConnected ? returnTarget : null);
         focusTarget?.focus({ preventScroll: true });
       });
       return () => window.cancelAnimationFrame(frame);
     }
   }, [childModeOpen, observationReturnActivityId]);
 
+  const openTeacherGuide = (activity: ActivityStudioItem) => {
+    keyboard.hide();
+    setErrorMessage(null);
+    setGuideToolsOpen(false);
+    guideReturnActivityIdRef.current = activity.id;
+    setTeacherActivityId(activity.id);
+  };
+
+  const openTeacherObservation = async (activity: ActivityStudioItem) => {
+    keyboard.hide();
+    setBusyAction(`observation:${activity.id}`);
+    setErrorMessage(null);
+    try {
+      await startActivityTeacherObservation({
+        activity, context, onApply, onWriteObservation,
+        unavailableReason: childModeObservationUnavailableReason,
+      });
+      setObservationReturnActivityId(activity.id);
+    } catch (error) {
+      setErrorMessage(messageFromError(error));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const runCardAction = async (
     kind: "plan" | "apply" | "print",
     activity: ActivityStudioItem,
   ) => {
+    keyboard.hide();
     const actionKey = `${kind}:${activity.id}`;
     if (kind === "apply" && document.activeElement instanceof HTMLElement) {
       childModeReturnFocusRef.current = document.activeElement;
@@ -507,6 +561,39 @@ export function ActivityStudio({
     );
   }
 
+  if (teacherActivity) {
+    return (
+      <ActivityTeacherGuide
+        activity={teacherActivity}
+        context={context}
+        busyAction={busyAction}
+        errorMessage={errorMessage}
+        toolsOpen={guideToolsOpen}
+        onToolsToggle={setGuideToolsOpen}
+        observationUnavailableReason={
+          childModeObservationUnavailableReason ??
+          (!onWriteObservation ? ACTIVITY_TEACHER_GUIDE_COPY.observationUnavailable : undefined)
+        }
+        observationReturn={observationReturnActivityId === teacherActivity.id}
+        onBack={() => {
+          keyboard.hide();
+          setTeacherActivityId(null);
+          setErrorMessage(null);
+        }}
+        onPlan={() => void runCardAction("plan", teacherActivity)}
+        onPrint={() => void runCardAction("print", teacherActivity)}
+        onChildMode={() => void runCardAction("apply", teacherActivity)}
+        onObservation={() => void openTeacherObservation(teacherActivity)}
+        onObservationReturnFocus={() => {
+          if (observationReturnActivityId !== teacherActivity.id) return;
+          childModeReturnFocusRef.current = null;
+          childModeReturnActivityIdRef.current = null;
+          setObservationReturnActivityId(null);
+        }}
+      />
+    );
+  }
+
   return (
     <main className="activity-studio" aria-labelledby={headingId}>
       <header className="activity-studio__header">
@@ -515,7 +602,7 @@ export function ActivityStudio({
         </div>
         <div>
           <span className="activity-studio__kicker">Hazırla · uygula · yazdır</span>
-          <h1 id={headingId} data-route-heading tabIndex={-1}>
+          <h1 id={headingId} data-route-heading tabIndex={-1} ref={catalogueHeadingRef}>
             Etkinlik ve Materyal Stüdyosu
           </h1>
           <p>Bugün için kısa bir öneri seçin; ayrıntıları yalnız ihtiyaç duyduğunuzda açın.</p>
@@ -679,9 +766,10 @@ export function ActivityStudio({
       </section>
 
       <p id={statusId} className="activity-studio__result-count" role="status">
-        <strong>{activities.length}</strong> uygun etkinlik
         <span>
-          İlk {Math.min(visibleActivities.length, activities.length)} öneri gösteriliyor · {" "}
+          {activities.length === 0
+            ? "Bu seçimde öneri bulunamadı"
+            : `${Math.min(visibleActivities.length, activities.length)} öneri gösteriliyor`} · {" "}
           {ACTIVITY_STUDIO_AGE_LABELS[ageBand]}
           {collection !== "tumu"
             ? ` · ${ACTIVITY_STUDIO_COLLECTIONS.find((item) => item.id === collection)?.label}`
@@ -702,15 +790,8 @@ export function ActivityStudio({
         aria-describedby={statusId}
       >
         {visibleActivities.map((activity) => {
-          const ageNote = activity.ageAdaptations[ageBand];
           const categoryLabel =
             ACTIVITY_STUDIO_CATEGORY_LABELS[activity.category];
-          const adaptation = createActivityContextAdaptation({
-            activity,
-            ageBand,
-            scenarioId,
-            participationRouteId,
-          });
           return (
             <article
               className="activity-card"
@@ -738,76 +819,15 @@ export function ActivityStudio({
                 <span>{activity.tymmDomains.slice(0, 2).join(" · ")}</span>
               </div>
 
-              <details className="activity-card__compact-details">
-                <summary>Ayrıntıları ve öğretmen rehberini aç</summary>
-                <p className="activity-card__age-note">
-                  <strong>{ACTIVITY_STUDIO_AGE_LABELS[ageBand]}:</strong> {ageNote}
-                </p>
-                <dl className="activity-card__details">
-                  <div><dt>Ortam</dt><dd>{activity.environment}</dd></div>
-                  <div><dt>TYMM alanı</dt><dd>{activity.tymmDomains.join(", ")}</dd></div>
-                  <div><dt>Malzeme</dt><dd>{activity.materials.join(", ")}</dd></div>
-                  <div><dt>Hazırlık</dt><dd>{activity.preparationMinutes} dk</dd></div>
-                </dl>
-                <div className="activity-card__guide-body">
-                  <ol>{activity.teacherSteps.map((step) => <li key={step}>{step}</li>)}</ol>
-                  <dl>
-                    <div><dt>Katılım uyarlaması</dt><dd>{activity.inclusionNote}</dd></div>
-                    <div><dt>Gözlem odağı</dt><dd>{activity.observationPrompt}</dd></div>
-                    <div><dt>Aileye uzatma</dt><dd>{activity.familyExtension}</dd></div>
-                  </dl>
-                </div>
-                <dl className="activity-card__adaptation-details">
-                  <div><dt>Canlı uyarlama</dt><dd>{adaptation.scenario.label} · {adaptation.participationRoute.label}</dd></div>
-                  <div><dt>Ortamı kur</dt><dd>{adaptation.setup}</dd></div>
-                  <div><dt>Malzemeyi değiştir</dt><dd>{adaptation.materialSwap}</dd></div>
-                  <div><dt>Kolaylaştır</dt><dd>{adaptation.facilitation}</dd></div>
-                  <div><dt>Kanıtı yakala</dt><dd>{adaptation.evidencePrompt}</dd></div>
-                  <div><dt>Aile köprüsü</dt><dd>{adaptation.familyBridge}</dd></div>
-                  <div><dt>Güvenlik</dt><dd>{adaptation.safetyCheck}</dd></div>
-                </dl>
-              </details>
-
               <div className="activity-card__actions">
                 <button
                   type="button"
                   className="activity-card__primary-action"
-                  disabled={busyAction !== null}
-                  onClick={() => void runCardAction("plan", activity)}
-                  aria-label={`${activity.title} etkinliğini planıma ekle`}
+                  data-activity-guide-trigger={activity.id}
+                  onClick={() => openTeacherGuide(activity)}
+                  aria-label={ACTIVITY_TEACHER_GUIDE_COPY.openGuideLabel(activity.title)}
                 >
-                  <PlusIcon aria-hidden="true" />
-                  {busyAction === `plan:${activity.id}`
-                    ? "Ekleniyor"
-                    : "Planıma ekle"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busyAction !== null}
-                  data-activity-child-trigger={activity.id}
-                  data-activity-observation-return={
-                    observationReturnActivityId === activity.id ? "true" : undefined
-                  }
-                  onFocus={() => {
-                    if (observationReturnActivityId !== activity.id) return;
-                    childModeReturnFocusRef.current = null;
-                    childModeReturnActivityIdRef.current = null;
-                    setObservationReturnActivityId(null);
-                  }}
-                  onClick={() => void runCardAction("apply", activity)}
-                  aria-label={`${activity.title} etkinliğini Çocuk Modunda uygula`}
-                >
-                  <PlayIcon aria-hidden="true" />
-                  {busyAction === `apply:${activity.id}` ? "Açılıyor" : "Uygula"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busyAction !== null}
-                  onClick={() => void runCardAction("print", activity)}
-                  aria-label={`${activity.title} materyalini yazdır`}
-                >
-                  <FileTextIcon aria-hidden="true" />
-                  {busyAction === `print:${activity.id}` ? "Hazırlanıyor" : "Yazdır"}
+                  {ACTIVITY_TEACHER_GUIDE_COPY.openGuide}
                 </button>
               </div>
             </article>
