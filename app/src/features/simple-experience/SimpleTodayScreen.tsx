@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useMemo, type ReactNode } from "react";
 import { BirthdayNotice } from "../today/BirthdayNotice.tsx";
 import {
   CalendarIcon,
@@ -200,15 +200,17 @@ export function SimpleTodayScreen({
   });
   const dailyPlanReady = model.teacherCycle.daily.planId !== null;
   const suggestedAgeBand = resolveActivityAgeBand(classroom?.ageGroup);
-  const dailySuggestions = suggestedAgeBand
-    ? selectDailyActivitySuggestions(
-        filterActivityStudioItems({
-          ageBand: suggestedAgeBand,
-          collection: "hemen",
-        }),
-        model.workspace.civilDate,
-      )
-    : [];
+  const dailySuggestions = useMemo(() => {
+    return suggestedAgeBand
+      ? selectDailyActivitySuggestions(
+          filterActivityStudioItems({
+            ageBand: suggestedAgeBand,
+            collection: "hemen",
+          }),
+          model.workspace.civilDate,
+        )
+      : [];
+  }, [suggestedAgeBand, model.workspace.civilDate]);
   const teachingFocus = createTodayTeachingFocus({
     enabled: classroom?.operationalStatus === "active" && !model.educationalWritesDisabled && model.students.length > 0,
     pendingObservationCount: model.pendingObservationCount,
@@ -231,13 +233,23 @@ export function SimpleTodayScreen({
     teachingFocus,
   });
   const monthLens = resolveActivityYearMonthLens(model.workspace.civilDate);
-  const observationCoverage = createObservationCoverage(model.students);
-  const pedagogicalSignals = createPedagogicalSignals({
-    attendance: model.attendance,
-    teacherCycle: model.teacherCycle,
-    observationCoverage,
-  });
-  const pedagogicalLoop = createPedagogicalLoop(model.teacherCycle);
+  const observationCoverage = useMemo(
+    () => createObservationCoverage(model.students),
+    [model.students],
+  );
+  const pedagogicalSignals = useMemo(
+    () =>
+      createPedagogicalSignals({
+        attendance: model.attendance,
+        teacherCycle: model.teacherCycle,
+        observationCoverage,
+      }),
+    [model.attendance, model.teacherCycle, observationCoverage],
+  );
+  const pedagogicalLoop = useMemo(
+    () => createPedagogicalLoop(model.teacherCycle),
+    [model.teacherCycle],
+  );
   const currentPedagogicalStageIndex = pedagogicalLoop.findIndex(
     (stage) => stage.state === "current",
   );
@@ -250,13 +262,15 @@ export function SimpleTodayScreen({
   const completedPedagogicalStageCount = pedagogicalLoop.filter(
     (stage) => stage.state === "done",
   ).length;
-  const pedagogicalDay = suggestedAgeBand
-    ? createPedagogicalDayFlow({
-        ageBand: suggestedAgeBand,
-        civilDate: model.workspace.civilDate,
-        scenarioId,
-      })
-    : null;
+  const pedagogicalDay = useMemo(() => {
+    return suggestedAgeBand
+      ? createPedagogicalDayFlow({
+          ageBand: suggestedAgeBand,
+          civilDate: model.workspace.civilDate,
+          scenarioId,
+        })
+      : null;
+  }, [suggestedAgeBand, model.workspace.civilDate, scenarioId]);
 
   const openOrchestraPhase = (phase: PedagogicalDayPhase) => {
     if (phase.activity) {

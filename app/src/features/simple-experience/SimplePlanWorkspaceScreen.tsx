@@ -52,6 +52,10 @@ import { AddActivityToPlanModal } from "../planning/AddActivityToPlanModal.tsx";
 import { DailyPlanDrawer } from "../planning/DailyPlanDrawer.tsx";
 import { DailyPlanMaterialsGallery } from "../planning/DailyPlanMaterialsGallery.tsx";
 import { exportDailyPlanDocument } from "../planning/daily-plan-export-service.ts";
+import {
+  OfficialFormsWorkspace,
+  type OfficialFormType,
+} from "../official-forms/OfficialFormsWorkspace.tsx";
 import "./simple-workspaces.css";
 
 export type ActivityStudioOpenOptions = {
@@ -476,6 +480,8 @@ export function SimplePlanWorkspaceScreen({
   const [dailyEvaluationOpen, setDailyEvaluationOpen] = useState(false);
   const [addActivityOpen, setAddActivityOpen] = useState(false);
   const [dailyDrawerOpen, setDailyDrawerOpen] = useState(false);
+  const [officialFormsWorkspaceOpen, setOfficialFormsWorkspaceOpen] = useState(false);
+  const [initialOfficialForm, setInitialOfficialForm] = useState<OfficialFormType>("daily");
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<"word" | "pdf" | null>(null);
   const [dailyPlanRecord, setDailyPlanRecord] = useState<StoredRecord | null>(null);
@@ -574,6 +580,99 @@ export function SimplePlanWorkspaceScreen({
         </button>
       </section>
       ) : null}
+
+      <section className="simple-workspace__section" aria-labelledby="official-forms-heading">
+        <div className="simple-workspace__heading">
+          <div>
+            <small>T.C. MEB TTKB RESMÎ MATBU FORMLAR</small>
+            <h2 id="official-forms-heading">Resmî Plan ve A4 Çıktı Merkezi</h2>
+          </div>
+          <span className="simple-state is-ready" style={{ background: "#ea580c", color: "#fff" }}>
+            2026 TTKB Uyumlu
+          </span>
+        </div>
+        <div className="simple-action-list">
+          <button
+            type="button"
+            onClick={() => {
+              setInitialOfficialForm("daily");
+              setOfficialFormsWorkspaceOpen(true);
+            }}
+            style={{ borderLeft: "4px solid #ea580c" }}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fff7ed", color: "#ea580c" }}>
+              <ReaderIcon />
+            </span>
+            <span>
+              <small>EK-6 · TTKB SAYFA 183–184</small>
+              <strong>Günlük Plan Şablonu (A4 Yazdır / Word İndir)</strong>
+              <em>Öğrenme alanları, süreç bileşenleri, eğilimler, rutinler ve değerlendirme.</em>
+            </span>
+            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setInitialOfficialForm("monthly");
+              setOfficialFormsWorkspaceOpen(true);
+            }}
+            style={{ borderLeft: "4px solid #0284c7" }}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0f9ff", color: "#0284c7" }}>
+              <CalendarIcon />
+            </span>
+            <span>
+              <small>EK-5 · TTKB SAYFA 182</small>
+              <strong>Aylık Eğitim Planı Şablonu (A4 Yazdır / Word İndir)</strong>
+              <em>Çocuk, program ve öğretmen değerlendirme alternatifleri ile tam uyumlu.</em>
+            </span>
+            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setInitialOfficialForm("anecdote");
+              setOfficialFormsWorkspaceOpen(true);
+            }}
+            style={{ borderLeft: "4px solid #16a34a" }}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdf4", color: "#16a34a" }}>
+              <FileTextIcon />
+            </span>
+            <span>
+              <small>EK-2 · TTKB SAYFA 178</small>
+              <strong>Anekdot Kayıt Formu (A4 Yazdır / Word İndir)</strong>
+              <em>Gözlenen mekân, durum, beceriler ve gözlemcinin genel değerlendirmesi.</em>
+            </span>
+            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setInitialOfficialForm("outside");
+              setOfficialFormsWorkspaceOpen(true);
+            }}
+            style={{ borderLeft: "4px solid #9333ea" }}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#faf5ff", color: "#9333ea" }}>
+              <TargetIcon />
+            </span>
+            <span>
+              <small>EK-4 · TTKB SAYFA 180–181</small>
+              <strong>Okul Dışı Öğrenme Etkinlik Planı (A4 Yazdır / Word İndir)</strong>
+              <em>Güzergâh, araç ve personel bilgileri, etkinlik öncesi/sırası/sonrası ve 8 değerlendirme sorusu.</em>
+            </span>
+            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+        </div>
+      </section>
 
       <section className="simple-workspace__section" aria-labelledby="simple-plan-types">
         <div className="simple-workspace__heading">
@@ -1008,6 +1107,12 @@ export function SimplePlanWorkspaceScreen({
         civilDate={civilDate}
         disabled={educationalWritesDisabled || dataBusy}
       />
+      {officialFormsWorkspaceOpen && (
+        <OfficialFormsWorkspace
+          initialForm={initialOfficialForm}
+          onClose={() => setOfficialFormsWorkspaceOpen(false)}
+        />
+      )}
     </main>
   );
 }

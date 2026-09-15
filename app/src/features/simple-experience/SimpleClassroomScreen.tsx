@@ -9,6 +9,7 @@ import {
   Pencil1Icon,
   PlusIcon,
   ReaderIcon,
+  TrashIcon,
 } from "@radix-ui/react-icons";
 
 import { KeyboardInput } from "../../mobile";
@@ -204,6 +205,38 @@ export function SimpleClassroomScreen({
                     >
                       <Pencil1Icon aria-hidden="true" />
                       Gelişim
+                    </button>
+                    <button
+                      type="button"
+                      className="simple-student-list__delete-direct"
+                      onClick={() => {
+                        const confirmed = window.confirm(
+                          `"${classroomStudentDisplayName(student)}" adlı öğrenciyi silmek istediğinize emin misiniz?`
+                        );
+                        if (confirmed) {
+                          void onDeleteStudent(student);
+                        }
+                      }}
+                      disabled={isBusy || rosterWritesDisabled}
+                      aria-label={`${classroomStudentDisplayName(student)} öğrencisini sil`}
+                      title="Öğrenciyi sil"
+                      style={{
+                        padding: "6px 10px",
+                        background: "#fff1f2",
+                        border: "1px solid #fecdd3",
+                        color: "#e11d48",
+                        borderRadius: "8px",
+                        fontSize: "0.78rem",
+                        fontWeight: 600,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        cursor: "pointer",
+                        marginLeft: "6px"
+                      }}
+                    >
+                      <TrashIcon aria-hidden="true" />
+                      Sil
                     </button>
                   </div>
                 </li>
