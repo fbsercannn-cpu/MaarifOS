@@ -59,6 +59,9 @@ import {
   type TeacherHomePreferencesModel,
   type TeacherHomeShortcutId,
 } from "./teacher-home-preferences.ts";
+import { QuickStatsBar, type QuickStat } from "./QuickStatsBar.tsx";
+import { OfflineStatusBadge } from "./OfflineStatusBadge.tsx";
+import { WeeklyFocusCard } from "./WeeklyFocusCard.tsx";
 import "./simple-experience.css";
 import "./today-teaching.css";
 
@@ -397,6 +400,30 @@ export function SimpleTodayScreen({
     )
     .slice(0, 3);
 
+  const quickStats: QuickStat[] = [
+    {
+      label: "Sınıfta",
+      value: `${control.attendance.inClass}/${control.attendance.expected}`,
+      detail: `Bugün ${control.attendance.inClass} mevcut, ${control.attendance.expected} beklenen çocuk (Kayıtlı: ${model.students.length}).`,
+      onClick: actions.onOpenAttendance,
+      tone: model.attendance.marked ? "ok" : "warn",
+    },
+    {
+      label: "Haftalık Plan",
+      value: `${model.teacherWeek.plannedDayCount}/${model.teacherWeek.expectedDayCount} gün`,
+      detail: `${model.teacherWeek.plannedDayCount} gün planlandı.`,
+      onClick: () => void actions.onOpenCalendar(),
+      tone: model.teacherWeek.plannedDayCount >= model.teacherWeek.expectedDayCount ? "ok" : "warn",
+    },
+    {
+      label: "Gözlem Kapsamı",
+      value: `%${observationCoverage.coveragePercent}`,
+      detail: `Sınıfın %${observationCoverage.coveragePercent} kadarı gözlemlendi.`,
+      onClick: actions.onOpenQuickObservation,
+      tone: observationCoverage.coveragePercent >= 70 ? "ok" : "warn",
+    },
+  ];
+
   return (
     <main
       className="simple-today today-teaching"
@@ -435,6 +462,20 @@ export function SimpleTodayScreen({
           ? `Kayıtlı ${model.students.length} · Bugünün yoklama kapsamı ${model.attendance.total} · ${ageBandLabel(classroom.ageGroup)} · ${compactTodayProgramLabel(classroom.curriculumProgram)}`
           : "Bilgileri bir kez girin; her belgede hazır olsun"}</span>
       </section>
+
+      <QuickStatsBar stats={quickStats} />
+
+      {!homePreferences.lessonMode ? (
+        <WeeklyFocusCard
+          focus={{
+            weekLabel: `${model.teacherWeek.plannedDayCount}/${model.teacherWeek.expectedDayCount} Günlük Öğretmen Akışı`,
+            theme: compactTodayProgramLabel(classroom?.curriculumProgram),
+            keyActivities: dailySuggestions.slice(0, 3).map((a) => a.title),
+            reminder: pedagogicalSignals[0]?.detail,
+          }}
+          mondayCivilDate={model.workspace.civilDate}
+        />
+      ) : null}
 
       <BirthdayNotice students={model.students} civilDate={model.workspace.civilDate} onOpenStudent={actions.onOpenStudentProfile} />
 
@@ -892,6 +933,7 @@ export function SimpleTodayScreen({
         </div>
       ) : null}
 
+      <OfflineStatusBadge />
     </main>
   );
 }

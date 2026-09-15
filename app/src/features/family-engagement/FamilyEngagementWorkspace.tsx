@@ -17,8 +17,9 @@ import {
 import { calendarReasonLabels, channelLabels, familyDateLabel, formatLabels, preferenceStateLabels, weekdayLabels } from "./family-engagement-copy.ts";
 import "./family-engagement.css";
 import { FamilyMeetingFormPanel } from "./FamilyMeetingFormPanel.tsx";
+import { FamilyNotificationTemplates } from "./FamilyNotificationTemplates.tsx";
 
-export interface FamilyEngagementWorkspaceProps { store: LocalDataStore; initialSection: "appointments" | "communication"; initialStudentId?: string; refreshKey?: unknown; disabled?: boolean; onChanged?(): void }
+export interface FamilyEngagementWorkspaceProps { store: LocalDataStore; initialSection: "appointments" | "communication" | "templates"; initialStudentId?: string; refreshKey?: unknown; disabled?: boolean; onChanged?(): void }
 type Save = (command: FamilyEngagementCommand) => Promise<FamilyEngagementRecord | null>;
 type SaveOfficial = (command: {
   appointmentId: string;
@@ -82,10 +83,10 @@ export function FamilyEngagementWorkspace(props: FamilyEngagementWorkspaceProps)
   const records = familyEngagementRecords(snapshot), students = snapshot.students.filter(s => familyScopeMatches(scope, s) && typeof s.deletedAt !== "string" && s.active !== false);
   const panel: PanelProps = { snapshot, scope, records, students, today: civilDateInIstanbul(new Date()), save, saveOfficial, initialStudentId: props.initialStudentId, openMeetingForm: id => { keyboard.hide(); setFormAppointmentId(id); } };
   return <div className="family-engagement" data-testid="family-engagement-workspace"><p className="family-context">{String(snapshot.classrooms.find(c => c.id === scope.classroomId)?.name ?? "Sınıf")} · {String(snapshot.academicYears.find(y => y.id === scope.academicYearId)?.name ?? "Eğitim yılı")} · İstanbul saati</p>
-    <div className="family-tabs" role="group" aria-label="Aile katılımı alanı"><button type="button" aria-pressed={section === "appointments"} onClick={() => { keyboard.hide(); setSection("appointments"); }}>Görüşme hazırlığı</button><button type="button" aria-pressed={section === "communication"} onClick={() => { keyboard.hide(); setSection("communication"); }}>İletişim tercihleri</button></div>
+    <div className="family-tabs" role="group" aria-label="Aile katılımı alanı"><button type="button" aria-pressed={section === "appointments"} onClick={() => { keyboard.hide(); setSection("appointments"); }}>Görüşme hazırlığı</button><button type="button" aria-pressed={section === "communication"} onClick={() => { keyboard.hide(); setSection("communication"); }}>İletişim tercihleri</button><button type="button" aria-pressed={section === "templates"} onClick={() => { keyboard.hide(); setSection("templates"); }}>Bildirim Şablonları (WhatsApp)</button></div>
     {error && <p role="alert" className="family-error">{error}</p>}{message && <p role="status" className="family-success">{message}</p>}
     <button type="button" onClick={() => setRevision(v => v + 1)} disabled={busy}>Son kayıtları yenile</button>
-    <fieldset disabled={busy || props.disabled} className="family-fieldset"><div hidden={section !== "appointments"}><Appointments {...panel} pdf={pdf} /></div><div hidden={section !== "communication"}><Communication {...panel} /></div></fieldset>
+    <fieldset disabled={busy || props.disabled} className="family-fieldset"><div hidden={section !== "appointments"}><Appointments {...panel} pdf={pdf} /></div><div hidden={section !== "communication"}><Communication {...panel} /></div><div hidden={section !== "templates"}><FamilyNotificationTemplates teacherName={String(snapshot.classrooms.find(c => c.id === scope.classroomId)?.teacherName ?? "Öğretmen")} classroomName={String(snapshot.classrooms.find(c => c.id === scope.classroomId)?.name ?? "Sınıf")} schoolName={String(snapshot.classrooms.find(c => c.id === scope.classroomId)?.schoolName ?? "Okul Öncesi")} disabled={props.disabled} /></div></fieldset>
     {formAppointmentId && <FamilyMeetingFormPanel store={props.store} appointmentId={formAppointmentId} refreshKey={revision} disabled={props.disabled} onClose={() => setFormAppointmentId(null)} onChanged={() => { setRevision(v => v + 1); props.onChanged?.(); }} />}
     {busy && <p role="status">Kaydediliyor…</p>}
   </div>;

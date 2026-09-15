@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.44.0",
+  "version": "0.45.0",
   "type": "module",
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",

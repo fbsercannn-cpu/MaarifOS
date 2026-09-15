@@ -1,0 +1,186 @@
+/* month-calendar.css — 0.46.0 */
+
+/* ───── MonthCalendarView ───── */
+.month-calendar {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(26,42,76,.1);
+}
+
+.month-calendar__header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--maarif-navy, #1a2a4a);
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.month-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+
+.month-calendar__weekdays > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--maarif-muted, #8a9bb5);
+  padding: 4px 0;
+}
+
+.month-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.month-calendar__cell--empty {
+  min-height: 52px;
+}
+
+.month-calendar__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 52px;
+  padding: 6px 2px 4px;
+  background: #f7f9fc;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms;
+  font: inherit;
+  color: var(--maarif-navy, #1a2a4a);
+}
+
+.month-calendar__cell:hover:not(:disabled) {
+  background: #e8f5e9;
+  border-color: #00897b;
+}
+
+.month-calendar__cell[data-today="true"] {
+  background: var(--maarif-teal, #00897b);
+  color: #fff;
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.month-calendar__cell[data-holiday="true"] {
+  background: #fce4ec;
+  color: #c62828;
+}
+
+.month-calendar__cell[data-weekend="true"]:not([data-today="true"]) {
+  color: var(--maarif-muted, #8a9bb5);
+}
+
+.month-calendar__day-num {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.month-calendar__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 3px;
+  justify-content: center;
+}
+
+.mcb {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.mcb--plan { background: #1a2a4a; }
+.mcb--obs  { background: #00897b; }
+.mcb--fruit { background: #ff8f00; }
+.mcb--star  { background: #f9a825; }
+.mcb--holiday { background: #c62828; }
+
+/* ───── FruitDutyScheduler ───── */
+.fruit-duty-scheduler { padding: 16px; }
+.fruit-duty-scheduler__header { margin-bottom: 16px; }
+.fruit-duty-scheduler__header h2 { font-size: 17px; color: var(--maarif-navy); margin: 0 0 4px; }
+.fruit-duty-scheduler__actions { display: flex; gap: 8px; margin-top: 10px; }
+.fruit-duty-scheduler__actions button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #dde4ef;
+  background: #f7f9fc;
+  font: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.fruit-duty-scheduler__save {
+  background: var(--maarif-teal, #00897b) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+.fruit-duty-scheduler__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.fruit-duty-scheduler__slot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f7f9fc;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+  break-inside: avoid;
+}
+.fruit-duty-scheduler__slot[data-locked="true"] { border-color: #ff8f00; background: #fff8e1; }
+.fds__date { display: grid; gap: 2px; min-width: 80px; }
+.fds__date strong { font-size: 13px; text-transform: capitalize; }
+.fds__date small { font-size: 10px; color: var(--maarif-muted); }
+.fds__students { flex: 1; font-size: 13px; }
+.fds__lock {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #dde4ef;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.fds__lock[aria-pressed="true"] { background: #ff8f00; color: #fff; border-color: transparent; }
+
+/* ───── StarOfWeekScheduler ───── */
+.star-of-week-scheduler { padding: 16px; }
+.star-of-week-scheduler__header { margin-bottom: 14px; }
+.star-of-week-scheduler__header h2 { font-size: 17px; margin: 0 0 4px; }
+.star-of-week-scheduler__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.sows__slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f7f9fc;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+  break-inside: avoid;
+}
+.sows__slot[data-completed="true"] { background: #e8f5e9; border-color: #00897b; }
+.sows__week { display: grid; gap: 2px; min-width: 100px; }
+.sows__conflict-warn { font-size: 11px; color: #e65100; background: #fff3e0; padding: 2px 6px; border-radius: 4px; }
+
+/* ───── BulkDateShifter ───── */
+.bulk-date-shifter { padding: 16px; }
+.bds__select-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.bds__select-actions button { padding: 7px 12px; border-radius: 8px; border: 1px solid #dde4ef; font: inherit; font-size: 13px; cursor: pointer; }
+.bds__item-list { list-style: none; padding: 0; display: grid; gap: 5px; }
+.bds__item-list li { padding: 8px 10px; background: #f7f9fc; border-radius: 7px; display: flex; align-items: center; gap: 8px; }
+.bds__item-list li[data-selected="true"] { background: #e8f5e9; border: 1px solid #00897b; }
+.bds__target { margin-top: 14px; }
+.bds__target select { margin-top: 4px; padding: 8px; border: 1px solid #dde4ef; border-radius: 8px; font: inherit; width: 100%; }
+.bds__preview { margin-top: 14px; background: #fff8e1; padding: 12px; border-radius: 8px; }
+.bds__preview ul { padding-left: 18px; margin: 8px 0; }
+.bds__confirm-btn { margin-top: 10px; padding: 9px 16px; background: #ff8f00; color: #fff; border: 0; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.bds__execute { margin-top: 14px; background: #fce4ec; padding: 14px; border-radius: 8px; }
+.bds__shift-btn { margin-left: 8px; padding: 9px 16px; background: #c62828; color: #fff; border: 0; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; }
+.bds__success { color: #00695c; font-weight: 600; margin-top: 12px; }

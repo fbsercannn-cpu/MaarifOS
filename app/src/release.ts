@@ -1,4 +1,4 @@
-export interface ReleaseMetadata {
+﻿export interface ReleaseMetadata {
   readonly version: string;
   readonly releasedOn: string;
   readonly title: string;
@@ -25,11 +25,6 @@ export interface ReleaseLaunchState {
 }
 
 export interface InspectCurrentReleaseOptions {
-  /**
-   * Testler veya gömülü çalışma ortamları için storage bağımlılığı.
-   * `undefined` tarayıcı localStorage alanını güvenli biçimde çözmeye çalışır;
-   * `null` ise depolamanın bilerek kullanılamadığını belirtir.
-   */
   readonly storage?: ReleaseStorage | null;
 }
 
@@ -63,7 +58,7 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.44.0",
+  version: "0.45.0",
   releasedOn: "2026-09-12",
   title: "Öğretmenin günü, çizelgeler ve idare dosyası",
   notes: Object.freeze([

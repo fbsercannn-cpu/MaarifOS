@@ -17,3 +17,24 @@ SHA-256 özeti:
 Telif bildirimi ve tam lisans metni aynı klasördeki `Roboto-OFL-1.1.txt`
 dosyasındadır. PDF motoru kapsam dışı bir Unicode karakteri sessizce bozmaz;
 belge üretimini açık bir hata ile durdurur.
+
+## Sınıf listesi 6.0 gerçek kalın fontu
+
+`MaarifOSSans-Bold.ttf`, aynı kilitli `@fontsource/roboto@5.2.10` paketinin
+700 ağırlıklı normal Latin ve Latin Extended kaynaklarından fontTools 4.62.1
+`TTFont` açılımı ve `Merger` ile üretildi. Çift çizim veya çizgi kalınlaştırmayla
+taklit kalınlık kullanılmaz; TTF OS/2 `usWeightClass` değeri 700'dür.
+
+- `roboto-latin-700-normal.woff2` SHA-256:
+  `b9d66d1708156f765ada51939bc24ed259dafa69eb631b36e443680fe9e15879`
+- `roboto-latin-ext-700-normal.woff2` SHA-256:
+  `7673803a2d402018b1f726dded5bf2dbf2be4307039e8718f4bea654d6eca249`
+- Dağıtılan `MaarifOSSans-Bold.ttf` SHA-256:
+  `dd4aa64a09bfcb5723dadae87b2376547558a7578134deae545c772f559cef3d`
+
+Aynı `Roboto-OFL-1.1.txt` telif/lisans bildirimi bu dosya için de geçerlidir.
+Font yalnız kalın başlık isteyen açık belge teması kullanıldığında yüklenir.
+PDF içinde ayrı FontFile2, CIDFontType2, Unicode eşlemesi ve gerçek font ölçüleri
+bulunur. Kaynak mevcut değilse, bozuksa veya kalınlık ağırlığı doğrulanmazsa
+üretim Türkçe hata verir; sessiz regular fonta dönüşmez. Temasız eski belge yolu
+bu fontu yüklemez ve önceki PDF baytlarını korur.
