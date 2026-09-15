@@ -5747,7 +5747,10 @@ export default function Prototype() {
     }
   };
 
-  const updateStudentStatus = (studentId: string) => {
+  const updateStudentStatus = (
+    studentId: string,
+    directStatus?: AttendanceStatus,
+  ) => {
     if (educationalWriteNotice) {
       setAnnouncement(educationalWriteNotice);
       return;
@@ -5766,9 +5769,11 @@ export default function Prototype() {
     if (!student) return;
     const mutationSequence = attendanceMutationSequenceRef.current + 1;
     attendanceMutationSequenceRef.current = mutationSequence;
-    const status = student.attendanceMarked === false
-      ? "present"
-      : nextStatus(student.status);
+    const status = directStatus
+      ? directStatus
+      : student.attendanceMarked === false
+        ? "present"
+        : nextStatus(student.status);
     const previousAttendanceCompleted = attendanceCompleted;
     const previousLastAttendanceChange = lastAttendanceChange;
     setStudents((current) =>

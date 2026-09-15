@@ -3,9 +3,17 @@ import { OfficialAnecdoteForm } from "./OfficialAnecdoteForm.tsx";
 import { OfficialSchoolOutsidePlan } from "./OfficialSchoolOutsidePlan.tsx";
 import { OfficialDailyPlanForm } from "./OfficialDailyPlanForm.tsx";
 import { OfficialMonthlyPlanForm } from "./OfficialMonthlyPlanForm.tsx";
+import { OfficialFamilyNeedForm } from "./OfficialFamilyNeedForm.tsx";
+import { OfficialFamilyParticipationForm } from "./OfficialFamilyParticipationForm.tsx";
 import "./official-forms.css";
 
-export type OfficialFormType = "anecdote" | "outside" | "daily" | "monthly";
+export type OfficialFormType =
+  | "daily"
+  | "monthly"
+  | "anecdote"
+  | "outside"
+  | "family_need"
+  | "family_participation";
 
 interface Props {
   initialForm?: OfficialFormType;
@@ -92,6 +100,24 @@ export function OfficialFormsWorkspace({ initialForm = "daily", onClose }: Props
           >
             🌳 EK-4 Okul Dışı Öğrenme <span className="tab-page-tag">s.180-181</span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeForm === "family_need"}
+            className={`official-tab-btn ${activeForm === "family_need" ? "is-active" : ""}`}
+            onClick={() => setActiveForm("family_need")}
+          >
+            👨‍👩‍👧 EK-9 Aile İhtiyaç <span className="tab-page-tag">s.188-189</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeForm === "family_participation"}
+            className={`official-tab-btn ${activeForm === "family_participation" ? "is-active" : ""}`}
+            onClick={() => setActiveForm("family_participation")}
+          >
+            🤝 EK-10 Aile Katılım <span className="tab-page-tag">s.190-192</span>
+          </button>
         </div>
       </div>
 
@@ -101,6 +127,8 @@ export function OfficialFormsWorkspace({ initialForm = "daily", onClose }: Props
         {activeForm === "monthly" && <OfficialMonthlyPlanForm onClose={onClose} />}
         {activeForm === "anecdote" && <OfficialAnecdoteForm onClose={onClose} />}
         {activeForm === "outside" && <OfficialSchoolOutsidePlan onClose={onClose} />}
+        {activeForm === "family_need" && <OfficialFamilyNeedForm onClose={onClose} />}
+        {activeForm === "family_participation" && <OfficialFamilyParticipationForm onClose={onClose} />}
       </div>
     </div>
   );

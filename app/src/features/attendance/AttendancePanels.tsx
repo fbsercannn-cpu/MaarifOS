@@ -23,6 +23,7 @@ import {
   localTimeInIstanbul,
   type AttendanceEventDraft,
 } from "./attendance-panel-model";
+import "./quick-attendance.css";
 
 export interface AttendancePanelsProps {
   calculationDetails?: ReactNode;
@@ -38,7 +39,7 @@ export interface AttendancePanelsProps {
   persistencePending: boolean;
   dataBusy: boolean;
   canUndo: boolean;
-  onToggleStatus: (studentId: string) => void;
+  onToggleStatus: (studentId: string, directStatus?: AttendanceStatus) => void;
   onUndo: () => void;
   onComplete: () => void;
   onSaveEvent: (
@@ -64,89 +65,173 @@ export function AttendancePanels(props: AttendancePanelsProps) {
     setError("");
   };
 
+  const markedCount = props.students.filter((s) => s.attendanceMarked !== false).length;
+  const presentCount = props.students.filter((s) => s.status === "present" && s.attendanceMarked !== false).length;
+  const absentCount = props.students.filter((s) => s.status === "absent" && s.attendanceMarked !== false).length;
+  const lateCount = props.students.filter((s) => s.status === "late" && s.attendanceMarked !== false).length;
+
+  const handleMarkAllUnmarkedPresent = () => {
+    props.students
+      .filter((s) => s.attendanceMarked === false)
+      .forEach((s) => props.onToggleStatus(s.id, "present"));
+  };
+
   return (
     <>
       <BottomSheet
         open={props.open}
         onOpenChange={props.onOpenChange}
-        title="Bugünün devam durumu"
-        description={`${props.formattedCivilDate} · Bir çocuğa dokunarak Geldi → Geç geldi → Gelmedi durumları arasında ilerleyin.`}
-        snap={0.84}
+        title="Hızlı Dokunmatik Yoklama (E5)"
+        description={`${props.formattedCivilDate} · Tek dokunuşla Var / Yok / Geç işaretleyin.`}
+        snap={0.88}
       >
-        {props.calculationDetails ? <details className="attendance-calculation-disclosure"><summary>Devam hesabını gün gün incele</summary>{props.calculationDetails}</details> : null}
-        <div className="attendance-list">
-          {props.students.map((student) => (
-            <div className="attendance-student-row" key={student.id}>
-              <button
-                className="student-row"
-                type="button"
-                onClick={() => props.onToggleStatus(student.id)}
-                disabled={
-                  props.writesBlocked ||
-                  props.educationalWritesDisabled ||
-                  props.persistencePending ||
-                  props.dataBusy
-                }
-              >
-                {props.renderAvatar(student)}
-                <span className="student-name">
-                  {student.name}
-                  {(student.events?.length ?? 0) > 0 ? (
-                    <small>{student.events?.length} ayrıntı</small>
-                  ) : null}
-                </span>
-                <span
-                  className={`status-pill status-pill--${
-                    student.attendanceMarked === false
-                      ? "unmarked"
-                      : student.status
-                  }`}
-                >
-                  {student.attendanceMarked === false
-                    ? "İşaretlenmedi"
-                    : props.statusLabels[student.status]}
-                </span>
-              </button>
-              <button
-                className="attendance-detail-trigger"
-                type="button"
-                onClick={() => {
-                  setDraft(initialAttendanceEventDraft());
-                  setError("");
-                  setDetailStudentId(student.id);
-                }}
-                disabled={
-                  props.writesBlocked ||
-                  props.educationalWritesDisabled ||
-                  props.dataBusy
-                }
-                aria-label={`${student.name} için yoklama ayrıntısını aç`}
-              >
-                Ayrıntı <ChevronRightIcon aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
-        {props.canUndo ? (
-          <button
-            className="attendance-undo"
-            type="button"
-            onClick={props.onUndo}
-            disabled={props.writesBlocked || props.persistencePending || props.dataBusy}
-          >
-            Son değişikliği geri al
-          </button>
+        {props.calculationDetails ? (
+          <details className="attendance-calculation-disclosure">
+            <summary>Devam hesabını gün gün incele</summary>
+            {props.calculationDetails}
+          </details>
         ) : null}
-        <button
-          className="sheet-primary"
-          type="button"
-          onClick={props.onComplete}
-          disabled={
-            props.dataBusy || props.writesBlocked || props.educationalWritesDisabled
-          }
-        >
-          <CheckCircledIcon aria-hidden="true" /> Devam durumunu tamamla
-        </button>
+
+        {/* E5 Hızlı Özet Şeridi */}
+        <div className="qag-summary-bar">
+          <div className="qag-summary-stats">
+            <span className="qag-badge qag-badge--total">
+              {markedCount}/{props.students.length} İşaretlendi
+            </span>
+            <span className="qag-badge qag-badge--present">
+              ✓ {presentCount} Var
+            </span>
+            <span className="qag-badge qag-badge--absent">
+              ✗ {absentCount} Yok
+            </span>
+            <span className="qag-badge qag-badge--late">
+              ⏱ {lateCount} Geç
+            </span>
+          </div>
+          {markedCount < props.students.length && (
+            <button
+              type="button"
+              className="qag-all-present-btn"
+              onClick={handleMarkAllUnmarkedPresent}
+              disabled={
+                props.writesBlocked ||
+                props.educationalWritesDisabled ||
+                props.persistencePending ||
+                props.dataBusy
+              }
+            >
+              Kalanları Geldi Yap
+            </button>
+          )}
+        </div>
+
+        {/* E5 Hızlı Dokunmatik Grid */}
+        <div className="qag-grid-container" role="group" aria-label="Yoklama listesi">
+          {props.students.map((student) => {
+            const isMarked = student.attendanceMarked !== false;
+            const currentStatus = isMarked ? student.status : null;
+            const disabled =
+              props.writesBlocked ||
+              props.educationalWritesDisabled ||
+              props.persistencePending ||
+              props.dataBusy;
+
+            return (
+              <div
+                key={student.id}
+                className="qag-student-card"
+                data-status={currentStatus ?? "unmarked"}
+              >
+                <div className="qag-student-info">
+                  {props.renderAvatar(student)}
+                  <div className="qag-student-name-block">
+                    <span className="qag-student-name">{student.name}</span>
+                    {(student.events?.length ?? 0) > 0 && (
+                      <small style={{ display: "block", color: "#64748b", fontSize: "0.75rem" }}>
+                        {student.events?.length} ayrıntı kaydı
+                      </small>
+                    )}
+                  </div>
+                </div>
+
+                <div className="qag-button-group" role="group" aria-label={`${student.name} yoklama`}>
+                  <button
+                    type="button"
+                    className={`qag-touch-btn qag-touch-btn--present ${currentStatus === "present" ? "is-active" : ""}`}
+                    onClick={() => props.onToggleStatus(student.id, "present")}
+                    disabled={disabled}
+                    aria-label={`${student.name} Geldi`}
+                    aria-pressed={currentStatus === "present"}
+                  >
+                    ✓ Var
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qag-touch-btn qag-touch-btn--absent ${currentStatus === "absent" ? "is-active" : ""}`}
+                    onClick={() => props.onToggleStatus(student.id, "absent")}
+                    disabled={disabled}
+                    aria-label={`${student.name} Gelmedi`}
+                    aria-pressed={currentStatus === "absent"}
+                  >
+                    ✗ Yok
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`qag-touch-btn qag-touch-btn--late ${currentStatus === "late" ? "is-active" : ""}`}
+                    onClick={() => props.onToggleStatus(student.id, "late")}
+                    disabled={disabled}
+                    aria-label={`${student.name} Geç Geldi`}
+                    aria-pressed={currentStatus === "late"}
+                  >
+                    ⏱ Geç
+                  </button>
+
+                  <button
+                    type="button"
+                    className="qag-detail-trigger"
+                    onClick={() => {
+                      setDraft(initialAttendanceEventDraft());
+                      setError("");
+                      setDetailStudentId(student.id);
+                    }}
+                    disabled={disabled}
+                    title="Yoklama ayrıntısı ve saat notu ekle"
+                    aria-label={`${student.name} için yoklama ayrıntısını aç`}
+                  >
+                    <ChevronRightIcon aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Alt Aksiyon Butonları */}
+        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          {props.canUndo && (
+            <button
+              className="attendance-undo"
+              type="button"
+              onClick={props.onUndo}
+              disabled={props.writesBlocked || props.persistencePending || props.dataBusy}
+            >
+              Son değişikliği geri al
+            </button>
+          )}
+
+          <button
+            className="sheet-primary"
+            type="button"
+            onClick={props.onComplete}
+            disabled={
+              props.dataBusy || props.writesBlocked || props.educationalWritesDisabled
+            }
+          >
+            <CheckCircledIcon aria-hidden="true" /> Devam durumunu tamamla
+          </button>
+        </div>
       </BottomSheet>
 
       <BottomSheet
