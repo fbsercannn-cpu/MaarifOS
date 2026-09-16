@@ -813,3 +813,109 @@ p {
   border-radius: 0;
   object-fit: fill;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   GLOBAL A4 PHYSICAL PRINT ENGINE (Rule 5 — OMNI-APEX PROTOKOLÜ)
+   ══════════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm 10mm 10mm;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .native-app-runtime {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .route-focus-boundary,
+  .mobile-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Rule 5: Tüm navigasyon barları, menüler ve sistem butonları DOM'dan tamamen gizlenecek */
+  .bottom-nav,
+  nav,
+  nav *,
+  header.prototype-header,
+  header:not(.official-sheet__header),
+  .alpha-dock,
+  .keyboard-dock,
+  .mobile-carousel,
+  .notification-toast,
+  .official-workspace-header,
+  .official-form-actions,
+  .no-print,
+  .no-print *,
+  [role="alert"],
+  [aria-live="polite"],
+  .screen-output-help {
+    display: none !important;
+  }
+
+  /* Rule 5: CSS Fragmentation & Table Header Group */
+  table {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th,
+  td {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Resmi form yazdırma izolasyonu */
+  body.printing-official-form > #root > .native-app-runtime > *:not(main),
+  body.printing-official-form main > *:not(.official-workspace-overlay):not(.official-form-modal),
+  body:has(.official-workspace-overlay) > #root > .native-app-runtime > *:not(main),
+  body:has(.official-workspace-overlay) main > *:not(.official-workspace-overlay),
+  body:has(.official-form-modal) > #root > .native-app-runtime > *:not(main),
+  body:has(.official-form-modal) main > *:not(.official-form-modal):not(.official-workspace-overlay) {
+    display: none !important;
+  }
+}

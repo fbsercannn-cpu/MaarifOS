@@ -183,15 +183,22 @@ export async function downloadOfficialFormPdf(
 /**
  * A4 CSS Paged Media doğrudan yazdırma motoru.
  * Pencere başlığını geçici olarak belge adına ayarlar; böylece "PDF olarak kaydet" seçildiğinde dosya adı otomatik dolar.
+ * Sayfa gövdesine geçici olarak "printing-official-form" sınıfı ekleyerek tüm harici navigasyon ve ekran öğelerini izole eder.
  */
 export function printOfficialFormA4(documentTitle: string): void {
   const previousTitle = document.title;
+  if (typeof document !== "undefined" && document.body) {
+    document.body.classList.add("printing-official-form");
+  }
   try {
     document.title = documentTitle;
     window.print();
   } finally {
     window.setTimeout(() => {
       document.title = previousTitle;
+      if (typeof document !== "undefined" && document.body) {
+        document.body.classList.remove("printing-official-form");
+      }
     }, 1500);
   }
 }
