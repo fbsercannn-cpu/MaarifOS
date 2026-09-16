@@ -1,0 +1,34 @@
+.student-import { padding: 0 0 22px; color: #263930; font-size: 14px; }
+.student-import p { line-height: 1.55; }
+.student-import__intro { padding: 16px; background: #f1f7f3; border-radius: 14px; margin-bottom: 18px; }
+.student-import__intro p { margin: 7px 0 0; }
+.student-import__file { position: relative; display: grid; gap: 8px; font-weight: 650; margin-bottom: 10px; cursor: pointer; }
+.student-import__file input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.student-import__file-button { display: flex; align-items: center; justify-content: center; min-height: 46px; border: 1px solid #adc5b8; border-radius: 10px; background: #fff; color: #315d44; }
+.student-import__file:focus-within .student-import__file-button { outline: 2px solid #28624a; outline-offset: 3px; }
+.student-import__filename { overflow-wrap: anywhere; font-weight: 650; }
+.student-import__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin: 14px 0; }
+.student-import__grid label { display: grid; gap: 7px; min-width: 0; font-size: 13px; }
+.student-import__field { display: grid; gap: 7px; min-width: 0; align-content: start; }
+.student-import__field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 90px; padding: 10px; border: 1px solid #cad7cf; border-radius: 9px; font: inherit; line-height: 1.5; background: white; color: #263930; resize: vertical; }
+.student-import__field .student-surname-suggestion { margin: 7px 0 0; }
+.student-import__grid select, .student-import__grid input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; font: inherit; padding: 10px; border-radius: 9px; border: 1px solid #cad7cf; background: white; color: #263930; }
+.student-import details { border: 1px solid #dce5df; border-radius: 12px; padding: 0 12px; }
+.student-import summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-weight: 650; }
+.student-import__summary { display: grid; gap: 6px; padding: 16px; background: #f1f7f3; border-radius: 12px; }
+.student-import__summary span, .student-import__hint { font-size: 12px; }
+.student-import__tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.student-import__tools button { min-height: 44px; padding: 8px 12px; border: 1px solid #c8d8cc; background: white; border-radius: 9px; color: #315140; font: inherit; font-size: 12px; }
+.student-import__rows { padding: 0; list-style: none; }
+.student-import__rows > li { margin: 12px 0; padding: 14px; border: 1px solid #d6e0d9; border-radius: 14px; background: white; }
+.student-import__selection { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.student-import__selection input { width: 24px; height: 24px; margin: 10px; accent-color: #315d44; }
+.student-import__selection span { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.student-import__selection small { color: #62746b; font-size: 11px; }
+.student-import__rows details { margin-top: 10px; }
+.student-import__error { color: #982b26; background: #fff2ef; border-radius: 8px; padding: 10px; }
+.student-import__warning { color: #7b531e; font-size: 12px; }
+.student-import__footer { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 8px; padding: 12px 0 calc(var(--mobile-safe-area-height, 0px) + 12px); background: white; box-shadow: 0 -10px 14px #fff; font-size: 12px; }
+.student-import__field--wide { grid-column: 1 / -1; }
+.student-import .sheet-primary { width: 100%; margin-top: 14px; min-height: 48px; }
+@media (max-width: 380px) { .student-import__grid { grid-template-columns: minmax(0, 1fr); } }

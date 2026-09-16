@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test";
 import {
+  BACKUP_HEALTH_RECEIPT_STORAGE_KEY,
   LAST_SUCCESSFUL_ENCRYPTED_BACKUP_STORAGE_KEY,
+  backupRecoveryHealth,
   backupReminderState,
   inspectStorageHealth,
+  readBackupHealthReceipt,
   readLastSuccessfulEncryptedBackup,
+  recordEncryptedBackupHealth,
   recordSuccessfulEncryptedBackup,
+  recordSuccessfulRestoreDrill,
   storagePressureLevel,
 } from "../src/core/storage";
 
@@ -144,6 +149,76 @@ test("son başarılı şifreli yedek zamanı sürümlü UTC kaydıyla saklanır"
   expect(storage.values.has(LAST_SUCCESSFUL_ENCRYPTED_BACKUP_STORAGE_KEY)).toBe(
     true,
   );
+});
+
+test("şifreli yedek sağlık makbuzu kişisel veri taşımadan exact dosya bütünlüğünü saklar", () => {
+  const storage = new MemoryStorage();
+  const receipt = recordEncryptedBackupHealth(storage, {
+    fileName: "maarifos-backup-2026-08-11.maarifos",
+    encryptedChecksum: "a".repeat(64),
+    encryptedByteLength: 12_345,
+    payloadChecksum: "b".repeat(64),
+    dataSchemaVersion: 5,
+    appVersion: "0.10.0",
+    createdAt: "2026-08-11T08:00:00.000Z",
+    verifiedAt: "2026-08-11T08:00:01.000Z",
+  });
+
+  expect(receipt).not.toBeNull();
+  expect(readBackupHealthReceipt(storage)).toEqual(receipt);
+  const raw = storage.values.get(BACKUP_HEALTH_RECEIPT_STORAGE_KEY) ?? "";
+  expect(raw).not.toContain("çocuk");
+  expect(raw).not.toContain("parola");
+  expect(backupRecoveryHealth(receipt, receipt?.createdAt ?? null)).toMatchObject({
+    kind: "drill-required",
+    lastRestoreDrillAt: null,
+  });
+});
+
+test("geri yükleme tatbikatı yalnız aynı şifreli dosya digest'iyle doğrulanır", () => {
+  const storage = new MemoryStorage();
+  const receipt = recordEncryptedBackupHealth(storage, {
+    fileName: "maarifos-backup-2026-08-11.maarifos",
+    encryptedChecksum: "c".repeat(64),
+    encryptedByteLength: 8_192,
+    payloadChecksum: "d".repeat(64),
+    dataSchemaVersion: 5,
+    appVersion: "0.10.0",
+    createdAt: "2026-08-11T08:00:00.000Z",
+    verifiedAt: "2026-08-11T08:00:01.000Z",
+  });
+  expect(receipt).not.toBeNull();
+
+  expect(
+    recordSuccessfulRestoreDrill(storage, {
+      sourceChecksum: "e".repeat(64),
+      restoredAt: new Date("2026-08-11T09:00:00.000Z"),
+      mode: "replace",
+    }),
+  ).toBeNull();
+  expect(readBackupHealthReceipt(storage)?.lastRestoreDrillAt).toBeNull();
+
+  const verified = recordSuccessfulRestoreDrill(storage, {
+    sourceChecksum: "c".repeat(64),
+    restoredAt: new Date("2026-08-11T09:00:00.000Z"),
+    mode: "replace",
+  });
+  expect(verified).toMatchObject({
+    lastRestoreDrillAt: "2026-08-11T09:00:00.000Z",
+    lastRestoreMode: "replace",
+  });
+  expect(backupRecoveryHealth(verified, verified?.createdAt ?? null)).toMatchObject({
+    kind: "drill-verified",
+  });
+});
+
+test("bozuk sağlık makbuzu fail-closed kalır ve eski zaman kaydı legacy olarak açıklanır", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(BACKUP_HEALTH_RECEIPT_STORAGE_KEY, "{} ");
+  expect(readBackupHealthReceipt(storage)).toBeNull();
+  expect(
+    backupRecoveryHealth(null, "2026-08-11T08:00:00.000Z"),
+  ).toMatchObject({ kind: "legacy-time-only" });
 });
 
 test("yedek zamanı deposu engelli veya bozuksa istisna sızdırmaz", () => {

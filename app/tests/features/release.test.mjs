@@ -37,11 +37,11 @@ function acknowledgement({
 }
 
 test("güncel sürüm kullanıcıya gösterilecek eksiksiz Türkçe metadata taşır", () => {
-  assert.equal(CURRENT_RELEASE.version, "0.8.0");
-  assert.equal(CURRENT_RELEASE.releasedOn, "2026-08-08");
+  assert.equal(CURRENT_RELEASE.version, "0.60.0");
+  assert.equal(CURRENT_RELEASE.releasedOn, "2026-09-16");
   assert.equal(
     CURRENT_RELEASE.title,
-    "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
+    "34 Resmî MEB TTKB Enstrümanı, Müfettiş Teftiş Dosyası ve Tam Müfredat Ekosistemi",
   );
   assert.ok(CURRENT_RELEASE.notes.length >= 4);
   assert.ok(CURRENT_RELEASE.notes.every((note) => note.trim().length >= 20));
@@ -77,6 +77,9 @@ test("paket, yedek ve PWA aynı kanonik uygulama sürümünü kullanır", async 
     prototype,
     /const applyReadyUpdate = async \(\) => \{[\s\S]*?await flushPendingWrites\(\);[\s\S]*?maarifos:apply-update/,
   );
+  assert.match(prototype, /updateVersion: displayedUpdateVersion/);
+  assert.match(prototype, /Güncellemeleri şimdi denetle/);
+  assert.match(prototype, /pwaStatus\?\.activeVersion/);
 });
 
 test("boş cihazı ilk kurulum sayar fakat güncellendi bildirimi üretmez", () => {
@@ -101,8 +104,8 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
     JSON.parse(storage.getItem(RELEASE_ACKNOWLEDGEMENT_STORAGE_KEY)),
     {
       schemaVersion: 1,
-      firstSeenVersion: "0.8.0",
-      acknowledgedVersion: "0.8.0",
+      firstSeenVersion: "0.60.0",
+      acknowledgedVersion: "0.60.0",
       acknowledgedAt: "2026-07-28T12:30:00.000Z",
     },
   );
@@ -110,7 +113,7 @@ test("ilk kurulumu onaylar ve sonraki açılışı güncel sürüm olarak tanır
   const state = inspectCurrentRelease({ storage });
   assert.equal(state.kind, "current");
   assert.equal(state.shouldPresent, false);
-  assert.equal(state.previousVersion, "0.8.0");
+  assert.equal(state.previousVersion, "0.60.0");
 });
 
 test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notlarını sunar", () => {
@@ -125,7 +128,7 @@ test("önceki sürümü gerçek güncelleme olarak ayırır ve sürüm notların
   assert.equal(state.kind, "update");
   assert.equal(state.shouldPresent, true);
   assert.equal(state.previousVersion, "0.1.0");
-  assert.equal(state.release.version, "0.8.0");
+  assert.equal(state.release.version, "0.60.0");
 });
 
 test("güncelleme onayında ilk görülen sürümü korur", () => {
@@ -151,7 +154,7 @@ test("güncelleme onayında ilk görülen sürümü korur", () => {
     {
       schemaVersion: 1,
       firstSeenVersion: "0.0.5",
-      acknowledgedVersion: "0.8.0",
+      acknowledgedVersion: "0.60.0",
       acknowledgedAt: "2026-07-28T15:00:00.000Z",
     },
   );

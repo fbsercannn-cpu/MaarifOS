@@ -1,0 +1,17 @@
+export const PLAN_NEXT_STEPS_COPY = {
+  region: "Planı adım adım tamamla",
+  sequence: "Seç → kaydet → ilerle",
+  loadingTitle: "Sıradaki plan adımı",
+  loading: "Sınıfınız ve kayıtlı planlarınızdan seçenekler hazırlanıyor.",
+  day: "Plan günü",
+  readFailed: "Plan seçenekleri okunamadı.",
+  openFailed: "Kayıtlı plan açılamadı. Seçenekleri yenileyip tekrar deneyin.",
+  saved: "Seçiminiz kaydedildi. Sıradaki adım hazır.",
+  alreadySaved: "Bu adım zaten kayıtlı. Sıradaki adıma geçebilirsiniz.",
+  savedRefreshFailed: "Plan kaydedildi; seçenekleri yenileyerek devam edebilirsiniz.",
+  savedOpenFailed: "Plan kaydedildi; kayıtlı planı açarak devam edebilirsiniz.",
+  writeFailed: "Plan kaydedilemedi. Seçenekleri yenileyip tekrar deneyin.",
+  refresh: "Seçenekleri yenile",
+  saving: "Kaydediliyor…",
+  openSaved: "Kaydedilen planı aç",
+} as const;

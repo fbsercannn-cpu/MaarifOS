@@ -1,0 +1,7 @@
+.student-profile-sheet { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.student-profile-context-details { min-width: 0; width: 100%; max-width: 100%; }
+.student-profile-context-details > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.student-profile-context-details > summary { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 10px 0; font-size: 13px; font-weight: 700; color: #40685f; cursor: pointer; }
+.student-profile-context-details > summary::before { content: "+"; font-size: 18px; }
+.student-profile-context-details[open] > summary::before { content: "−"; }
+.student-profile-context-details > summary:focus-visible { outline: 3px solid #5eb4a3; outline-offset: 3px; border-radius: 8px; }

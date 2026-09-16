@@ -22,6 +22,8 @@ import {
   persistQuickObservationDraftBatch,
   persistQuickObservationDraft,
 } from "../../src/features/evidence/quick-observation.ts";
+import { loadQuickObservationDraftBatch } from "../../src/features/evidence/quick-observation-batch-recovery.ts";
+import { verifyCommittedObservationRefresh } from "../../src/features/evidence/observation-commit-refresh.ts";
 
 class MemoryStore {
   snapshot;
@@ -68,6 +70,7 @@ const yearId = "00000000-0000-4000-8000-000000000701";
 const classroomId = "00000000-0000-4000-8000-000000000702";
 const studentAId = "00000000-0000-4000-8000-000000000703";
 const studentBId = "00000000-0000-4000-8000-000000000704";
+const studentCId = "00000000-0000-4000-8000-000000000714";
 const planId = "00000000-0000-4000-8000-000000000705";
 const activityId = "00000000-0000-4000-8000-000000000706";
 const observationId = "00000000-0000-4000-8000-000000000707";
@@ -159,6 +162,20 @@ function activeStore() {
     classroomId,
   });
   return new MemoryStore(snapshot);
+}
+
+function addStudentC(store) {
+  store.snapshot.students.push({
+    ...base,
+    id: studentCId,
+    displayName: "Kurgu Çocuk C",
+    academicYearId: yearId,
+    classroomId,
+    enrollmentStatus: "active",
+  });
+  store.snapshot.activities
+    .filter((activity) => activity.id === activityId)
+    .forEach((activity) => activity.studentIds.push(studentCId));
 }
 
 const draftAInput = {
@@ -811,5 +828,374 @@ test("toplu final yazma hatasında hiçbir kanıt yazmaz ve bütün taslakları 
         typeof record.deletedAt !== "string",
     ).length,
     2,
+  );
+});
+
+test("yarım kalan toplu hızlı gözlem aynı batch, çocuklar ve içerikle geri yüklenir", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraft(store, draftAInput);
+  const persisted = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+
+  const restored = await loadQuickObservationDraftBatch(store, {
+    planId,
+    activityId,
+  });
+
+  assert.ok(restored);
+  assert.equal(restored.batchId, persisted.batchId);
+  assert.deepEqual(
+    restored.drafts.map((draft) => draft.studentId).sort(),
+    [studentAId, studentBId].sort(),
+  );
+  assert.ok(
+    restored.drafts.every(
+      (draft) =>
+        draft.rawText === selectedChildrenDraftInput.rawText &&
+        draft.context === selectedChildrenDraftInput.context &&
+        draft.childQuote === selectedChildrenDraftInput.childQuote &&
+        draft.observationType === selectedChildrenDraftInput.observationType &&
+        draft.captureScope === "selected-children",
+    ),
+  );
+  assert.equal(
+    (await loadQuickObservationDraft(store, {
+      studentId: studentAId,
+      planId,
+      activityId,
+    }))?.rawText,
+    draftAInput.rawText,
+  );
+});
+
+test("toplu taslak aynı bağlamdaki bağımsız tekli taslakları ezmez ve finalden sonra açık bırakır", async () => {
+  const store = activeStore();
+  const singleDraftA = await persistQuickObservationDraft(store, {
+    ...draftAInput,
+    rawText: "A çocuğuna ait bağımsız tekli taslak.",
+    now: new Date("2026-09-02T07:30:00.000Z"),
+  });
+  const singleDraftB = await persistQuickObservationDraft(store, {
+    ...draftAInput,
+    studentId: studentBId,
+    rawText: "B çocuğuna ait bağımsız tekli taslak.",
+    now: new Date("2026-09-02T07:31:00.000Z"),
+  });
+
+  const batch = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+  const studentABatchDraft = batch.drafts.find(
+    (draft) => draft.studentId === studentAId,
+  );
+  const studentBBatchDraft = batch.drafts.find(
+    (draft) => draft.studentId === studentBId,
+  );
+  assert.notEqual(studentABatchDraft?.id, singleDraftA.id);
+  assert.notEqual(studentBBatchDraft?.id, singleDraftB.id);
+
+  const openStudentADrafts = store.snapshot.settings.filter(
+    (record) =>
+      record.settingType === "quick-observation-draft" &&
+      record.studentId === studentAId &&
+      typeof record.deletedAt !== "string",
+  );
+  assert.equal(openStudentADrafts.length, 2);
+  assert.equal(
+    openStudentADrafts.find((record) => record.id === singleDraftA.id)?.rawText,
+    "A çocuğuna ait bağımsız tekli taslak.",
+  );
+  assert.equal(
+    openStudentADrafts.find((record) => record.id === singleDraftA.id)?.batchId,
+    undefined,
+  );
+
+  await finalizeQuickObservationDraftBatch(store, {
+    studentIds: [studentAId, studentBId],
+    planId,
+    activityId,
+    batchId,
+    observationIds: {
+      [studentAId]: bulkObservationAId,
+      [studentBId]: bulkObservationBId,
+    },
+    observedAt: "2026-09-02T08:05:00.000Z",
+    now: new Date("2026-09-02T08:06:00.000Z"),
+  });
+
+  const restoredSingleA = await loadQuickObservationDraft(store, {
+    studentId: studentAId,
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+  });
+  const restoredSingleB = await loadQuickObservationDraft(store, {
+    studentId: studentBId,
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+  });
+  assert.equal(restoredSingleA?.id, singleDraftA.id);
+  assert.equal(restoredSingleA?.rawText, "A çocuğuna ait bağımsız tekli taslak.");
+  assert.equal(restoredSingleB?.id, singleDraftB.id);
+  assert.equal(restoredSingleB?.rawText, "B çocuğuna ait bağımsız tekli taslak.");
+});
+
+test("A+B+C toplu taslağı A+B'ye daralırken C tombstone olur ve A+B aynı kimlikle final olur", async () => {
+  const store = activeStore();
+  addStudentC(store);
+  const first = await persistQuickObservationDraftBatch(store, {
+    ...selectedChildrenDraftInput,
+    studentIds: [studentAId, studentBId, studentCId],
+  });
+  const firstIds = Object.fromEntries(
+    first.drafts.map((draft) => [draft.studentId, draft.id]),
+  );
+
+  const narrowed = await persistQuickObservationDraftBatch(store, {
+    ...selectedChildrenDraftInput,
+    studentIds: [studentAId, studentBId],
+    rawText: "A ve B aynı olayı birlikte sürdürdü.",
+    now: new Date("2026-09-02T08:01:00.000Z"),
+  });
+
+  assert.deepEqual(
+    narrowed.drafts.map((draft) => draft.id),
+    [firstIds[studentAId], firstIds[studentBId]],
+  );
+  const removedStudentCDraft = store.snapshot.settings.find(
+    (record) => record.id === firstIds[studentCId],
+  );
+  assert.equal(removedStudentCDraft?.batchId, batchId);
+  assert.equal(removedStudentCDraft?.studentId, studentCId);
+  assert.equal(removedStudentCDraft?.deletedAt, "2026-09-02T08:01:00.000Z");
+  assert.equal(
+    removedStudentCDraft?.rawText,
+    selectedChildrenDraftInput.rawText,
+  );
+
+  const finalized = await finalizeQuickObservationDraftBatch(store, {
+    studentIds: [studentAId, studentBId],
+    planId,
+    activityId,
+    batchId,
+    observationIds: {
+      [studentAId]: bulkObservationAId,
+      [studentBId]: bulkObservationBId,
+    },
+    observedAt: "2026-09-02T08:05:00.000Z",
+    now: new Date("2026-09-02T08:06:00.000Z"),
+  });
+  assert.deepEqual(
+    finalized.observations.map((observation) => observation.studentIds),
+    [[studentAId], [studentBId]],
+  );
+  assert.ok(
+    finalized.observations.every(
+      (observation) =>
+        observation.batchId === batchId &&
+        observation.rawText === "A ve B aynı olayı birlikte sürdürdü.",
+    ),
+  );
+  assert.equal(
+    store.snapshot.observations.some((observation) =>
+      observation.studentIds.includes(studentCId),
+    ),
+    false,
+  );
+});
+
+test("toplu taslak daraltma yazma hatasında üye veya içerik değiştirmez", async () => {
+  const store = activeStore();
+  addStudentC(store);
+  await persistQuickObservationDraftBatch(store, {
+    ...selectedChildrenDraftInput,
+    studentIds: [studentAId, studentBId, studentCId],
+  });
+  const before = await store.readSnapshot();
+  store.failPut = (collection, records) =>
+    collection === "settings" &&
+    records.some(
+      (record) =>
+        record.studentId === studentCId && typeof record.deletedAt === "string",
+    );
+
+  await assert.rejects(
+    persistQuickObservationDraftBatch(store, {
+      ...selectedChildrenDraftInput,
+      studentIds: [studentAId, studentBId],
+      rawText: "Bu değişiklik transaction ile geri alınmalıdır.",
+      now: new Date("2026-09-02T08:01:00.000Z"),
+    }),
+    /transaction yazma hatas/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+});
+
+test("tekli taslak ve final açık toplu taslağın kimliğini veya içeriğini değiştirmez", async () => {
+  const store = activeStore();
+  const batch = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+  const batchDraftA = batch.drafts.find(
+    (draft) => draft.studentId === studentAId,
+  );
+
+  const singleDraft = await persistQuickObservationDraft(store, {
+    ...draftAInput,
+    rawText: "Toplu kayıttan ayrı yeni tekli gözlem.",
+    now: new Date("2026-09-02T08:01:00.000Z"),
+  });
+  assert.notEqual(singleDraft.id, batchDraftA?.id);
+
+  const finalizedSingle = await finalizeQuickObservationDraft(store, {
+    studentId: studentAId,
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+    observationId,
+    observedAt: "2026-09-02T08:02:00.000Z",
+    now: new Date("2026-09-02T08:03:00.000Z"),
+  });
+  assert.equal(finalizedSingle.observation.rawText, singleDraft.rawText);
+
+  const preservedBatchDraftA = store.snapshot.settings.find(
+    (record) => record.id === batchDraftA?.id,
+  );
+  assert.equal(preservedBatchDraftA?.deletedAt, null);
+  assert.equal(preservedBatchDraftA?.batchId, batchId);
+  assert.equal(
+    preservedBatchDraftA?.rawText,
+    selectedChildrenDraftInput.rawText,
+  );
+});
+
+test("aynı toplu grupta bir çocuk için iki açık taslak varsa yazmayı kapalı reddeder", async () => {
+  const store = activeStore();
+  const batch = await persistQuickObservationDraftBatch(
+    store,
+    selectedChildrenDraftInput,
+  );
+  const draftA = batch.drafts.find((draft) => draft.studentId === studentAId);
+  assert.ok(draftA);
+  store.snapshot.settings.push({
+    ...structuredClone(draftA),
+    id: "00000000-0000-4000-8000-000000000716",
+  });
+  const before = await store.readSnapshot();
+
+  await assert.rejects(
+    persistQuickObservationDraftBatch(store, {
+      ...selectedChildrenDraftInput,
+      rawText: "Çakışmalı gruba yazılmaması gereken değişiklik.",
+      now: new Date("2026-09-02T08:01:00.000Z"),
+    }),
+    /aynı çocuk için birden fazla açık taslak/,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+});
+
+test("tekli gözlem commitinden sonraki refresh hatası save hatasına dönüşmez ve tek kayıt korunur", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraft(store, {
+    ...draftAInput,
+    rawText: "Çocuk parçaları sırayla yan yana getirdi.",
+  });
+  const committed = await finalizeQuickObservationDraft(store, {
+    studentId: studentAId,
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+    observationId,
+    observedAt: "2026-09-02T08:05:00.000Z",
+  });
+
+  const refresh = await verifyCommittedObservationRefresh(
+    [committed.observation.id],
+    async () => {
+      throw new Error("Kurgu projection read hatası.");
+    },
+  );
+
+  assert.deepEqual(refresh, {
+    status: "refresh-required",
+    reason: "read-failed",
+    committedObservationIds: [observationId],
+  });
+  assert.equal(store.snapshot.observations.length, 1);
+  assert.equal(store.snapshot.observations[0].id, observationId);
+  assert.equal(store.snapshot.observations[0].rawTextImmutable, true);
+});
+
+test("yenileme exact commit kimliğini missing sonuçtan verified sonuca kadar kaybetmeden taşır", async () => {
+  const emptyWorkspace = {
+    civilDate: "2026-09-02",
+    activities: [],
+    pendingObservations: [],
+    linkedObservations: [],
+  };
+  const missing = await verifyCommittedObservationRefresh(
+    [observationId],
+    async () => emptyWorkspace,
+  );
+  assert.deepEqual(missing, {
+    status: "refresh-required",
+    reason: "committed-record-missing",
+    committedObservationIds: [observationId],
+  });
+
+  const verified = await verifyCommittedObservationRefresh(
+    missing.committedObservationIds,
+    async () => ({
+      ...emptyWorkspace,
+      pendingObservations: [{ id: observationId }],
+    }),
+  );
+  assert.equal(verified.status, "verified");
+  assert.deepEqual(
+    verified.observations.map((observation) => observation.id),
+    [observationId],
+  );
+});
+
+test("toplu gözlem commitinden sonra projection kayıtları eksikse başarı korunur ve mükerrer yazılmaz", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraftBatch(store, selectedChildrenDraftInput);
+  const committed = await finalizeQuickObservationDraftBatch(store, {
+    studentIds: [studentAId, studentBId],
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+    batchId,
+    observationIds: {
+      [studentAId]: bulkObservationAId,
+      [studentBId]: bulkObservationBId,
+    },
+    observedAt: "2026-09-02T08:05:00.000Z",
+  });
+
+  const refresh = await verifyCommittedObservationRefresh(
+    committed.observations.map((observation) => observation.id),
+    async () => ({
+      civilDate: "2026-09-02",
+      activities: [],
+      pendingObservations: [],
+      linkedObservations: [],
+    }),
+  );
+
+  assert.equal(refresh.status, "refresh-required");
+  assert.equal(refresh.reason, "committed-record-missing");
+  assert.deepEqual(
+    refresh.committedObservationIds,
+    [bulkObservationAId, bulkObservationBId],
+  );
+  assert.deepEqual(
+    store.snapshot.observations.map((observation) => observation.id).sort(),
+    [bulkObservationAId, bulkObservationBId].sort(),
   );
 });

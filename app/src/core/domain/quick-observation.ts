@@ -1,5 +1,9 @@
 import type { StoredRecord } from "./model.ts";
 import {
+  isDevelopmentObservationSelection,
+  type DevelopmentObservationSelection,
+} from "../../features/evidence/development-observation-presets.ts";
+import {
   OBSERVATION_CATEGORIES_V1,
   OBSERVATION_CATEGORIES_V2,
   OBSERVATION_TAXONOMY_VERSION_V1,
@@ -62,6 +66,7 @@ export interface QuickObservationDraft extends StoredRecord {
   observationType: QuickObservationType;
   categoryIds: QuickObservationCategory[];
   observationTaxonomyVersion?: ObservationTaxonomyVersion;
+  developmentSelection?: DevelopmentObservationSelection;
   schemaVersion: typeof QUICK_OBSERVATION_DRAFT_SCHEMA_VERSION;
 }
 
@@ -115,6 +120,8 @@ export function isQuickObservationDraftRecord(
     typeof record.context === "string" &&
     typeof record.childQuote === "string" &&
     isQuickObservationType(record.observationType) &&
+    (record.developmentSelection === undefined ||
+      isDevelopmentObservationSelection(record.developmentSelection)) &&
     Array.isArray(record.categoryIds) &&
     record.categoryIds.every((value) =>
       isObservationCategoryForVersion(taxonomyVersion, value),

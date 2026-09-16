@@ -3,6 +3,7 @@ dist/
 .env
 .env.*
 !.env.example
+!app/.env.founder-production
 coverage/
 playwright-report/
 test-results/
@@ -10,3 +11,7 @@ test-results/
 *.local
 *.log
 *.tsbuildinfo
+output/
+app/output/
+tmp/
+app/tmp/

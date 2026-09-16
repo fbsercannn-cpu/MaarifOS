@@ -1,7 +1,7 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.8.0";
+const WORKER_RELEASE = "0.60.0";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
 const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
 const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";
@@ -13,19 +13,121 @@ const META_CACHE = `${CACHE_PREFIX}meta`;
 const CACHEABLE_DESTINATIONS = new Set(["font", "image", "script", "style"]);
 const NETWORK_TIMEOUT_MS = 5000;
 const CACHE_HEALTH_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PRECACHE_MANIFEST_SCHEMA_VERSION = 1;
+const MAX_PRECACHE_MANIFEST_BYTES = 2 * 1024 * 1024;
+const MAX_PRECACHE_ASSETS = 2000;
 
 const scopeUrl = new URL("./", self.registration.scope);
 const indexUrl = new URL("index.html", scopeUrl);
-const manifestUrl = new URL("manifest.webmanifest", scopeUrl);
+const webAppManifestUrl = new URL("manifest.webmanifest", scopeUrl);
+const precacheManifestUrl = new URL("maarifos-precache-manifest.json", scopeUrl);
 const metadataUrl = new URL("__maarifos_runtime_metadata__", scopeUrl);
-const iconUrls = [
-  "assets/brand/maarifos-icon-192.png",
-  "assets/brand/maarifos-icon-512.png",
-  "assets/brand/maarifos-icon-maskable-512.png",
-  "assets/brand/apple-touch-icon-180.png",
-  "assets/brand/favicon-32.png",
-].map((path) => new URL(path, scopeUrl));
+const shellReadyUrl = new URL("__maarifos_shell_ready__", scopeUrl);
 const assetsPath = new URL("assets/", scopeUrl).pathname;
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hasExactKeys(value, expectedKeys) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const actualKeys = Object.keys(value).sort();
+  const sortedExpected = [...expectedKeys].sort();
+  return actualKeys.length === sortedExpected.length &&
+    actualKeys.every((key, index) => key === sortedExpected[index]);
+}
+
+function parsePrecacheManifestBytes(bytes) {
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_PRECACHE_MANIFEST_BYTES) {
+    throw new Error("MaarifOS çevrim dışı varlık listesi geçersiz.");
+  }
+
+  let value;
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error("MaarifOS çevrim dışı varlık listesi geçersiz.");
+  }
+  if (
+    !hasExactKeys(value, ["assets", "release", "schemaVersion"]) ||
+    value.schemaVersion !== PRECACHE_MANIFEST_SCHEMA_VERSION ||
+    value.release !== WORKER_RELEASE ||
+    !Array.isArray(value.assets) ||
+    value.assets.length === 0 ||
+    value.assets.length > MAX_PRECACHE_ASSETS
+  ) {
+    throw new Error("MaarifOS çevrim dışı varlık listesi sürümle eşleşmiyor.");
+  }
+
+  const seenPaths = new Set();
+  const assets = value.assets.map((asset) => {
+    if (
+      !hasExactKeys(asset, ["path", "sha256", "size"]) ||
+      typeof asset.path !== "string" ||
+      asset.path.length === 0 ||
+      asset.path.length > 500 ||
+      !asset.path.startsWith("assets/") ||
+      asset.path.includes("\\") ||
+      asset.path.includes("%") ||
+      asset.path.includes("?") ||
+      asset.path.includes("#") ||
+      asset.path.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
+      typeof asset.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/u.test(asset.sha256) ||
+      !Number.isSafeInteger(asset.size) ||
+      asset.size < 0 ||
+      seenPaths.has(asset.path)
+    ) {
+      throw new Error("MaarifOS çevrim dışı varlık listesinde güvensiz bir kayıt var.");
+    }
+
+    const url = new URL(asset.path, scopeUrl);
+    if (
+      url.origin !== scopeUrl.origin ||
+      !url.pathname.startsWith(assetsPath) ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      throw new Error("MaarifOS çevrim dışı varlık listesinde güvensiz bir kayıt var.");
+    }
+    seenPaths.add(asset.path);
+    return Object.freeze({ ...asset, url });
+  });
+
+  if (
+    !assets.some((asset) => asset.path.endsWith(".js")) ||
+    !assets.some((asset) => asset.path.endsWith(".css"))
+  ) {
+    throw new Error("MaarifOS çevrim dışı varlık listesinde uygulama kaynakları eksik.");
+  }
+  return Object.freeze({ assets: Object.freeze(assets), release: value.release });
+}
+
+async function readVerifiedPrecacheManifest(response) {
+  const contentType = response?.headers?.get("Content-Type") || "";
+  if (!canStore(response) || !/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    throw new Error("MaarifOS çevrim dışı varlık listesi alınamadı.");
+  }
+  const bytes = await response.clone().arrayBuffer();
+  return Object.freeze({
+    manifest: parsePrecacheManifestBytes(bytes),
+    sha256: await sha256Hex(bytes),
+  });
+}
+
+async function verifyPrecacheAssetResponse(response, asset) {
+  if (!canStore(response)) {
+    throw new Error(`App-shell kaynağı alınamadı: ${asset.url.pathname}`);
+  }
+  const bytes = await response.clone().arrayBuffer();
+  if (bytes.byteLength !== asset.size || await sha256Hex(bytes) !== asset.sha256) {
+    throw new Error(`App-shell kaynağı bütünlük doğrulamasını geçemedi: ${asset.url.pathname}`);
+  }
+  return response;
+}
 
 async function readRuntimeMetadata() {
   try {
@@ -61,6 +163,11 @@ function releaseFromShellCache(cacheName) {
   return cacheName.startsWith(prefix) ? cacheName.slice(prefix.length) : null;
 }
 
+function isCurrentWorkerActive() {
+  const activeScriptUrl = self.registration.active?.scriptURL;
+  return typeof activeScriptUrl === "string" && activeScriptUrl === self.location.href;
+}
+
 async function recordActivation() {
   const existing = await readRuntimeMetadata();
   if (existing?.currentRelease === WORKER_RELEASE) return existing;
@@ -86,12 +193,40 @@ async function recordActivation() {
 
 async function verifyCurrentShellCache() {
   const cache = await caches.open(SHELL_CACHE);
-  const [scope, index, manifest] = await Promise.all([
+  const [scope, index, webAppManifest, precacheManifest, readyMarker] = await Promise.all([
     cache.match(scopeUrl),
     cache.match(indexUrl),
-    cache.match(manifestUrl),
+    cache.match(webAppManifestUrl),
+    cache.match(precacheManifestUrl),
+    cache.match(shellReadyUrl),
   ]);
-  return Boolean(scope && index && manifest);
+  if (!scope || !index || !webAppManifest || !precacheManifest || !readyMarker) return false;
+
+  try {
+    const marker = await readyMarker.json();
+    const verifiedManifest = await readVerifiedPrecacheManifest(precacheManifest);
+    if (
+      !hasExactKeys(marker, ["assetCount", "manifestSha256", "release", "schemaVersion"]) ||
+      marker.schemaVersion !== 1 ||
+      marker.release !== WORKER_RELEASE ||
+      marker.manifestSha256 !== verifiedManifest.sha256 ||
+      marker.assetCount !== verifiedManifest.manifest.assets.length
+    ) {
+      return false;
+    }
+
+    const cachedAssets = await Promise.all(
+      verifiedManifest.manifest.assets.map(async (asset) => {
+        const response = await cache.match(asset.url, { ignoreVary: true });
+        if (!response) return false;
+        await verifyPrecacheAssetResponse(response, asset);
+        return true;
+      }),
+    );
+    return cachedAssets.every(Boolean);
+  } catch {
+    return false;
+  }
 }
 
 async function fallbackCacheNames(kind) {
@@ -114,9 +249,12 @@ async function fallbackCacheNames(kind) {
 }
 
 async function markHealthyAndCleanup() {
+  if (!isCurrentWorkerActive()) return false;
   if (!(await verifyCurrentShellCache())) return false;
 
-  const metadata = (await readRuntimeMetadata()) ?? (await recordActivation());
+  const metadata = await readRuntimeMetadata();
+  if (!metadata || metadata.currentRelease !== WORKER_RELEASE) return false;
+
   const healthyAt = metadata.healthyAt ?? Date.now();
   if (metadata.healthyAt === null) {
     await writeRuntimeMetadata({ ...metadata, healthyAt });
@@ -141,7 +279,6 @@ async function markHealthyAndCleanup() {
 async function getWorkerHealth() {
   const cacheNames = await caches.keys();
   const shellReady = await verifyCurrentShellCache();
-  if (shellReady) await markHealthyAndCleanup();
   return {
     type: STATUS_RESPONSE_MESSAGE,
     version: WORKER_RELEASE,
@@ -199,12 +336,24 @@ async function fetchAndStore(cache, request) {
   return response;
 }
 
+async function fetchVerifiedPrecacheAsset(asset) {
+  const request = new Request(asset.url, { cache: "reload" });
+  const response = await fetch(request);
+  await verifyPrecacheAssetResponse(response, asset);
+  return Object.freeze({ request, response });
+}
+
 function discoverBuiltAssets(html) {
   const assetUrls = new Set();
   const referencePattern = /(?:src|href)=["']([^"']+)["']/gi;
 
   for (const match of html.matchAll(referencePattern)) {
-    const candidate = new URL(match[1], scopeUrl);
+    let candidate;
+    try {
+      candidate = new URL(match[1], scopeUrl);
+    } catch {
+      continue;
+    }
     if (candidate.origin === scopeUrl.origin && candidate.pathname.startsWith(assetsPath)) {
       assetUrls.add(candidate.href);
     }
@@ -216,24 +365,54 @@ function discoverBuiltAssets(html) {
 async function installAppShell() {
   const cache = await caches.open(SHELL_CACHE);
   const indexRequest = new Request(indexUrl, { cache: "reload" });
-  const indexResponse = await fetch(indexRequest);
+  const precacheManifestRequest = new Request(precacheManifestUrl, { cache: "reload" });
+  const [indexResponse, precacheManifestResponse] = await Promise.all([
+    fetch(indexRequest),
+    fetch(precacheManifestRequest),
+  ]);
+  const contentType = indexResponse.headers.get("Content-Type") || "";
 
-  if (!canStore(indexResponse)) {
+  if (!canStore(indexResponse) || !/^text\/html(?:\s*;|$)/i.test(contentType)) {
     throw new Error("MaarifOS çevrim dışı uygulama kabuğu alınamadı.");
   }
 
   const html = await indexResponse.clone().text();
+  const builtAssets = discoverBuiltAssets(html);
+  const hasScript = builtAssets.some((url) => new URL(url).pathname.endsWith(".js"));
+  const hasStyle = builtAssets.some((url) => new URL(url).pathname.endsWith(".css"));
+  if (!hasScript || !hasStyle) {
+    throw new Error("MaarifOS uygulama kabuğunun derlenmiş kaynakları doğrulanamadı.");
+  }
+
+  const verifiedManifest = await readVerifiedPrecacheManifest(precacheManifestResponse);
+  const manifestAssetUrls = new Set(
+    verifiedManifest.manifest.assets.map((asset) => asset.url.href),
+  );
+  if (builtAssets.some((url) => !manifestAssetUrls.has(url))) {
+    throw new Error("MaarifOS uygulama kabuğu çevrim dışı varlık listesiyle eşleşmiyor.");
+  }
+  const verifiedAssets = await Promise.all(
+    verifiedManifest.manifest.assets.map(fetchVerifiedPrecacheAsset),
+  );
+
   await Promise.all([
     cache.put(scopeUrl, indexResponse.clone()),
     cache.put(indexUrl, indexResponse.clone()),
-    fetchAndStore(cache, new Request(manifestUrl, { cache: "reload" })),
-    ...iconUrls.map((url) =>
-      fetchAndStore(cache, new Request(url, { cache: "reload" })),
-    ),
-    ...discoverBuiltAssets(html).map((url) =>
-      fetchAndStore(cache, new Request(url, { cache: "reload" })),
-    ),
+    fetchAndStore(cache, new Request(webAppManifestUrl, { cache: "reload" })),
+    cache.put(precacheManifestRequest, precacheManifestResponse.clone()),
+    ...verifiedAssets.map(({ request, response }) => cache.put(request, response.clone())),
   ]);
+  await cache.put(
+    shellReadyUrl,
+    new Response(JSON.stringify({
+      schemaVersion: 1,
+      release: WORKER_RELEASE,
+      assetCount: verifiedManifest.manifest.assets.length,
+      manifestSha256: verifiedManifest.sha256,
+    }), {
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 }
 
 self.addEventListener("install", (event) => {
@@ -325,18 +504,24 @@ async function revalidateStaticAsset(request) {
 async function cacheFirstStaticAsset(event) {
   const runtimeCache = await caches.open(ASSET_CACHE);
   const shellCache = await caches.open(SHELL_CACHE);
-  const cached = (await runtimeCache.match(event.request)) || (await shellCache.match(event.request));
+  const cached =
+    (await runtimeCache.match(event.request)) ||
+    (await shellCache.match(event.request, { ignoreVary: true }));
 
   if (cached) {
     event.waitUntil(revalidateStaticAsset(event.request).catch(() => undefined));
     return cached;
   }
 
-  for (const cacheName of [
-    ...(await fallbackCacheNames("assets")),
-    ...(await fallbackCacheNames("shell")),
-  ]) {
+  for (const cacheName of await fallbackCacheNames("assets")) {
     const fallback = await (await caches.open(cacheName)).match(event.request);
+    if (fallback) return fallback;
+  }
+  for (const cacheName of await fallbackCacheNames("shell")) {
+    const fallback = await (await caches.open(cacheName)).match(
+      event.request,
+      { ignoreVary: true },
+    );
     if (fallback) return fallback;
   }
 
@@ -344,9 +529,38 @@ async function cacheFirstStaticAsset(event) {
 }
 
 function isSensitivePath(url) {
+  const routingPath = decodeRoutingPath(url.pathname);
+  if (routingPath === null) return false;
+
+  return ["api", "auth"].some((segment) => {
+    const path = new URL(segment, scopeUrl).pathname;
+    return routingPath === path || routingPath.startsWith(`${path}/`);
+  });
+}
+
+function decodeRoutingPath(pathname) {
+  try {
+    const decoded = decodeURIComponent(pathname);
+    if (decoded.includes("%") || decoded.includes("\\") || decoded.includes("\0")) {
+      return null;
+    }
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function isAppNavigationPath(url) {
+  const routingPath = decodeRoutingPath(url.pathname);
+  if (routingPath === null) return false;
+  if ([scopeUrl.pathname, indexUrl.pathname].includes(routingPath)) return true;
+
+  const assetsRootPath = assetsPath.endsWith("/") ? assetsPath.slice(0, -1) : assetsPath;
+  const finalPathSegment = routingPath.split("/").at(-1) || "";
   return (
-    url.pathname.startsWith(new URL("api/", scopeUrl).pathname) ||
-    url.pathname.startsWith(new URL("auth/", scopeUrl).pathname)
+    routingPath !== assetsRootPath &&
+    !routingPath.startsWith(assetsPath) &&
+    !finalPathSegment.includes(".")
   );
 }
 
@@ -356,7 +570,8 @@ function shouldHandleStaticRequest(request, url) {
 
   return (
     CACHEABLE_DESTINATIONS.has(request.destination) ||
-    url.pathname === manifestUrl.pathname ||
+    url.pathname === webAppManifestUrl.pathname ||
+    url.pathname === precacheManifestUrl.pathname ||
     url.pathname.startsWith(assetsPath)
   );
 }
@@ -377,7 +592,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(event));
+    if (isAppNavigationPath(url)) {
+      event.respondWith(networkFirstNavigation(event));
+    }
     return;
   }
 

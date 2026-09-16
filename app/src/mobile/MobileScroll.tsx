@@ -52,6 +52,7 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
   const { isKeyboardVisible, keyboardHeight, keyboardDragging } = useKeyboardInsets();
   const { focusedElement } = useKeyboard();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollbarRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const inertiaFrameRef = useRef<number | null>(null);
   const lastInertiaTimeRef = useRef<number | null>(null);
@@ -166,11 +167,14 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
     if (!scroll) return;
 
     const { clientHeight, scrollHeight, scrollTop } = scroll;
+    const trackHeight = scrollbarRef.current?.clientHeight ?? clientHeight;
     const enabled = scrollHeight > clientHeight + 2;
-    const height = enabled ? Math.max(36, (clientHeight / scrollHeight) * clientHeight) : 0;
-    const maxThumbTop = Math.max(0, clientHeight - height - 8);
+    const height = enabled
+      ? Math.min(trackHeight, Math.max(36, (clientHeight / scrollHeight) * trackHeight))
+      : 0;
+    const maxThumbTop = Math.max(0, trackHeight - height);
     const maxScrollTop = Math.max(1, scrollHeight - clientHeight);
-    const top = enabled ? 4 + (scrollTop / maxScrollTop) * maxThumbTop : 0;
+    const top = enabled ? (scrollTop / maxScrollTop) * maxThumbTop : 0;
 
     setThumb({ visible: visible && enabled, top, height, enabled });
 
@@ -214,6 +218,9 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
 
     scroll.addEventListener("scroll", handleScroll, { passive: true });
     resizeObserver.observe(scroll);
+    if (scrollbarRef.current) {
+      resizeObserver.observe(scrollbarRef.current);
+    }
 
     if (scroll.firstElementChild) {
       resizeObserver.observe(scroll.firstElementChild);
@@ -495,6 +502,7 @@ export function MobileScroll({ className, children }: MobileScrollProps) {
         </div>
       </div>
       <div
+        ref={scrollbarRef}
         className="mobile-scrollbar"
         data-testid="mobile-scrollbar"
         data-visible={thumb.visible ? "true" : "false"}

@@ -2,6 +2,7 @@ import type {
   PremiumDeviceIdentityStore,
   StoredPremiumDeviceIdentity,
 } from "./license-store.ts";
+import { PremiumLicenseStorageError } from "./license-store.ts";
 
 const BASE64URL_32_BYTES = /^[A-Za-z0-9_-]{43}$/;
 
@@ -12,6 +13,31 @@ export interface PremiumDeviceIdentity {
   readonly thumbprint: string;
   readonly createdAtUtc: string;
 }
+
+export type PremiumDeviceIdentityFailure =
+  | "stored-key-invalid"
+  | "generation-failed"
+  | "persistence-roundtrip-failed"
+  | "self-test-failed";
+
+export class PremiumDeviceIdentityError extends Error {
+  readonly name = "PremiumDeviceIdentityError";
+  readonly reason: PremiumDeviceIdentityFailure;
+
+  constructor(
+    reason: PremiumDeviceIdentityFailure,
+    message: string,
+    options: { cause?: unknown } = {},
+  ) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    this.reason = reason;
+  }
+}
+
+const identityOperations = new WeakMap<
+  PremiumDeviceIdentityStore,
+  Promise<PremiumDeviceIdentity>
+>();
 
 function exactPublicJwk(value: JsonWebKey): asserts value is JsonWebKey & {
   kty: "EC";
@@ -93,25 +119,118 @@ async function assertStoredIdentity(
   });
 }
 
+async function assertDeviceKeySelfTest(
+  identity: PremiumDeviceIdentity,
+): Promise<PremiumDeviceIdentity> {
+  try {
+    const message = crypto.getRandomValues(new Uint8Array(32));
+    const signature = await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" },
+      identity.privateKey,
+      message,
+    );
+    const verified = await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      identity.publicKey,
+      signature,
+      message,
+    );
+    if (!verified) {
+      throw new Error("Cihaz anahtarı imza öz sınamasını geçemedi.");
+    }
+    return identity;
+  } catch (error) {
+    throw new PremiumDeviceIdentityError(
+      "self-test-failed",
+      "Premium cihaz anahtarı bu tarayıcıda imza doğrulamasını tamamlayamadı.",
+      { cause: error },
+    );
+  }
+}
+
+async function validateStoredIdentity(
+  identity: StoredPremiumDeviceIdentity,
+): Promise<PremiumDeviceIdentity> {
+  try {
+    return await assertDeviceKeySelfTest(await assertStoredIdentity(identity));
+  } catch (error) {
+    if (error instanceof PremiumDeviceIdentityError) throw error;
+    throw new PremiumDeviceIdentityError(
+      "stored-key-invalid",
+      "Bu telefondaki premium cihaz anahtarı geçersiz veya kullanılamıyor.",
+      { cause: error },
+    );
+  }
+}
+
+async function createOrLoadPremiumDeviceIdentity(
+  store: PremiumDeviceIdentityStore,
+  now: Date,
+): Promise<PremiumDeviceIdentity> {
+  const existing = await store.load();
+  if (existing) return validateStoredIdentity(existing);
+
+  let keyPair: CryptoKeyPair;
+  let publicJwk: JsonWebKey;
+  try {
+    keyPair = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"],
+    );
+    publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  } catch (error) {
+    throw new PremiumDeviceIdentityError(
+      "generation-failed",
+      "Bu tarayıcı güvenli premium cihaz anahtarı oluşturamadı.",
+      { cause: error },
+    );
+  }
+
+  try {
+    await store.createIfAbsent({
+      publicKey: keyPair.publicKey,
+      privateKey: keyPair.privateKey,
+      publicJwk,
+      thumbprint: await premiumDeviceKeyThumbprint(publicJwk),
+      createdAtUtc: now.toISOString(),
+    });
+    await store.reopen?.();
+    const persisted = await store.load();
+    if (!persisted) {
+      throw new Error("Kalıcı premium cihaz anahtarı yeniden okunamadı.");
+    }
+    return await validateStoredIdentity(persisted);
+  } catch (error) {
+    if (
+      error instanceof PremiumLicenseStorageError &&
+      error.domExceptionName !== "DataCloneError"
+    ) {
+      throw error;
+    }
+    if (error instanceof PremiumDeviceIdentityError) throw error;
+    throw new PremiumDeviceIdentityError(
+      "persistence-roundtrip-failed",
+      "Premium cihaz anahtarı bu tarayıcıda güvenle saklanıp yeniden açılamadı.",
+      { cause: error },
+    );
+  }
+}
+
 export async function getOrCreatePremiumDeviceIdentity(
   store: PremiumDeviceIdentityStore,
   now = new Date(),
 ): Promise<PremiumDeviceIdentity> {
   if (Number.isNaN(now.getTime())) throw new Error("Cihaz anahtari olusturma zamani gecersiz.");
-  const existing = await store.load();
-  if (existing) return assertStoredIdentity(existing);
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign", "verify"],
-  );
-  const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
-  const created = await store.createIfAbsent({
-    publicKey: keyPair.publicKey,
-    privateKey: keyPair.privateKey,
-    publicJwk,
-    thumbprint: await premiumDeviceKeyThumbprint(publicJwk),
-    createdAtUtc: now.toISOString(),
-  });
-  return assertStoredIdentity(created);
+  const current = identityOperations.get(store);
+  if (current) return current;
+  const operation = createOrLoadPremiumDeviceIdentity(store, now);
+  identityOperations.set(store, operation);
+  try {
+    return await operation;
+  } finally {
+    if (identityOperations.get(store) === operation) {
+      identityOperations.delete(store);
+    }
+  }
 }

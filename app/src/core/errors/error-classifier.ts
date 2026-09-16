@@ -1,7 +1,7 @@
 import {
   ApplicationError,
   type ApplicationErrorKind,
-} from "./application-errors";
+} from "./application-errors.ts";
 
 export type ClassifiedErrorKind = ApplicationErrorKind | "unknown";
 export type ErrorHandlingScope =

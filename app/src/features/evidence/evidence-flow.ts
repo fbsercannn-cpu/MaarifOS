@@ -1,3 +1,4 @@
+import { resolveStudentMembershipOn, studentMembershipOverlaps } from "../../core/domain/student-membership.ts";
 import {
   civilDateInIstanbul,
   isCivilDate,
@@ -8,8 +9,29 @@ import {
   resolveActiveClassroomScope,
   type ActiveClassroomScope,
 } from "../../core/domain/classroom-scope.ts";
-import { isLocalTime } from "../../core/domain/classroom.ts";
+import {
+  isClassroomSchedule,
+  isLocalTime,
+} from "../../core/domain/classroom.ts";
 import { createEmptySnapshot, type StoredRecord } from "../../core/domain/model.ts";
+import {
+  assertPedagogicalPlanProvenance,
+  bindPedagogicalPlanProvenanceToCivilDate,
+  type PedagogicalPlanProvenance,
+} from "../../core/domain/pedagogical-plan-provenance.ts";
+import {
+  isTeacherOwnedPlanRecord,
+  type TeacherOwnedWeeklyPlan,
+} from "../../core/domain/teacher-owned-plan.ts";
+import {
+  createTeacherOwnedDailyFlow,
+  isTeacherOwnedDailyFlow,
+  reviseTeacherOwnedDailyFlow,
+  type TeacherOwnedActivityFlowBlockKind,
+  type TeacherOwnedDailyFlowBlockEdit,
+  type TeacherOwnedDailyFlowBlockDraft,
+  type TeacherOwnedDailyFlowTemplateSource,
+} from "../../core/domain/teacher-owned-daily-flow.ts";
 import type {
   DataTransaction,
   LocalDataStore,
@@ -21,6 +43,7 @@ import {
   type CurriculumTargetSnapshot,
   type PlannedCurriculumAssignment,
 } from "../curriculum/curriculum-catalog.ts";
+import type { TymmHolisticLearningOutcomeReference } from "../curriculum/tymm-holistic-graph.ts";
 import {
   parsePremiumLensPreferenceRecord,
   premiumDailyFlowSnapshot,
@@ -32,6 +55,9 @@ import { parsePedagogicalRawObservationText } from "../values/value-plan-models.
 import {
   resolveLocalTeacherIdentity,
 } from "./local-teacher-identity.ts";
+import { scheduledPlanIntegrityIssue } from "../planning/scheduled-plan-workspace.ts";
+import { isAuthenticSpontaneousObservationActivity } from "./spontaneous-observation-integrity.ts";
+import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 
 export {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
@@ -81,12 +107,37 @@ export interface PlanActivityResult {
   activity: StoredRecord;
 }
 
+export interface ExpectedTeacherOwnedDailyLineage {
+  annualPlanId: string;
+  monthlyPlanId: string;
+  weeklyPlanId: string;
+  expectedAnnualUpdatedAt: string;
+  expectedMonthlyUpdatedAt: string;
+  expectedWeeklyUpdatedAt: string;
+}
+
 export interface CapturedEvidenceResult {
   observation: StoredRecord;
 }
 
 export interface AssessmentDraftResult {
   draft: StoredRecord;
+}
+
+export interface UpdateScheduledPlanCommand {
+  planId: string;
+  activityId: string;
+  expectedPlanUpdatedAt: string;
+  expectedActivityUpdatedAt: string;
+  civilDate: string;
+  planTitle: string;
+  activityTitle: string;
+  startTime: string;
+  endTime?: string;
+  premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+  teacherOwnedDailyFlowBlocks?: readonly TeacherOwnedDailyFlowBlockEdit[];
+  teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
+  now?: Date;
 }
 
 const UUID_PATTERN =
@@ -156,6 +207,18 @@ function sameCurriculumProfile(
   );
 }
 
+function sameCurriculumProgramSource(
+  left: CurriculumProfileSnapshot,
+  right: CurriculumProfileSnapshot,
+): boolean {
+  return (
+    left.framework === right.framework &&
+    left.programLabel === right.programLabel &&
+    left.catalogId === right.catalogId &&
+    left.sourceVersion === right.sourceVersion
+  );
+}
+
 function curriculumProfileFromUnknown(value: unknown): CurriculumProfileSnapshot | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   try {
@@ -189,6 +252,22 @@ function normalizeCurriculumTargets(
         target.verificationStatus !== "teacher-declared-unverified")
     ) {
       throw new Error("Seçilen program hedefinin kaynak veya başlık bilgisi eksik.");
+    }
+    if (
+      target.framework === "tymm" &&
+      target.catalogCompleteness === "complete" &&
+      target.verificationStatus === "official-source-checked" &&
+      target.officialCatalogVerified &&
+      (!Number.isInteger(target.sourcePage) ||
+        Number(target.sourcePage) < 1 ||
+        typeof target.sourceSha256 !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/u.test(target.sourceSha256) ||
+        !Array.isArray(target.ageBands) ||
+        target.ageBands.length !== 1)
+    ) {
+      throw new Error(
+        "Resmî TYMM hedefinin yaş bandı, kaynak sayfası veya PDF özeti eksik.",
+      );
     }
     if (uniqueIds.has(target.id)) {
       throw new Error("Aynı program hedefi bir plana birden fazla eklenemez.");
@@ -229,6 +308,8 @@ function normalizeCurriculumTargets(
 function activeStudentIdsForScope(
   students: readonly StoredRecord[],
   scope: ActiveClassroomScope,
+  civilDate: string,
+  academicYear: StoredRecord,
 ): string[] {
   return students
     .filter(
@@ -237,7 +318,7 @@ function activeStudentIdsForScope(
         record.enrollmentStatus !== "left" &&
         record.enrollmentStatus !== "completed" &&
         record.enrollmentStatus !== "transferred" &&
-        sameScope(record, scope),
+        sameScope(record, scope) && resolveStudentMembershipOn(record, { ...scope, civilDate, academicYear }).eligible,
     )
     .map((record) => record.id)
     .sort((left, right) => left.localeCompare(right));
@@ -264,6 +345,65 @@ function sameScope(record: StoredRecord, scope: ActiveClassroomScope): boolean {
   return recordBelongsToClassroomScope(record, scope);
 }
 
+function cloneHolisticGraphReference(
+  reference: TymmHolisticLearningOutcomeReference,
+): TymmHolisticLearningOutcomeReference {
+  return Object.freeze({
+    ...reference,
+    relatedNodeIds: Object.freeze([...reference.relatedNodeIds]),
+  });
+}
+
+async function attachCanonicalHolisticGraphReferences(
+  targets: readonly CurriculumTargetSnapshot[],
+): Promise<CurriculumTargetSnapshot[]> {
+  const needsGraph = targets.some(
+    (target) =>
+      target.framework === "tymm" &&
+      target.kind === "learning-outcome" &&
+      target.catalogCompleteness === "complete" &&
+      target.verificationStatus === "official-source-checked" &&
+      target.officialCatalogVerified === true &&
+      Array.isArray(target.ageBands) &&
+      target.ageBands.length === 1,
+  );
+  if (!needsGraph) {
+    return targets.map(({ holisticGraphReference: _ignored, ...target }) => ({
+      ...target,
+    }));
+  }
+
+  const { createTymmHolisticLearningOutcomeReference } = await import(
+    "../curriculum/tymm-holistic-graph.ts"
+  );
+  return targets.map(({ holisticGraphReference: _ignored, ...target }) => {
+    if (
+      target.framework !== "tymm" ||
+      target.kind !== "learning-outcome" ||
+      target.catalogCompleteness !== "complete" ||
+      target.verificationStatus !== "official-source-checked" ||
+      target.officialCatalogVerified !== true ||
+      !Array.isArray(target.ageBands) ||
+      target.ageBands.length !== 1
+    ) {
+      return { ...target };
+    }
+    const reference = createTymmHolisticLearningOutcomeReference(
+      target.ageBands[0],
+      target.referenceCode,
+    );
+    if (!reference) {
+      throw new Error(
+        "Resmî TYMM öğrenme çıktısının bütüncül program grafiği bağlantısı bulunamadı.",
+      );
+    }
+    return {
+      ...target,
+      holisticGraphReference: cloneHolisticGraphReference(reference),
+    };
+  });
+}
+
 function sameCanonicalSnapshot(left: unknown, right: unknown): boolean {
   try {
     return canonicalJson(left) === canonicalJson(right);
@@ -284,6 +424,64 @@ function snapshotById(candidates: unknown, id: string): unknown | null {
   ) ?? null;
 }
 
+type TeacherOwnedDailyLineage = {
+  annualPlanId: string;
+  monthlyPlanId: string;
+  weeklyPlanId: string;
+};
+
+function resolveTeacherOwnedDailyLineage(
+  plans: readonly StoredRecord[],
+  scope: ActiveClassroomScope,
+  civilDate: string,
+): TeacherOwnedDailyLineage | null {
+  const matchingWeeks = plans.filter(
+    (record): record is TeacherOwnedWeeklyPlan =>
+      isTeacherOwnedPlanRecord(record) &&
+      record.planType === "weekly" &&
+      typeof record.deletedAt !== "string" &&
+      sameScope(record, scope) &&
+      record.periodStart <= civilDate &&
+      record.periodEnd >= civilDate,
+  );
+  if (matchingWeeks.length === 0) return null;
+  if (matchingWeeks.length !== 1) {
+    throw new Error(
+      "Bu gün birden fazla öğretmen haftalık planına düşüyor; çakışma incelenmeden günlük plan oluşturulamaz.",
+    );
+  }
+
+  const weekly = matchingWeeks[0];
+  const monthly = plans.find((record) => record.id === weekly.monthlyPlanId);
+  const annual = plans.find((record) => record.id === weekly.annualPlanId);
+  if (
+    !monthly ||
+    !annual ||
+    !isTeacherOwnedPlanRecord(monthly) ||
+    monthly.planType !== "monthly" ||
+    !isTeacherOwnedPlanRecord(annual) ||
+    annual.planType !== "annual" ||
+    monthly.annualPlanId !== annual.id ||
+    !annual.monthlySectionIds.includes(monthly.id) ||
+    !monthly.weeklySectionIds.includes(weekly.id) ||
+    !sameScope(monthly, scope) ||
+    !sameScope(annual, scope) ||
+    weekly.periodStart < monthly.periodStart ||
+    weekly.periodEnd > monthly.periodEnd ||
+    monthly.periodStart < annual.periodStart ||
+    monthly.periodEnd > annual.periodEnd
+  ) {
+    throw new Error(
+      "Günlük planın öğretmene ait yıl, ay ve hafta kaynak zinciri doğrulanamadı.",
+    );
+  }
+  return {
+    annualPlanId: annual.id,
+    monthlyPlanId: monthly.id,
+    weeklyPlanId: weekly.id,
+  };
+}
+
 export async function createPlanWithActivity(
   store: LocalDataStore,
   input: {
@@ -300,7 +498,13 @@ export async function createPlanWithActivity(
     studentIds: string[];
     premiumSource?: PremiumDailyTemplateSelection;
     premiumDailyFlowBlocks?: readonly PremiumDailyFlowBlockDraft[];
+    teacherOwnedDailyFlowBlocks?: readonly TeacherOwnedDailyFlowBlockDraft[];
+    teacherOwnedActivityBlockKind?: TeacherOwnedActivityFlowBlockKind;
+    teacherOwnedDailyFlowTemplateSource?: TeacherOwnedDailyFlowTemplateSource;
+    pedagogicalProvenance?: PedagogicalPlanProvenance;
     premiumAlternativeActivated?: boolean;
+    expectedTeacherOwnedLineage?: ExpectedTeacherOwnedDailyLineage;
+    initialActivityStatus?: "planned" | "in_progress";
     now?: Date;
   },
 ): Promise<PlanActivityResult> {
@@ -313,12 +517,42 @@ export async function createPlanWithActivity(
   if (input.endTime && input.startTime >= input.endTime) {
     throw new Error("Etkinlik bitiş saati başlangıç saatinden sonra olmalıdır.");
   }
+  if (
+    input.initialActivityStatus !== undefined &&
+    input.initialActivityStatus !== "planned" &&
+    input.initialActivityStatus !== "in_progress"
+  ) {
+    throw new Error("İlk etkinlik durumu planlandı veya devam ediyor olmalıdır.");
+  }
+  if (input.premiumSource && input.teacherOwnedDailyFlowBlocks !== undefined) {
+    throw new Error(
+      "Öğretmenin günlük akışı premium sağlayıcı planıyla birleştirilemez.",
+    );
+  }
+  const initialActivityStatus = input.initialActivityStatus ?? "planned";
+  const expectedTeacherOwnedLineage = input.expectedTeacherOwnedLineage;
+  if (expectedTeacherOwnedLineage) {
+    validUuid(expectedTeacherOwnedLineage.annualPlanId, "Beklenen yıllık plan");
+    validUuid(expectedTeacherOwnedLineage.monthlyPlanId, "Beklenen aylık plan");
+    validUuid(expectedTeacherOwnedLineage.weeklyPlanId, "Beklenen haftalık plan");
+    validUtc(
+      expectedTeacherOwnedLineage.expectedAnnualUpdatedAt,
+      "Beklenen yıllık plan güncelleme zamanı",
+    );
+    validUtc(
+      expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt,
+      "Beklenen aylık plan güncelleme zamanı",
+    );
+    validUtc(
+      expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt,
+      "Beklenen haftalık plan güncelleme zamanı",
+    );
+  }
   const planId = validUuid(input.planId, "Plan");
   const activityId = validUuid(input.activityId, "Etkinlik");
   const profile = normalizeCurriculumProfile(input.curriculumProfile);
-  const curriculumTargets = normalizeCurriculumTargets(
-    input.curriculumTargets,
-    profile,
+  const curriculumTargets = await attachCanonicalHolisticGraphReferences(
+    normalizeCurriculumTargets(input.curriculumTargets, profile),
   );
   if (
     input.assignmentMode !== "whole-class" &&
@@ -332,6 +566,12 @@ export async function createPlanWithActivity(
   const now = input.now ?? new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
   const timestamp = now.toISOString();
+  const pedagogicalProvenance = input.pedagogicalProvenance
+    ? bindPedagogicalPlanProvenanceToCivilDate(
+        input.pedagogicalProvenance,
+        input.civilDate,
+      )
+    : undefined;
   let result: PlanActivityResult | null = null;
 
   await store.transaction(
@@ -360,7 +600,14 @@ export async function createPlanWithActivity(
         !academicYear ||
         !isCivilDate(academicYear.startDate) ||
         !isCivilDate(academicYear.endDate) ||
-        input.civilDate < academicYear.startDate ||
+        input.civilDate <
+          academicYearEffectiveOperationalStart({
+            startDate: academicYear.startDate,
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.civilDate > academicYear.endDate
       ) {
         throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
@@ -382,6 +629,26 @@ export async function createPlanWithActivity(
       }
       if (activities.some((record) => record.id === activityId)) {
         throw new Error("Bu etkinlik kimliği zaten kullanılıyor.");
+      }
+      if (
+        initialActivityStatus === "in_progress" &&
+        activities.some(
+          (record) =>
+            record.status === "in_progress" &&
+            !isAuthenticSpontaneousObservationActivity(
+              record,
+              plans,
+              scope,
+              input.civilDate,
+            ) &&
+            record.civilDate === input.civilDate &&
+            typeof record.deletedAt !== "string" &&
+            sameScope(record, scope),
+        )
+      ) {
+        throw new Error(
+          "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
+        );
       }
       if (input.premiumSource) {
         const premiumSource = input.premiumSource;
@@ -528,7 +795,127 @@ export async function createPlanWithActivity(
           );
         }
       }
-      const activeStudentIds = activeStudentIdsForScope(students, scope);
+      const teacherOwnedLineage = input.premiumSource
+        ? null
+        : resolveTeacherOwnedDailyLineage(plans, scope, input.civilDate);
+      if (expectedTeacherOwnedLineage) {
+        const expectedAnnual = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.annualPlanId,
+        );
+        const expectedMonthly = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.monthlyPlanId,
+        );
+        const expectedWeekly = plans.find(
+          (record) => record.id === expectedTeacherOwnedLineage.weeklyPlanId,
+        );
+        if (
+          !teacherOwnedLineage ||
+          teacherOwnedLineage.annualPlanId !== expectedTeacherOwnedLineage.annualPlanId ||
+          teacherOwnedLineage.monthlyPlanId !== expectedTeacherOwnedLineage.monthlyPlanId ||
+          teacherOwnedLineage.weeklyPlanId !== expectedTeacherOwnedLineage.weeklyPlanId ||
+          expectedAnnual?.updatedAt !== expectedTeacherOwnedLineage.expectedAnnualUpdatedAt ||
+          expectedMonthly?.updatedAt !== expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt ||
+          expectedWeekly?.updatedAt !== expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt
+        ) {
+          throw new Error(
+            "Plan zinciri seçimden sonra değişti; günlük plan son sürüm yüklenmeden kaydedilmedi.",
+          );
+        }
+        if (
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedAnnualUpdatedAt) ||
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedMonthlyUpdatedAt) ||
+          Date.parse(timestamp) <= Date.parse(expectedTeacherOwnedLineage.expectedWeeklyUpdatedAt)
+        ) {
+          throw new Error(
+            "Günlük plan kayıt zamanı kaynak planların son güncelleme zamanından sonra olmalıdır.",
+          );
+        }
+        if (
+          plans.some(
+            (record) =>
+              record.planType === "daily" &&
+              record.civilDate === input.civilDate &&
+              typeof record.deletedAt !== "string" &&
+              sameScope(record, scope),
+          )
+        ) {
+          throw new Error(
+            "Bu gün için günlük plan zaten var; ikinci bir plan oluşturulmadı.",
+          );
+        }
+      }
+      if (
+        input.teacherOwnedDailyFlowBlocks !== undefined &&
+        !teacherOwnedLineage
+      ) {
+        throw new Error(
+          "Öğretmen günlük akışı yalnız doğrulanmış yıllık, aylık ve haftalık öğretmen planı zincirinde saklanabilir.",
+        );
+      }
+      if (input.teacherOwnedDailyFlowTemplateSource !== undefined && !teacherOwnedLineage) {
+        throw new Error(
+          "Öğretmen günlük akış şablon kaynağı yalnız doğrulanmış öğretmen plan zincirinde kullanılabilir.",
+        );
+      }
+      let teacherOwnedDailyFlow = null;
+      let teacherOwnedFlowBlockId: string | null = null;
+      if (teacherOwnedLineage) {
+        if (!input.teacherOwnedDailyFlowBlocks || !input.teacherOwnedActivityBlockKind) {
+          throw new Error(
+            "Öğretmen plan zincirindeki günlük akış, 10 bölüm ve gerçek etkinliğin uygulanacağı bölüm öğretmen tarafından gözden geçirilmeden kaydedilemez.",
+          );
+        }
+        if (!isClassroomSchedule(classroom?.schedule)) {
+          throw new Error(
+            "Öğretmen günlük akışı için sınıfın başlangıç ve bitiş saatleri tamamlanmalıdır.",
+          );
+        }
+        if (input.teacherOwnedDailyFlowTemplateSource) {
+          const source = input.teacherOwnedDailyFlowTemplateSource;
+          const sourcePlan = plans.find(
+            (plan) =>
+              plan.id === source.sourcePlanId &&
+              plan.planType === "daily" &&
+              plan.sourceWeeklyPlanId === teacherOwnedLineage.weeklyPlanId &&
+              plan.sourceWeeklyPlanId === source.sourceWeeklyPlanId &&
+              plan.civilDate === source.sourceCivilDate &&
+              typeof plan.civilDate === "string" &&
+              plan.civilDate < input.civilDate &&
+              typeof plan.deletedAt !== "string" &&
+              sameScope(plan, scope) &&
+              isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow) &&
+              plan.teacherOwnedDailyFlow.revisionNumber ===
+                source.sourceFlowRevisionNumber,
+          );
+          if (!sourcePlan) {
+            throw new Error(
+              "Günlük akış şablonu yalnız aynı haftadaki doğrulanmış önceki öğretmen planından alınabilir.",
+            );
+          }
+        }
+        const confirmedByUserId = await resolveLocalTeacherIdentity(transaction, {
+          now,
+        });
+        teacherOwnedDailyFlow = createTeacherOwnedDailyFlow({
+          blocks: input.teacherOwnedDailyFlowBlocks,
+          schedule: classroom.schedule,
+          confirmedByUserId,
+          ...(input.teacherOwnedDailyFlowTemplateSource
+            ? { templateSource: input.teacherOwnedDailyFlowTemplateSource }
+            : {}),
+          now,
+        });
+        const activityFlowBlock = teacherOwnedDailyFlow.blocks.find(
+          (block) => block.kind === input.teacherOwnedActivityBlockKind,
+        );
+        if (!activityFlowBlock || activityFlowBlock.status === "skipped") {
+          throw new Error(
+            "Gerçek etkinlik yalnız öğretmen akışındaki uygulanacak bir etkinlik bölümüne bağlanabilir.",
+          );
+        }
+        teacherOwnedFlowBlockId = activityFlowBlock.id;
+      }
+      const activeStudentIds = activeStudentIdsForScope(students, scope, input.civilDate, academicYear);
       const assignedStudentIds =
         input.assignmentMode === "whole-class"
           ? activeStudentIds
@@ -603,6 +990,21 @@ export async function createPlanWithActivity(
               lensSelectionMode: input.premiumSource.lensSelectionMode,
             }
           : {}),
+        ...(teacherOwnedLineage
+          ? {
+              sourceAnnualPlanId: teacherOwnedLineage.annualPlanId,
+              sourceMonthlyPlanId: teacherOwnedLineage.monthlyPlanId,
+              sourceWeeklyPlanId: teacherOwnedLineage.weeklyPlanId,
+              teacherOwnedDailyFlow,
+            }
+          : {}),
+        ...(pedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                pedagogicalProvenance,
+              ),
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -617,7 +1019,7 @@ export async function createPlanWithActivity(
         title: requiredText(input.activityTitle, "Etkinlik başlığı"),
         startTime: input.startTime,
         ...(input.endTime ? { endTime: input.endTime } : {}),
-        status: "planned",
+        status: initialActivityStatus,
         curriculumProfileSnapshot: profile,
         curriculumTargets,
         maarifRefs,
@@ -646,6 +1048,21 @@ export async function createPlanWithActivity(
               lensSelectionMode: input.premiumSource.lensSelectionMode,
             }
           : {}),
+        ...(teacherOwnedLineage
+          ? {
+              sourceAnnualPlanId: teacherOwnedLineage.annualPlanId,
+              sourceMonthlyPlanId: teacherOwnedLineage.monthlyPlanId,
+              sourceWeeklyPlanId: teacherOwnedLineage.weeklyPlanId,
+              teacherOwnedFlowBlockId,
+            }
+          : {}),
+        ...(pedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                pedagogicalProvenance,
+              ),
+            }
+          : {}),
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
         createdAt: timestamp,
@@ -660,6 +1077,321 @@ export async function createPlanWithActivity(
     },
   );
   if (!result) throw new Error("Plan ve etkinlik kaydedilemedi.");
+  return result;
+}
+
+export async function updateScheduledPlanWithActivity(
+  store: LocalDataStore,
+  input: UpdateScheduledPlanCommand,
+): Promise<PlanActivityResult> {
+  const planId = validUuid(input.planId, "Plan");
+  const activityId = validUuid(input.activityId, "Etkinlik");
+  if (!isCivilDate(input.civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  if (!isLocalTime(input.startTime) || (input.endTime && !isLocalTime(input.endTime))) {
+    throw new Error("Etkinlik saatleri SS:DD biçiminde olmalıdır.");
+  }
+  if (input.endTime && input.startTime >= input.endTime) {
+    throw new Error("Etkinlik bitiş saati başlangıç saatinden sonra olmalıdır.");
+  }
+  const planTitle = requiredText(input.planTitle, "Plan başlığı");
+  const activityTitle = requiredText(input.activityTitle, "Etkinlik başlığı");
+  if (
+    Boolean(input.premiumDailyFlowBlocks?.length) &&
+    Boolean(input.teacherOwnedDailyFlowBlocks?.length)
+  ) {
+    throw new Error(
+      "Premium akış ile öğretmenin günlük akışı aynı revizyonda birleştirilemez.",
+    );
+  }
+  const now = input.now ?? new Date();
+  if (Number.isNaN(now.getTime())) throw new Error("Geçerli bir kayıt zamanı gerekli.");
+  const today = civilDateInIstanbul(now);
+  const timestamp = now.toISOString();
+  let result: PlanActivityResult | null = null;
+
+  await store.transaction(
+    "readwrite",
+    [
+      "academicYears",
+      "classrooms",
+      "settings",
+      "students",
+      "plans",
+      "activities",
+      "observations",
+    ],
+    async (transaction) => {
+      const scope = await activeScopeInTransaction(transaction);
+      const [academicYears, students, plans, activities, observations] = await Promise.all([
+        transaction.getAll("academicYears"),
+        transaction.getAll("students"),
+        transaction.getAll("plans"),
+        transaction.getAll("activities"),
+        transaction.getAll("observations"),
+      ]);
+      const plan = plans.find(
+        (record) =>
+          record.id === planId &&
+          record.planType === "daily" &&
+          typeof record.deletedAt !== "string" &&
+          sameScope(record, scope),
+      );
+      if (!plan) {
+        throw new Error("Düzenlenecek günlük plan etkin sınıfta bulunamadı.");
+      }
+      const planActivities = activities.filter(
+        (record) =>
+          record.planId === plan.id &&
+          typeof record.deletedAt !== "string" &&
+          sameScope(record, scope),
+      );
+      const activity = planActivities.length === 1 && planActivities[0].id === activityId
+        ? planActivities[0]
+        : null;
+      if (!activity) {
+        throw new Error("Düzenleme için plana bağlı tek bir gerçek etkinlik bulunmalıdır.");
+      }
+      if (
+        plan.updatedAt !== input.expectedPlanUpdatedAt ||
+        activity.updatedAt !== input.expectedActivityUpdatedAt
+      ) {
+        throw new Error(
+          "Plan başka bir ekranda değiştirildi. Güncel kaydı yeniden açıp düzenleyin.",
+        );
+      }
+      if (
+        activity.civilDate !== plan.civilDate ||
+        Date.parse(plan.updatedAt) > now.getTime() ||
+        Date.parse(activity.updatedAt) > now.getTime()
+      ) {
+        throw new Error(
+          activity.civilDate !== plan.civilDate
+            ? "Plan ile gerçek etkinliğin kayıtlı tarihleri uyuşmuyor."
+            : "Kayıt zamanı planın son değişiklik zamanından eski olamaz.",
+        );
+      }
+      if (
+        plan.civilDate <= today ||
+        input.civilDate <= today ||
+        plan.coverageStatus !== "planned" ||
+        activity.status !== "planned"
+      ) {
+        throw new Error("Yalnız henüz başlamamış gelecek tarihli planlar düzenlenebilir.");
+      }
+      if (
+        observations.some(
+          (observation) =>
+            typeof observation.deletedAt !== "string" &&
+            sameScope(observation, scope) &&
+            (observation.planId === plan.id || observation.activityId === activity.id),
+        )
+      ) {
+        throw new Error("Gözlem kanıtı bulunan planlar geriye dönük değiştirilemez.");
+      }
+      const academicYear = academicYears.find(
+        (record) =>
+          record.id === scope.academicYearId &&
+          typeof record.deletedAt !== "string",
+      );
+      if (
+        !academicYear ||
+        !isCivilDate(String(academicYear.startDate)) ||
+        !isCivilDate(String(academicYear.endDate)) ||
+        input.civilDate <
+          academicYearEffectiveOperationalStart({
+            startDate: String(academicYear.startDate),
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
+        input.civilDate > String(academicYear.endDate)
+      ) {
+        throw new Error("Plan günü aktif eğitim yılının tarih aralığında olmalıdır.");
+      }
+      const assignedIds = Array.isArray(activity.studentIds) ? activity.studentIds : [];
+      if (assignedIds.some(id => !students.some(student => student.id === id && resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: input.civilDate }).eligible))) {
+        throw new Error("Planın çocuklarından biri yeni tarihte bu sınıfa kayıtlı değil; tarih veya çocuk kapsamı incelenmeli.");
+      }
+      const integrityIssue = scheduledPlanIntegrityIssue({
+        plan,
+        activity,
+        plans,
+        scope,
+      });
+      if (integrityIssue) throw new Error(integrityIssue);
+
+      const sourceWeeklyPlan = typeof plan.sourceWeeklyPlanId === "string"
+        ? plans.find(
+            (record) =>
+              record.id === plan.sourceWeeklyPlanId &&
+              record.planType === "weekly" &&
+              typeof record.deletedAt !== "string" &&
+              sameScope(record, scope),
+          )
+        : null;
+      if (
+        sourceWeeklyPlan &&
+        (input.civilDate < String(sourceWeeklyPlan.periodStart) ||
+          input.civilDate > String(sourceWeeklyPlan.periodEnd))
+      ) {
+        throw new Error("Plan tarihi kayıtlı kaynak haftanın dışına taşınamaz.");
+      }
+
+      let premiumDailyFlowSnapshot = plan.premiumDailyFlowSnapshot;
+      if (premiumDailyFlowSnapshot !== undefined) {
+        if (
+          !premiumDailyFlowSnapshot ||
+          typeof premiumDailyFlowSnapshot !== "object" ||
+          Array.isArray(premiumDailyFlowSnapshot) ||
+          !Array.isArray((premiumDailyFlowSnapshot as Record<string, unknown>).blocks) ||
+          !input.premiumDailyFlowBlocks
+        ) {
+          throw new Error("Kayıtlı tam gün akışı düzenleme için doğrulanamadı.");
+        }
+        const existingBlocks = (premiumDailyFlowSnapshot as Record<string, unknown>)
+          .blocks as Array<Record<string, unknown>>;
+        if (
+          input.premiumDailyFlowBlocks.length !== existingBlocks.length ||
+          input.premiumDailyFlowBlocks.some(
+            (block, index) =>
+              block.id !== existingBlocks[index]?.id ||
+              !["planned", "optional", "skipped"].includes(block.status) ||
+              !Number.isInteger(block.durationMinutes) ||
+              block.durationMinutes < 5 ||
+              block.durationMinutes > 240 ||
+              typeof block.transitionNote !== "string" ||
+              block.transitionNote.length > 500 ||
+              typeof block.teacherNote !== "string" ||
+              block.teacherNote.length > 1_000,
+          )
+        ) {
+          throw new Error("Tam gün akışındaki öğretmen düzenlemeleri geçersiz.");
+        }
+        premiumDailyFlowSnapshot = {
+          ...(premiumDailyFlowSnapshot as Record<string, unknown>),
+          planCivilDate: input.civilDate,
+          blocks: existingBlocks.map((block, index) => ({
+            ...block,
+            status: input.premiumDailyFlowBlocks![index].status,
+            durationMinutes: input.premiumDailyFlowBlocks![index].durationMinutes,
+            transitionNote: input.premiumDailyFlowBlocks![index].transitionNote.trim(),
+            teacherNote: input.premiumDailyFlowBlocks![index].teacherNote.trim(),
+          })),
+        };
+      } else if (input.premiumDailyFlowBlocks?.length) {
+        throw new Error("Standart günlük plana premium akış blokları eklenemez.");
+      }
+
+      let teacherOwnedDailyFlow = plan.teacherOwnedDailyFlow;
+      let teacherOwnedFlowBlockId = activity.teacherOwnedFlowBlockId;
+      if (teacherOwnedDailyFlow !== undefined) {
+        if (
+          !isTeacherOwnedDailyFlow(teacherOwnedDailyFlow) ||
+          !input.teacherOwnedDailyFlowBlocks ||
+          !input.teacherOwnedActivityBlockKind
+        ) {
+          throw new Error(
+            "Öğretmenin kayıtlı 10 bölümlü günlük akışı düzenleme için doğrulanamadı.",
+          );
+        }
+        const revisedTeacherOwnedDailyFlow = reviseTeacherOwnedDailyFlow(
+          teacherOwnedDailyFlow,
+          input.teacherOwnedDailyFlowBlocks,
+          await resolveLocalTeacherIdentity(transaction, { now }),
+          now,
+        );
+        teacherOwnedDailyFlow = revisedTeacherOwnedDailyFlow;
+        const activityFlowBlock = revisedTeacherOwnedDailyFlow.blocks.find(
+          (block) => block.kind === input.teacherOwnedActivityBlockKind,
+        );
+        if (!activityFlowBlock || activityFlowBlock.status === "skipped") {
+          throw new Error(
+            "Gerçek etkinlik yalnız öğretmen akışındaki uygulanacak bir etkinlik bölümüne bağlanabilir.",
+          );
+        }
+        teacherOwnedFlowBlockId = activityFlowBlock.id;
+      } else if (input.teacherOwnedDailyFlowBlocks?.length) {
+        throw new Error(
+          "Bağımsız günlük plana sonradan öğretmen plan zinciri uydurulamaz.",
+        );
+      }
+
+      let reboundPedagogicalProvenance: PedagogicalPlanProvenance | undefined;
+      if (
+        plan.pedagogicalProvenance !== undefined ||
+        activity.pedagogicalProvenance !== undefined
+      ) {
+        assertPedagogicalPlanProvenance(
+          plan.pedagogicalProvenance,
+          "Planın pedagojik etkinlik kaynağı",
+        );
+        assertPedagogicalPlanProvenance(
+          activity.pedagogicalProvenance,
+          "Etkinliğin pedagojik kaynağı",
+        );
+        if (
+          canonicalJson(plan.pedagogicalProvenance) !==
+            canonicalJson(activity.pedagogicalProvenance)
+        ) {
+          throw new Error(
+            "Plan ile etkinliğin pedagojik kaynak zinciri uyuşmuyor.",
+          );
+        }
+        reboundPedagogicalProvenance =
+          bindPedagogicalPlanProvenanceToCivilDate(
+            plan.pedagogicalProvenance,
+            input.civilDate,
+          );
+      }
+
+      const updatedPlan: StoredRecord = {
+        ...plan,
+        title: planTitle,
+        civilDate: input.civilDate,
+        updatedAt: timestamp,
+        ...(premiumDailyFlowSnapshot !== undefined
+          ? { premiumDailyFlowSnapshot }
+          : {}),
+        ...(teacherOwnedDailyFlow !== undefined
+          ? { teacherOwnedDailyFlow }
+          : {}),
+        ...(reboundPedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                reboundPedagogicalProvenance,
+              ),
+            }
+          : {}),
+      };
+      const updatedActivity: StoredRecord = {
+        ...activity,
+        title: activityTitle,
+        startTime: input.startTime,
+        civilDate: input.civilDate,
+        updatedAt: timestamp,
+        ...(teacherOwnedDailyFlow !== undefined
+          ? { teacherOwnedFlowBlockId }
+          : {}),
+        ...(reboundPedagogicalProvenance
+          ? {
+              pedagogicalProvenance: structuredClone(
+                reboundPedagogicalProvenance,
+              ),
+            }
+          : {}),
+      };
+      if (input.endTime) updatedActivity.endTime = input.endTime;
+      else delete updatedActivity.endTime;
+
+      await transaction.putMany("plans", [updatedPlan]);
+      await transaction.putMany("activities", [updatedActivity]);
+      result = { plan: updatedPlan, activity: updatedActivity };
+    },
+  );
+  if (!result) throw new Error("Plan ve etkinlik değişiklikleri kaydedilemedi.");
   return result;
 }
 
@@ -707,7 +1439,8 @@ export async function captureImmutableRawObservation(
     ],
     async (transaction) => {
       const scope = await activeScopeInTransaction(transaction);
-      const [students, plans, activities, observations] = await Promise.all([
+      const [academicYears, students, plans, activities, observations] = await Promise.all([
+        transaction.getAll("academicYears"),
         transaction.getAll("students"),
         transaction.getAll("plans"),
         transaction.getAll("activities"),
@@ -723,6 +1456,10 @@ export async function captureImmutableRawObservation(
           sameScope(record, scope),
       );
       if (!student) throw new Error("Gözlem notu yalnız etkin sınıftaki çocuğa bağlanabilir.");
+      const academicYear = academicYears.find(record => record.id === scope.academicYearId);
+      if (!academicYear || !resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: civilDateInIstanbul(new Date(observedAt)) }).eligible) {
+        throw new Error("Gözlem tarihinde çocuk bu sınıfa kayıtlı değil; üyelik dönemi incelenmeli.");
+      }
       const plan = plans.find(
         (record) =>
           record.id === planId &&
@@ -848,7 +1585,7 @@ export async function confirmObservationCurriculumLink(
       const planProfile = curriculumProfileFromUnknown(
         plan?.curriculumProfileSnapshot,
       );
-      if (!planProfile || !sameCurriculumProfile(planProfile, profile)) {
+      if (!planProfile || !sameCurriculumProgramSource(planProfile, profile)) {
         throw new Error(
           "Program bağlantısı planın doğrulanmış katalog ve program profiliyle uyuşmuyor.",
         );
@@ -893,6 +1630,17 @@ export async function confirmObservationCurriculumLink(
           );
         }
       }
+      if (!plannedTarget && profile.officialCatalogVerified) {
+        throw new Error(
+          "Elle yazılan program referansı resmî katalog hedefi olarak işaretlenemez.",
+        );
+      }
+      const referenceOrigin = plannedTarget
+        ? plannedTarget.referenceOrigin
+        : "teacher-declared";
+      const officialCatalogVerified = plannedTarget
+        ? plannedTarget.officialCatalogVerified
+        : false;
       const approvedByUserId = await resolveLocalTeacherIdentity(transaction, {
         now,
         requestedTeacherUserId: requestedApproverId,
@@ -903,8 +1651,8 @@ export async function confirmObservationCurriculumLink(
             link.framework === profile.framework &&
             link.sourceVersion === profile.sourceVersion &&
             link.referenceCode === referenceCode &&
-            (link.referenceOrigin ?? "teacher-declared") === profile.referenceOrigin &&
-            (link.officialCatalogVerified === true) === profile.officialCatalogVerified,
+            (link.referenceOrigin ?? "teacher-declared") === referenceOrigin &&
+            (link.officialCatalogVerified === true) === officialCatalogVerified,
         )
       ) {
         return;
@@ -920,8 +1668,8 @@ export async function confirmObservationCurriculumLink(
         confirmedAt: timestamp,
         approvedByUserId,
         confirmationMethod: "teacher-confirmed",
-        referenceOrigin: profile.referenceOrigin,
-        officialCatalogVerified: profile.officialCatalogVerified,
+        referenceOrigin,
+        officialCatalogVerified,
       };
       result = {
         ...link,
@@ -931,8 +1679,21 @@ export async function confirmObservationCurriculumLink(
               targetKind: plannedTarget.kind,
               targetDomain: plannedTarget.domain,
               targetSourceUrl: plannedTarget.sourceUrl,
+              ...(plannedTarget.sourcePage
+                ? { targetSourcePage: plannedTarget.sourcePage }
+                : {}),
+              ...(plannedTarget.sourceSha256
+                ? { targetSourceSha256: plannedTarget.sourceSha256 }
+                : {}),
+              ...(plannedTarget.holisticGraphReference
+                ? {
+                    holisticGraphReference: cloneHolisticGraphReference(
+                      plannedTarget.holisticGraphReference,
+                    ),
+                  }
+                : {}),
             }
-          : {}),
+          : { targetSourceUrl: "about:blank" }),
         observationId,
         academicYearId: scope.academicYearId,
         classroomId: scope.classroomId,
@@ -940,7 +1701,7 @@ export async function confirmObservationCurriculumLink(
         updatedAt: timestamp,
         civilDate: civilDateInIstanbul(now),
         deletedAt: null,
-        schemaVersion: 1,
+        schemaVersion: 2,
       };
       await transaction.putMany("evidenceCurriculumLinks", [result]);
     },
@@ -965,6 +1726,8 @@ export async function createCitedAssessmentDraft(
     studentId: string;
     observationIds: string[];
     teacherAssessmentText: string;
+    /** The teacher's save action completes their own authored assessment. */
+    completeTeacherAssessment?: boolean;
     assessmentLevel?: CurriculumAssessmentLevel;
     assessmentTargetIds?: string[];
     periodStart: string;
@@ -1029,7 +1792,14 @@ export async function createCitedAssessmentDraft(
         !academicYear ||
         !isCivilDate(academicYear.startDate) ||
         !isCivilDate(academicYear.endDate) ||
-        input.periodStart < academicYear.startDate ||
+        input.periodStart <
+          academicYearEffectiveOperationalStart({
+            startDate: academicYear.startDate,
+            operationalStartDate:
+              typeof academicYear.operationalStartDate === "string"
+                ? academicYear.operationalStartDate
+                : undefined,
+          }) ||
         input.periodEnd > academicYear.endDate
       ) {
         throw new Error("Değerlendirme dönemi aktif eğitim yılının tarih aralığında olmalıdır.");
@@ -1046,13 +1816,14 @@ export async function createCitedAssessmentDraft(
       if (!student) {
         throw new Error("Değerlendirme yalnız etkin sınıftaki çocuk için hazırlanabilir.");
       }
+      if (!studentMembershipOverlaps(student, { ...scope, academicYear, periodStart: input.periodStart, periodEnd: input.periodEnd })) throw new Error("Değerlendirme döneminde çocuğun sınıf üyeliği yok.");
       if (reportDrafts.some((record) => record.id === draftId)) {
         throw new Error("Bu değerlendirme taslağı kimliği zaten kullanılıyor.");
       }
       const selected = observationIds.map((id) =>
         observations.find(
           (record) =>
-            record.id === id &&
+            record.id === id && resolveStudentMembershipOn(student, { ...scope, academicYear, civilDate: record.civilDate }).eligible &&
             record.rawTextImmutable === true &&
             typeof record.deletedAt !== "string" &&
             sameScope(record, scope) &&
@@ -1109,10 +1880,12 @@ export async function createCitedAssessmentDraft(
         observedAt: record!.observedAt,
         confirmedCurriculumLinkIds: selectedLinks[index].map((link) => link.id),
       }));
+      const reviewedByUserId = input.completeTeacherAssessment === true
+        ? await resolveLocalTeacherIdentity(transaction, { now }) : null;
       draft = {
         id: draftId,
         reportType: "evidence-assessment",
-        status: "teacher-review-required",
+        status: reviewedByUserId ? "teacher-saved" : "teacher-review-required",
         studentIds: [studentId],
         observationIds,
         evidenceCitations: citations,
@@ -1123,10 +1896,10 @@ export async function createCitedAssessmentDraft(
         assessmentLevel,
         assessmentTargetIds,
         authoredBy: "teacher",
-        teacherReviewRequired: true,
-        reviewStatus: "pending",
-        reviewedByUserId: null,
-        reviewedAt: null,
+        teacherReviewRequired: !reviewedByUserId,
+        reviewStatus: reviewedByUserId ? "teacher-saved" : "pending",
+        reviewedByUserId,
+        reviewedAt: reviewedByUserId ? timestamp : null,
         generationMode: "teacher-authored-cited-draft",
         referenceVerificationStatus,
         periodStart: input.periodStart,

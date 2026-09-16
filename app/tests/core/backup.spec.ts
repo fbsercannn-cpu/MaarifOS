@@ -117,26 +117,26 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
 
   expect(result.manifest.format).toBe("maarifos-json");
   expect(result.manifest.backupVersion).toBe(1);
-  expect(result.manifest.dataSchemaVersion).toBe(5);
+  expect(result.manifest.dataSchemaVersion).toBe(11);
   expect(result.manifest.createdAt).toBe("2026-07-22T09:30:00.000Z");
   expect(result.manifest.civilDate).toBe("2026-07-22");
   expect(result.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
   expect(result.manifest.entityCounts.students).toBe(1);
   expect(result.studentCount).toBe(1);
-  expect(result.upgradedLegacyVersion).toBe(5);
+  expect(result.upgradedLegacyVersion).toBe(11);
   expect(result.upgradedLegacyLinkCount).toBe(0);
-  expect(result.upgradedV2Version).toBe(5);
+  expect(result.upgradedV2Version).toBe(11);
   expect(result.upgradedV2FirstName).toBe("Test Kaydı");
   expect(result.upgradedV2LastName).toBe("A");
-  expect(result.upgradedV3Version).toBe(5);
+  expect(result.upgradedV3Version).toBe(11);
   expect(result.upgradedV3CalendarCount).toBe(0);
   expect(result.upgradedV3FeedbackCount).toBe(0);
-  expect(result.upgradedV4Version).toBe(5);
+  expect(result.upgradedV4Version).toBe(11);
   expect(result.upgradedV4ValueLinkCount).toBe(0);
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
 });
 
-test("takvim ve haricî AI geri bildirimi V5 yedekte kayıpsız döner", async ({
+test("takvim ve haricî AI geri bildirimi güncel yedekte kayıpsız döner", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -208,9 +208,9 @@ test("takvim ve haricî AI geri bildirimi V5 yedekte kayıpsız döner", async (
       }]),
     );
     await calendar.saveCalendarEntry(source, {
-      entryType: "parent_meeting",
-      title: "Veli toplantısı",
-      note: "Saat 17.30",
+      entryType: "no_school",
+      title: "Yerel kurum kapanışı",
+      note: "Öğretmen tarafından okul takvimine işlendi.",
       startDate: "2026-10-05",
       status: "planned",
       now: new Date("2026-09-01T06:20:00.000Z"),
@@ -277,6 +277,7 @@ test("takvim ve haricî AI geri bildirimi V5 yedekte kayıpsız döner", async (
       version: backup.manifest.dataSchemaVersion,
       calendarTitle: restored.calendarEntries[0]?.title,
       calendarNote: restored.calendarEntries[0]?.note,
+      calendarType: restored.calendarEntries[0]?.entryType,
       feedbackText: restored.externalFeedback[0]?.feedbackText,
       feedbackImmutable: restored.externalFeedback[0]?.rawTextImmutable,
       feedbackHash: restored.externalFeedback[0]?.contentHash,
@@ -287,9 +288,10 @@ test("takvim ve haricî AI geri bildirimi V5 yedekte kayıpsız döner", async (
     };
   });
 
-  expect(result.version).toBe(5);
-  expect(result.calendarTitle).toBe("Veli toplantısı");
-  expect(result.calendarNote).toBe("Saat 17.30");
+  expect(result.version).toBe(11);
+  expect(result.calendarTitle).toBe("Yerel kurum kapanışı");
+  expect(result.calendarNote).toBe("Öğretmen tarafından okul takvimine işlendi.");
+  expect(result.calendarType).toBe("no_school");
   expect(result.feedbackText).toBe(
     "Tarihli kanıtlara dayalı kurgu geri bildirim.",
   );
@@ -317,17 +319,20 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
       updatedAt: "2026-09-01T06:00:00.000Z",
       civilDate: "2026-09-01",
       deletedAt: null,
-      schemaVersion: 2,
+      schemaVersion: 6,
       displayName: "Kurgu Profil Öğrencisi",
+      firstName: "Kurgu Profil",
+      lastName: "Öğrencisi",
       preferredName: "Kurgu",
       birthDate: "2021-03-14",
       optionalCode: "OKUL-MAVI-42",
-      enrollmentDate: "2025-09-01",
+      nationalIdentityNumber: "10000000146",
+      enrollmentYear: "2025",
       homeLanguages: "Türkçe, Almanca",
       interests: "Doğa incelemeleri ve blok oyunları",
       strengths: "Akranlarıyla iş birliği kuruyor",
       supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
-      profileSchemaVersion: 3,
+      profileSchemaVersion: 6,
     };
     await source.transaction("readwrite", ["students"], (transaction) =>
       transaction.putMany("students", [profile]),
@@ -342,16 +347,28 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
     const verified = await sourceService.parseAndVerifyBackup(
       sourceService.serializeBackup(backup),
     );
-    const invalidEnrollment = structuredClone(backup);
-    invalidEnrollment.payload.students[0].enrollmentDate = "2026-09-02";
-    invalidEnrollment.manifest.payloadChecksum = await core.sha256Hex(
-      core.canonicalJson(invalidEnrollment.payload),
+    const invalidIdentity = structuredClone(backup);
+    invalidIdentity.payload.students[0].nationalIdentityNumber = "10000000145";
+    invalidIdentity.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidIdentity.payload),
     );
-    let invalidEnrollmentError = "";
+    let invalidIdentityError = "";
     try {
-      await sourceService.parseAndVerifyBackup(invalidEnrollment);
+      await sourceService.parseAndVerifyBackup(invalidIdentity);
     } catch (error) {
-      invalidEnrollmentError =
+      invalidIdentityError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidEnrollmentYear = structuredClone(backup);
+    invalidEnrollmentYear.payload.students[0].enrollmentYear = "20255";
+    invalidEnrollmentYear.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidEnrollmentYear.payload),
+    );
+    let invalidEnrollmentYearError = "";
+    try {
+      await sourceService.parseAndVerifyBackup(invalidEnrollmentYear);
+    } catch (error) {
+      invalidEnrollmentYearError =
         error instanceof Error ? error.message : String(error);
     }
     const invalidSupport = structuredClone(backup);
@@ -377,28 +394,33 @@ test("çocuk profilinin bütün alanlarını yedekle geri yükler", async ({ pag
       restoredStudent: restored.students[0],
       studentCount: verified.manifest.entityCounts.students,
       inserted: restoreReport.inserted,
-      invalidEnrollmentError,
+      invalidIdentityError,
+      invalidEnrollmentYearError,
       invalidSupportError,
     };
   });
 
   const expectedProfile = {
     displayName: "Kurgu Profil Öğrencisi",
+    firstName: "Kurgu Profil",
+    lastName: "Öğrencisi",
     preferredName: "Kurgu",
     birthDate: "2021-03-14",
     optionalCode: "OKUL-MAVI-42",
-    enrollmentDate: "2025-09-01",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe, Almanca",
     interests: "Doğa incelemeleri ve blok oyunları",
     strengths: "Akranlarıyla iş birliği kuruyor",
     supportPreferences: "Geçişlerden önce kısa bir hatırlatma yardımcı oluyor.",
-    profileSchemaVersion: 3,
+    profileSchemaVersion: 6,
   };
   expect(result.studentCount).toBe(1);
   expect(result.inserted).toBe(1);
   expect(result.backupStudent).toMatchObject(expectedProfile);
   expect(result.restoredStudent).toMatchObject(expectedProfile);
-  expect(result.invalidEnrollmentError).toContain("kayıt tarihi geçersiz");
+  expect(result.invalidIdentityError).toContain("öğrenci sözleşmesine uymuyor");
+  expect(result.invalidEnrollmentYearError).toContain("öğrenci sözleşmesine uymuyor");
   expect(result.invalidSupportError).toContain(
     "öğretmen desteği notu geçersiz",
   );
@@ -626,6 +648,213 @@ test("yoklama olaylarını kayıpsız yedekler, N-1 kaydı okur ve bozuk olayı 
   expect(result.corruptedEventError).toContain("yoklama sözleşmesine uymuyor");
 });
 
+test("gün sonu kapanışını yedekler, geri okur ve kanıt-kod tahrifini reddeder", async ({ page }) => {
+  // This fixture deliberately carries a missing daily plan; weekends do not require one.
+  await page.clock.setFixedTime(new Date("2026-09-10T09:00:00.000Z"));
+  await page.goto("/tests/runtime-fixture.html");
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const closureModule = await import(
+      "/src/features/day-closure/teacher-day-closure.ts"
+    );
+    const attendance = await import("/src/core/domain/attendance.ts");
+    const classroom = await import("/src/core/domain/classroom.ts");
+    const civilDate = attendance.civilDateInIstanbul(new Date());
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const databaseName = `maarifos-day-closure-backup-${crypto.randomUUID()}`;
+    const store = new core.IndexedDbDataStore({ databaseName });
+    const academicYearId = "00000000-0000-4000-8000-00000000b701";
+    const classroomId = "00000000-0000-4000-8000-00000000b702";
+    const studentId = "00000000-0000-4000-8000-00000000b703";
+    const attendanceId = "00000000-0000-4000-8000-00000000b704";
+    const base = {
+      civilDate,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+      schemaVersion: 1,
+    };
+    const scopedBase = { ...base, academicYearId, classroomId };
+    await store.transaction(
+      "readwrite",
+      ["academicYears", "classrooms", "students", "attendanceRecords", "settings"],
+      async (transaction) => {
+        await transaction.putMany("academicYears", [
+          {
+            ...base,
+            id: academicYearId,
+            name: "Kurgu aktif dönem",
+            startDate: civilDate,
+            endDate: civilDate,
+            status: "active",
+          },
+        ]);
+        await transaction.putMany("classrooms", [
+          {
+            ...base,
+            academicYearId,
+            id: classroomId,
+            name: "Kurgu kapanış sınıfı",
+            schedule: {
+              kind: "full_day",
+              startTime: "08:30",
+              endTime: "16:30",
+              timeZone: "Europe/Istanbul",
+            },
+          },
+        ]);
+        await transaction.putMany("students", [
+          {
+            ...scopedBase,
+            id: studentId,
+            displayName: "Kurgu Öğrenci",
+            firstName: "Kurgu",
+            lastName: "Öğrenci",
+            active: true,
+          },
+        ]);
+        await transaction.putMany("attendanceRecords", [
+          {
+            ...scopedBase,
+            id: attendanceId,
+            studentId,
+            status: "absent",
+          },
+        ]);
+        await transaction.putMany("settings", [
+          {
+            ...scopedBase,
+            id: classroom.ACTIVE_CLASSROOM_SETTING_ID,
+            settingType: classroom.ACTIVE_CLASSROOM_SETTING_TYPE,
+          },
+        ]);
+      },
+    );
+    const closure = await closureModule.closeTeacherDay(store, {
+      civilDate,
+      nextDayNote: "Sabah yoklama ve günlük planı tamamlayacağım.",
+      now,
+    });
+    const sourceIssueIdentity = closureModule.teacherDayCarryForwardSourceIdentity({
+      academicYearId,
+      classroomId,
+      sourceCivilDate: civilDate,
+      sourceIssueCode: "daily-plan-missing",
+    });
+    const deferredUntilCivilDate = attendance.civilDateInIstanbul(
+      new Date(now.getTime() + 86_400_000),
+    );
+    const transition = await closureModule.transitionTeacherDayCarryForward(store, {
+      sourceIssueIdentity,
+      state: "deferred",
+      deferredUntilCivilDate,
+      note: "Ertesi iş gününe açıkça ertelendi.",
+      now,
+    });
+    const service = new core.BackupService(store, {
+      appVersion: "0.10.0-test",
+      clock: () => now,
+      civilDateProvider: () => civilDate,
+    });
+    const exported = await service.exportBackup();
+    const parsed = await service.parseAndVerifyBackup(
+      service.serializeBackup(exported),
+    );
+    const restoredClosure = parsed.payload.settings.find(
+      (record) => record.id === closure.id,
+    );
+    const restoredTransition = parsed.payload.settings.find(
+      (record) => record.id === transition.id,
+    );
+    const target = new core.IndexedDbDataStore({
+      databaseName: `${databaseName}-restored`,
+    });
+    await new core.BackupService(target, {
+      appVersion: "0.10.0-test",
+      clock: () => now,
+      civilDateProvider: () => civilDate,
+    }).restoreBackup(parsed, { mode: "replace" });
+    const restoredSnapshot = await target.readSnapshot();
+    await target.transaction(
+      "readwrite",
+      ["attendanceRecords"],
+      async (transaction) => {
+        await transaction.putMany("attendanceRecords", [
+          {
+            ...scopedBase,
+            id: attendanceId,
+            studentId,
+            status: "present",
+          },
+        ]);
+      },
+    );
+    const staleAfterRestore = await closureModule.loadTeacherDayClosureWorkspace(
+      target,
+      { civilDate },
+    );
+    const tampered = structuredClone(exported);
+    const tamperedClosure = tampered.payload.settings.find(
+      (record) => record.id === closure.id,
+    );
+    if (!tamperedClosure) throw new Error("Kapanış kaydı bulunamadı.");
+    tamperedClosure.issueCodes = [];
+    tampered.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(tampered.payload),
+    );
+    let tamperError = "";
+    try {
+      await service.parseAndVerifyBackup(tampered);
+    } catch (error) {
+      tamperError = error instanceof Error ? error.message : String(error);
+    }
+    const transitionTampered = structuredClone(exported);
+    const tamperedTransition = transitionTampered.payload.settings.find(
+      (record) => record.id === transition.id,
+    );
+    if (!tamperedTransition) throw new Error("Taşınan iş geçişi bulunamadı.");
+    tamperedTransition.previousTransitionId = crypto.randomUUID();
+    transitionTampered.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(transitionTampered.payload),
+    );
+    let transitionTamperError = "";
+    try {
+      await service.parseAndVerifyBackup(transitionTampered);
+    } catch (error) {
+      transitionTamperError = error instanceof Error ? error.message : String(error);
+    }
+    store.close();
+    target.close();
+    return {
+      closureStatus: restoredClosure?.closureStatus,
+      nextDayNote: restoredClosure?.nextDayNote,
+      issueCodes: restoredClosure?.issueCodes,
+      transitionState: restoredTransition?.transitionState,
+      deferredUntilCivilDate: restoredTransition?.deferredUntilCivilDate,
+      restoredTransitionCount: restoredSnapshot.settings.filter(
+        (record) => record.settingType === "teacher-day-carry-forward-transition",
+      ).length,
+      staleAfterRestore: staleAfterRestore.status,
+      tamperError,
+      transitionTamperError,
+    };
+  });
+
+  expect(result.closureStatus).toBe("carried-forward");
+  expect(result.nextDayNote).toContain("Sabah yoklama");
+  expect(result.issueCodes).toEqual([
+    "attendance-incomplete",
+    "daily-plan-missing",
+  ]);
+  expect(result.transitionState).toBe("deferred");
+  expect(result.deferredUntilCivilDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(result.restoredTransitionCount).toBe(1);
+  expect(result.staleAfterRestore).toBe("stale");
+  expect(result.tamperError).toContain("gün sonu kaydı geçersiz");
+  expect(result.transitionTamperError).toContain("geçiş zinciri geçersiz");
+});
+
 test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemede korur", async ({ page }) => {
   const premiumPlanSource = JSON.parse(await readFile(
     new URL("../../../premium-content/releases/tymm-6072/2026-09/content.v2.json", import.meta.url),
@@ -640,8 +869,11 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
     const {
       installPremiumPlanBoard,
       preparePremiumDailyTemplate,
+      recordPremiumMonthlyEvaluation,
       recordPremiumWeeklyEvaluation,
       updatePremiumPlanLensPreferences,
+      PREMIUM_MONTHLY_PROGRAM_CRITERIA,
+      PREMIUM_MONTHLY_TEACHER_CRITERIA,
     } = await import(
       "/src/features/premium-plans/plan-service.ts"
     );
@@ -779,12 +1011,101 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
       teacherPreferredSupportingLensIds: ["accessible-participation"],
       now: new Date("2026-09-11T15:00:00.000Z"),
     });
+    const monthlyTarget = alternativeTargets[0];
+    const curriculumLink = await evidence.confirmObservationCurriculumLink(
+      source,
+      {
+        observationId: captured.observation.id,
+        framework: profile.framework,
+        catalogId: profile.catalogId,
+        sourceVersion: profile.sourceVersion,
+        referenceOrigin: profile.referenceOrigin,
+        officialCatalogVerified: profile.officialCatalogVerified,
+        referenceCode: monthlyTarget.referenceCode,
+        referenceTitle: monthlyTarget.referenceTitle,
+        plannedTargetId: monthlyTarget.id,
+        approvedByUserId: "00000000-0000-4000-8000-000000009707",
+        now: new Date("2026-09-11T15:05:00.000Z"),
+      },
+    );
+    const monthlyEvaluation = await recordPremiumMonthlyEvaluation(source, {
+      monthlyPlanId: installed.monthlyPlanId,
+      childEvidenceState: "insufficient-evidence",
+      childNarrative:
+        "Tek haftadaki kayıt tüm ayı temsil etmediği için kanıt yetersiz bırakıldı.",
+      observationIds: [captured.observation.id],
+      curriculumLinkIds: [curriculumLink.id],
+      programCriteria: PREMIUM_MONTHLY_PROGRAM_CRITERIA.map(({ id }) => ({
+        criterionId: id,
+        status: id === "duration-fit" ? "needs-adjustment" : "observed-working",
+      })),
+      programNarrative:
+        "Katılım işledi; süre ve geçiş düzeni sonraki uygulamada uyarlanmalıdır.",
+      teacherCriteria: PREMIUM_MONTHLY_TEACHER_CRITERIA.map(({ id }) => ({
+        criterionId: id,
+        status: id === "time-management" ? "needs-adjustment" : "observed-working",
+      })),
+      teacherNarrative:
+        "Zaman yönetimi ve farklı katılım yollarını yeniden düşündüm.",
+      nextMonthRecommendation:
+        "Farklı gün ve haftalarda kanıt toplamayı sürdürüp geçiş süresini uyarlayacağım.",
+      now: new Date("2026-09-30T13:00:00.000Z"),
+    });
     const backup = await new core.BackupService(source, {
       appVersion: "premium-graph-test",
     }).exportBackup();
     const targetService = new core.BackupService(target, {
       appVersion: "premium-graph-test",
     });
+    const invalidMonthlyCoverage = structuredClone(backup);
+    const invalidCoveragePlan = invalidMonthlyCoverage.payload.plans.find(
+      (record) => record.id === installed.monthlyPlanId,
+    ) as Record<string, unknown> | undefined;
+    const invalidCoverageEvaluation = Array.isArray(
+      invalidCoveragePlan?.monthlyEvaluations,
+    )
+      ? invalidCoveragePlan.monthlyEvaluations[0] as {
+          children?: { coverage?: { activeStudentCount?: number } };
+        }
+      : undefined;
+    if (invalidCoverageEvaluation?.children?.coverage) {
+      invalidCoverageEvaluation.children.coverage.activeStudentCount = 2;
+    }
+    invalidMonthlyCoverage.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidMonthlyCoverage.payload),
+    );
+    let invalidMonthlyCoverageError = "";
+    try {
+      await targetService.parseAndVerifyBackup(invalidMonthlyCoverage);
+    } catch (error) {
+      invalidMonthlyCoverageError =
+        error instanceof Error ? error.message : String(error);
+    }
+    const invalidMonthlySource = structuredClone(backup);
+    const invalidSourcePlan = invalidMonthlySource.payload.plans.find(
+      (record) => record.id === installed.monthlyPlanId,
+    ) as Record<string, unknown> | undefined;
+    const invalidSourceEvaluation = Array.isArray(
+      invalidSourcePlan?.monthlyEvaluations,
+    )
+      ? invalidSourcePlan.monthlyEvaluations[0] as {
+          children?: { curriculumLinkIds?: string[] };
+        }
+      : undefined;
+    if (invalidSourceEvaluation?.children?.curriculumLinkIds) {
+      invalidSourceEvaluation.children.curriculumLinkIds[0] =
+        "00000000-0000-4000-8000-000000009799";
+    }
+    invalidMonthlySource.manifest.payloadChecksum = await core.sha256Hex(
+      core.canonicalJson(invalidMonthlySource.payload),
+    );
+    let invalidMonthlySourceError = "";
+    try {
+      await targetService.parseAndVerifyBackup(invalidMonthlySource);
+    } catch (error) {
+      invalidMonthlySourceError =
+        error instanceof Error ? error.message : String(error);
+    }
     const doubleSource = structuredClone(backup);
     const doubleSourceAnnual = doubleSource.payload.plans.find(
       (record) => record.id === installed.annualPlanId,
@@ -845,6 +1166,7 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
     const restored = await target.readSnapshot();
     const daily = restored.plans.find((record) => record.planType === "daily");
     const annual = restored.plans.find((record) => record.planType === "annual");
+    const monthly = restored.plans.find((record) => record.id === installed.monthlyPlanId);
     const activity = restored.activities.find((record) => record.planId === daily?.id);
     const firstWeekly = restored.plans.find((record) => record.id === firstWeeklyPlanId);
     const nextWeekly = restored.plans.find(
@@ -869,11 +1191,18 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
         daily?.premiumDailyFlowSnapshot?.alternativeReplacement?.replacesMainActivityTemplateId,
       flowBlockCount: daily?.premiumDailyFlowSnapshot?.blocks?.length,
       weeklyEvaluationCount: firstWeekly?.weeklyEvaluations?.length,
+      monthlyEvaluationCount: monthly?.monthlyEvaluations?.length,
+      monthlyEvaluationId: monthly?.monthlyEvaluations?.[0]?.id,
+      expectedMonthlyEvaluationId: monthlyEvaluation.id,
+      monthlyRecommendation:
+        monthly?.monthlyEvaluations?.[0]?.nextMonthRecommendation,
       nextPlanDecision: nextWeekly?.nextPlanDecisionContext?.decision,
       rejectedRestorePlanCount: targetAfterRejectedRestore.plans.length,
       legacyLensPlanCount: parsedLegacyLens.payload.plans.length,
       doubleSourceError,
       corruptedFlowError,
+      invalidMonthlyCoverageError,
+      invalidMonthlySourceError,
     };
   }, premiumPlanSource);
 
@@ -889,11 +1218,16 @@ test("premium yıllık-aylık-haftalık-günlük grafiğini temiz geri yüklemed
   expect(result.replacedMainId).toBe(result.sourceTemplateId);
   expect(result.flowBlockCount).toBe(10);
   expect(result.weeklyEvaluationCount).toBe(2);
+  expect(result.monthlyEvaluationCount).toBe(1);
+  expect(result.monthlyEvaluationId).toBe(result.expectedMonthlyEvaluationId);
+  expect(result.monthlyRecommendation).toContain("Farklı gün ve haftalarda");
   expect(result.nextPlanDecision).toBe("adapt");
   expect(result.rejectedRestorePlanCount).toBe(0);
   expect(result.legacyLensPlanCount).toBeGreaterThan(0);
   expect(result.doubleSourceError).toContain("çift kaynaklı");
   expect(result.corruptedFlowError).toContain("premium tam gün akışı geçersiz");
+  expect(result.invalidMonthlyCoverageError).toContain("kanıt kapsamı");
+  expect(result.invalidMonthlySourceError).toContain("program bağı");
   expect(result).toMatchObject({
     annualCount: 1,
     monthlyCount: 1,
@@ -2284,7 +2618,7 @@ test("V5 öğretmen onaylı değer kanıtını kayıpsız taşır; tamper, merge
     return response;
   }, premiumPlanSource);
 
-  expect(result.version).toBe(5);
+  expect(result.version).toBe(11);
   expect(result.roundTripLinks).toEqual(result.expectedLinks);
   expect(result.roundTripLinks).toHaveLength(2);
   expect(result.predecessorDeletedAt).toBe(result.replacementConfirmedAt);
@@ -3298,7 +3632,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V3 yedekle birebir geri
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(5);
+  expect(result.dataSchemaVersion).toBe(11);
   expect(result.rawText).toBe("  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ");
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
@@ -4051,7 +4385,7 @@ test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini 
   expect(result.backedUpSettingType).toBe("app-lock-config-v1");
 });
 
-test("IndexedDB v2, v3 ve v4 verisini v5'e kayıpsız taşır; değer kanıtı store ve indekslerini açar", async ({
+test("IndexedDB v2, v3 ve v4 verisini v8'e kayıpsız taşır; öğrenci kasası, kanıt store ve ilişki indekslerini açar", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -4202,7 +4536,7 @@ test("IndexedDB v2, v3 ve v4 verisini v5'e kayıpsız taşır; değer kanıtı s
   expect(result.every((item) => item.valueEvidenceCount === 0)).toBe(true);
   expect(
     result.every(
-      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 5,
+      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 8,
     ),
   ).toBe(true);
   expect(result[0].valueEvidenceStoreMetadata.indexes).toEqual([

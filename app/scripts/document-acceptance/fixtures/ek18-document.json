@@ -1,0 +1,308 @@
+{
+  "format": "pdf",
+  "fileName": "MaarifOS_Ek18_Aylik_Plan_Kontrol_2026-09_9c1fb03d.pdf",
+  "monthLabel": "Eylül",
+  "monthColumnIndex": 0,
+  "monthlyPlan": {
+    "id": "6acfb324-a42e-4f8e-be01-0827aa6c57a3",
+    "title": "Eylül 2026 · Aidiyet, sınıf topluluğu ve güvenli keşif",
+    "periodStart": "2026-09-07",
+    "periodEnd": "2026-09-30"
+  },
+  "evaluation": {
+    "id": "9c1fb03d-2a67-4657-883c-db12dd12b193",
+    "monthlyPlanId": "6acfb324-a42e-4f8e-be01-0827aa6c57a3",
+    "periodStart": "2026-09-07",
+    "periodEnd": "2026-09-30",
+    "children": {
+      "evidenceState": "insufficient-evidence",
+      "narrative": "Bu ay iki farklı hafta ve günü kapsayan yeterli kanıt bulunmadığı için çocuklar hakkında kesin beceri hükmü kurulmadı. Gelecek ay farklı ortam ve günlerde kanıt toplamaya devam edilecek.",
+      "observationIds": [],
+      "curriculumLinkIds": [],
+      "coverage": {
+        "observationCount": 0,
+        "anecdotalObservationCount": 0,
+        "programLinkedObservationCount": 0,
+        "curriculumLinkCount": 0,
+        "distinctCivilDateCount": 0,
+        "distinctWeekCount": 0,
+        "distinctStudentCount": 0,
+        "distinctEnvironmentCount": 0,
+        "activeStudentCount": 1,
+        "coveredActiveStudentCount": 0,
+        "activeStudentIds": [
+          "00000000-0000-4000-8000-000000009103"
+        ],
+        "coveredActiveStudentIds": [],
+        "uncoveredActiveStudentIds": [
+          "00000000-0000-4000-8000-000000009103"
+        ]
+      }
+    },
+    "program": {
+      "narrative": "Aylık plandaki katılım yolları ve program bileşenleri genel olarak işledi. Etkinlikler arası geçişler ile süre dağılımında çocukların ritmine göre uyarlama gerekti. Bu metin yalnız Genel Değerlendirme alanında ve ayrı öğretmen ekinde kullanılır; Ek 18 matrisindeki işaretlerin kaynağı değildir.",
+      "criteria": [
+        {
+          "criterionId": "individual-participation",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "group-participation",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "learning-enjoyment",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "age-development-fit",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "needs-fit",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "skill-support",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "duration-fit",
+          "status": "needs-adjustment"
+        },
+        {
+          "criterionId": "assessment-tool-fit",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "planned-applied-consistency",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "activity-diversity",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "materials-fit",
+          "status": "observed-working"
+        }
+      ]
+    },
+    "teacher": {
+      "narrative": "Zaman yönetiminde esnekliği artırmam ve sessiz katılım yollarını daha erken sunmam gerektiğini fark ettim. Çocukların sözlü katılımı kadar görsel, bedensel ve oyun temelli katılımını da planlama kararlarında görünür kılacağım.",
+      "criteria": [
+        {
+          "criterionId": "monthly-daily-planning",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "program-components",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "activity-diversity",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "learning-environment",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "assessment-practice",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "differentiation",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "daily-life-relevance",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "active-participation",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "materials-use",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "time-management",
+          "status": "needs-adjustment"
+        },
+        {
+          "criterionId": "communication-adaptation",
+          "status": "observed-working"
+        },
+        {
+          "criterionId": "equal-opportunity",
+          "status": "observed-working"
+        }
+      ]
+    },
+    "nextMonthRecommendation": "Sonraki ay geçişleri kısaltıp merkezlerde daha uzun kesintisiz oyun süresi sunacağım; farklı gün ve ortamlardan anekdot kanıtı toplayıp program bağlarını öğretmen onayıyla kuracağım.",
+    "teacherAuthored": true,
+    "mebProvenance": {
+      "authority": "T.C. Millî Eğitim Bakanlığı",
+      "programTitle": "Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı",
+      "sourceVersion": "2024",
+      "evaluationPages": "136-139",
+      "annex": "Ek 18 - Aylık Plan Kontrol Çizelgesi",
+      "annexPage": 344
+    },
+    "createdAt": "2026-09-30T13:00:00.000Z"
+  },
+  "selectedObservations": [],
+  "mappedOfficialRowIds": [
+    "area-art-practice",
+    "area-math-data-decisions",
+    "area-math-reasoning",
+    "area-movement-health",
+    "area-movement-psychomotor",
+    "area-music-listen",
+    "area-music-play",
+    "area-science-observation",
+    "area-social-chronology",
+    "area-social-critical-sociological",
+    "area-social-evidence-inquiry",
+    "area-social-map",
+    "area-social-participation",
+    "area-social-spatial",
+    "area-turkish-early-literacy",
+    "area-turkish-listening-viewing",
+    "area-turkish-reading",
+    "area-turkish-speaking"
+  ],
+  "manifest": {
+    "schemaVersion": 1,
+    "documentType": "meb-2024-ek18-monthly-plan-control",
+    "renderingMode": "source-structured-visual-reproduction",
+    "officialFormPageCount": 6,
+    "officialSource": {
+      "authority": "T.C. Millî Eğitim Bakanlığı",
+      "program": "Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı",
+      "version": "2024",
+      "evaluationPages": "136-139",
+      "annex": "Ek 18 - Aylık Plan Kontrol Çizelgesi",
+      "annexPages": "343-348"
+    },
+    "generatedAt": "2026-10-01T08:00:00.000Z",
+    "monthlyPlanId": "6acfb324-a42e-4f8e-be01-0827aa6c57a3",
+    "monthlyEvaluationId": "9c1fb03d-2a67-4657-883c-db12dd12b193",
+    "observationIds": [],
+    "curriculumLinkIds": [],
+    "mappedOfficialRowIds": [
+      "area-art-practice",
+      "area-math-data-decisions",
+      "area-math-reasoning",
+      "area-movement-health",
+      "area-movement-psychomotor",
+      "area-music-listen",
+      "area-music-play",
+      "area-science-observation",
+      "area-social-chronology",
+      "area-social-critical-sociological",
+      "area-social-evidence-inquiry",
+      "area-social-map",
+      "area-social-participation",
+      "area-social-spatial",
+      "area-turkish-early-literacy",
+      "area-turkish-listening-viewing",
+      "area-turkish-reading",
+      "area-turkish-speaking"
+    ],
+    "programComponentEvidenceStatus": "verified-complete-mapping",
+    "persistedProgramComponents": [
+      {
+        "referenceCode": "TADB.2",
+        "referenceTitle": "Dinledikleri/izledikleri şiir, hikâye, tekerleme, video, tiyatro, animasyon gibi materyalleri ile ilgili yeni anlamlar oluşturabilme"
+      },
+      {
+        "referenceCode": "TAOB.1",
+        "referenceTitle": "Resimli öykü kitabı, dijital araçlar, afiş, broşür gibi görsel materyalleri seçebilme"
+      },
+      {
+        "referenceCode": "TAOB.2",
+        "referenceTitle": "Görsel materyallerden anlamlar üretebilme"
+      },
+      {
+        "referenceCode": "TAOB.4",
+        "referenceTitle": "Resimli öykü kitabı, dijital araçlar, afiş, broşür gibi görsel materyaller ile ilgili görüşlerini yansıtabilme"
+      },
+      {
+        "referenceCode": "TAKB.2",
+        "referenceTitle": "Konuşma sürecinin içeriğini oluşturabilme"
+      },
+      {
+        "referenceCode": "TAEOB.6",
+        "referenceTitle": "Yazma öncesi becerileri kazanabilme"
+      },
+      {
+        "referenceCode": "MAB.2",
+        "referenceTitle": "Matematiksel olgu, olay ve nesnelerin özelliklerini çözümleyebilme"
+      },
+      {
+        "referenceCode": "MAB.12",
+        "referenceTitle": "Elde ettiği/eriştiği verileri düzenleyebilme"
+      },
+      {
+        "referenceCode": "FAB.1",
+        "referenceTitle": "Günlük yaşamında fene yönelik olaylara/olgulara ve durumlara yönelik bilimsel gözlem yapabilme"
+      },
+      {
+        "referenceCode": "SAB.2",
+        "referenceTitle": "Yakın çevresindeki olay/dönem/kavramları kronolojik olarak sıralayabilme"
+      },
+      {
+        "referenceCode": "SAB.4",
+        "referenceTitle": "Yakın çevresindeki yaşantılardan yola çıkarak merak ettiği konulara yönelik sorular sorabilme"
+      },
+      {
+        "referenceCode": "SAB.8",
+        "referenceTitle": "Yakın çevresinde oluşan gruplarla sosyal temas oluşturabilme"
+      },
+      {
+        "referenceCode": "SAB.9",
+        "referenceTitle": "Yakın çevresindeki coğrafi olay, nesne, mekân ve kişilerin konumunu algılayabilme"
+      },
+      {
+        "referenceCode": "SAB.15",
+        "referenceTitle": "Yakın çevresi ile ilgili olarak hazırlanmış olan basit krokiyi okuyabilme"
+      },
+      {
+        "referenceCode": "SAB.17",
+        "referenceTitle": "Yakın çevresinde bulunan belirli bir kişi/nesne/mekânın konumunu gösteren kendi krokisini oluşturabilme"
+      },
+      {
+        "referenceCode": "SAB.20",
+        "referenceTitle": "Toplumsal yaşama yönelik nesne, olgu ve olayları çözümleyebilme"
+      },
+      {
+        "referenceCode": "HSAB.5",
+        "referenceTitle": "Kişisel ve genel alanın farkında olarak hareket edebilme"
+      },
+      {
+        "referenceCode": "HSAB.10",
+        "referenceTitle": "Sağlıklı yaşam için temizliğe ve düzene dikkat edebilme"
+      },
+      {
+        "referenceCode": "HSAB.11",
+        "referenceTitle": "Tehlike ve kaza durumlarına karşı kendini koruyabilme"
+      },
+      {
+        "referenceCode": "SNAB.4",
+        "referenceTitle": "Sanat etkinliği uygulayabilme"
+      },
+      {
+        "referenceCode": "MDB.3",
+        "referenceTitle": "Duyduğu seslerin kaynağını anlayabilme"
+      },
+      {
+        "referenceCode": "MÇB.1",
+        "referenceTitle": "Duyduğu sesleri çalgıyla taklit edebilme"
+      }
+    ],
+    "unmappedPlanComponents": []
+  }
+}

@@ -5,6 +5,7 @@ export {
   configuredClassroomFromToday,
   createTodayStudentCards,
   focusActivityFromToday,
+  todayPlanItemStatusLabel,
   todayCatalogDisplayLabel,
   type TodayAttendanceSummary,
   type TodayConfiguredClassroom,
@@ -12,3 +13,9 @@ export {
   type TodayStudentCard,
   type TodaySyncStateView,
 } from "./today-screen-model.ts";
+export {
+  loadPlanDayWorkspace,
+  resolvePlanDayWorkspace,
+  type TodayPlanItem,
+  type TodayWorkspace,
+} from "./today-data.ts";

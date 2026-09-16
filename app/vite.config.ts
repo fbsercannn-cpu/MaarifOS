@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { trimReferenceMedia } from "./scripts/trim-reference-media.mjs";
 
 export default defineConfig({
   build: {
@@ -23,6 +24,11 @@ export default defineConfig({
               test: /node_modules[\\/](?:motion|motion-dom|motion-utils|@use-gesture)[\\/]/,
               priority: 10,
             },
+            {
+              name: "teacher-feedback",
+              test: /src[\\/]features[\\/]feedback[\\/]/,
+              priority: 15,
+            },
           ],
         },
       },
@@ -31,6 +37,12 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     allowedHosts: ["terminal.local"],
+    // Office holds temporary output files open while validating exports on Windows.
+    watch: { ignored: ["**/output/**", "**/test-results/**", "**/playwright-report/**"] },
   },
-  plugins: [react()],
+  plugins: [react(), {
+    name: "lightweight-reference-text",
+    apply: "build",
+    closeBundle() { trimReferenceMedia("dist/client"); },
+  }],
 });

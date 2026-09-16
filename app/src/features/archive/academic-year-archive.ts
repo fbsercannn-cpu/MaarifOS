@@ -1,4 +1,5 @@
 import { civilDateInIstanbul, isCivilDate } from "../../core/domain/attendance.ts";
+import { academicYearEffectiveOperationalStart } from "../../core/domain/academic-year-operational.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import {
@@ -6,24 +7,10 @@ import {
   type ValueEvidenceLinkRecord,
 } from "../../core/repository/entities.ts";
 
-export const STUDENT_ENROLLMENT_VERSION = 1 as const;
+import { STUDENT_ENROLLMENT_VERSION, studentEnrollments, latestStudentEnrollment, type StudentEnrollment } from "../../core/domain/student-membership.ts";
+export { STUDENT_ENROLLMENT_VERSION, studentEnrollments, latestStudentEnrollment } from "../../core/domain/student-membership.ts";
+export type { StudentEnrollment, StudentEnrollmentStatus } from "../../core/domain/student-membership.ts";
 export const STUDENT_ARCHIVE_VERSION = 1 as const;
-
-export type StudentEnrollmentStatus =
-  | "active"
-  | "left"
-  | "completed"
-  | "transferred";
-
-export interface StudentEnrollment {
-  id: string;
-  academicYearId: string;
-  classroomId: string;
-  startedOn: string;
-  endedOn?: string;
-  status: StudentEnrollmentStatus;
-  schemaVersion: typeof STUDENT_ENROLLMENT_VERSION;
-}
 
 export interface AcademicYearArchiveSummary {
   academicYearId: string;
@@ -48,6 +35,7 @@ export interface StudentLongitudinalArchive {
   academicYears: StoredRecord[];
   classrooms: StoredRecord[];
   attendanceRecords: StoredRecord[];
+  calendarEntries?: StoredRecord[];
   observations: StoredRecord[];
   observationRevisions: StoredRecord[];
   evidenceCurriculumLinks: StoredRecord[];
@@ -62,32 +50,6 @@ export interface StudentLongitudinalArchive {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isEnrollment(value: unknown): value is StudentEnrollment {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    UUID_PATTERN.test(record.id) &&
-    typeof record.academicYearId === "string" &&
-    UUID_PATTERN.test(record.academicYearId) &&
-    typeof record.classroomId === "string" &&
-    UUID_PATTERN.test(record.classroomId) &&
-    isCivilDate(record.startedOn) &&
-    (record.endedOn === undefined || isCivilDate(record.endedOn)) &&
-    (record.status === "active" ||
-      record.status === "left" ||
-      record.status === "completed" ||
-      record.status === "transferred") &&
-    record.schemaVersion === STUDENT_ENROLLMENT_VERSION
-  );
-}
-
-export function studentEnrollments(record: StoredRecord): StudentEnrollment[] {
-  return Array.isArray(record.enrollments)
-    ? record.enrollments.filter(isEnrollment).map((enrollment) => ({ ...enrollment }))
-    : [];
-}
 
 function scopeKey(academicYearId: string, classroomId: string): string {
   return `${academicYearId}\u0000${classroomId}`;
@@ -223,6 +185,20 @@ export async function archiveAcademicYear(
         throw new Error("Arşivlenecek eğitim yılı bulunamadı.");
       }
       if (academicYear.status === "archived") return;
+      if (!isCivilDate(academicYear.startDate) || !isCivilDate(academicYear.endDate) ||
+        academicYear.startDate > academicYear.endDate ||
+        (academicYear.operationalStartDate !== undefined &&
+          (!isCivilDate(academicYear.operationalStartDate) || academicYear.operationalStartDate > academicYear.endDate))) {
+        throw new Error("Arşivlenecek eğitim yılının tarih aralığı geçersiz.");
+      }
+      const effectiveStart = academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        ...(typeof academicYear.operationalStartDate === "string"
+          ? { operationalStartDate: academicYear.operationalStartDate } : {}),
+      });
+      if (input.closedOn < effectiveStart || input.closedOn > academicYear.endDate) {
+        throw new Error("Eğitim yılı kapanış günü çalışma tarihleri içinde olmalıdır.");
+      }
 
       const yearClassrooms = classrooms.filter(
         (record) =>
@@ -259,16 +235,19 @@ export async function archiveAcademicYear(
           typeof student.classroomId === "string" &&
           classroomIds.has(student.classroomId);
         const enrollments = studentEnrollments(student);
-        const matchingEnrollment = enrollments.find(
-          (enrollment) =>
-            enrollment.academicYearId === input.academicYearId &&
-            classroomIds.has(enrollment.classroomId),
+        const matchingEnrollment = latestStudentEnrollment(
+          enrollments.filter((enrollment) => classroomIds.has(enrollment.classroomId)),
+          { academicYearId: input.academicYearId,
+            ...(currentMatches ? { classroomId: student.classroomId as string } : {}) },
         );
         if (!currentMatches && !matchingEnrollment) continue;
 
         const classroomId = currentMatches
           ? (student.classroomId as string)
           : matchingEnrollment!.classroomId;
+        if (matchingEnrollment?.status === "active" && matchingEnrollment.startedOn > input.closedOn) {
+          throw new Error("Eğitim yılı kapanışı etkin üyeliğin başlangıcından önce olamaz.");
+        }
         const nextEnrollment: StudentEnrollment = {
           ...(matchingEnrollment ?? {}),
           id: matchingEnrollment?.id ?? crypto.randomUUID(),
@@ -429,6 +408,22 @@ export async function reenrollArchivedStudent(
       if (!academicYear || !classroom) {
         throw new Error("Yeni üyelik için etkin eğitim yılı ve sınıf bulunamadı.");
       }
+      if (
+        !isCivilDate(academicYear.startDate) || !isCivilDate(academicYear.endDate) ||
+        academicYear.startDate > academicYear.endDate ||
+        (academicYear.operationalStartDate !== undefined &&
+          (!isCivilDate(academicYear.operationalStartDate) || academicYear.operationalStartDate > academicYear.endDate))
+      ) {
+        throw new Error("Yeni üyelik için eğitim yılının tarih aralığı geçerli olmalıdır.");
+      }
+      const effectiveStart = academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        ...(typeof academicYear.operationalStartDate === "string"
+          ? { operationalStartDate: academicYear.operationalStartDate } : {}),
+      });
+      if (input.startedOn < effectiveStart || input.startedOn > academicYear.endDate) {
+        throw new Error("Yeni üyelik başlangıcı eğitim yılının çalışma tarihleri içinde olmalıdır.");
+      }
       const student = students.find((record) => record.id === input.studentId);
       if (!student) throw new Error("Yeniden kaydedilecek öğrenci bulunamadı.");
       if (
@@ -439,26 +434,40 @@ export async function reenrollArchivedStudent(
         throw new Error("Öğrencinin başka bir etkin sınıf üyeliği önce kapatılmalıdır.");
       }
       const enrollments = studentEnrollments(student);
-      const existing = enrollments.find(
-        (enrollment) =>
-          enrollment.academicYearId === input.academicYearId &&
-          enrollment.classroomId === input.classroomId,
+      if (student.enrollments !== undefined &&
+        (!Array.isArray(student.enrollments) || student.enrollments.length !== enrollments.length ||
+          new Set(enrollments.map((enrollment) => enrollment.id)).size !== enrollments.length ||
+          enrollments.some((enrollment) => enrollment.endedOn !== undefined && enrollment.endedOn < enrollment.startedOn))) {
+        throw new Error("Üyelik geçmişi geçersiz; yeniden kayıt uygulanmadı.");
+      }
+      const existing = latestStudentEnrollment(enrollments, input);
+      const activeEpisodes = enrollments.filter((enrollment) => enrollment.status === "active");
+      const activeEnrollmentBefore = activeEpisodes[0];
+      if (activeEnrollmentBefore) {
+        if (activeEpisodes.length === 1 && existing?.id === activeEnrollmentBefore.id &&
+          existing.startedOn === input.startedOn && existing.endedOn === undefined &&
+          student.enrollmentStatus === "active" && student.active !== false &&
+          typeof student.deletedAt !== "string") {
+          result = { ...student };
+          return;
+        }
+        throw new Error("Yeniden kayıttan önce öğrencinin etkin üyeliği kapatılmalıdır.");
+      }
+      const previousEpisodes = enrollments.filter((enrollment) =>
+        enrollment.academicYearId === input.academicYearId && enrollment.classroomId === input.classroomId,
       );
+      if (previousEpisodes.some((enrollment) => enrollment.endedOn === undefined || enrollment.endedOn >= input.startedOn)) {
+        throw new Error("Yeni üyelik önceki üyeliğin bitiş gününden sonra başlamalıdır; ayrılık geçmişi korundu.");
+      }
       const activeEnrollment: StudentEnrollment = {
-        ...(existing ?? {}),
-        id: existing?.id ?? crypto.randomUUID(),
+        id: crypto.randomUUID(),
         academicYearId: input.academicYearId,
         classroomId: input.classroomId,
-        startedOn: existing?.startedOn ?? input.startedOn,
+        startedOn: input.startedOn,
         status: "active",
         schemaVersion: STUDENT_ENROLLMENT_VERSION,
       };
-      delete activeEnrollment.endedOn;
-      const nextEnrollments = existing
-        ? enrollments.map((enrollment) =>
-            enrollment.id === existing.id ? activeEnrollment : enrollment,
-          )
-        : [...enrollments, activeEnrollment];
+      const nextEnrollments = [...enrollments, activeEnrollment];
       const next: StoredRecord = {
         ...student,
         academicYearId: input.academicYearId,
@@ -492,6 +501,7 @@ export function buildStudentLongitudinalArchiveFromSnapshot(
 
   const enrollments = studentEnrollments(student);
   if (
+    student.enrollments === undefined &&
     typeof student.academicYearId === "string" &&
     typeof student.classroomId === "string" &&
     !enrollments.some(
@@ -501,7 +511,7 @@ export function buildStudentLongitudinalArchiveFromSnapshot(
     )
   ) {
     enrollments.push({
-      id: crypto.randomUUID(),
+      id: student.id,
       academicYearId: student.academicYearId,
       classroomId: student.classroomId,
       startedOn: isCivilDate(student.civilDate)
@@ -518,7 +528,9 @@ export function buildStudentLongitudinalArchiveFromSnapshot(
   const classroomIds = new Set(enrollments.map((item) => item.classroomId));
   const observations = snapshot.observations.filter(
     (record) =>
-      Array.isArray(record.studentIds) && record.studentIds.includes(input.studentId),
+      record.studentIds !== undefined
+        ? Array.isArray(record.studentIds) && record.studentIds.includes(input.studentId)
+        : record.studentId === input.studentId,
   );
   const observationIds = new Set(observations.map((record) => record.id));
   const activityIds = new Set(
@@ -544,6 +556,7 @@ export function buildStudentLongitudinalArchiveFromSnapshot(
     classrooms: snapshot.classrooms.filter((record) =>
       classroomIds.has(record.id),
     ),
+    calendarEntries: snapshot.calendarEntries.filter(record => enrollments.some(entry => entry.academicYearId === record.academicYearId && entry.classroomId === record.classroomId)),
     attendanceRecords: snapshot.attendanceRecords.filter(
       (record) => record.studentId === input.studentId,
     ),

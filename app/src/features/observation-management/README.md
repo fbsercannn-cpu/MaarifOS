@@ -1,0 +1,11 @@
+# Kaydedilmiş gözlemin tarihi ve kaynakları
+
+`ObservationMetadataEditor` kayıtlı gözlemler için Bugün, Dün ve tarih seçimi sunar. Olay tarihi `civilDate` ve `observedAt` alanlarıyla güncellenir; `createdAt`, ham metin, çocuk sözü ve bağlam değişmez. Düzeltmenin eski/yeni gün ve etkinlik bilgisi mevcut `observationRevisions` sözleşmesinin gerekçe alanına kaydedilir. Gelecek gün veya katılımcılardan birinin gerçek üyelik dönemi dışındaki gün seçilemez. Ortak gözlem bütün katılımcılarını korur.
+
+Gerçek kaynak önerileri seçilen gündeki etkin sınıfın kayıtlı günlük plan ve etkinliklerinden oluşur. Seçili çocuklara atanmış etkinlik bütün gözlem katılımcılarını kapsamalıdır. Seçim doğrudan gözlemin `planId` ve `activityId` alanlarını yazar. Kayıtlı etkinliğin program hedefi seçilirse mevcut `confirmObservationCurriculumLink` servisi gerçek, öğretmen onaylı program bağını kurar.
+
+Uygun program bağı bulunmayan tek çocuk gözlemlerinde sınıfın açık TYMM yaş bandındaki kaynaklı Maarif başlıkları ayrıca seçilebilir. `prepareDevelopmentObservationRecord` kanonik hedefi ve grafik kaynağını saklar; ham gözlem yeniden yazılmaz, başarı/değerlendirme düzeyi üretilmez. TYMM/EÇE veya yaş bantları tahminle dönüştürülmez.
+
+Tarih değişince öğretmen yeni günün gerçek etkinliğini veya o günün anlık gözlem bağlamını seçer. Bağı kaldırma, zorunlu plan/etkinlik omurgasını silmek yerine o günün gerçek anlık gözlem kayıtlarına yerleştirir. Eski etkinliğe özgü program/değer bağlarının kaldırılacağı seçim öncesinde açıklanır. Tam snapshot ilişki doğrulaması commit öncesinde çalışır; mevcut bir rapor veya değerlendirmeyi geçersiz kılacak düzeltme bütün işlemi geri alır. Kaynağı ve zamanı sabit kabul eden eski türetilmiş raporlar bu serviste sessizce yeniden yazılmaz.
+
+Kayıt, etkinlik, hedef veya sınıf değişince eski seçim reddedilir. Aynı seçim tekrar yazılmaz. İlk kayıt ve bütün bağlantı değişiklikleri tek IndexedDB işlemine girer. Çevrimdışı tarih/bağ düzeltme, tam yedek dönüşü ve 320 px tıklama akışı yeni model, çekirdek ve bileşen testlerinde doğrulanır. `ActionCenter` kategori ve gelecek destek planı tamamlanmış olsa da asıl gözlemin bağlanabilecek program/etkinlik kaynağı eksikse işi yeniden görünür kılar.

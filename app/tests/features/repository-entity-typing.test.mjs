@@ -11,6 +11,7 @@ import {
 import {
   INDEXED_DB_MIGRATIONS,
   MAARIFOS_DATABASE_VERSION,
+  OBSERVATION_RELATION_INDEX_DEFINITIONS,
   VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS,
 } from "../../src/core/repository/indexed-db-definitions.ts";
 
@@ -96,6 +97,51 @@ const records = {
     studentIds: [studentId],
     rawText: "Kurgu nesnel gözlem notu.",
     observedAt: "2026-09-02T06:00:00.000Z",
+    planId: "00000000-0000-4000-8000-000000000911",
+    activityId: "00000000-0000-4000-8000-000000000912",
+    rawTextImmutable: true,
+    workflowStatus: "captured",
+  },
+  plans: {
+    ...base,
+    id: "00000000-0000-4000-8000-000000000911",
+    academicYearId,
+    classroomId,
+    planType: "daily",
+    title: "Kurgu günlük plan",
+  },
+  activities: {
+    ...base,
+    id: "00000000-0000-4000-8000-000000000912",
+    academicYearId,
+    classroomId,
+    planId: "00000000-0000-4000-8000-000000000911",
+    title: "Kurgu gerçek etkinlik",
+    status: "planned",
+  },
+  evidenceCurriculumLinks: {
+    ...base,
+    id: "00000000-0000-4000-8000-000000000914",
+    academicYearId,
+    classroomId,
+    observationId,
+    framework: "tymm",
+    programLabel: "Türkiye Yüzyılı Maarif Modeli",
+    catalogId: "tymm-2024-okul-oncesi-v1",
+    sourceVersion: "2024.09.02",
+    referenceCode: "FAB.1",
+    referenceTitle: "Bilimsel gözlem yapabilme",
+    confirmedAt: "2026-09-02T06:05:00.000Z",
+    approvedByUserId: "00000000-0000-4000-8000-000000000913",
+    confirmationMethod: "teacher-confirmed",
+    referenceOrigin: "official-catalog",
+    officialCatalogVerified: true,
+    plannedTargetId: "tymm-2024-60-72-fab-1",
+    targetKind: "learning-outcome",
+    targetDomain: "Fen",
+    targetSourceUrl: "https://tymm.meb.gov.tr/",
+    targetSourcePage: 245,
+    targetSourceSha256: `sha256:${"c".repeat(64)}`,
   },
   valueEvidenceLinks: valueEvidenceLink,
   calendarEntries: {
@@ -153,9 +199,9 @@ test("değer kanıt bağı guard'ı kimlik, rol, hedef, onay ve provenance alanl
   );
 });
 
-test("IndexedDB v5 değer kanıt deposunu beş non-unique indeksle tanımlar", () => {
-  assert.equal(MAARIFOS_DATABASE_VERSION, 5);
-  assert.equal(INDEXED_DB_MIGRATIONS.at(-1)?.toVersion, 5);
+test("IndexedDB v8 tam veri kasası ve değer kanıtı indekslerini tanımlar", () => {
+  assert.equal(MAARIFOS_DATABASE_VERSION, 8);
+  assert.equal(INDEXED_DB_MIGRATIONS.at(-1)?.toVersion, 8);
   assert.deepEqual(
     VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS.map((definition) => ({
       name: definition.name,
@@ -182,6 +228,94 @@ test("IndexedDB v5 değer kanıt deposunu beş non-unique indeksle tanımlar", (
         unique: false,
       },
     ],
+  );
+  assert.deepEqual(
+    OBSERVATION_RELATION_INDEX_DEFINITIONS.map((definition) => ({
+      name: definition.name,
+      keyPath: definition.keyPath,
+    })),
+    [
+      { name: "by-plan", keyPath: "planId" },
+      { name: "by-activity", keyPath: "activityId" },
+    ],
+  );
+});
+
+test("kanonik ilişki kayıtları bozuk plan, etkinlik, gözlem ve program bağlarını reddeder", () => {
+  assert.equal(
+    isEntityRecord("activities", { ...records.activities, planId: "bozuk" }),
+    false,
+  );
+  assert.equal(isEntityRecord("plans", { ...records.plans, planType: "" }), false);
+  assert.equal(
+    isEntityRecord("observations", { ...records.observations, activityId: "bozuk" }),
+    false,
+  );
+  assert.equal(
+    isEntityRecord("evidenceCurriculumLinks", {
+      ...records.evidenceCurriculumLinks,
+      referenceOrigin: "teacher-declared",
+      officialCatalogVerified: true,
+    }),
+    false,
+  );
+  assert.equal(
+    isEntityRecord("evidenceCurriculumLinks", {
+      ...records.evidenceCurriculumLinks,
+      referenceOrigin: "teacher-declared",
+      officialCatalogVerified: false,
+      targetSourceUrl: "about:blank",
+    }),
+    true,
+  );
+});
+
+test("yeni resmî TYMM öğrenme çıktısı bağı exact ve insan incelemesi bekleyen graf referansı olmadan geçmez", () => {
+  const holisticGraphReference = {
+    graphId: "meb-tymm-okul-oncesi-2024-holistic-graph",
+    graphVersion: "1.0.0",
+    catalogContentSha256:
+      "sha256:3605c74ddc95970671cc54994d40702b6831ad46e92cfed4a9047597804d4d8a",
+    reviewStatus: "pending-human-review",
+    outcomeNodeId: "outcome:60-72:fen:fab.1",
+    relatedNodeIds: [
+      "field:60-72:fen:fbab1",
+      "process:60-72:fen:fbab1.sb1",
+    ],
+    sourceSha256:
+      "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+  };
+  const canonical = {
+    ...records.evidenceCurriculumLinks,
+    schemaVersion: 2,
+    targetSourceSha256: holisticGraphReference.sourceSha256,
+    holisticGraphReference,
+  };
+  assert.equal(isEntityRecord("evidenceCurriculumLinks", canonical), true);
+  const { holisticGraphReference: _omitted, ...missingReference } = canonical;
+  assert.equal(
+    isEntityRecord("evidenceCurriculumLinks", missingReference),
+    false,
+  );
+  assert.equal(
+    isEntityRecord("evidenceCurriculumLinks", {
+      ...canonical,
+      holisticGraphReference: {
+        ...holisticGraphReference,
+        reviewStatus: "approved",
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    isEntityRecord("evidenceCurriculumLinks", {
+      ...canonical,
+      holisticGraphReference: {
+        ...holisticGraphReference,
+        catalogContentSha256: `sha256:${"0".repeat(64)}`,
+      },
+    }),
+    false,
   );
 });
 

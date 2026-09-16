@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   CLASSROOM_SCHEDULE_PRESETS,
   classroomScheduleLabel,
+  isClassroomRecord,
   isClassroomSchedule,
   normalizeClassroomSchedule,
 } from "../../src/core/domain/classroom.ts";
@@ -14,6 +15,7 @@ import {
   resolveTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
+  transitionAcademicYearConfiguration,
 } from "../../src/features/today/today-data.ts";
 
 class MemoryStore {
@@ -106,6 +108,95 @@ test("sınıf düzeni eksikse tahmin yürütmeden not_configured döner", () => 
   );
 });
 
+test("kimlik alanları boş olan legacy sınıfı okur, yeni değerleri doğrulayıp normalize eder", async () => {
+  const academicYearId = "00000000-0000-4000-8000-000000000103";
+  const classroomId = "00000000-0000-4000-8000-000000000104";
+  const snapshot = createEmptySnapshot();
+  snapshot.academicYears.push({
+    ...baseRecord,
+    id: academicYearId,
+    name: "2026-2027 Eğitim Yılı",
+    startDate: "2026-09-01",
+    endDate: "2027-06-30",
+    status: "active",
+  });
+  snapshot.classrooms.push({
+    ...baseRecord,
+    id: classroomId,
+    academicYearId,
+    name: "Kurgu Legacy Sınıfı",
+    schoolName: "   ",
+    teacherName: "",
+    schedule: normalizeClassroomSchedule(CLASSROOM_SCHEDULE_PRESETS.morning),
+  });
+
+  assert.equal(isClassroomRecord(snapshot.classrooms[0]), true);
+  const legacyContext = resolveTodayWorkspace(
+    snapshot,
+    new Date("2026-09-02T07:00:00.000Z"),
+  ).classroom;
+  assert.equal(legacyContext.status, "configured");
+  assert.equal(
+    legacyContext.status === "configured" ? legacyContext.schoolName : undefined,
+    undefined,
+  );
+  assert.equal(
+    legacyContext.status === "configured" ? legacyContext.teacherName : undefined,
+    undefined,
+  );
+
+  const store = new MemoryStore(snapshot);
+  const baseInput = {
+    academicYear: {
+      id: academicYearId,
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.morning,
+    now: new Date("2026-09-02T07:30:00.000Z"),
+  };
+  await assert.rejects(
+    saveClassroomConfiguration(store, {
+      ...baseInput,
+      classroom: {
+        id: classroomId,
+        name: "Kurgu Legacy Sınıfı",
+        schoolName: "  ",
+      },
+    }),
+    /Okul adı boş bırakılamaz/,
+  );
+  await assert.rejects(
+    saveClassroomConfiguration(store, {
+      ...baseInput,
+      classroom: {
+        id: classroomId,
+        name: "Kurgu Legacy Sınıfı",
+        schoolName: "Kurgu İlkokulu",
+        teacherName: "  ",
+      },
+    }),
+    /Öğretmen adı soyadı boş bırakılamaz/,
+  );
+
+  const context = await saveClassroomConfiguration(store, {
+    ...baseInput,
+    classroom: {
+      id: classroomId,
+      name: "Kurgu Legacy Sınıfı",
+      schoolName: "  Kurgu   İlkokulu  ",
+      teacherName: "  Emine   Yılmaz  ",
+    },
+  });
+  assert.equal(context.status === "configured" ? context.schoolName : "", "Kurgu İlkokulu");
+  assert.equal(context.status === "configured" ? context.teacherName : "", "Emine Yılmaz");
+
+  const storedClassroom = (await store.readSnapshot()).classrooms[0];
+  assert.equal(storedClassroom.schoolName, "Kurgu İlkokulu");
+  assert.equal(storedClassroom.teacherName, "Emine Yılmaz");
+});
+
 test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek planı taşır", async () => {
   const store = new MemoryStore();
   const context = await saveClassroomConfiguration(store, {
@@ -118,6 +209,8 @@ test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek pla
     classroom: {
       id: "00000000-0000-4000-8000-000000000112",
       name: "Kurgu Güneş Sınıfı",
+      schoolName: "  Kurgu   İlkokulu  ",
+      teacherName: "  Emine   Yılmaz  ",
       ageGroup: "60–72 ay",
       curriculumProgram: "TYMM",
       curriculumCatalogLabel: "Katalog 2025",
@@ -134,6 +227,8 @@ test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek pla
     now: new Date("2026-07-22T06:30:00.000Z"),
   });
   assert.equal(context.status, "configured");
+  assert.equal(context.status === "configured" ? context.schoolName : "", "Kurgu İlkokulu");
+  assert.equal(context.status === "configured" ? context.teacherName : "", "Emine Yılmaz");
   assert.equal(context.status === "configured" ? context.scheduleLabel : "", "Sabah grubu · 08.30–12.30");
   assert.equal(
     context.status === "configured" ? context.academicYearStart : "",
@@ -170,6 +265,14 @@ test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek pla
       ? preservedContext.curriculumProfile?.catalogId
       : "",
     "ogretmen-beyani-tymm",
+  );
+  assert.equal(
+    preservedContext.status === "configured" ? preservedContext.schoolName : "",
+    "Kurgu İlkokulu",
+  );
+  assert.equal(
+    preservedContext.status === "configured" ? preservedContext.teacherName : "",
+    "Emine Yılmaz",
   );
 
   const activityId = "00000000-0000-4000-8000-000000000113";
@@ -286,6 +389,58 @@ test("sınıf kurulumunu atomik saklar ve Bugün çalışma alanına gerçek pla
   assert.equal(workspace.datedEvidenceCount, 2);
 });
 
+test("eğitim yılı geçişinde okul ve öğretmen kimliğini yeni sınıfa taşır", async () => {
+  const store = new MemoryStore();
+  await saveClassroomConfiguration(store, {
+    academicYear: {
+      id: "00000000-0000-4000-8000-000000000181",
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    classroom: {
+      id: "00000000-0000-4000-8000-000000000182",
+      name: "Kurgu Güneş Sınıfı",
+      schoolName: "Kurgu İlkokulu",
+      teacherName: "Emine Yılmaz",
+    },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.morning,
+    now: new Date("2026-09-01T06:30:00.000Z"),
+  });
+
+  const nextContext = await transitionAcademicYearConfiguration(store, {
+    academicYear: {
+      id: "00000000-0000-4000-8000-000000000183",
+      name: "2027-2028 Eğitim Yılı",
+      startDate: "2027-09-01",
+      endDate: "2028-06-30",
+    },
+    classroom: {
+      id: "00000000-0000-4000-8000-000000000184",
+      name: "Kurgu Güneş Sınıfı",
+    },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.morning,
+    carryStudentIds: [],
+    closedOn: "2027-06-30",
+    now: new Date("2027-07-01T06:30:00.000Z"),
+  });
+
+  assert.equal(
+    nextContext.status === "configured" ? nextContext.schoolName : "",
+    "Kurgu İlkokulu",
+  );
+  assert.equal(
+    nextContext.status === "configured" ? nextContext.teacherName : "",
+    "Emine Yılmaz",
+  );
+  const snapshot = await store.readSnapshot();
+  const nextClassroom = snapshot.classrooms.find(
+    (record) => record.id === "00000000-0000-4000-8000-000000000184",
+  );
+  assert.equal(nextClassroom?.schoolName, "Kurgu İlkokulu");
+  assert.equal(nextClassroom?.teacherName, "Emine Yılmaz");
+});
+
 test("etkinlik durumunu güncellerken kimliği, createdAt değerini ve ek alanları korur", async () => {
   const snapshot = createEmptySnapshot();
   const activityId = "00000000-0000-4000-8000-000000000121";
@@ -387,5 +542,150 @@ test("aynı sınıf ve gün içinde yalnız bir etkinliğin devam etmesine izin 
   assert.equal(
     activities.find((record) => record.id === secondActivityId)?.status,
     "in_progress",
+  );
+});
+
+test("anlık gözlem bağlamı gerçek sınıf etkinliğinin başlamasını engellemez", async () => {
+  const store = new MemoryStore();
+  const academicYearId = "00000000-0000-4000-8000-000000000135";
+  const classroomId = "00000000-0000-4000-8000-000000000136";
+  const spontaneousActivityId = "00000000-0000-4000-8000-000000000137";
+  const spontaneousPlanId = "00000000-0000-4000-8000-000000000139";
+  const plannedActivityId = "00000000-0000-4000-8000-000000000138";
+  await saveClassroomConfiguration(store, {
+    academicYear: {
+      id: academicYearId,
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    classroom: {
+      id: classroomId,
+      name: "Kurgu Anlık Gözlem Sınıfı",
+    },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.full_day,
+    now: new Date("2026-07-22T08:00:00.000Z"),
+  });
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...baseRecord,
+        id: spontaneousPlanId,
+        academicYearId,
+        classroomId,
+        planType: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "active",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...baseRecord,
+        id: spontaneousActivityId,
+        planId: spontaneousPlanId,
+        academicYearId,
+        classroomId,
+        activityKind: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        startTime: "08:30",
+        status: "in_progress",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+      {
+        ...baseRecord,
+        id: plannedActivityId,
+        academicYearId,
+        classroomId,
+        title: "Batar mı, yüzer mi?",
+        startTime: "09:00",
+        status: "planned",
+      },
+    ]);
+  });
+
+  await setTodayActivityStatus(store, plannedActivityId, "in_progress", {
+    now: new Date("2026-07-22T08:30:00.000Z"),
+  });
+  const activities = (await store.readSnapshot()).activities;
+
+  assert.equal(
+    activities.find((record) => record.id === spontaneousActivityId)?.status,
+    "in_progress",
+  );
+  assert.equal(
+    activities.find((record) => record.id === plannedActivityId)?.status,
+    "in_progress",
+  );
+});
+
+test("normal plana bağlı sahte anlık etkinlik durum çakışmasını atlatamaz", async () => {
+  const store = new MemoryStore();
+  const academicYearId = "00000000-0000-4000-8000-000000000145";
+  const classroomId = "00000000-0000-4000-8000-000000000146";
+  const spoofedPlanId = "00000000-0000-4000-8000-000000000147";
+  const spoofedActivityId = "00000000-0000-4000-8000-000000000148";
+  const plannedActivityId = "00000000-0000-4000-8000-000000000149";
+  await saveClassroomConfiguration(store, {
+    academicYear: {
+      id: academicYearId,
+      name: "2026-2027 Eğitim Yılı",
+      startDate: "2026-09-01",
+      endDate: "2027-06-30",
+    },
+    classroom: { id: classroomId, name: "Kurgu Bütünlük Sınıfı" },
+    schedule: CLASSROOM_SCHEDULE_PRESETS.full_day,
+    now: new Date("2026-07-22T08:00:00.000Z"),
+  });
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...baseRecord,
+        id: spoofedPlanId,
+        academicYearId,
+        classroomId,
+        planType: "daily",
+        title: "Normal plan",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...baseRecord,
+        id: spoofedActivityId,
+        planId: spoofedPlanId,
+        academicYearId,
+        classroomId,
+        activityKind: "spontaneous-observation",
+        title: "Sahte anlık etkinlik",
+        status: "in_progress",
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+      {
+        ...baseRecord,
+        id: plannedActivityId,
+        academicYearId,
+        classroomId,
+        title: "Başlatılacak gerçek etkinlik",
+        status: "planned",
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    setTodayActivityStatus(store, plannedActivityId, "in_progress", {
+      now: new Date("2026-07-22T08:30:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+  assert.equal(
+    (await store.readSnapshot()).activities.find(
+      (record) => record.id === plannedActivityId,
+    )?.status,
+    "planned",
   );
 });

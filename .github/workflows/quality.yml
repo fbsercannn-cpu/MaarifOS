@@ -18,7 +18,10 @@ jobs:
     defaults:
       run:
         working-directory: app
-    timeout-minutes: 25
+    # The canonical gate includes the seed-free five-day teacher journey,
+    # Chromium/WebKit PWA checks, backup/restore and the remaining runtime
+    # suites. Keep one job-level ceiling without weakening per-suite budgets.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

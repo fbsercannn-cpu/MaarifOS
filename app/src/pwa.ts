@@ -6,9 +6,11 @@ const SERVICE_WORKER_STATUS_REQUEST = "maarifos:get-status";
 const SERVICE_WORKER_STATUS_RESPONSE = "maarifos:sw-status";
 const SERVICE_WORKER_ACTIVATE_MESSAGE = "maarifos:skip-waiting";
 const SERVICE_WORKER_MESSAGE_TIMEOUT_MS = 4_000;
+const AUTOMATIC_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1_000;
 
 export const PWA_STATUS_EVENT = "maarifos:pwa-status";
 export const PWA_APPLY_UPDATE_EVENT = "maarifos:apply-update";
+export const PWA_CHECK_UPDATE_EVENT = "maarifos:check-update";
 
 export type PwaRuntimePhase =
   | "idle"
@@ -16,6 +18,7 @@ export type PwaRuntimePhase =
   | "unsupported"
   | "registering"
   | "installing"
+  | "checking-update"
   | "ready"
   | "update-ready"
   | "activating-update"
@@ -27,6 +30,7 @@ export interface PwaRuntimeStatus {
   readonly version: string;
   readonly activeVersion: string | null;
   readonly updateVersion: string | null;
+  readonly lastCheckedAt: string | null;
   readonly message: string;
   readonly errorCode?: "unsupported" | "registration" | "controller" | "cache" | "activation";
 }
@@ -49,6 +53,7 @@ let currentStatus: PwaRuntimeStatus = Object.freeze({
   version: CURRENT_RELEASE.version,
   activeVersion: null,
   updateVersion: null,
+  lastCheckedAt: null,
   message: "Çevrim dışı çalışma hazırlanıyor.",
 });
 let currentRegistration: ServiceWorkerRegistration | null = null;
@@ -56,6 +61,8 @@ let announcedWaitingWorker: ServiceWorker | null = null;
 let updateActivationRequested = false;
 let controllerReloadStarted = false;
 let listenersInstalled = false;
+let lastAutomaticUpdateCheckAt = 0;
+let updateCheckInFlight: Promise<boolean> | null = null;
 
 function ensureNativeRuntimeQuery(): void {
   const url = new URL(window.location.href);
@@ -65,8 +72,15 @@ function ensureNativeRuntimeQuery(): void {
   window.history.replaceState({}, "", url);
 }
 
-function publishStatus(status: PwaRuntimeStatus): void {
-  currentStatus = Object.freeze(status);
+function publishStatus(
+  status: Omit<PwaRuntimeStatus, "lastCheckedAt"> & {
+    readonly lastCheckedAt?: string | null;
+  },
+): void {
+  currentStatus = Object.freeze({
+    ...status,
+    lastCheckedAt: status.lastCheckedAt ?? currentStatus.lastCheckedAt,
+  });
   (window as PwaStatusWindow).__maarifosPwaStatus = currentStatus;
   window.dispatchEvent(
     new CustomEvent<PwaRuntimeStatus>(PWA_STATUS_EVENT, {
@@ -199,36 +213,75 @@ function isNewReleaseMessage(
   );
 }
 
-async function announceWaitingWorker(
-  registration: ServiceWorkerRegistration,
-  announcedVersion?: string,
-): Promise<void> {
-  const waitingWorker = registration.waiting;
-  if (
-    !registration.active ||
-    !waitingWorker ||
-    waitingWorker === announcedWaitingWorker
-  ) {
+function publishWaitingWorkerVerificationFailure(): void {
+  announcedWaitingWorker = null;
+  if (currentStatus.offlineReady) {
+    publishStatus({
+      ...currentStatus,
+      phase: "ready",
+      updateVersion: null,
+      message: "Çevrim dışı uygulama hazır.",
+    });
     return;
   }
 
-  announcedWaitingWorker = waitingWorker;
-  let updateVersion = announcedVersion ?? CURRENT_RELEASE.version;
-  try {
-    updateVersion = (await requestWorkerHealth(waitingWorker)).version;
-  } catch {
-    // Waiting worker yine de kullanıcı kontrollü etkinleştirmeye sunulur.
+  publishStatus({
+    phase: "error",
+    offlineReady: false,
+    version: CURRENT_RELEASE.version,
+    activeVersion: currentStatus.activeVersion,
+    updateVersion: null,
+    message: "Yeni çevrim dışı sürümün uygulama dosyaları doğrulanamadı.",
+    errorCode: "cache",
+  });
+}
+
+async function announceWaitingWorker(
+  registration: ServiceWorkerRegistration,
+  announcedVersion?: string,
+): Promise<boolean> {
+  const waitingWorker = registration.waiting;
+  if (
+    !registration.active ||
+    !waitingWorker
+  ) {
+    return false;
   }
 
+  if (
+    waitingWorker === announcedWaitingWorker &&
+    currentStatus.phase === "update-ready"
+  ) {
+    return true;
+  }
+
+  let waitingHealth: ServiceWorkerHealth;
+  try {
+    waitingHealth = await requestWorkerHealth(waitingWorker);
+  } catch {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
+  if (
+    !waitingHealth.shellReady ||
+    (announcedVersion !== undefined && announcedVersion !== waitingHealth.version)
+  ) {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
+  announcedWaitingWorker = waitingWorker;
   publishStatus({
     phase: "update-ready",
     offlineReady: currentStatus.offlineReady,
     version: CURRENT_RELEASE.version,
     activeVersion: currentStatus.activeVersion,
-    updateVersion,
+    updateVersion: waitingHealth.version,
     message: "Yeni sürüm hazır; açık kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
   });
   window.dispatchEvent(new CustomEvent(PWA_UPDATE_READY_EVENT));
+  return true;
 }
 
 function observeInstallingWorker(
@@ -282,6 +335,112 @@ function observeRegistration(registration: ServiceWorkerRegistration): void {
   }
 }
 
+function restoreStatusAfterUpdateCheck(lastCheckedAt: string): void {
+  if (currentStatus.phase !== "checking-update") return;
+
+  publishStatus({
+    ...currentStatus,
+    phase: currentStatus.offlineReady ? "ready" : "registering",
+    lastCheckedAt,
+    message: currentStatus.offlineReady
+      ? `MaarifOS ${currentStatus.activeVersion ?? CURRENT_RELEASE.version} bu cihazda güncel.`
+      : "Çevrim dışı uygulama dosyaları hazırlanıyor.",
+  });
+}
+
+async function performServiceWorkerUpdateCheck(force: boolean): Promise<boolean> {
+  if (!navigator.onLine) {
+    if (force) {
+      publishStatus({
+        ...currentStatus,
+        message: "Güncelleme denetimi için internet bağlantısı gerekiyor.",
+      });
+    }
+    return false;
+  }
+
+  const registration =
+    currentRegistration ??
+    (await navigator.serviceWorker.getRegistration("/"));
+  if (!registration) {
+    if (force) {
+      publishStatus({
+        ...currentStatus,
+        phase: "error",
+        message: "Güncelleme hizmeti henüz hazır değil. Birkaç saniye sonra yeniden deneyin.",
+        errorCode: "registration",
+      });
+    }
+    return false;
+  }
+
+  currentRegistration = registration;
+  if (registration.waiting) {
+    return announceWaitingWorker(registration);
+  }
+
+  const checkedAt = new Date().toISOString();
+  publishStatus({
+    ...currentStatus,
+    phase: "checking-update",
+    lastCheckedAt: checkedAt,
+    message: "Yeni MaarifOS sürümü denetleniyor.",
+  });
+
+  try {
+    await registration.update();
+    if (registration.waiting) {
+      return announceWaitingWorker(registration);
+    }
+    restoreStatusAfterUpdateCheck(checkedAt);
+    return false;
+  } catch (error) {
+    if (currentStatus.offlineReady) {
+      publishStatus({
+        ...currentStatus,
+        phase: "ready",
+        lastCheckedAt: checkedAt,
+        message: "Güncelleme denetimi tamamlanamadı; mevcut çevrim dışı sürüm hazır.",
+      });
+    } else if (currentStatus.phase !== "error") {
+      publishStatus({
+        ...currentStatus,
+        phase: "error",
+        lastCheckedAt: checkedAt,
+        message: "Güncelleme hizmetine ulaşılamadı; bağlantınızı denetleyin.",
+        errorCode: "registration",
+      });
+    }
+    console.warn("MaarifOS güncelleme denetimi tamamlanamadı.", error);
+    return false;
+  }
+}
+
+export function checkForServiceWorkerUpdate(
+  options: { readonly force?: boolean } = {},
+): Promise<boolean> {
+  if (!import.meta.env.PROD || !("serviceWorker" in navigator)) {
+    return Promise.resolve(false);
+  }
+  if (updateCheckInFlight) return updateCheckInFlight;
+
+  const force = options.force === true;
+  const now = Date.now();
+  if (
+    !force &&
+    now - lastAutomaticUpdateCheckAt < AUTOMATIC_UPDATE_CHECK_INTERVAL_MS
+  ) {
+    return Promise.resolve(false);
+  }
+  lastAutomaticUpdateCheckAt = now;
+
+  const task = performServiceWorkerUpdateCheck(force);
+  updateCheckInFlight = task.finally(() => {
+    updateCheckInFlight = null;
+  });
+  return updateCheckInFlight;
+}
+
 export async function activateWaitingServiceWorker(): Promise<boolean> {
   const registration =
     currentRegistration ??
@@ -298,16 +457,32 @@ export async function activateWaitingServiceWorker(): Promise<boolean> {
   }
 
   currentRegistration = registration;
+  let waitingHealth: ServiceWorkerHealth;
+  try {
+    waitingHealth = await requestWorkerHealth(waitingWorker);
+  } catch {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+  if (
+    !waitingHealth.shellReady ||
+    (currentStatus.updateVersion !== null &&
+      currentStatus.updateVersion !== waitingHealth.version)
+  ) {
+    publishWaitingWorkerVerificationFailure();
+    return false;
+  }
+
   updateActivationRequested = true;
   publishStatus({
     ...currentStatus,
     phase: "activating-update",
-    updateVersion: currentStatus.updateVersion ?? CURRENT_RELEASE.version,
+    updateVersion: waitingHealth.version,
     message: "Yeni sürüm güvenli biçimde etkinleştiriliyor.",
   });
   waitingWorker.postMessage({
     type: SERVICE_WORKER_ACTIVATE_MESSAGE,
-    version: currentStatus.updateVersion ?? CURRENT_RELEASE.version,
+    version: waitingHealth.version,
   });
   return true;
 }
@@ -342,6 +517,21 @@ function installGlobalListeners(): void {
   window.addEventListener(PWA_APPLY_UPDATE_EVENT, () => {
     void activateWaitingServiceWorker();
   });
+
+  window.addEventListener(PWA_CHECK_UPDATE_EVENT, () => {
+    void checkForServiceWorkerUpdate({ force: true });
+  });
+
+  const checkWhenUsable = () => {
+    if (document.visibilityState !== "visible" || !navigator.onLine) return;
+    void checkForServiceWorkerUpdate();
+  };
+  const checkWhenVisible = () => {
+    if (document.visibilityState === "visible") checkWhenUsable();
+  };
+  window.addEventListener("focus", checkWhenUsable);
+  window.addEventListener("online", checkWhenUsable);
+  document.addEventListener("visibilitychange", checkWhenVisible);
 }
 
 async function installServiceWorker(): Promise<void> {
@@ -369,17 +559,29 @@ async function installServiceWorker(): Promise<void> {
       announcedWaitingWorker = null;
       await announceWaitingWorker(registration);
     }
-    await registration.update();
+    await checkForServiceWorkerUpdate({ force: true });
   } catch (error) {
-    publishStatus({
-      phase: "error",
-      offlineReady: false,
-      version: CURRENT_RELEASE.version,
-      activeVersion: null,
-      updateVersion: null,
-      message: "Çevrim dışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
-      errorCode: "registration",
-    });
+    const waitingWorkerReady = currentRegistration
+      ? await announceWaitingWorker(currentRegistration)
+      : false;
+    if (waitingWorkerReady) return;
+
+    if (currentStatus.offlineReady) {
+      console.warn("MaarifOS çevrim dışı güncelleme denetimi tamamlanamadı.", error);
+      return;
+    }
+
+    if (currentStatus.phase !== "error") {
+      publishStatus({
+        phase: "error",
+        offlineReady: false,
+        version: CURRENT_RELEASE.version,
+        activeVersion: null,
+        updateVersion: null,
+        message: "Çevrim dışı destek başlatılamadı; bağlantı varken kullanmaya devam edebilirsiniz.",
+        errorCode: "registration",
+      });
+    }
     console.warn("MaarifOS çevrim dışı desteği başlatılamadı.", error);
   }
 }

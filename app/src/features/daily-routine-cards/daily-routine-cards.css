@@ -1,0 +1,26 @@
+.routine-workspace { display: grid; gap: 14px; color: #1b3c38; overflow-wrap: anywhere; }
+.routine-workspace p { margin: 6px 0; line-height: 1.5; }
+.routine-workspace h3 { margin: 0; font-size: 21px; }
+.routine-fieldset, .routine-workspace section { display: grid; gap: 14px; min-width: 0; padding: 0; border: 0; margin: 0; }
+.routine-workspace label { display: grid; gap: 7px; font-weight: 650; min-width: 0; }
+.routine-workspace input, .routine-workspace select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; border: 1px solid #b8cbc5; border-radius: 12px; background: white; color: #173c35; font: inherit; }
+.routine-workspace button { min-height: 46px; padding: 10px 13px; border: 1px solid #adc5bb; border-radius: 12px; color: #174638; background: #f4f9f5; font: inherit; font-weight: 650; white-space: normal; }
+.routine-workspace button:disabled { opacity: .5; }
+.routine-workspace .sheet-primary { color: white; background: #185d49; }
+.routine-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.routine-context { color: #536e65; font-size: 13px; }
+.routine-warning, .routine-error, .routine-success { padding: 12px; border-radius: 12px; background: #fff5da; color: #685011; }
+.routine-error { background: #ffece8; color: #8e3024; }
+.routine-success { background: #eaf5e9; color: #245b32; }
+.routine-card-list { list-style: none; display: grid; grid-template-columns: 1fr; gap: 16px; margin: 0; padding: 0; }
+.routine-card { border: 1px solid #cbdad3; border-radius: 19px; padding: 16px; background: white; min-width: 0; }
+.routine-card-hidden { background: #f1f2f1; }
+.routine-card-preview { display: grid; justify-items: center; gap: 9px; position: relative; padding: 12px 0 18px; text-align: center; }
+.routine-card-preview svg { width: 116px; height: 116px; }
+.routine-card-preview strong { font-size: 25px; line-height: 1.28; }
+.routine-card-preview > span:last-child { font-size: 14px; color: #5f736b; }
+.routine-number { position: absolute; top: 0; left: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #e8f1eb; color: #375e4e; font-weight: 750; }
+.routine-workspace summary { cursor: pointer; min-height: 44px; padding: 10px 0; box-sizing: border-box; font-weight: 700; }
+.routine-workspace details[open] > label, .routine-workspace details[open] > button, .routine-workspace details[open] > div { margin-top: 12px; }
+.routine-source { display: grid; gap: 10px; border: 1px solid #bbd1c7; border-radius: 14px; padding: 13px; }
+@media (min-width: 620px) { .routine-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -29,11 +29,14 @@ export function bytesToBase64(bytes: Uint8Array): string {
 export function base64ToBytes(
   value: string,
   expectedLength?: number,
+  maximumCharacters = 16_777_216,
 ): Uint8Array<ArrayBuffer> {
   if (
+    !Number.isSafeInteger(maximumCharacters) || maximumCharacters < 4 || maximumCharacters > 32 * 1024 * 1024 ||
     typeof value !== "string" ||
     value.length === 0 ||
-    value.length > 16_777_216 ||
+    value.length > maximumCharacters ||
+    (expectedLength !== undefined && value.length !== 4 * Math.ceil(expectedLength / 3)) ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(value) ||
     value.length % 4 !== 0
   ) {

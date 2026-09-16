@@ -1,9 +1,12 @@
+import { HOME_GAME_CARD_KEYS, HOME_GAME_CARD_SETTING_TYPE, isHomeGameCardRecord, assertHomeGameCardRelationships } from "../../features/home-game-cards/home-game-card-model.ts";
+import {STUDENT_ERASURE_TYPE,isStudentErasure} from '../domain/student-erasure.ts';
 import {
   COLLECTION_NAMES,
   type CollectionName,
   type DataSnapshot,
   type StoredRecord,
 } from "../domain/model";
+import { DOCUMENT_VERSION_KEYS, DOCUMENT_VERSION_SETTING_TYPE, isDocumentVersionRecord } from "../domain/document-history.ts";
 import {
   ATTENDANCE_COMPLETION_SETTING_TYPE,
   isAttendanceCompletionSetting,
@@ -14,10 +17,24 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
   isClassroomRecord,
 } from "../domain/classroom";
+import { TEACHER_FOLLOWUP_KEYS, TEACHER_FOLLOWUP_SETTING_TYPE, isTeacherFollowupRecord, assertTeacherFollowupRelationships } from "../domain/teacher-followup.ts";
+import { CONSENT_TRIP_KEYS, CONSENT_TRIP_SETTING_TYPE, isConsentTripRecord, assertConsentTripRelationships } from "../domain/consent-trips.ts";
+import { CLASSROOM_ADMIN_KEYS, CLASSROOM_ADMIN_SETTING_TYPE, isClassroomAdminRecord, assertClassroomAdminRelationships } from "../domain/classroom-admin.ts";
+import { GROWTH_MEASUREMENT_RECORD_KEYS, GROWTH_MEASUREMENT_SETTING_TYPE, isGrowthMeasurementRecord, assertGrowthMeasurementSnapshotRelations } from "../domain/growth-measurements.ts";
+import { LEARNING_CENTER_KEYS, LEARNING_CENTER_SETTING_TYPE, isLearningCenterRecord, assertLearningCenterRelationships } from "../domain/learning-centers.ts";
+import {CLASS_DUTY_SETTING_TYPE,isClassDutyRecord,assertClassDutyRelationships} from "../domain/class-duty-schedule.ts";
+import {TEACHER_HOME_PREFERENCES_SETTING_TYPE,isTeacherHomePreferencesRecord} from "../../features/simple-experience/teacher-home-preferences.ts";
+import { FAMILY_ENGAGEMENT_KEYS, FAMILY_ENGAGEMENT_SETTING_TYPE, isFamilyEngagementRecord, assertFamilyEngagementRelationships } from "../domain/family-engagement.ts";
+import { SCHOOL_DOCUMENT_TEMPLATE_KEYS, SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE, isSchoolDocumentTemplateRecord, assertSchoolDocumentTemplateRelationships } from "../domain/school-document-template.ts";
+import { DAILY_ROUTINE_CARD_KEYS, DAILY_ROUTINE_CARD_SETTING_TYPE, isDailyRoutineCardRecord, assertDailyRoutineCardRelationships } from "../domain/daily-routine-cards.ts";
 import {
   LEGACY_ASSIGNMENT_NEEDS_REVIEW,
   type ActiveClassroomScope,
 } from "../domain/classroom-scope";
+import { assertPedagogicalPlanProvenance } from "../domain/pedagogical-plan-provenance";
+import {
+  isTeacherMonthlyEvaluation,
+} from "../domain/teacher-owned-monthly-evaluation";
 import {
   QUICK_OBSERVATION_DRAFT_SETTING_TYPE,
   isQuickObservationCategory,
@@ -25,10 +42,20 @@ import {
   isQuickObservationType,
 } from "../domain/quick-observation";
 import {
+  isTeacherOwnedPlanRecord,
+  isTeacherWeeklyEvaluation,
+  TEACHER_AUTHORED_PLAN_ORIGIN,
+} from "../domain/teacher-owned-plan";
+import { isTeacherOwnedDailyFlow } from "../domain/teacher-owned-daily-flow";
+import {
   composeStudentDisplayName,
   isStudentProfilePhotoDataUrl,
+  isValidStudentNationalIdentityNumber,
+  isStudentSpreadsheetImportReview,
+  normalizeStudentCareDetails,
   normalizeStudentContacts,
   studentContactsFromRecord,
+  type StudentCareDetailsInput,
   type StudentContactInput,
 } from "../domain/student";
 import {
@@ -37,6 +64,8 @@ import {
 } from "../security/app-lock";
 import { assertEntityRecord } from "../repository/entities";
 import { canonicalJson } from "./canonical-json";
+import { DEVELOPMENT_REPORT_KEYS, DEVELOPMENT_REPORT_SETTING_TYPE, isDevelopmentReportRecord } from "../../features/development/development-report-model";
+import { assertDevelopmentReportRelationships } from "../../features/development/development-report-sources";
 import {
   parsePremiumActivityValueDesignSnapshot,
   parsePremiumValuesContentPackSnapshot,
@@ -46,6 +75,7 @@ import {
   samePremiumLensPreference,
   type PremiumLensPreferenceSnapshot,
 } from "../../features/premium-plans/domain";
+import { parsePremiumMonthlyEvaluation } from "../../features/premium-plans/plan-service";
 import {
   assertValueEvidenceSourceObservationPolicy,
   parseTeacherEvidenceRationale,
@@ -55,15 +85,71 @@ import {
   LOCAL_TEACHER_IDENTITY_SETTING_ID,
   LOCAL_TEACHER_IDENTITY_SETTING_TYPE,
 } from "../../features/evidence/local-teacher-identity";
+import {
+  isDevelopmentObservationSelection,
+  parseDevelopmentObservationSelection,
+} from "../../features/evidence/development-observation-presets";
+import {
+  assertDevelopmentObservationContext,
+  isDevelopmentObservationCurriculumLink,
+} from "../../features/evidence/development-observation-record";
+import {
+  ANECDOTE_FORM_LEGACY_SCHEMA_VERSION,
+  ANECDOTE_FORM_REPORT_TYPE,
+  ANECDOTE_FORM_SCHEMA_VERSION,
+  approvalSealMatchesCurrentSources,
+  isAnecdoteFormDraftRecord,
+} from "../../features/anecdote/anecdote-form";
+import {
+  TEACHER_DAY_CARRY_FORWARD_TRANSITION_SETTING_TYPE,
+  TEACHER_DAY_CLOSURE_SETTING_TYPE,
+  isTeacherDayCarryForwardTransitionSetting,
+  isTeacherDayClosureSetting,
+  teacherDayClosureSemanticFingerprint,
+  teacherDayCarryForwardSourceIdentity,
+} from "../../features/day-closure/teacher-day-closure";
+import {
+  OFFICIAL_APPOINTMENT_TRANSITION_KEYS,
+  OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE,
+  assertOfficialAppointmentCompletionRelationships,
+  isOfficialAppointmentCompletionRecord,
+} from "../../features/family-engagement/official-appointment-transition.ts";
+import {
+  PLAY_FAMILY_CYCLE_KEYS,
+  PLAY_FAMILY_CYCLE_SETTING_TYPE,
+  assertPlayFamilyCycleRelationships,
+  isPlayFamilyCycleRecord,
+} from "../../features/planning/play-family-cycle.ts";
+import {
+  CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION,
+  DATA_SCHEMA_VERSION,
+  IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
+  LEGACY_DATA_SCHEMA_VERSION,
+  PREVIOUS_DATA_SCHEMA_VERSION,
+  SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
+  VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
+  PRE_DEVELOPMENT_DATA_SCHEMA_VERSION,
+  DEVELOPMENT_DATA_SCHEMA_VERSION,
+  PRE_WORKFLOW_DATA_SCHEMA_VERSION,
+  TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION,
+} from "./schema-version";
+
+export {
+  CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION,
+  DATA_SCHEMA_VERSION,
+  IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION,
+  LEGACY_DATA_SCHEMA_VERSION,
+  PREVIOUS_DATA_SCHEMA_VERSION,
+  SECOND_PREVIOUS_DATA_SCHEMA_VERSION,
+  VALUE_EVIDENCE_DATA_SCHEMA_VERSION,
+  PRE_DEVELOPMENT_DATA_SCHEMA_VERSION,
+  DEVELOPMENT_DATA_SCHEMA_VERSION,
+  PRE_WORKFLOW_DATA_SCHEMA_VERSION,
+  TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION,
+} from "./schema-version";
 
 export const BACKUP_FORMAT = "maarifos-json";
 export const BACKUP_VERSION = 1;
-export const LEGACY_DATA_SCHEMA_VERSION = 1;
-export const SECOND_PREVIOUS_DATA_SCHEMA_VERSION = 2;
-export const PREVIOUS_DATA_SCHEMA_VERSION = 3;
-export const IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION = 4;
-export const DATA_SCHEMA_VERSION = 5;
-
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   backupVersion: typeof BACKUP_VERSION;
@@ -72,6 +158,12 @@ export interface BackupManifest {
     | typeof SECOND_PREVIOUS_DATA_SCHEMA_VERSION
     | typeof PREVIOUS_DATA_SCHEMA_VERSION
     | typeof IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION
+    | typeof VALUE_EVIDENCE_DATA_SCHEMA_VERSION
+    | typeof PRE_DEVELOPMENT_DATA_SCHEMA_VERSION
+    | typeof DEVELOPMENT_DATA_SCHEMA_VERSION
+    | typeof PRE_WORKFLOW_DATA_SCHEMA_VERSION
+    | typeof TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION
+    | typeof CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION
     | typeof DATA_SCHEMA_VERSION;
   appVersion: string;
   createdAt: string;
@@ -130,6 +222,10 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "name",
     "startDate",
     "endDate",
+    "operationalStartDate",
+    "operationalStartedAt",
+    "officialStartDate",
+    "activatedEarlyAt",
     "status",
     "archivedAt",
     "closedOn",
@@ -158,14 +254,18 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "preferredName",
     "optionalCode",
     "birthDate",
+    "nationalIdentityNumber",
+    "enrollmentYear",
     "enrollmentDate",
     "homeLanguages",
     "interests",
     "strengths",
     "supportPreferences",
     "contacts",
+    "careDetails",
     "profilePhotoDataUrl",
     "profileSchemaVersion",
+    "spreadsheetImportReview",
     "profileMediaId",
     "active",
     "notes",
@@ -211,6 +311,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "observationType",
     "observationTaxonomyVersion",
     "observationCategories",
+    "developmentSelection",
     "workflowStatus",
     "batchId",
     "captureScope",
@@ -263,6 +364,8 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "teacherPreferredLensId",
     "teacherPreferredSupportingLensIds",
     "lensSelectionMode",
+    "teacherOwnedFlowBlockId",
+    "pedagogicalProvenance",
   ],
   mediaAssets: [
     ...BASE_RECORD_KEYS,
@@ -285,6 +388,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "date",
     "type",
     "planType",
+    "planOrigin",
     "title",
     "content",
     "maarifRefs",
@@ -309,8 +413,13 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "teacherPreferredLensId",
     "teacherPreferredSupportingLensIds",
     "lensSelectionMode",
+    "pedagogicalProvenance",
     "monthlySectionIds",
     "weeklySectionIds",
+    "weekKey",
+    "teacherContent",
+    "revisionNumber",
+    "revisionHistory",
     "annualMonths",
     "coverageSummary",
     "annualPlanId",
@@ -324,10 +433,13 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "premiumFullDayFlow",
     "teacherReviewRequired",
     "monthlyReflection",
+    "monthlyEvaluations",
     "weeklyEvaluations",
     "nextPlanDecisionRequired",
     "previousWeekEvaluationId",
     "nextPlanDecisionContext",
+    "previousMonthEvaluationId",
+    "nextMonthDecisionContext",
     "sourceAnnualPlanId",
     "sourceMonthlyPlanId",
     "sourceWeeklyPlanId",
@@ -337,6 +449,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "appliedActivityTemplateId",
     "appliedActivityTemplateSnapshot",
     "premiumDailyFlowSnapshot",
+    "teacherOwnedDailyFlow",
   ],
   calendarEntries: [
     ...BASE_RECORD_KEYS,
@@ -385,6 +498,11 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "targetKind",
     "targetDomain",
     "targetSourceUrl",
+    "targetSourcePage",
+    "targetSourceSha256",
+    "holisticGraphReference",
+    "developmentSelection",
+    "targetSnapshot",
   ],
   valueEvidenceLinks: [
     ...BASE_RECORD_KEYS,
@@ -444,6 +562,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "reviewStatus",
     "reviewedByUserId",
     "reviewedAt",
+    "approvalSeal",
     "generationMode",
     "referenceVerificationStatus",
   ],
@@ -486,6 +605,20 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "scope",
   ],
   settings: [
+    "erasedStudentHash",
+    ...DOCUMENT_VERSION_KEYS,
+    ...HOME_GAME_CARD_KEYS,
+    ...OFFICIAL_APPOINTMENT_TRANSITION_KEYS,
+    ...PLAY_FAMILY_CYCLE_KEYS,
+    ...GROWTH_MEASUREMENT_RECORD_KEYS,
+    ...LEARNING_CENTER_KEYS,
+    ...FAMILY_ENGAGEMENT_KEYS,
+    ...SCHOOL_DOCUMENT_TEMPLATE_KEYS,
+    ...DAILY_ROUTINE_CARD_KEYS,
+    ...CLASSROOM_ADMIN_KEYS,
+    ...CONSENT_TRIP_KEYS,
+    ...TEACHER_FOLLOWUP_KEYS,
+    ...DEVELOPMENT_REPORT_KEYS,
     ...BASE_RECORD_KEYS,
     ...SCOPE_RECORD_KEYS,
     "settingType",
@@ -498,6 +631,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "childQuote",
     "observationType",
     "categoryIds",
+    "developmentSelection",
     "observationTaxonomyVersion",
     "batchId",
     "captureScope",
@@ -506,6 +640,22 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "archivedAt",
     "config",
     "attemptState",
+    "closureStatus",
+    "closedAt",
+    "nextDayNote",
+    "issueCodes",
+    "evidence",
+    "evidenceFingerprint",
+    "sourceClosureId",
+    "sourceCivilDate",
+    "sourceIssueCode",
+    "sourceIssueIdentity",
+    "sourceIssueId",
+    "transitionState",
+    "transitionedAt",
+    "transitionNote",
+    "deferredUntilCivilDate",
+    "previousTransitionId",
   ],
   auditLogs: [
     ...BASE_RECORD_KEYS,
@@ -643,6 +793,23 @@ function validateCollectionRecordSemantics(
       !isValidCivilDate(record.startDate) ||
       !isValidCivilDate(record.endDate) ||
       record.startDate > record.endDate ||
+      (record.operationalStartDate !== undefined &&
+        !isValidCivilDate(record.operationalStartDate)) ||
+      (record.operationalStartedAt !== undefined &&
+        !isValidUtcIso(record.operationalStartedAt)) ||
+      ((record.operationalStartDate === undefined) !==
+        (record.operationalStartedAt === undefined)) ||
+      (typeof record.operationalStartDate === "string" &&
+        record.operationalStartDate > record.endDate) ||
+      (record.officialStartDate !== undefined &&
+        !isValidCivilDate(record.officialStartDate)) ||
+      (record.activatedEarlyAt !== undefined &&
+        !isValidUtcIso(record.activatedEarlyAt)) ||
+      ((record.officialStartDate === undefined) !==
+        (record.activatedEarlyAt === undefined)) ||
+      (typeof record.officialStartDate === "string" &&
+        (record.startDate > record.officialStartDate ||
+          record.officialStartDate > record.endDate)) ||
       (record.status !== undefined &&
         record.status !== "active" &&
         record.status !== "archived") ||
@@ -752,6 +919,7 @@ function validateCollectionRecordSemantics(
         record.entryType !== "fruit_day" &&
         record.entryType !== "activity" &&
         record.entryType !== "adaptation_day" &&
+        record.entryType !== "no_school" &&
         record.entryType !== "official_marker") ||
       !isValidCivilDate(record.startDate) ||
       !isValidCivilDate(record.endDate) ||
@@ -992,6 +1160,14 @@ function validateCollectionRecordSemantics(
   }
 
   if (collection === "settings") {
+    if (record.settingType === HOME_GAME_CARD_SETTING_TYPE) {
+      if (!isHomeGameCardRecord(record)) throw new Error("Ev oyunu kartı kayıt sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === DOCUMENT_VERSION_SETTING_TYPE) {
+      if (!isDocumentVersionRecord(record)) throw new Error("Belge sürümü kayıt sözleşmesi geçersiz.");
+      return;
+    }
     if (!isNonEmptyText(record.settingType, 120)) {
       throw new Error(`settings/${record.id} ayar türü geçersiz.`);
     }
@@ -1008,6 +1184,53 @@ function validateCollectionRecordSemantics(
       "settingType",
       ...SCOPE_RECORD_KEYS,
     ];
+    if (record.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+      if (!isDevelopmentReportRecord(record)) throw new Error(`settings/${record.id} öğretmen gözlem özeti sözleşmesi geçersiz.`);
+      return;
+    }
+    if (record.settingType === TEACHER_FOLLOWUP_SETTING_TYPE) {
+      if (!isTeacherFollowupRecord(record)) throw new Error("Öğretmen takip kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === CONSENT_TRIP_SETTING_TYPE) {
+      if (!isConsentTripRecord(record)) throw new Error("Veli izni/gezi kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === CLASSROOM_ADMIN_SETTING_TYPE) {
+      if (!isClassroomAdminRecord(record)) throw new Error("Sınıf malzeme/devir kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === GROWTH_MEASUREMENT_SETTING_TYPE) {
+      if (!isGrowthMeasurementRecord(record)) throw new Error("Boy/kilo ölçüm kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === LEARNING_CENTER_SETTING_TYPE) {
+      if (!isLearningCenterRecord(record)) throw new Error("Öğrenme merkezi kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if(record.settingType===STUDENT_ERASURE_TYPE){if(!isStudentErasure(record))throw new Error("Çocuk silme izi geçersiz.");return;}
+    if(record.settingType===CLASS_DUTY_SETTING_TYPE){if(!isClassDutyRecord(record))throw new Error("Sınıf görev çizelgesi sözleşmesi geçersiz.");return;}
+    if(record.settingType===TEACHER_HOME_PREFERENCES_SETTING_TYPE){if(!isTeacherHomePreferencesRecord(record))throw new Error("Öğretmenin sade ekran tercihi sözleşmesi geçersiz.");return;}
+    if (record.settingType === FAMILY_ENGAGEMENT_SETTING_TYPE) {
+      if (!isFamilyEngagementRecord(record)) throw new Error("Aile randevu/iletişim kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE) {
+      if (!isSchoolDocumentTemplateRecord(record)) throw new Error("Okul belge şablonu sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === DAILY_ROUTINE_CARD_SETTING_TYPE) {
+      if (!isDailyRoutineCardRecord(record)) throw new Error("Görsel rutin kartı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE) {
+      if (!isOfficialAppointmentCompletionRecord(record)) throw new Error("Resmî randevu işlem kaydı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === PLAY_FAMILY_CYCLE_SETTING_TYPE) {
+      if (!isPlayFamilyCycleRecord(record)) throw new Error("Oyun ve aile zinciri kayıt sözleşmesi geçersiz.");
+      return;
+    }
     if (record.settingType === APP_LOCK_SETTING_TYPE) {
       assertObjectAllowedKeys(
         record,
@@ -1052,6 +1275,51 @@ function validateCollectionRecordSemantics(
       );
       return;
     }
+    if (record.settingType === TEACHER_DAY_CLOSURE_SETTING_TYPE) {
+      assertObjectAllowedKeys(
+        record,
+        [
+          ...scopedSettingKeys,
+          "closureStatus",
+          "closedAt",
+          "nextDayNote",
+          "issueCodes",
+          "evidence",
+          "evidenceFingerprint",
+        ],
+        `settings/${record.id}`,
+      );
+      if (!isTeacherDayClosureSetting(record)) {
+        throw new Error(`settings/${record.id} gün sonu kaydı geçersiz.`);
+      }
+      return;
+    }
+    if (
+      record.settingType ===
+      TEACHER_DAY_CARRY_FORWARD_TRANSITION_SETTING_TYPE
+    ) {
+      assertObjectAllowedKeys(
+        record,
+        [
+          ...scopedSettingKeys,
+          "sourceClosureId",
+          "sourceCivilDate",
+          "sourceIssueCode",
+          "sourceIssueIdentity",
+          "sourceIssueId",
+          "transitionState",
+          "transitionedAt",
+          "transitionNote",
+          "deferredUntilCivilDate",
+          "previousTransitionId",
+        ],
+        `settings/${record.id}`,
+      );
+      if (!isTeacherDayCarryForwardTransitionSetting(record)) {
+        throw new Error(`settings/${record.id} taşınan iş geçişi geçersiz.`);
+      }
+      return;
+    }
     if (record.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
       assertObjectAllowedKeys(
         record,
@@ -1065,6 +1333,7 @@ function validateCollectionRecordSemantics(
           "childQuote",
           "observationType",
           "categoryIds",
+          "developmentSelection",
           "observationTaxonomyVersion",
           "batchId",
           "captureScope",
@@ -1086,6 +1355,45 @@ function isValidCivilDate(value: unknown): value is string {
     parsed.getUTCMonth() === month - 1 &&
     parsed.getUTCDate() === day
   );
+}
+
+const TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 =
+  "sha256:3605c74ddc95970671cc54994d40702b6831ad46e92cfed4a9047597804d4d8a";
+const TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 =
+  "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09";
+
+function isTymmHolisticGraphReference(value: unknown): boolean {
+  const relatedNodeIds = isRecord(value) ? value.relatedNodeIds : undefined;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "catalogContentSha256",
+      "graphId",
+      "graphVersion",
+      "outcomeNodeId",
+      "relatedNodeIds",
+      "reviewStatus",
+      "sourceSha256",
+    ]) ||
+    value.graphId !== "meb-tymm-okul-oncesi-2024-holistic-graph" ||
+    value.graphVersion !== "1.0.0" ||
+    value.catalogContentSha256 !== TYMM_HOLISTIC_GRAPH_CONTENT_SHA256 ||
+    value.reviewStatus !== "pending-human-review" ||
+    value.sourceSha256 !== TYMM_HOLISTIC_GRAPH_SOURCE_SHA256 ||
+    typeof value.outcomeNodeId !== "string" ||
+    !/^outcome:(36-48|48-60|60-72):/u.test(value.outcomeNodeId) ||
+    !Array.isArray(relatedNodeIds) ||
+    relatedNodeIds.some(
+      (nodeId) => typeof nodeId !== "string" || nodeId.trim().length === 0,
+    ) ||
+    new Set(relatedNodeIds).size !== relatedNodeIds.length ||
+    relatedNodeIds.some(
+      (nodeId, index) => index > 0 && nodeId <= relatedNodeIds[index - 1],
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function istanbulCivilDate(value: string): string {
@@ -1304,6 +1612,20 @@ function recordWasVisibleAt(record: StoredRecord, timestamp: string): boolean {
   );
 }
 
+function snapshotVisibleAt(
+  snapshot: DataSnapshot,
+  timestamp: string,
+): DataSnapshot {
+  return Object.fromEntries(
+    COLLECTION_NAMES.map((collection) => [
+      collection,
+      snapshot[collection].filter((record) =>
+        recordWasVisibleAt(record, timestamp),
+      ),
+    ]),
+  ) as DataSnapshot;
+}
+
 function periodsOverlap(
   leftStart: string,
   leftEnd: string,
@@ -1399,6 +1721,10 @@ function validateStudentProfile(
   student: StoredRecord,
   currentCivilDate: string,
 ): void {
+  if (student.spreadsheetImportReview !== undefined &&
+    !isStudentSpreadsheetImportReview(student.spreadsheetImportReview, student)) {
+    throw new Error("Öğrenci Excel aktarımı mükerrer inceleme kaydı geçersiz.");
+  }
   if (
     typeof student.displayName !== "string" ||
     !student.displayName.trim() ||
@@ -1408,7 +1734,14 @@ function validateStudentProfile(
   }
   validateOptionalStudentText(student, "firstName", "adı", 80);
   validateOptionalStudentText(student, "lastName", "soyadı", 80);
-  if (student.profileSchemaVersion === 5) {
+  if (
+    student.profileSchemaVersion === 5 ||
+    student.profileSchemaVersion === 6 ||
+    student.profileSchemaVersion === 7 ||
+    student.profileSchemaVersion === 8 ||
+    student.profileSchemaVersion === 9 ||
+    student.profileSchemaVersion === 10
+  ) {
     if (typeof student.firstName !== "string" || !student.firstName.trim()) {
       throw new Error(`students/${student.id} adı eksik veya geçersiz.`);
     }
@@ -1443,6 +1776,23 @@ function validateStudentProfile(
       /^\d{10,11}$/.test(student.optionalCode.trim()))
   ) {
     throw new Error(`students/${student.id} okul içi kodu geçersiz.`);
+  }
+  if (
+    student.nationalIdentityNumber !== undefined &&
+    !isValidStudentNationalIdentityNumber(student.nationalIdentityNumber)
+  ) {
+    throw new Error(`students/${student.id} T.C. kimlik numarası geçersiz.`);
+  }
+  if (
+    student.enrollmentYear !== undefined &&
+    (typeof student.enrollmentYear !== "string" ||
+      !/^\d{4}$/.test(student.enrollmentYear) ||
+      student.enrollmentYear > currentCivilDate.slice(0, 4) ||
+      (typeof student.birthDate === "string" &&
+        isValidCivilDate(student.birthDate) &&
+        student.enrollmentYear < student.birthDate.slice(0, 4)))
+  ) {
+    throw new Error(`students/${student.id} kayıt yılı geçersiz.`);
   }
   if (
     student.enrollmentDate !== undefined &&
@@ -1498,14 +1848,27 @@ function validateStudentProfile(
             source.kind === contact.kind &&
             source.relationship === contact.relationship &&
             source.name === contact.name &&
+            source.occupation === contact.occupation &&
             source.phone === contact.phone &&
-            source.isPrimary === contact.isPrimary
+            source.isPrimary === contact.isPrimary &&
+            (source.isEmergencyContact === true) ===
+              (contact.isEmergencyContact === true) &&
+            (source.isAuthorizedPickup === true) ===
+              (contact.isAuthorizedPickup === true)
           );
         });
     } catch {
       contactsMatch = false;
     }
-    if (!contactsMatch && student.profileSchemaVersion !== 5) {
+    if (
+      !contactsMatch &&
+      student.profileSchemaVersion !== 5 &&
+      student.profileSchemaVersion !== 6 &&
+      student.profileSchemaVersion !== 7 &&
+      student.profileSchemaVersion !== 8 &&
+      student.profileSchemaVersion !== 9 &&
+      student.profileSchemaVersion !== 10
+    ) {
       const legacyContacts = studentContactsFromRecord(sourceContacts);
       contactsMatch =
         legacyContacts.length === sourceContacts.length &&
@@ -1517,13 +1880,44 @@ function validateStudentProfile(
             source.kind === contact.kind &&
             source.relationship === contact.relationship &&
             source.name === contact.name &&
+            source.occupation === contact.occupation &&
             source.phone === contact.phone &&
-            source.isPrimary === contact.isPrimary
+            source.isPrimary === contact.isPrimary &&
+            (source.isEmergencyContact === true) ===
+              (contact.isEmergencyContact === true) &&
+            (source.isAuthorizedPickup === true) ===
+              (contact.isAuthorizedPickup === true)
           );
         });
     }
     if (!contactsMatch) {
       throw new Error(`students/${student.id} yakın iletişim listesi geçersiz.`);
+    }
+  }
+  if (student.careDetails !== undefined) {
+    if (!isRecord(student.careDetails)) {
+      throw new Error(`students/${student.id} sağlık ve güvenlik bilgileri geçersiz.`);
+    }
+    const sourceCareDetails = student.careDetails;
+    let normalizedCareDetails;
+    try {
+      normalizedCareDetails = normalizeStudentCareDetails(
+        student.careDetails as StudentCareDetailsInput,
+      );
+    } catch {
+      normalizedCareDetails = undefined;
+    }
+    if (
+      !normalizedCareDetails ||
+      Object.keys(sourceCareDetails).length !==
+        Object.keys(normalizedCareDetails).length ||
+      Object.entries(normalizedCareDetails).some(
+        ([key, value]) => key === "homeAddressParts"
+          ? canonicalJson(sourceCareDetails[key]) !== canonicalJson(value)
+          : sourceCareDetails[key] !== value,
+      )
+    ) {
+      throw new Error(`students/${student.id} sağlık ve güvenlik bilgileri geçersiz.`);
     }
   }
   if (
@@ -1537,7 +1931,12 @@ function validateStudentProfile(
     student.profileSchemaVersion !== 2 &&
     student.profileSchemaVersion !== 3 &&
     student.profileSchemaVersion !== 4 &&
-    student.profileSchemaVersion !== 5
+    student.profileSchemaVersion !== 5 &&
+    student.profileSchemaVersion !== 6 &&
+    student.profileSchemaVersion !== 7 &&
+    student.profileSchemaVersion !== 8 &&
+    student.profileSchemaVersion !== 9 &&
+    student.profileSchemaVersion !== 10
   ) {
     throw new Error(`students/${student.id} profil şema sürümü geçersiz.`);
   }
@@ -1576,6 +1975,12 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     manifest.dataSchemaVersion !== SECOND_PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== PREVIOUS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== IMMEDIATE_PREVIOUS_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== VALUE_EVIDENCE_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== PRE_DEVELOPMENT_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== DEVELOPMENT_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== PRE_WORKFLOW_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== TEACHER_FOLLOWUP_DATA_SCHEMA_VERSION &&
+    manifest.dataSchemaVersion !== CLASSROOM_WORKFLOWS_DATA_SCHEMA_VERSION &&
     manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
   ) {
     throw new Error("Yedek veri şeması bu uygulama sürümüyle uyumlu değil.");
@@ -1617,7 +2022,7 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     }
     if (
       collection === "valueEvidenceLinks" &&
-      Number(manifest.dataSchemaVersion) < DATA_SCHEMA_VERSION
+      Number(manifest.dataSchemaVersion) < VALUE_EVIDENCE_DATA_SCHEMA_VERSION
     ) {
       return false;
     }
@@ -1673,6 +2078,23 @@ export function assertBackupEnvelopeStructure(value: unknown): asserts value is 
     const identifiers = new Set<string>();
     for (const record of records) {
       assertStoredRecord(record, collection);
+      if (Number(manifest.dataSchemaVersion) < DEVELOPMENT_DATA_SCHEMA_VERSION &&
+        (record.developmentSelection !== undefined || record.targetSnapshot !== undefined)) {
+        throw new Error("Maarif gelişim seçimi ve kaynak snapshot'ı en az V7 yedek şeması gerektirir.");
+      }
+      if (Number(manifest.dataSchemaVersion) < 8 && record.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+        throw new Error("Öğretmen gözlem özeti en az V8 yedek şeması gerektirir.");
+      }
+      if (Number(manifest.dataSchemaVersion) < 9 && record.settingType === TEACHER_FOLLOWUP_SETTING_TYPE) throw new Error("Öğretmen takip kaydı en az V9 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === CONSENT_TRIP_SETTING_TYPE) throw new Error("Veli izni/gezi kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === CLASSROOM_ADMIN_SETTING_TYPE) throw new Error("Sınıf malzeme/devir kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === GROWTH_MEASUREMENT_SETTING_TYPE) throw new Error("Boy/kilo ölçüm kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === LEARNING_CENTER_SETTING_TYPE) throw new Error("Öğrenme merkezi kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === FAMILY_ENGAGEMENT_SETTING_TYPE) throw new Error("Aile randevu/iletişim kaydı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === SCHOOL_DOCUMENT_TEMPLATE_SETTING_TYPE) throw new Error("Okul belge şablonu en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 10 && record.settingType === DAILY_ROUTINE_CARD_SETTING_TYPE) throw new Error("Görsel rutin kartı en az V10 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 11 && record.settingType === OFFICIAL_APPOINTMENT_TRANSITION_SETTING_TYPE) throw new Error("Resmî randevu işlem kaydı en az V11 yedek şeması gerektirir.");
+      if (Number(manifest.dataSchemaVersion) < 11 && record.settingType === PLAY_FAMILY_CYCLE_SETTING_TYPE) throw new Error("Oyun ve aile zinciri en az V11 yedek şeması gerektirir.");
       if (identifiers.has(record.id)) {
         throw new Error(`${collection} koleksiyonunda mükerrer UUID var: ${record.id}`);
       }
@@ -1841,9 +2263,27 @@ function assertBackupRelationships(
     string,
     PremiumLensPreferenceSnapshot
   >();
+  const dayClosuresForEvaluation = payload.settings
+    .filter(isTeacherDayClosureSetting)
+    .sort(
+      (left, right) =>
+        left.closedAt.localeCompare(right.closedAt) ||
+        left.id.localeCompare(right.id),
+    );
   for (const plan of payload.plans) {
     const planScope = validatedRecordScope(plan, "plans", classroomsById);
     planScopes.set(plan.id, planScope);
+    const teacherOwnedPeriodPlan =
+      plan.planOrigin === TEACHER_AUTHORED_PLAN_ORIGIN;
+    if (
+      plan.planOrigin !== undefined &&
+      !teacherOwnedPeriodPlan
+    ) {
+      throw new Error(`plans/${plan.id} bilinmeyen plan sahipliği taşıyor.`);
+    }
+    if (teacherOwnedPeriodPlan && !isTeacherOwnedPlanRecord(plan)) {
+      throw new Error(`plans/${plan.id} öğretmen plan sözleşmesine uymuyor.`);
+    }
     if (plan.curriculumProfileSnapshot !== undefined) {
       validateCurriculumProfileShape(
         plan.curriculumProfileSnapshot,
@@ -1874,9 +2314,10 @@ function assertBackupRelationships(
       validatedCurriculumProvenance(profile, `plans/${plan.id}`);
     }
     if (
-      plan.planType === "annual" ||
-      plan.planType === "monthly" ||
-      plan.planType === "weekly"
+      !teacherOwnedPeriodPlan &&
+      (plan.planType === "annual" ||
+        plan.planType === "monthly" ||
+        plan.planType === "weekly")
     ) {
       if (
         !isCivilDate(plan.periodStart) ||
@@ -1927,6 +2368,7 @@ function assertBackupRelationships(
       }
     }
     if (
+      !teacherOwnedPeriodPlan &&
       plan.planType === "annual" &&
       (!Array.isArray(plan.monthlySectionIds) ||
         !Array.isArray(plan.annualMonths) ||
@@ -1935,6 +2377,7 @@ function assertBackupRelationships(
       throw new Error(`plans/${plan.id} yıllık plan omurgası eksik.`);
     }
     if (
+      !teacherOwnedPeriodPlan &&
       plan.planType === "monthly" &&
       (typeof plan.annualPlanId !== "string" ||
         typeof plan.monthKey !== "string" ||
@@ -1947,6 +2390,8 @@ function assertBackupRelationships(
         !Array.isArray(plan.premiumFullDayFlow) ||
         plan.premiumFullDayFlow.length !== 10 ||
         plan.teacherReviewRequired !== true ||
+        (plan.monthlyEvaluations !== undefined &&
+          !Array.isArray(plan.monthlyEvaluations)) ||
         typeof plan.periodStart !== "string" ||
         typeof plan.periodEnd !== "string" ||
         !plan.periodStart.startsWith(`${plan.monthKey}-`) ||
@@ -1955,6 +2400,7 @@ function assertBackupRelationships(
       throw new Error(`plans/${plan.id} aylık plan sözleşmesine uymuyor.`);
     }
     if (
+      !teacherOwnedPeriodPlan &&
       plan.planType === "weekly" &&
       (typeof plan.annualPlanId !== "string" ||
         typeof plan.monthlyPlanId !== "string" ||
@@ -1969,7 +2415,36 @@ function assertBackupRelationships(
     ) {
       throw new Error(`plans/${plan.id} haftalık plan sözleşmesine uymuyor.`);
     }
-    if (plan.planType === "weekly") {
+    if (
+      !teacherOwnedPeriodPlan &&
+      plan.planType === "monthly" &&
+      Array.isArray(plan.monthlyEvaluations)
+    ) {
+      const evaluationIds = new Set<string>();
+      let previousCreatedAt: string | null = null;
+      for (const [index, candidate] of plan.monthlyEvaluations.entries()) {
+        const evaluation = parsePremiumMonthlyEvaluation(
+          candidate,
+          `plans/${plan.id} aylık değerlendirme ${index + 1}`,
+        );
+        if (
+          evaluationIds.has(evaluation.id) ||
+          evaluation.monthlyPlanId !== plan.id ||
+          evaluation.periodStart !== plan.periodStart ||
+          evaluation.periodEnd !== plan.periodEnd ||
+          !recordWasVisibleAt(plan, evaluation.createdAt) ||
+          (previousCreatedAt !== null &&
+            evaluation.createdAt < previousCreatedAt)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirme kimlik, dönem veya kronoloji sözleşmesine uymuyor.`,
+          );
+        }
+        evaluationIds.add(evaluation.id);
+        previousCreatedAt = evaluation.createdAt;
+      }
+    }
+    if (!teacherOwnedPeriodPlan && plan.planType === "weekly") {
       const weekSnapshot = isRecord(plan.premiumWeekSnapshot)
         ? plan.premiumWeekSnapshot
         : null;
@@ -2021,7 +2496,11 @@ function assertBackupRelationships(
         throw new Error(`plans/${plan.id} haftalık 2 ana + 1 alternatif ilişkisi geçersiz.`);
       }
     }
-    if (plan.planType === "weekly" && Array.isArray(plan.weeklyEvaluations)) {
+    if (
+      !teacherOwnedPeriodPlan &&
+      plan.planType === "weekly" &&
+      Array.isArray(plan.weeklyEvaluations)
+    ) {
       const evaluationIds = new Set<string>();
       let previousEvaluationCreatedAt: string | null = null;
       for (const evaluation of plan.weeklyEvaluations) {
@@ -2131,6 +2610,143 @@ function assertBackupRelationships(
   const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
   for (const plan of payload.plans) {
     const planScope = planScopes.get(plan.id) ?? null;
+    if (isTeacherOwnedPlanRecord(plan)) {
+      if (!planScope) {
+        throw new Error(`plans/${plan.id} öğretmen plan kapsamı geçersiz.`);
+      }
+      if (plan.planType === "annual") {
+        const linkedMonths = payload.plans.filter(
+          (candidate) =>
+            candidate.planOrigin === TEACHER_AUTHORED_PLAN_ORIGIN &&
+            candidate.planType === "monthly" &&
+            candidate.annualPlanId === plan.id,
+        );
+        const linkedMonthIds = new Set(linkedMonths.map((candidate) => candidate.id));
+        if (
+          linkedMonthIds.size !== plan.monthlySectionIds.length ||
+          plan.monthlySectionIds.some((id) => !linkedMonthIds.has(id)) ||
+          linkedMonths.some((monthly) => {
+            const scope = planScopes.get(monthly.id) ?? null;
+            return (
+              !isTeacherOwnedPlanRecord(monthly) ||
+              monthly.planType !== "monthly" ||
+              !scope ||
+              !scopesMatch(planScope, scope) ||
+              monthly.periodStart < plan.periodStart ||
+              monthly.periodEnd > plan.periodEnd
+            );
+          })
+        ) {
+          throw new Error(`plans/${plan.id} öğretmen aylık plan grafiği geçersiz.`);
+        }
+        continue;
+      }
+      if (plan.planType === "monthly") {
+        const annual = plansById.get(plan.annualPlanId);
+        const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
+        const linkedWeeks = payload.plans.filter(
+          (candidate) =>
+            candidate.planOrigin === TEACHER_AUTHORED_PLAN_ORIGIN &&
+            candidate.planType === "weekly" &&
+            candidate.monthlyPlanId === plan.id,
+        );
+        const linkedWeekIds = new Set(linkedWeeks.map((candidate) => candidate.id));
+        if (
+          !annual ||
+          !isTeacherOwnedPlanRecord(annual) ||
+          annual.planType !== "annual" ||
+          !annualScope ||
+          !scopesMatch(planScope, annualScope) ||
+          !annual.monthlySectionIds.includes(plan.id) ||
+          plan.periodStart < annual.periodStart ||
+          plan.periodEnd > annual.periodEnd ||
+          linkedWeekIds.size !== plan.weeklySectionIds.length ||
+          plan.weeklySectionIds.some((id) => !linkedWeekIds.has(id)) ||
+          linkedWeeks.some((weekly) => {
+            const scope = planScopes.get(weekly.id) ?? null;
+            return (
+              !isTeacherOwnedPlanRecord(weekly) ||
+              weekly.planType !== "weekly" ||
+              weekly.annualPlanId !== annual.id ||
+              !scope ||
+              !scopesMatch(planScope, scope) ||
+              weekly.periodStart < plan.periodStart ||
+              weekly.periodEnd > plan.periodEnd
+            );
+          })
+        ) {
+          throw new Error(`plans/${plan.id} öğretmen haftalık plan grafiği geçersiz.`);
+        }
+        if (plan.nextMonthDecisionContext) {
+          const context = plan.nextMonthDecisionContext;
+          const source = plansById.get(context.sourceMonthlyPlanId);
+          const sourceIndex = isTeacherOwnedPlanRecord(annual) &&
+            annual.planType === "annual"
+            ? annual.monthlySectionIds.indexOf(context.sourceMonthlyPlanId)
+            : -1;
+          const targetIndex = isTeacherOwnedPlanRecord(annual) &&
+            annual.planType === "annual"
+            ? annual.monthlySectionIds.indexOf(plan.id)
+            : -1;
+          const evaluation =
+            source &&
+            isTeacherOwnedPlanRecord(source) &&
+            source.planType === "monthly"
+              ? (source.monthlyEvaluations ?? []).find(
+                  (entry) => entry.id === context.evaluationId,
+                )
+              : undefined;
+          const latestReview = context.reviewHistory.at(-1);
+          if (
+            !source ||
+            !isTeacherOwnedPlanRecord(source) ||
+            source.planType !== "monthly" ||
+            source.annualPlanId !== plan.annualPlanId ||
+            sourceIndex < 0 ||
+            targetIndex !== sourceIndex + 1 ||
+            source.periodEnd >= plan.periodStart ||
+            plan.previousMonthEvaluationId !== context.evaluationId ||
+            !evaluation ||
+            evaluation.nextMonthTargetPlanId !== plan.id ||
+            evaluation.targetPlanRevisionNumberAtSuggestion !==
+              context.targetPlanRevisionNumberAtSuggestion ||
+            evaluation.sourcePlanRevisionNumber !== context.sourcePlanRevisionNumber ||
+            evaluation.nextMonthRecommendation !== context.recommendation ||
+            evaluation.createdAt !== context.createdAt ||
+            context.targetPlanRevisionNumberAtSuggestion > plan.revisionNumber ||
+            (latestReview !== undefined &&
+              latestReview.targetPlanRevisionNumberAfter > plan.revisionNumber)
+          ) {
+            throw new Error(`plans/${plan.id} önceki ay öneri zinciri geçersiz.`);
+          }
+        }
+        continue;
+      }
+      const annual = plansById.get(plan.annualPlanId);
+      const monthly = plansById.get(plan.monthlyPlanId);
+      const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
+      const monthlyScope = monthly ? planScopes.get(monthly.id) ?? null : null;
+      if (
+        !annual ||
+        !monthly ||
+        !isTeacherOwnedPlanRecord(annual) ||
+        annual.planType !== "annual" ||
+        !isTeacherOwnedPlanRecord(monthly) ||
+        monthly.planType !== "monthly" ||
+        monthly.annualPlanId !== annual.id ||
+        !annualScope ||
+        !monthlyScope ||
+        !scopesMatch(planScope, annualScope) ||
+        !scopesMatch(planScope, monthlyScope) ||
+        !annual.monthlySectionIds.includes(monthly.id) ||
+        !monthly.weeklySectionIds.includes(plan.id) ||
+        plan.periodStart < monthly.periodStart ||
+        plan.periodEnd > monthly.periodEnd
+      ) {
+        throw new Error(`plans/${plan.id} öğretmen plan ebeveyn zinciri geçersiz.`);
+      }
+      continue;
+    }
     if (plan.planType === "monthly") {
       const annual =
         typeof plan.annualPlanId === "string"
@@ -2286,6 +2902,17 @@ function assertBackupRelationships(
     }
     if (
       plan.planType === "daily" &&
+      plan.teacherOwnedDailyFlow !== undefined &&
+      plan.sourceAnnualPlanId === undefined &&
+      plan.sourceMonthlyPlanId === undefined &&
+      plan.sourceWeeklyPlanId === undefined
+    ) {
+      throw new Error(
+        `plans/${plan.id} öğretmen günlük akışı kaynak plan zinciri olmadan saklanamaz.`,
+      );
+    }
+    if (
+      plan.planType === "daily" &&
       (plan.sourceAnnualPlanId !== undefined ||
         plan.sourceMonthlyPlanId !== undefined ||
         plan.sourceWeeklyPlanId !== undefined)
@@ -2305,6 +2932,51 @@ function assertBackupRelationships(
       const annualScope = annual ? planScopes.get(annual.id) ?? null : null;
       const monthlyScope = monthly ? planScopes.get(monthly.id) ?? null : null;
       const weeklyScope = weekly ? planScopes.get(weekly.id) ?? null : null;
+      const teacherOwnedWeekly =
+        weekly && isTeacherOwnedPlanRecord(weekly) && weekly.planType === "weekly"
+          ? weekly
+          : null;
+      if (teacherOwnedWeekly) {
+        if (
+          !annual ||
+          !isTeacherOwnedPlanRecord(annual) ||
+          annual.planType !== "annual" ||
+          !monthly ||
+          !isTeacherOwnedPlanRecord(monthly) ||
+          monthly.planType !== "monthly" ||
+          monthly.annualPlanId !== annual.id ||
+          teacherOwnedWeekly.annualPlanId !== annual.id ||
+          teacherOwnedWeekly.monthlyPlanId !== monthly.id ||
+          !annual.monthlySectionIds.includes(monthly.id) ||
+          !monthly.weeklySectionIds.includes(teacherOwnedWeekly.id) ||
+          !planScope ||
+          !annualScope ||
+          !monthlyScope ||
+          !weeklyScope ||
+          !scopesMatch(planScope, annualScope) ||
+          !scopesMatch(planScope, monthlyScope) ||
+          !scopesMatch(planScope, weeklyScope) ||
+          String(plan.civilDate) < teacherOwnedWeekly.periodStart ||
+          String(plan.civilDate) > teacherOwnedWeekly.periodEnd ||
+          plan.sourceContentPackSnapshot !== undefined ||
+          plan.sourceActivityTemplateId !== undefined ||
+          plan.sourceActivityTemplateSnapshot !== undefined ||
+          plan.appliedActivityTemplateId !== undefined ||
+          plan.appliedActivityTemplateSnapshot !== undefined ||
+          plan.premiumDailyFlowSnapshot !== undefined ||
+          (plan.teacherOwnedDailyFlow !== undefined &&
+            (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow) ||
+              plan.teacherOwnedDailyFlow.createdAt !== plan.createdAt)) ||
+          plan.teacherPreferredLensId !== undefined ||
+          plan.teacherPreferredSupportingLensIds !== undefined ||
+          plan.lensSelectionMode !== undefined
+        ) {
+          throw new Error(
+            `plans/${plan.id} öğretmene ait günlük kaynak zinciri geçersiz.`,
+          );
+        }
+        continue;
+      }
       // Günlük kayıt, oluşturulduğu andaki öğretmen tercihini korur; daha sonra
       // değişen pano tercihi tarihsel günlük planı sessizce yeniden yazmaz.
       parsePremiumLensPreferenceRecord(plan, `plans/${plan.id}`);
@@ -2327,6 +2999,7 @@ function assertBackupRelationships(
         !scopesMatch(planScope, weeklyScope) ||
         String(plan.civilDate) < String(weekly.periodStart) ||
         String(plan.civilDate) > String(weekly.periodEnd) ||
+        plan.teacherOwnedDailyFlow !== undefined ||
         !isRecord(plan.sourceContentPackSnapshot) ||
         !sameCanonicalSnapshot(
           plan.sourceContentPackSnapshot,
@@ -2532,6 +3205,29 @@ function assertBackupRelationships(
         typeof activity.planId === "string"
           ? plansById.get(activity.planId)
           : undefined;
+      if (
+        activity.pedagogicalProvenance !== undefined ||
+        plan?.pedagogicalProvenance !== undefined
+      ) {
+        assertPedagogicalPlanProvenance(
+          activity.pedagogicalProvenance,
+          `activities/${activity.id} pedagojik plan kaynağı`,
+        );
+        assertPedagogicalPlanProvenance(
+          plan?.pedagogicalProvenance,
+          `plans/${String(activity.planId)} pedagojik plan kaynağı`,
+        );
+        if (
+          activity.pedagogicalProvenance.civilDate !== activity.civilDate ||
+          plan?.pedagogicalProvenance.civilDate !== plan.civilDate ||
+          canonicalJson(activity.pedagogicalProvenance) !==
+            canonicalJson(plan.pedagogicalProvenance)
+        ) {
+          throw new Error(
+            `activities/${activity.id} pedagojik plan kaynak zinciri geçersiz.`,
+          );
+        }
+      }
       const planScope = plan ? planScopes.get(plan.id) ?? null : null;
       if (
         !plan ||
@@ -2547,55 +3243,104 @@ function assertBackupRelationships(
         activity.sourceMonthlyPlanId !== undefined ||
         activity.sourceWeeklyPlanId !== undefined
       ) {
-        const activityLensPreference = parsePremiumLensPreferenceRecord(
-          activity,
-          `activities/${activity.id}`,
-        );
-        const planLensPreference = parsePremiumLensPreferenceRecord(
-          plan,
-          `plans/${plan.id}`,
-        );
+        const sourceWeekly =
+          typeof activity.sourceWeeklyPlanId === "string"
+            ? plansById.get(activity.sourceWeeklyPlanId)
+            : undefined;
         if (
-          plan.planType !== "daily" ||
-          !samePremiumLensPreference(
-            activityLensPreference,
-            planLensPreference,
-          ) ||
-          activity.sourceAnnualPlanId !== plan.sourceAnnualPlanId ||
-          activity.sourceMonthlyPlanId !== plan.sourceMonthlyPlanId ||
-          activity.sourceWeeklyPlanId !== plan.sourceWeeklyPlanId ||
-          activity.sourceActivityTemplateId !== plan.sourceActivityTemplateId ||
-          activity.appliedActivityTemplateId !== plan.appliedActivityTemplateId ||
-          !isRecord(activity.sourceContentPackSnapshot) ||
-          !isRecord(activity.sourceActivityTemplateSnapshot) ||
-          !sameCanonicalSnapshot(
-            activity.sourceContentPackSnapshot,
-            plan.sourceContentPackSnapshot,
-          ) ||
-          !sameCanonicalSnapshot(
-            activity.sourceActivityTemplateSnapshot,
-            plan.sourceActivityTemplateSnapshot,
-          ) ||
-          !sameCanonicalSnapshot(
-            activity.appliedActivityTemplateSnapshot,
-            plan.appliedActivityTemplateSnapshot,
-          )
+          sourceWeekly &&
+          isTeacherOwnedPlanRecord(sourceWeekly) &&
+          sourceWeekly.planType === "weekly"
         ) {
-          throw new Error(
-            `activities/${activity.id} premium kaynak zinciri geçersiz.`,
+          if (
+            plan.planType !== "daily" ||
+            activity.sourceAnnualPlanId !== plan.sourceAnnualPlanId ||
+            activity.sourceMonthlyPlanId !== plan.sourceMonthlyPlanId ||
+            activity.sourceWeeklyPlanId !== plan.sourceWeeklyPlanId ||
+            activity.sourceContentPackSnapshot !== undefined ||
+            activity.sourceActivityTemplateId !== undefined ||
+            activity.sourceActivityTemplateSnapshot !== undefined ||
+            activity.appliedActivityTemplateId !== undefined ||
+            activity.appliedActivityTemplateSnapshot !== undefined ||
+            activity.teacherPreferredLensId !== undefined ||
+            activity.teacherPreferredSupportingLensIds !== undefined ||
+            activity.lensSelectionMode !== undefined
+          ) {
+            throw new Error(
+              `activities/${activity.id} öğretmene ait günlük kaynak zinciri geçersiz.`,
+            );
+          }
+          if (activity.teacherOwnedFlowBlockId !== undefined) {
+            const teacherFlow = plan.teacherOwnedDailyFlow;
+            const linkedBlock =
+              isTeacherOwnedDailyFlow(teacherFlow) &&
+              typeof activity.teacherOwnedFlowBlockId === "string"
+                ? teacherFlow.blocks.find(
+                    (block) => block.id === activity.teacherOwnedFlowBlockId,
+                  )
+                : null;
+            if (
+              !linkedBlock ||
+              (linkedBlock.kind !== "teacher-activity-one" &&
+                linkedBlock.kind !== "teacher-activity-two") ||
+              linkedBlock.status === "skipped"
+            ) {
+              throw new Error(
+                `activities/${activity.id} öğretmen akışı bölüm bağlantısı geçersiz.`,
+              );
+            }
+          }
+        } else {
+          const activityLensPreference = parsePremiumLensPreferenceRecord(
+            activity,
+            `activities/${activity.id}`,
           );
-        }
-        assertPremiumActivityValuesSnapshot(
-          activity.sourceContentPackSnapshot,
-          activity.sourceActivityTemplateSnapshot,
-          `activities/${activity.id} sourceActivityTemplateSnapshot`,
-        );
-        if (activity.appliedActivityTemplateSnapshot !== undefined) {
+          const planLensPreference = parsePremiumLensPreferenceRecord(
+            plan,
+            `plans/${plan.id}`,
+          );
+          if (
+            plan.planType !== "daily" ||
+            !samePremiumLensPreference(
+              activityLensPreference,
+              planLensPreference,
+            ) ||
+            activity.sourceAnnualPlanId !== plan.sourceAnnualPlanId ||
+            activity.sourceMonthlyPlanId !== plan.sourceMonthlyPlanId ||
+            activity.sourceWeeklyPlanId !== plan.sourceWeeklyPlanId ||
+            activity.sourceActivityTemplateId !== plan.sourceActivityTemplateId ||
+            activity.appliedActivityTemplateId !== plan.appliedActivityTemplateId ||
+            !isRecord(activity.sourceContentPackSnapshot) ||
+            !isRecord(activity.sourceActivityTemplateSnapshot) ||
+            !sameCanonicalSnapshot(
+              activity.sourceContentPackSnapshot,
+              plan.sourceContentPackSnapshot,
+            ) ||
+            !sameCanonicalSnapshot(
+              activity.sourceActivityTemplateSnapshot,
+              plan.sourceActivityTemplateSnapshot,
+            ) ||
+            !sameCanonicalSnapshot(
+              activity.appliedActivityTemplateSnapshot,
+              plan.appliedActivityTemplateSnapshot,
+            )
+          ) {
+            throw new Error(
+              `activities/${activity.id} premium kaynak zinciri geçersiz.`,
+            );
+          }
           assertPremiumActivityValuesSnapshot(
             activity.sourceContentPackSnapshot,
-            activity.appliedActivityTemplateSnapshot,
-            `activities/${activity.id} appliedActivityTemplateSnapshot`,
+            activity.sourceActivityTemplateSnapshot,
+            `activities/${activity.id} sourceActivityTemplateSnapshot`,
           );
+          if (activity.appliedActivityTemplateSnapshot !== undefined) {
+            assertPremiumActivityValuesSnapshot(
+              activity.sourceContentPackSnapshot,
+              activity.appliedActivityTemplateSnapshot,
+              `activities/${activity.id} appliedActivityTemplateSnapshot`,
+            );
+          }
         }
       }
       if (activity.assignmentMode !== undefined) {
@@ -2618,6 +3363,7 @@ function assertBackupRelationships(
             [
               "catalogCompleteness",
               "catalogId",
+              "ageBands",
               "domain",
               "framework",
               "id",
@@ -2629,6 +3375,9 @@ function assertBackupRelationships(
               "referenceTitle",
               "sourceCheckedOn",
               "sourceLabel",
+              "sourcePage",
+              "sourceSha256",
+              "holisticGraphReference",
               "sourceUrl",
               "sourceVersion",
               "verificationStatus",
@@ -2671,7 +3420,26 @@ function assertBackupRelationships(
               target.referenceOrigin ===
                 (planProfile.referenceOrigin ?? "teacher-declared") &&
               target.officialCatalogVerified ===
-                (planProfile.officialCatalogVerified === true),
+                (planProfile.officialCatalogVerified === true) &&
+              (target.holisticGraphReference === undefined ||
+                isTymmHolisticGraphReference(target.holisticGraphReference)) &&
+              (target.framework !== "tymm" ||
+                target.catalogCompleteness !== "complete" ||
+                target.verificationStatus !== "official-source-checked" ||
+                target.officialCatalogVerified !== true ||
+                (Array.isArray(target.ageBands) &&
+                  target.ageBands.length === 1 &&
+                  target.ageBands.every(
+                    (ageBand) =>
+                      ageBand === "36-48" ||
+                      ageBand === "48-60" ||
+                      ageBand === "60-72",
+                  ) &&
+                  typeof target.sourcePage === "number" &&
+                  Number.isInteger(target.sourcePage) &&
+                  target.sourcePage >= 1 &&
+                  typeof target.sourceSha256 === "string" &&
+                  /^sha256:[0-9a-f]{64}$/u.test(target.sourceSha256))),
           );
         const studentsValid =
           assignedStudentIds.length > 0 &&
@@ -2744,18 +3512,593 @@ function assertBackupRelationships(
   const observationsById = new Map(
     payload.observations.map((observation) => [observation.id, observation]),
   );
+  const curriculumLinksById = new Map(
+    payload.evidenceCurriculumLinks.map((link) => [link.id, link]),
+  );
+  for (const plan of payload.plans) {
+    if (plan.planType !== "monthly" || !Array.isArray(plan.monthlyEvaluations)) {
+      continue;
+    }
+    const planScope = planScopes.get(plan.id) ?? null;
+    const teacherMonthlyPlan =
+      isTeacherOwnedPlanRecord(plan) && plan.planType === "monthly" ? plan : null;
+    if (teacherMonthlyPlan) {
+      let previousCreatedAt: string | null = null;
+      for (const candidate of teacherMonthlyPlan.monthlyEvaluations ?? []) {
+        if (
+          !isTeacherMonthlyEvaluation(candidate) ||
+          candidate.monthlyPlanId !== teacherMonthlyPlan.id ||
+          candidate.periodStart !== teacherMonthlyPlan.periodStart ||
+          candidate.periodEnd !== teacherMonthlyPlan.periodEnd ||
+          candidate.sourcePlanRevisionNumber > teacherMonthlyPlan.revisionNumber ||
+          !recordWasVisibleAt(teacherMonthlyPlan, candidate.createdAt) ||
+          (previousCreatedAt !== null && candidate.createdAt < previousCreatedAt)
+        ) {
+          throw new Error(
+            `plans/${plan.id} öğretmen aylık değerlendirme dönem, revizyon veya kronoloji sözleşmesine uymuyor.`,
+          );
+        }
+        const selectedObservationIds = new Set(candidate.children.observationIds);
+        const coveredStudentIds = new Set<string>();
+        const civilDates = new Set<string>();
+        const weeklyPlanIds = new Set<string>();
+        for (const observationId of candidate.children.observationIds) {
+          const observation = observationsById.get(observationId);
+          const daily = observation && typeof observation.planId === "string"
+            ? plansById.get(observation.planId)
+            : undefined;
+          const weekly = daily && typeof daily.sourceWeeklyPlanId === "string"
+            ? plansById.get(daily.sourceWeeklyPlanId)
+            : undefined;
+          const observationScope = observation
+            ? observationScopes.get(observation.id) ?? null
+            : null;
+          const observedAt = observation && typeof observation.observedAt === "string"
+            ? observation.observedAt
+            : observation?.createdAt;
+          if (
+            !observation ||
+            !daily ||
+            !weekly ||
+            daily.sourceMonthlyPlanId !== teacherMonthlyPlan.id ||
+            !teacherMonthlyPlan.weeklySectionIds.includes(weekly.id) ||
+            observation.rawTextImmutable !== true ||
+            !planScope ||
+            !observationScope ||
+            !scopesMatch(planScope, observationScope) ||
+            typeof observedAt !== "string" ||
+            observedAt > candidate.createdAt ||
+            !recordWasVisibleAt(observation, candidate.createdAt)
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen aylık değerlendirme gözlem zinciri geçersiz.`,
+            );
+          }
+          civilDates.add(String(observation.civilDate));
+          weeklyPlanIds.add(weekly.id);
+          const observationStudentIds = Array.isArray(observation.studentIds)
+            ? observation.studentIds
+            : typeof observation.studentId === "string"
+              ? [observation.studentId]
+              : [];
+          observationStudentIds.forEach((studentId) => {
+            if (candidate.children.coverage.activeStudentIds.includes(studentId)) {
+              coveredStudentIds.add(studentId);
+            }
+          });
+          const hasSelectedLink = candidate.children.curriculumLinkIds.some((linkId) => {
+            const link = curriculumLinksById.get(linkId);
+            return link?.observationId === observationId;
+          });
+          if (!hasSelectedLink) {
+            throw new Error(
+              `plans/${plan.id} öğretmen aylık değerlendirmesinde programsız gözlem var.`,
+            );
+          }
+        }
+        for (const linkId of candidate.children.curriculumLinkIds) {
+          const link = curriculumLinksById.get(linkId);
+          const linkScope = link
+            ? validatedRecordScope(link, "evidenceCurriculumLinks", classroomsById)
+            : null;
+          if (
+            !link ||
+            typeof link.observationId !== "string" ||
+            !selectedObservationIds.has(link.observationId) ||
+            link.confirmationMethod !== "teacher-confirmed" ||
+            !planScope ||
+            !linkScope ||
+            !scopesMatch(planScope, linkScope) ||
+            !recordWasVisibleAt(link, candidate.createdAt) ||
+            typeof link.confirmedAt !== "string" ||
+            link.confirmedAt > candidate.createdAt
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen aylık değerlendirme program bağı geçersiz.`,
+            );
+          }
+        }
+        const coveredActiveStudentIds = [
+          ...candidate.children.coverage.activeStudentIds,
+        ].filter((id) => coveredStudentIds.has(id));
+        const uncoveredActiveStudentIds = [
+          ...candidate.children.coverage.activeStudentIds,
+        ].filter((id) => !coveredStudentIds.has(id));
+        const expectedCoverage = {
+          observationCount: candidate.children.observationIds.length,
+          curriculumLinkCount: candidate.children.curriculumLinkIds.length,
+          distinctCivilDateCount: civilDates.size,
+          distinctWeekCount: weeklyPlanIds.size,
+          activeStudentIds: candidate.children.coverage.activeStudentIds,
+          coveredActiveStudentIds,
+          uncoveredActiveStudentIds,
+        };
+        if (canonicalJson(expectedCoverage) !== canonicalJson(candidate.children.coverage)) {
+          throw new Error(
+            `plans/${plan.id} öğretmen aylık değerlendirme kapsam özeti kaynak kayıtlarla uyuşmuyor.`,
+          );
+        }
+        if (candidate.nextMonthTargetPlanId !== undefined) {
+          const annual = plansById.get(teacherMonthlyPlan.annualPlanId);
+          const sourceIndex =
+            annual &&
+            isTeacherOwnedPlanRecord(annual) &&
+            annual.planType === "annual"
+              ? annual.monthlySectionIds.indexOf(teacherMonthlyPlan.id)
+              : -1;
+          const expectedTargetId =
+            annual &&
+            isTeacherOwnedPlanRecord(annual) &&
+            annual.planType === "annual" &&
+            sourceIndex >= 0
+              ? annual.monthlySectionIds[sourceIndex + 1] ?? null
+              : null;
+          const target = typeof candidate.nextMonthTargetPlanId === "string"
+            ? plansById.get(candidate.nextMonthTargetPlanId)
+            : undefined;
+          const isLatestEvaluation =
+            candidate === teacherMonthlyPlan.monthlyEvaluations?.at(-1);
+          const context =
+            target &&
+            isTeacherOwnedPlanRecord(target) &&
+            target.planType === "monthly"
+              ? target.nextMonthDecisionContext
+              : undefined;
+          if (
+            sourceIndex < 0 ||
+            candidate.nextMonthTargetPlanId !== expectedTargetId ||
+            (expectedTargetId === null
+              ? candidate.targetPlanRevisionNumberAtSuggestion !== null
+              : !target ||
+                !isTeacherOwnedPlanRecord(target) ||
+                target.planType !== "monthly" ||
+                target.annualPlanId !== teacherMonthlyPlan.annualPlanId ||
+                target.periodStart <= teacherMonthlyPlan.periodEnd ||
+                typeof candidate.targetPlanRevisionNumberAtSuggestion !== "number" ||
+                candidate.targetPlanRevisionNumberAtSuggestion >
+                  target.revisionNumber) ||
+            (isLatestEvaluation &&
+              expectedTargetId !== null &&
+              (!target ||
+                !isTeacherOwnedPlanRecord(target) ||
+                target.planType !== "monthly" ||
+                target.previousMonthEvaluationId !== candidate.id ||
+                !context ||
+                context.sourceMonthlyPlanId !== teacherMonthlyPlan.id ||
+                context.evaluationId !== candidate.id ||
+                context.recommendation !== candidate.nextMonthRecommendation ||
+                context.sourcePlanRevisionNumber !==
+                  candidate.sourcePlanRevisionNumber ||
+                context.targetPlanRevisionNumberAtSuggestion !==
+                  candidate.targetPlanRevisionNumberAtSuggestion ||
+                context.createdAt !== candidate.createdAt))
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen aylık öneri hedefi veya karar izi geçersiz.`,
+            );
+          }
+        }
+        previousCreatedAt = candidate.createdAt;
+      }
+      continue;
+    }
+    const planProfile = isRecord(plan.curriculumProfileSnapshot)
+      ? plan.curriculumProfileSnapshot
+      : null;
+    for (const [index, candidate] of plan.monthlyEvaluations.entries()) {
+      const evaluation = parsePremiumMonthlyEvaluation(
+        candidate,
+        `plans/${plan.id} aylık değerlendirme ${index + 1}`,
+      );
+      const evaluationCreatedAt = evaluation.createdAt;
+      const selectedObservationIds = new Set(
+        evaluation.children.observationIds,
+      );
+      const selectedStudentIds = new Set<string>();
+      const civilDates = new Set<string>();
+      const weeklyPlanIds = new Set<string>();
+      const environments = new Set<string>();
+      let anecdotalObservationCount = 0;
+      for (const observationId of evaluation.children.observationIds) {
+        const observation = observationsById.get(observationId);
+        const observationScope = observation
+          ? observationScopes.get(observation.id) ?? null
+          : null;
+        const daily =
+          observation && typeof observation.planId === "string"
+            ? plansById.get(observation.planId)
+            : undefined;
+        const observedAt =
+          observation && typeof observation.observedAt === "string"
+            ? observation.observedAt
+            : observation?.createdAt;
+        const dailyScope = daily ? planScopes.get(daily.id) ?? null : null;
+        const sourceWeekly =
+          daily && typeof daily.sourceWeeklyPlanId === "string"
+            ? plansById.get(daily.sourceWeeklyPlanId)
+            : undefined;
+        const sourceWeeklyScope = sourceWeekly
+          ? planScopes.get(sourceWeekly.id) ?? null
+          : null;
+        if (
+          !observation ||
+          observation.rawTextImmutable !== true ||
+          !recordWasVisibleAt(observation, evaluationCreatedAt) ||
+          !isValidUtcIso(observedAt) ||
+          Date.parse(observedAt) > Date.parse(evaluationCreatedAt) ||
+          !isCivilDate(observation.civilDate) ||
+          observation.civilDate < evaluation.periodStart ||
+          observation.civilDate > evaluation.periodEnd ||
+          !daily ||
+          daily.planType !== "daily" ||
+          daily.sourceMonthlyPlanId !== plan.id ||
+          !recordWasVisibleAt(daily, evaluationCreatedAt) ||
+          !sourceWeekly ||
+          sourceWeekly.planType !== "weekly" ||
+          sourceWeekly.monthlyPlanId !== plan.id ||
+          !recordWasVisibleAt(sourceWeekly, evaluationCreatedAt) ||
+          !planScope ||
+          !observationScope ||
+          !dailyScope ||
+          !sourceWeeklyScope ||
+          !scopesMatch(planScope, observationScope) ||
+          !scopesMatch(planScope, dailyScope) ||
+          !scopesMatch(planScope, sourceWeeklyScope)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi bilinmeyen, tarih dışı veya kapsam dışı gözleme bağlı.`,
+          );
+        }
+        parseTeacherWeeklyValuesNarrative(
+          observation.rawText,
+          `plans/${plan.id} aylık değerlendirmesine bağlı ham gözlem`,
+        );
+        civilDates.add(observation.civilDate);
+        if (typeof daily.sourceWeeklyPlanId === "string") {
+          weeklyPlanIds.add(daily.sourceWeeklyPlanId);
+        }
+        if (observation.observationType === "anecdotal") {
+          anecdotalObservationCount += 1;
+        }
+        if (Array.isArray(observation.studentIds)) {
+          observation.studentIds.forEach((studentId) => {
+            if (typeof studentId === "string") selectedStudentIds.add(studentId);
+          });
+        }
+        const activity =
+          typeof observation.activityId === "string"
+            ? activitiesById.get(observation.activityId)
+            : undefined;
+        const appliedTemplate = activity && isRecord(
+          activity.appliedActivityTemplateSnapshot,
+        )
+          ? activity.appliedActivityTemplateSnapshot
+          : activity && isRecord(activity.sourceActivityTemplateSnapshot)
+            ? activity.sourceActivityTemplateSnapshot
+            : null;
+        const environment =
+          appliedTemplate && typeof appliedTemplate.environment === "string"
+            ? appliedTemplate.environment.trim()
+            : activity && typeof activity.environment === "string"
+              ? activity.environment.trim()
+              : "";
+        if (environment) environments.add(environment);
+      }
+
+      const observationsWithSelectedLink = new Set<string>();
+      for (const linkId of evaluation.children.curriculumLinkIds) {
+        const link = curriculumLinksById.get(linkId);
+        const linkScope = link
+          ? validatedRecordScope(
+              link,
+              "evidenceCurriculumLinks",
+              classroomsById,
+            )
+          : null;
+        if (
+          !link ||
+          !recordWasVisibleAt(link, evaluationCreatedAt) ||
+          link.confirmationMethod !== "teacher-confirmed" ||
+          typeof link.observationId !== "string" ||
+          !selectedObservationIds.has(link.observationId) ||
+          !isValidUtcIso(link.confirmedAt) ||
+          Date.parse(link.confirmedAt) > Date.parse(evaluationCreatedAt) ||
+          !planProfile ||
+          link.framework !== planProfile.framework ||
+          link.catalogId !== planProfile.catalogId ||
+          link.sourceVersion !== planProfile.sourceVersion ||
+          !planScope ||
+          !linkScope ||
+          !scopesMatch(planScope, linkScope)
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi izlenemeyen öğretmen onaylı program bağı taşıyor.`,
+          );
+        }
+        observationsWithSelectedLink.add(link.observationId);
+      }
+      if (
+        evaluation.children.observationIds.some(
+          (observationId) => !observationsWithSelectedLink.has(observationId),
+        )
+      ) {
+        throw new Error(
+          `plans/${plan.id} aylık değerlendirmesinde program bağı olmayan seçili gözlem var.`,
+        );
+      }
+
+      for (const studentId of evaluation.children.coverage.activeStudentIds) {
+        const student = studentsById.get(studentId);
+        const allowedScopes = studentScopes.get(studentId) ?? [];
+        if (
+          !student ||
+          !recordWasVisibleAt(student, evaluationCreatedAt) ||
+          !planScope ||
+          !allowedScopes.some((scope) => scopesMatch(planScope, scope))
+        ) {
+          throw new Error(
+            `plans/${plan.id} aylık değerlendirmesi izlenemeyen aktif sınıf çocuğu kimliği taşıyor.`,
+          );
+        }
+      }
+      const coveredActiveStudentIds =
+        evaluation.children.coverage.activeStudentIds.filter((studentId) =>
+          selectedStudentIds.has(studentId),
+        );
+      const uncoveredActiveStudentIds =
+        evaluation.children.coverage.activeStudentIds.filter(
+          (studentId) => !selectedStudentIds.has(studentId),
+        );
+      const expectedCoverage = {
+        observationCount: evaluation.children.observationIds.length,
+        anecdotalObservationCount,
+        programLinkedObservationCount: observationsWithSelectedLink.size,
+        curriculumLinkCount: evaluation.children.curriculumLinkIds.length,
+        distinctCivilDateCount: civilDates.size,
+        distinctWeekCount: weeklyPlanIds.size,
+        distinctStudentCount: selectedStudentIds.size,
+        distinctEnvironmentCount: environments.size,
+        activeStudentCount:
+          evaluation.children.coverage.activeStudentIds.length,
+        coveredActiveStudentCount: coveredActiveStudentIds.length,
+        activeStudentIds: evaluation.children.coverage.activeStudentIds,
+        coveredActiveStudentIds,
+        uncoveredActiveStudentIds,
+      };
+      if (
+        canonicalJson(expectedCoverage) !==
+        canonicalJson(evaluation.children.coverage)
+      ) {
+        throw new Error(
+          `plans/${plan.id} aylık değerlendirmesinin kanıt kapsam özeti kaynak kayıtlarla uyuşmuyor.`,
+        );
+      }
+    }
+  }
   for (const plan of payload.plans) {
     if (plan.planType !== "weekly" || !Array.isArray(plan.weeklyEvaluations)) {
       continue;
     }
     const planScope = planScopes.get(plan.id) ?? null;
-    for (const evaluation of plan.weeklyEvaluations) {
+    const teacherWeeklyPlan =
+      isTeacherOwnedPlanRecord(plan) && plan.planType === "weekly" ? plan : null;
+    for (const [evaluationIndex, evaluation] of plan.weeklyEvaluations.entries()) {
       if (!isRecord(evaluation) || !Array.isArray(evaluation.observationIds)) {
-        continue;
+        throw new Error(
+          `plans/${plan.id} haftalık değerlendirme sözleşmesi geçersiz.`,
+        );
       }
       const evaluationCreatedAt = isValidUtcIso(evaluation.createdAt)
         ? evaluation.createdAt
         : null;
+      if (teacherWeeklyPlan) {
+        if (!isTeacherWeeklyEvaluation(evaluation)) {
+          throw new Error(
+            `plans/${plan.id} öğretmen haftalık değerlendirmesi geçersiz.`,
+          );
+        }
+        const monthly = plansById.get(teacherWeeklyPlan.monthlyPlanId);
+        const sourceIndex =
+          monthly && isTeacherOwnedPlanRecord(monthly) && monthly.planType === "monthly"
+            ? monthly.weeklySectionIds.indexOf(teacherWeeklyPlan.id)
+            : -1;
+        const expectedTargetId =
+          monthly && isTeacherOwnedPlanRecord(monthly) && monthly.planType === "monthly"
+            ? monthly.weeklySectionIds[sourceIndex + 1] ?? null
+            : null;
+        const target =
+          typeof evaluation.nextPlanTargetPlanId === "string"
+            ? plansById.get(evaluation.nextPlanTargetPlanId)
+            : undefined;
+        const targetScope = target ? planScopes.get(target.id) ?? null : null;
+        if (
+          sourceIndex < 0 ||
+          evaluation.sourcePlanRevisionNumber > teacherWeeklyPlan.revisionNumber ||
+          evaluation.nextPlanTargetPlanId !== expectedTargetId ||
+          (expectedTargetId === null
+            ? evaluation.targetPlanRevisionNumberAtSuggestion !== null
+            : !target ||
+              !isTeacherOwnedPlanRecord(target) ||
+              target.planType !== "weekly" ||
+              target.monthlyPlanId !== teacherWeeklyPlan.monthlyPlanId ||
+              !targetScope ||
+              !planScope ||
+              !scopesMatch(planScope, targetScope) ||
+              evaluation.targetPlanRevisionNumberAtSuggestion === null ||
+              evaluation.targetPlanRevisionNumberAtSuggestion > target.revisionNumber)
+        ) {
+          throw new Error(
+            `plans/${plan.id} öğretmen haftalık karar hedefi veya revizyon izi geçersiz.`,
+          );
+        }
+        const isLatestEvaluation =
+          evaluationIndex === plan.weeklyEvaluations.length - 1;
+        if (isLatestEvaluation && expectedTargetId !== null) {
+          const context =
+            target && isTeacherOwnedPlanRecord(target) && target.planType === "weekly"
+              ? target.nextPlanDecisionContext
+              : undefined;
+          if (
+            !target ||
+            !isTeacherOwnedPlanRecord(target) ||
+            target.planType !== "weekly" ||
+            target.previousWeekEvaluationId !== evaluation.id ||
+            !context ||
+            target.teacherReviewRequired !==
+              (context.applicationStatus === "pending-teacher-review") ||
+            context.sourceWeeklyPlanId !== teacherWeeklyPlan.id ||
+            context.evaluationId !== evaluation.id ||
+            context.decision !== evaluation.nextPlanDecision ||
+            context.evidenceSummary !== evaluation.evidenceSummary ||
+            context.teacherReflection !== evaluation.reflection ||
+            context.sourcePlanRevisionNumber !==
+              evaluation.sourcePlanRevisionNumber ||
+            context.targetPlanRevisionNumberAtSuggestion !==
+              evaluation.targetPlanRevisionNumberAtSuggestion ||
+            context.createdAt !== evaluation.createdAt ||
+            !["pending-teacher-review", "accepted", "rejected"].includes(
+              context.applicationStatus,
+            )
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen haftalık öneri taşıma zinciri geçersiz.`,
+            );
+          }
+        }
+        const selectedObservationIds = new Set(evaluation.observationIds);
+        const observationsWithSelectedLink = new Set<string>();
+        for (const linkId of evaluation.curriculumLinkIds ?? []) {
+          const link = curriculumLinksById.get(linkId);
+          const linkScope = link
+            ? validatedRecordScope(
+                link,
+                "evidenceCurriculumLinks",
+                classroomsById,
+              )
+            : null;
+          if (
+            !link ||
+            !evaluationCreatedAt ||
+            typeof link.observationId !== "string" ||
+            !selectedObservationIds.has(link.observationId) ||
+            link.confirmationMethod !== "teacher-confirmed" ||
+            !planScope ||
+            !linkScope ||
+            !scopesMatch(planScope, linkScope) ||
+            !recordWasVisibleAt(link, evaluationCreatedAt) ||
+            !isValidUtcIso(link.confirmedAt) ||
+            Date.parse(link.confirmedAt) > Date.parse(evaluationCreatedAt)
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen haftalık değerlendirme program bağı geçersiz.`,
+            );
+          }
+          observationsWithSelectedLink.add(link.observationId);
+        }
+        if (
+          evaluation.observationIds.some(
+            (observationId) => !observationsWithSelectedLink.has(observationId),
+          )
+        ) {
+          throw new Error(
+            `plans/${plan.id} öğretmen haftalık değerlendirmesinde program bağı olmayan seçili gözlem var.`,
+          );
+        }
+        const weeklyDailyPlans = payload.plans
+          .filter(
+            (candidate) =>
+              candidate.planType === "daily" &&
+              candidate.sourceAnnualPlanId === teacherWeeklyPlan.annualPlanId &&
+              candidate.sourceMonthlyPlanId === teacherWeeklyPlan.monthlyPlanId &&
+              candidate.sourceWeeklyPlanId === teacherWeeklyPlan.id &&
+              candidate.civilDate >= teacherWeeklyPlan.periodStart &&
+              candidate.civilDate <= teacherWeeklyPlan.periodEnd &&
+              evaluationCreatedAt !== null &&
+              recordWasVisibleAt(candidate, evaluationCreatedAt),
+          )
+          .sort(
+            (left, right) =>
+              String(left.civilDate).localeCompare(String(right.civilDate)) ||
+              left.id.localeCompare(right.id),
+          );
+        if (weeklyDailyPlans.length === 0) {
+          throw new Error(
+            `plans/${plan.id} öğretmen haftalık değerlendirmesine bağlı günlük plan yok.`,
+          );
+        }
+        const dailyPlanCountByCivilDate = new Map<string, number>();
+        for (const daily of weeklyDailyPlans) {
+          const civilDate = String(daily.civilDate);
+          dailyPlanCountByCivilDate.set(
+            civilDate,
+            (dailyPlanCountByCivilDate.get(civilDate) ?? 0) + 1,
+          );
+        }
+        if (
+          [...dailyPlanCountByCivilDate.values()].some((count) => count !== 1)
+        ) {
+          throw new Error(
+            `plans/${plan.id} öğretmen haftalık değerlendirmesinde günlük plan çakışması var.`,
+          );
+        }
+        for (const daily of weeklyDailyPlans) {
+          const civilDate = String(daily.civilDate);
+          const closure = dayClosuresForEvaluation
+            .filter(
+              (candidate) =>
+                candidate.academicYearId === teacherWeeklyPlan.academicYearId &&
+                candidate.classroomId === teacherWeeklyPlan.classroomId &&
+                candidate.civilDate === civilDate &&
+                evaluationCreatedAt !== null &&
+                candidate.closedAt <= evaluationCreatedAt,
+            )
+            .sort(
+              (left, right) =>
+                right.closedAt.localeCompare(left.closedAt) ||
+                right.id.localeCompare(left.id),
+            )[0];
+          if (!closure || closure.closureStatus !== "complete") {
+            throw new Error(
+              `plans/${plan.id} öğretmen haftalık değerlendirmesinin ${civilDate} gün kapanışı eksik veya tamamlanmamış.`,
+            );
+          }
+          if (
+            closure.evidenceFingerprint !==
+            teacherDayClosureSemanticFingerprint(
+              snapshotVisibleAt(payload, closure.closedAt),
+              {
+                academicYearId: teacherWeeklyPlan.academicYearId,
+                classroomId: teacherWeeklyPlan.classroomId,
+                civilDate,
+              },
+            )
+          ) {
+            throw new Error(
+              `plans/${plan.id} öğretmen haftalık değerlendirmesinin ${civilDate} gün kapanışı kaynak kanıtla uyuşmuyor.`,
+            );
+          }
+        }
+      }
       for (const observationId of evaluation.observationIds) {
         const observation =
           typeof observationId === "string"
@@ -2768,6 +4111,13 @@ function assertBackupRelationships(
           observation && typeof observation.planId === "string"
             ? plansById.get(observation.planId)
             : undefined;
+        const observationActivity =
+          observation && typeof observation.activityId === "string"
+            ? activitiesById.get(observation.activityId)
+            : undefined;
+        const activityScope = observationActivity
+          ? activityScopes.get(observationActivity.id) ?? null
+          : null;
         if (
           !observation ||
           !evaluationCreatedAt ||
@@ -2778,6 +4128,18 @@ function assertBackupRelationships(
           !observationPlan ||
           observationPlan.planType !== "daily" ||
           observationPlan.sourceWeeklyPlanId !== plan.id ||
+          (teacherWeeklyPlan &&
+            (!observationActivity ||
+              observationActivity.planId !== observationPlan.id ||
+              observationActivity.sourceAnnualPlanId !==
+                observationPlan.sourceAnnualPlanId ||
+              observationActivity.sourceMonthlyPlanId !==
+                observationPlan.sourceMonthlyPlanId ||
+              observationActivity.sourceWeeklyPlanId !==
+                observationPlan.sourceWeeklyPlanId ||
+              !activityScope ||
+              !planScope ||
+              !scopesMatch(planScope, activityScope))) ||
           !planScope ||
           !observationScope ||
           !scopesMatch(planScope, observationScope)
@@ -2983,6 +4345,8 @@ function assertBackupRelationships(
         typeof observation.childQuote !== "string") ||
       (observation.observationType !== undefined &&
         !isQuickObservationType(observation.observationType)) ||
+      (observation.developmentSelection !== undefined &&
+        !isDevelopmentObservationSelection(observation.developmentSelection)) ||
       (observationCategories !== undefined &&
         (!Array.isArray(observationCategories) ||
           !observationCategories.every(isQuickObservationCategory) ||
@@ -3029,6 +4393,7 @@ function assertBackupRelationships(
     const profileProvenance = profile
       ? validatedCurriculumProvenance(profile, `plans/${plan?.id ?? "bilinmeyen"}`)
       : null;
+    const developmentLink = isDevelopmentObservationCurriculumLink(link);
     if (
       !observation ||
       !linkScope ||
@@ -3049,23 +4414,52 @@ function assertBackupRelationships(
       link.approvedByUserId.trim().length === 0 ||
       !isValidUtcIso(link.confirmedAt) ||
       (link.targetSourceUrl !== undefined &&
-        !isSafeHttpsUrl(link.targetSourceUrl)) ||
+        !isSafeHttpsUrl(link.targetSourceUrl) &&
+        !(
+          link.targetSourceUrl === "about:blank" &&
+          linkProvenance.referenceOrigin === "teacher-declared" &&
+          linkProvenance.officialCatalogVerified === false
+        )) ||
       !profile ||
       profile.framework !== link.framework ||
-      profile.catalogId !== link.catalogId ||
-      profile.sourceVersion !== link.sourceVersion ||
-      !profileProvenance ||
-      profileProvenance.referenceOrigin !== linkProvenance.referenceOrigin ||
-      profileProvenance.officialCatalogVerified !==
-        linkProvenance.officialCatalogVerified
+      (!developmentLink && (
+        profile.catalogId !== link.catalogId ||
+        profile.sourceVersion !== link.sourceVersion ||
+        !profileProvenance ||
+        (linkProvenance.referenceOrigin === "official-catalog" &&
+          (profileProvenance.referenceOrigin !== "official-catalog" ||
+            profileProvenance.officialCatalogVerified !== true))
+      ))
     ) {
       throw new Error(
         `evidenceCurriculumLinks/${link.id} öğretmen onaylı program bağı geçersiz.`,
       );
     }
+    if (developmentLink) {
+      if (!sameCanonicalSnapshot(observation.developmentSelection, link.developmentSelection)) {
+        throw new Error(`evidenceCurriculumLinks/${link.id} gözlenen davranış seçimi kaynak gözlemle uyuşmuyor.`);
+      }
+      assertDevelopmentObservationContext({
+        selection: parseDevelopmentObservationSelection(link.developmentSelection),
+        observation,
+        classrooms: payload.classrooms,
+        plans: payload.plans,
+        activities: payload.activities,
+        validateCurrentAgeBand: false,
+      });
+    }
     const group = linksByObservation.get(observation.id) ?? [];
     group.push(link);
     linksByObservation.set(observation.id, group);
+  }
+
+  for (const observation of payload.observations) {
+    if (observation.developmentSelection === undefined) continue;
+    const developmentLinks = (linksByObservation.get(observation.id) ?? [])
+      .filter((link) => isDevelopmentObservationCurriculumLink(link));
+    if (developmentLinks.length !== 1) {
+      throw new Error(`observations/${observation.id} gelişim gözleminin tek bir kaynaklı program bağı bulunmalıdır.`);
+    }
   }
 
   const valueEvidenceLinksById = new Map(
@@ -3387,6 +4781,191 @@ function assertBackupRelationships(
   }
 
   for (const draft of payload.reportDrafts) {
+    if (draft.reportType === ANECDOTE_FORM_REPORT_TYPE) {
+      const draftScope = validatedRecordScope(
+        draft,
+        "reportDrafts",
+        classroomsById,
+      );
+      const observationId = Array.isArray(draft.selectedObservationIds)
+        ? draft.selectedObservationIds[0]
+        : undefined;
+      const observation =
+        typeof observationId === "string"
+          ? observationsById.get(observationId)
+          : undefined;
+      const observationScope = observation
+        ? observationScopes.get(observation.id) ?? null
+        : null;
+      const observationStudentIds =
+        observation && Array.isArray(observation.studentIds)
+          ? observation.studentIds
+          : [];
+      const sections = isRecord(draft.editableSections)
+        ? draft.editableSections
+        : null;
+      const approvedLinkIds =
+        sections && Array.isArray(sections.approvedCurriculumLinkIds)
+          ? sections.approvedCurriculumLinkIds
+          : [];
+      const approvedProgramSources =
+        sections && Array.isArray(sections.approvedProgramSources)
+          ? sections.approvedProgramSources
+          : [];
+      const activeLinks = observation
+        ? (linksByObservation.get(observation.id) ?? []).filter(
+            (link) =>
+              typeof link.deletedAt !== "string" &&
+              link.confirmationMethod === "teacher-confirmed",
+          )
+        : [];
+      const activeLinkIds = activeLinks.map((link) => link.id);
+      const activeProgramSourceKeys = new Set(
+        activeLinks.map(
+          (link) =>
+            `${String(link.framework)}\u0000${String(link.catalogId)}\u0000${String(link.sourceVersion)}`,
+        ),
+      );
+      const approvedProgramSourceKeys = new Set(
+        approvedProgramSources
+          .filter((source) => isRecord(source))
+          .map(
+            (source) =>
+              `${String(source.framework)}\u0000${String(source.catalogId)}\u0000${String(source.sourceVersion)}`,
+          ),
+      );
+      const generalEvaluationSource =
+        sections && typeof sections.generalEvaluationSourceDraftId === "string"
+          ? payload.reportDrafts.find(
+              (candidate) =>
+                candidate.id === sections.generalEvaluationSourceDraftId,
+            )
+          : null;
+      const generalEvaluationSourceValid =
+        !sections || sections.generalEvaluationSourceDraftId === null ||
+        (generalEvaluationSource?.reportType === "evidence-assessment" &&
+          Array.isArray(generalEvaluationSource.observationIds) &&
+          generalEvaluationSource.observationIds.includes(observationId) &&
+          Array.isArray(generalEvaluationSource.studentIds) &&
+          generalEvaluationSource.studentIds.length === 1 &&
+          generalEvaluationSource.studentIds[0] ===
+            (Array.isArray(draft.studentIds) ? draft.studentIds[0] : undefined) &&
+          typeof generalEvaluationSource.teacherAssessmentText === "string" &&
+          generalEvaluationSource.teacherAssessmentText.trim() ===
+            String(sections.observerGeneralAssessment).trim());
+      const allLinksOfficial =
+        activeLinks.length > 0 &&
+        activeLinks.every(
+          (link) =>
+            link.referenceOrigin === "official-catalog" &&
+            link.officialCatalogVerified === true,
+        );
+      const expectedReferenceStatus = allLinksOfficial
+        ? "official-catalog-verified"
+        : "teacher-declared-unverified";
+      const pendingReviewValid =
+        draft.status === "draft" &&
+        draft.reviewStatus === "pending" &&
+        draft.reviewedByUserId === null &&
+        draft.reviewedAt === null &&
+        (draft.approvalSeal === undefined || draft.approvalSeal === null) &&
+        approvedLinkIds.length === 0 &&
+        approvedProgramSources.length === 0;
+      const approvedReviewValid =
+        draft.schemaVersion === ANECDOTE_FORM_SCHEMA_VERSION &&
+        draft.status === "ready" &&
+        draft.reviewStatus === "approved" &&
+        typeof draft.reviewedByUserId === "string" &&
+        localTeacherIdentity?.teacherUserId === draft.reviewedByUserId &&
+        isValidUtcIso(draft.reviewedAt) &&
+        String(draft.reviewedAt) >= draft.updatedAt &&
+        typeof sections?.observedLocation === "string" &&
+        sections.observedLocation.trim().length > 0 &&
+        typeof sections.observerGeneralAssessment === "string" &&
+        sections.observerGeneralAssessment.trim().length > 0 &&
+        activeLinkIds.length > 0 &&
+        approvedLinkIds.length === activeLinkIds.length &&
+        new Set(approvedLinkIds).size === approvedLinkIds.length &&
+        approvedLinkIds.every((id) => activeLinkIds.includes(id as string)) &&
+        approvedProgramSourceKeys.size === activeProgramSourceKeys.size &&
+        [...approvedProgramSourceKeys].every((key) =>
+          activeProgramSourceKeys.has(key),
+        ) &&
+        Boolean(
+          observation &&
+            approvalSealMatchesCurrentSources(
+              draft.approvalSeal,
+              observation,
+              activeLinks,
+            ),
+        ) &&
+        draft.referenceVerificationStatus === expectedReferenceStatus;
+      const legacyApprovalRequiresReapproval =
+        draft.schemaVersion === ANECDOTE_FORM_LEGACY_SCHEMA_VERSION &&
+        draft.approvalSeal === undefined &&
+        draft.status === "ready" &&
+        draft.reviewStatus === "approved" &&
+        typeof draft.reviewedByUserId === "string" &&
+        localTeacherIdentity?.teacherUserId === draft.reviewedByUserId &&
+        isValidUtcIso(draft.reviewedAt) &&
+        String(draft.reviewedAt) >= draft.updatedAt &&
+        typeof sections?.observedLocation === "string" &&
+        sections.observedLocation.trim().length > 0 &&
+        typeof sections.observerGeneralAssessment === "string" &&
+        sections.observerGeneralAssessment.trim().length > 0 &&
+        activeLinkIds.length > 0 &&
+        approvedLinkIds.length === activeLinkIds.length &&
+        new Set(approvedLinkIds).size === approvedLinkIds.length &&
+        approvedLinkIds.every((id) => activeLinkIds.includes(id as string)) &&
+        approvedProgramSourceKeys.size === activeProgramSourceKeys.size &&
+        [...approvedProgramSourceKeys].every((key) =>
+          activeProgramSourceKeys.has(key),
+        ) &&
+        draft.referenceVerificationStatus === expectedReferenceStatus;
+      if (
+        !isAnecdoteFormDraftRecord(draft) ||
+        !draftScope ||
+        !observation ||
+        !observationScope ||
+        !scopesMatch(draftScope, observationScope) ||
+        observation.observationType !== "anecdotal" ||
+        observation.rawTextImmutable !== true ||
+        typeof observation.rawText !== "string" ||
+        observation.rawText.trim().length === 0 ||
+        draft.periodStart !== observation.civilDate ||
+        draft.periodEnd !== observation.civilDate ||
+        observationStudentIds.length !== 1 ||
+        observationStudentIds[0] !== draft.studentIds[0] ||
+        !studentIds.has(draft.studentIds[0]) ||
+        !sections ||
+        !hasExactKeys(sections, [
+          "approvedCurriculumLinkIds",
+          "approvedProgramSources",
+          "generalEvaluationSourceDraftId",
+          "observedLocation",
+          "observedLocationSource",
+          "observerGeneralAssessment",
+        ]) ||
+        approvedProgramSources.some(
+          (source) =>
+            !isRecord(source) ||
+            !hasExactKeys(source, [
+              "catalogId",
+              "framework",
+              "sourceVersion",
+            ]),
+        ) ||
+        !generalEvaluationSourceValid ||
+        (!pendingReviewValid &&
+          !approvedReviewValid &&
+          !legacyApprovalRequiresReapproval)
+      ) {
+        throw new Error(
+          `reportDrafts/${draft.id} MEB 2024 anekdot formu kaynak, kapsam veya öğretmen onayı sözleşmesine uymuyor.`,
+        );
+      }
+      continue;
+    }
     if (draft.reportType !== "evidence-assessment") {
       const selectedObservationIds = draft.selectedObservationIds;
       const selectedMediaIds = draft.selectedMediaIds;
@@ -3566,12 +5145,9 @@ function assertBackupRelationships(
       typeof draft.teacherAssessmentText !== "string" ||
       draft.teacherAssessmentText.trim().length === 0 ||
       !periodAndObservationsValid ||
-      draft.status !== "teacher-review-required" ||
       draft.authoredBy !== "teacher" ||
-      draft.teacherReviewRequired !== true ||
-      draft.reviewStatus !== "pending" ||
-      draft.reviewedByUserId !== null ||
-      draft.reviewedAt !== null ||
+      !((draft.status === "teacher-review-required" && draft.teacherReviewRequired === true && draft.reviewStatus === "pending" && draft.reviewedByUserId === null && draft.reviewedAt === null) ||
+        (draft.status === "teacher-saved" && draft.teacherReviewRequired === false && draft.reviewStatus === "teacher-saved" && isUuid(draft.reviewedByUserId) && typeof draft.reviewedAt === "string" && UTC_ISO_PATTERN.test(draft.reviewedAt) && draft.reviewedAt === draft.updatedAt)) ||
       draft.generationMode !== "teacher-authored-cited-draft" ||
       (storedVerificationStatus !== "official-catalog-verified" &&
         storedVerificationStatus !== "teacher-declared-unverified") ||
@@ -3926,7 +5502,92 @@ function assertBackupRelationships(
     }
   }
 
+  const dayClosures = payload.settings
+    .filter(isTeacherDayClosureSetting)
+    .sort(
+      (left, right) =>
+        left.closedAt.localeCompare(right.closedAt) ||
+        left.id.localeCompare(right.id),
+    );
+  const carryForwardOrigins = new Map<
+    string,
+    (typeof dayClosures)[number]
+  >();
+  for (const closure of dayClosures) {
+    for (const issueCode of closure.issueCodes) {
+      const identity = teacherDayCarryForwardSourceIdentity({
+        academicYearId: closure.academicYearId,
+        classroomId: closure.classroomId,
+        sourceCivilDate: closure.civilDate,
+        sourceIssueCode: issueCode,
+      });
+      if (!carryForwardOrigins.has(identity)) {
+        carryForwardOrigins.set(identity, closure);
+      }
+    }
+  }
+  const carryForwardTransitions = payload.settings
+    .filter(isTeacherDayCarryForwardTransitionSetting)
+    .sort(
+      (left, right) =>
+        left.transitionedAt.localeCompare(right.transitionedAt) ||
+        left.id.localeCompare(right.id),
+    );
+  const latestTransitionIdByIdentity = new Map<string, string>();
+  for (const transition of carryForwardTransitions) {
+    const origin = carryForwardOrigins.get(transition.sourceIssueIdentity);
+    const chainOrigin = carryForwardOrigins.get(transition.sourceIssueId);
+    const expectedPreviousId =
+      latestTransitionIdByIdentity.get(transition.sourceIssueIdentity) ?? null;
+    if (
+      !origin ||
+      !chainOrigin ||
+      transition.sourceClosureId !== origin.id ||
+      transition.sourceCivilDate !== origin.civilDate ||
+      !origin.issueCodes.includes(transition.sourceIssueCode) ||
+      transition.academicYearId !== origin.academicYearId ||
+      transition.classroomId !== origin.classroomId ||
+      chainOrigin.academicYearId !== origin.academicYearId ||
+      chainOrigin.classroomId !== origin.classroomId ||
+      chainOrigin.civilDate > origin.civilDate ||
+      !chainOrigin.issueCodes.includes(transition.sourceIssueCode) ||
+      transition.transitionedAt < origin.closedAt ||
+      transition.previousTransitionId !== expectedPreviousId ||
+      transition.civilDate !== istanbulCivilDate(transition.transitionedAt)
+    ) {
+      throw new Error(
+        `settings/${transition.id} taşınan iş kaynak veya geçiş zinciri geçersiz.`,
+      );
+    }
+    validatedRecordScope(transition, "settings", classroomsById);
+    latestTransitionIdByIdentity.set(
+      transition.sourceIssueIdentity,
+      transition.id,
+    );
+  }
+
+  assertTeacherFollowupRelationships(payload);
+  assertConsentTripRelationships(payload);
+  assertClassroomAdminRelationships(payload);
+  assertGrowthMeasurementSnapshotRelations(payload);
+  assertLearningCenterRelationships(payload);
+  assertClassDutyRelationships(payload);
+  assertFamilyEngagementRelationships(payload);
+  assertSchoolDocumentTemplateRelationships(payload);
+  assertDailyRoutineCardRelationships(payload);
+  assertOfficialAppointmentCompletionRelationships(payload);
+  assertPlayFamilyCycleRelationships(payload);
+  assertHomeGameCardRelationships(payload);
   for (const setting of payload.settings) {
+    if (setting.settingType === DOCUMENT_VERSION_SETTING_TYPE) {
+      if (!isDocumentVersionRecord(setting)) throw new Error("Belge sürümü kayıt sözleşmesi geçersiz.");
+      validatedRecordScope(setting, "settings", classroomsById);
+      if (setting.studentIds.some(id => !studentIds.has(id))) throw new Error("Belge sürümü bilinmeyen öğrenciye bağlı.");
+    }
+    if (setting.settingType === DEVELOPMENT_REPORT_SETTING_TYPE) {
+      if (!isDevelopmentReportRecord(setting)) throw new Error("Öğretmen gözlem özeti kayıt sözleşmesi geçersiz.");
+      assertDevelopmentReportRelationships(payload, setting);
+    }
     if (setting.settingType === QUICK_OBSERVATION_DRAFT_SETTING_TYPE) {
       if (!isQuickObservationDraftRecord(setting)) {
         throw new Error(`settings/${setting.id} hızlı gözlem taslağı geçersiz.`);
@@ -3974,12 +5635,35 @@ function assertBackupRelationships(
           `settings/${setting.id} hızlı gözlem taslağı ilişkileri geçersiz.`,
         );
       }
+      if (setting.developmentSelection !== undefined) {
+        assertDevelopmentObservationContext({
+          selection: setting.developmentSelection,
+          observation: setting,
+          classrooms: payload.classrooms,
+          plans: payload.plans,
+          activities: payload.activities,
+          validateCurrentAgeBand: false,
+        });
+      }
     }
     if (
       setting.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE &&
       !isAttendanceCompletionSetting(setting)
     ) {
       throw new Error(`settings/${setting.id} günlük yoklama ayarı geçersiz.`);
+    }
+    if (
+      setting.settingType === TEACHER_DAY_CLOSURE_SETTING_TYPE &&
+      !isTeacherDayClosureSetting(setting)
+    ) {
+      throw new Error(`settings/${setting.id} gün sonu kaydı geçersiz.`);
+    }
+    if (
+      setting.settingType ===
+        TEACHER_DAY_CARRY_FORWARD_TRANSITION_SETTING_TYPE &&
+      !isTeacherDayCarryForwardTransitionSetting(setting)
+    ) {
+      throw new Error(`settings/${setting.id} taşınan iş geçişi geçersiz.`);
     }
     if (
       setting.settingType === ACTIVE_CLASSROOM_SETTING_TYPE &&
@@ -4012,11 +5696,22 @@ function assertBackupRelationships(
     }
     if (
       setting.settingType === ATTENDANCE_COMPLETION_SETTING_TYPE ||
+      setting.settingType === TEACHER_DAY_CLOSURE_SETTING_TYPE ||
+      setting.settingType ===
+        TEACHER_DAY_CARRY_FORWARD_TRANSITION_SETTING_TYPE ||
       typeof setting.attendanceCompleted === "boolean"
     ) {
       validatedRecordScope(setting, "settings", classroomsById);
     }
   }
+}
+
+/** Applies the backup verifier's canonical relationship gate before a live write. */
+export function assertDataSnapshotRelationships(
+  payload: DataSnapshot,
+  currentCivilDate: string,
+): void {
+  assertBackupRelationships(payload, currentCivilDate);
 }
 
 export function assertBackupEnvelope(value: unknown): asserts value is BackupEnvelope {

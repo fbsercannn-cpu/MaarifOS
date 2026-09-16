@@ -2,6 +2,8 @@ export const CAPABILITY_IDS = Object.freeze([
   "today",
   "classroom",
   "capture",
+  "planningHub",
+  "recordsHub",
   "attendanceV2",
   "localBackupRestore",
   "appLock",
@@ -29,12 +31,14 @@ export const ALPHA_CAPABILITIES = Object.freeze({
   today: true,
   classroom: true,
   capture: true,
+  planningHub: true,
+  recordsHub: true,
   attendanceV2: true,
   localBackupRestore: true,
   appLock: true,
   googleAuth: false,
   curriculumCatalogBrowser: false,
-  planEvidenceDetails: false,
+  planEvidenceDetails: true,
   premiumPlanCenter: false,
   portfolio: false,
   aiFeedback: false,
@@ -43,19 +47,24 @@ export const ALPHA_CAPABILITIES = Object.freeze({
   pdfReports: false,
   notifications: false,
   cloudSync: false,
-  calendarNotes: false,
+  calendarNotes: true,
 } as const) satisfies AlphaCapabilityRegistry;
 
 export function isCapabilityEnabled(capability: CapabilityId): boolean {
   return ALPHA_CAPABILITIES[capability];
 }
 
-export type AlphaPrimaryNavigationId = "today" | "classroom" | "capture";
+export type AlphaPrimaryNavigationId =
+  | "today"
+  | "classroom"
+  | "capture"
+  | "plans"
+  | "documents";
 
 export interface AlphaPrimaryNavigationItem {
   readonly id: AlphaPrimaryNavigationId;
-  readonly label: "Bugün" | "Sınıfım" | "Kayıt Ekle";
-  readonly capability: AlphaPrimaryNavigationId;
+  readonly label: "Bugün" | "Sınıfım" | "Gözlem" | "Planlar" | "Belgeler";
+  readonly capability: "today" | "classroom" | "capture" | "planningHub" | "recordsHub";
 }
 
 const ALPHA_PRIMARY_NAVIGATION: readonly AlphaPrimaryNavigationItem[] =
@@ -66,7 +75,13 @@ const ALPHA_PRIMARY_NAVIGATION: readonly AlphaPrimaryNavigationItem[] =
       label: "Sınıfım",
       capability: "classroom",
     }),
-    Object.freeze({ id: "capture", label: "Kayıt Ekle", capability: "capture" }),
+    Object.freeze({ id: "capture", label: "Gözlem", capability: "capture" }),
+    Object.freeze({ id: "plans", label: "Planlar", capability: "planningHub" }),
+    Object.freeze({
+      id: "documents",
+      label: "Belgeler",
+      capability: "recordsHub",
+    }),
   ]);
 
 export function visiblePrimaryNavigation(): readonly AlphaPrimaryNavigationItem[] {

@@ -156,3 +156,91 @@ test("öğretmen yoklamayı işaretleyince aynı öğrenci günlük sayıya gire
     total: 1,
   });
 });
+
+test("bitiş tarihinden sonra yeni sınıf üyeliğini hiçbir kaydı değiştirmeden reddeder", async () => {
+  const store = configuredStore();
+  store.snapshot.academicYears[0].endDate = "2026-08-31";
+  const before = await store.readSnapshot();
+
+  await assert.rejects(
+    persistStudentRosterChange(store, {
+      student: {
+        id: studentId,
+        name: "Kurgu Öğrenci",
+        status: "present",
+        attendanceMarked: false,
+      },
+      archived: false,
+      now: new Date("2026-09-01T09:00:00.000Z"),
+    }),
+    /Bu eğitim yılı 2026-08-31 tarihinde sona erdiği için çocuk listesi değiştirilemez\. Yeni veya bugün etkin olan eğitim yılını seçin\./,
+  );
+
+  assert.deepEqual(await store.readSnapshot(), before);
+  assert.equal((await store.readSnapshot()).students.length, 0);
+});
+
+test("hazırlık döneminde ekleme, arşivleme ve geri alma tek üyeliği koruyarak çalışır", async () => {
+  const store = configuredStore();
+  store.snapshot.academicYears[0].startDate = "2026-09-01";
+
+  await persistStudentRosterChange(store, {
+    student: {
+      id: studentId,
+      name: "Kurgu Öğrenci",
+      status: "present",
+      attendanceMarked: false,
+    },
+    archived: false,
+    now: new Date("2026-08-03T09:00:00.000Z"),
+  });
+  await persistStudentRosterChange(store, {
+    student: {
+      id: studentId,
+      name: "Kurgu Öğrenci",
+      status: "present",
+      attendanceMarked: false,
+    },
+    archived: true,
+    now: new Date("2026-08-04T09:00:00.000Z"),
+  });
+  await persistStudentRosterChange(store, {
+    student: {
+      id: studentId,
+      name: "Kurgu Öğrenci",
+      status: "present",
+      attendanceMarked: false,
+    },
+    archived: false,
+    now: new Date("2026-08-05T09:00:00.000Z"),
+  });
+
+  const snapshot = await store.readSnapshot();
+  assert.equal(snapshot.students.length, 1);
+  assert.equal(snapshot.students[0].enrollments.length, 1);
+  assert.equal(snapshot.students[0].enrollmentStatus, "active");
+  assert.equal(snapshot.students[0].enrollments[0].status, "active");
+  assert.equal(snapshot.students[0].enrollments[0].endedOn, undefined);
+});
+
+test("kapatılmış eğitim yılında liste değişikliğini kesin hata ile reddeder", async () => {
+  const store = configuredStore();
+  store.snapshot.academicYears[0].status = "archived";
+  store.snapshot.academicYears[0].closedOn = "2026-08-31";
+  const before = await store.readSnapshot();
+
+  await assert.rejects(
+    persistStudentRosterChange(store, {
+      student: {
+        id: studentId,
+        name: "Kurgu Öğrenci",
+        status: "present",
+        attendanceMarked: false,
+      },
+      archived: false,
+      now: new Date("2026-09-01T09:00:00.000Z"),
+    }),
+    /Bu eğitim yılı kapatıldığı için çocuk listesi değiştirilemez\. Yeni veya bugün etkin olan eğitim yılını seçin\./,
+  );
+  assert.deepEqual(await store.readSnapshot(), before);
+});

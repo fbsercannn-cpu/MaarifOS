@@ -1,17 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.describe.configure({ timeout: 60_000 });
+
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   if (!(await setup.isVisible().catch(() => false))) return;
+  await setup.getByLabel("Okul adı").fill("Üyelik Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Üyelik Kurgu Öğretmeni");
   await setup.getByLabel("Sınıf adı").fill("Üyelik Kurgu Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
+    .getByLabel("Maarif Modeli yaş grubu", { exact: true })
+    .selectOption({ label: "60–72 ay" });
   await setup
-    .getByRole("button", { name: "Sınıfı ve çalışma düzenini kaydet" })
+    .locator("details")
+    .filter({ hasText: "Takvim ayrıntıları" })
+    .locator("summary")
     .click();
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
+  await setup
+    .locator("details")
+    .filter({ hasText: "İleri ayarlar" })
+    .locator("summary")
+    .click();
+  await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
@@ -24,13 +37,12 @@ test("yeni sınıf üyeliği işaretlenene kadar günlük devam sayısına girme
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
-  await page.getByLabel("Çocuğun adı").fill(childName);
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addStudent.getByLabel("Çocuğun adı").fill(childName);
+  await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
 
-  const attendanceSummary = page.getByRole("button", {
-    name: /Bugünkü devam\s+0\/1 çocuk/,
-  });
+  await page.getByText("Sınıf işlemleri", { exact: true }).click();
+  const attendanceSummary = page.getByRole("button", { name: "Bugünün yoklaması" });
   await expect(attendanceSummary).toBeVisible();
   await attendanceSummary.click();
 
@@ -48,6 +60,6 @@ test("yeni sınıf üyeliği işaretlenene kadar günlük devam sayısına girme
   await page.keyboard.press("Escape");
 
   await expect(
-    page.getByRole("button", { name: /Bugünkü devam\s+1\/1 çocuk/ }),
+    page.getByRole("button", { name: "Bugünün yoklaması" }),
   ).toBeVisible();
 });

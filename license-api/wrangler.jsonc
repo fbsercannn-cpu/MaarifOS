@@ -1,0 +1,65 @@
+{
+  "name": "maarifos-founder-license-api",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-08-08",
+  "workers_dev": true,
+  "send_metrics": false,
+  "secrets": {
+    "required": [
+      "FOUNDER_PIN_HMAC_KEY",
+      "FOUNDER_PIN_HMAC_DIGEST",
+      "RATE_LIMIT_HMAC_KEY",
+      "ENTITLEMENT_PRIVATE_JWK"
+    ]
+  },
+  "vars": {
+    "ALLOWED_ORIGINS": "https://maarifos-emine-akis-pusulasi.fbsercannn.chatgpt.site",
+    "ENTITLEMENT_ISSUER": "https://maarifos-founder-license-api.otonom-hesaplama.workers.dev",
+    "ENTITLEMENT_AUDIENCE": "maarifos-pwa",
+    "ENTITLEMENT_KID": "founder-es256-2026-08",
+    "LEGAL_TERMS_VERSION": "founder-staff-2026-08-v1"
+  },
+  "d1_databases": [
+    {
+      "binding": "LICENSE_DB",
+      "database_name": "maarifos-founder-license",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "./private-assets",
+    "binding": "PRIVATE_ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.05
+  },
+  "env": {
+    "development": {
+      "secrets": {
+        "required": [
+          "FOUNDER_PIN_HMAC_KEY",
+          "FOUNDER_PIN_HMAC_DIGEST",
+          "RATE_LIMIT_HMAC_KEY",
+          "ENTITLEMENT_PRIVATE_JWK"
+        ]
+      },
+      "vars": {
+        "ALLOWED_ORIGINS": "http://localhost:4173,http://127.0.0.1:4173",
+        "ENTITLEMENT_ISSUER": "http://localhost:8787",
+        "ENTITLEMENT_AUDIENCE": "maarifos-pwa",
+        "ENTITLEMENT_KID": "founder-es256-local",
+        "LEGAL_TERMS_VERSION": "founder-staff-local-v1"
+      },
+      "d1_databases": [
+        {
+          "binding": "LICENSE_DB",
+          "database_name": "maarifos-founder-license-local",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}

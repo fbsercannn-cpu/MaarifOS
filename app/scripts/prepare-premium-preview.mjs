@@ -21,9 +21,27 @@ const v2SourcePath = path.join(releaseDirectory, "content.v2.json");
 const v3SourcePath = path.join(releaseDirectory, "content.v3.json");
 const manifestSourcePath = path.join(releaseDirectory, "manifest.v3.json");
 const previewDirectory = path.join(appRoot, "premium-preview-cache");
+const builtInDirectory = path.join(
+  appRoot,
+  "public",
+  "assets",
+  "maarif-content",
+);
 const v2TargetPath = path.join(previewDirectory, "tymm-6072-2026-09-v2.json");
 const v3TargetPath = path.join(previewDirectory, "tymm-6072-2026-09-v3.json");
 const manifestTargetPath = path.join(previewDirectory, "tymm-6072-2026-09-manifest-v3.json");
+const builtInV2TargetPath = path.join(
+  builtInDirectory,
+  "tymm-6072-2026-09-v2.json",
+);
+const builtInV3TargetPath = path.join(
+  builtInDirectory,
+  "tymm-6072-2026-09-v3.json",
+);
+const builtInManifestTargetPath = path.join(
+  builtInDirectory,
+  "tymm-6072-2026-09-manifest-v3.json",
+);
 
 const sha256 = (value) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -105,11 +123,17 @@ const expectedSourceFiles = {
   constitution: "app/src/features/values/values-pedagogy-constitution.v1.json",
   officialActionCatalog: "app/src/features/values/official-preschool-value-actions.v1.json",
 };
+const builtInSourceCopies = [];
 for (const [sourceKey, expectedRelativePath] of Object.entries(expectedSourceFiles)) {
   const source = manifest.valuesSourceChain?.[sourceKey];
   assertEqual(source?.file, expectedRelativePath, `${sourceKey} kaynak yolu`);
-  const sourceBytes = await readFile(path.join(projectRoot, expectedRelativePath));
+  const sourcePath = path.join(projectRoot, expectedRelativePath);
+  const sourceBytes = await readFile(sourcePath);
   assertEqual(source.rawFileSha256, sha256(sourceBytes), `${sourceKey} kaynak byte özeti`);
+  builtInSourceCopies.push({
+    sourcePath,
+    targetPath: path.join(builtInDirectory, path.basename(expectedRelativePath)),
+  });
 }
 
 const parsedPack = parsePremiumContentPack(content);
@@ -120,8 +144,15 @@ assertEqual(
 );
 
 await mkdir(previewDirectory, { recursive: true });
+await mkdir(builtInDirectory, { recursive: true });
 await Promise.all([
   copyFile(v2SourcePath, v2TargetPath),
   copyFile(v3SourcePath, v3TargetPath),
   copyFile(manifestSourcePath, manifestTargetPath),
+  copyFile(v2SourcePath, builtInV2TargetPath),
+  copyFile(v3SourcePath, builtInV3TargetPath),
+  copyFile(manifestSourcePath, builtInManifestTargetPath),
+  ...builtInSourceCopies.map(({ sourcePath, targetPath }) =>
+    copyFile(sourcePath, targetPath),
+  ),
 ]);

@@ -13,17 +13,24 @@ import { TYMM_2024_CATALOG_METADATA } from "../../src/features/curriculum/tymm-2
 import {
   CURRICULUM_PROGRAM_LABELS,
   captureImmutableRawObservation,
+  confirmObservationCurriculumLink,
   createPlanWithActivity,
 } from "../../src/features/evidence/evidence-flow.ts";
 import { parsePremiumContentPack } from "../../src/features/premium-plans/content-repository.ts";
 import { createPremiumDailyFlowDraft } from "../../src/features/premium-plans/domain.ts";
+import { loadTodayWorkspace } from "../../src/features/today/today-data.ts";
 import {
   installPremiumPlanBoard,
   loadInstalledPremiumPlan,
   loadLegacyInstalledPremiumPlans,
+  loadPremiumMonthlyReviewContext,
+  loadPremiumWeeklyCarryForwardContexts,
   preparePremiumDailyTemplate,
+  recordPremiumMonthlyEvaluation,
   recordPremiumWeeklyEvaluation,
   updatePremiumPlanLensPreferences,
+  PREMIUM_MONTHLY_PROGRAM_CRITERIA,
+  PREMIUM_MONTHLY_TEACHER_CRITERIA,
 } from "../../src/features/premium-plans/plan-service.ts";
 
 class MemoryStore {
@@ -217,6 +224,26 @@ test("annual → monthly → weekly → daily zinciri kapsamı ve premium proven
   );
   assert.equal(daily.activity.sourceContentPackSnapshot.id, content.id);
   assert.deepEqual(daily.activity.sourceActivityTemplateSnapshot, activity);
+
+  const projectedDay = await loadTodayWorkspace(store, {
+    now: new Date("2026-09-08T08:00:00.000Z"),
+  });
+  assert.equal(projectedDay.planItems.length, 10);
+  assert.deepEqual(
+    projectedDay.planItems.map((item) => item.flowBlockId),
+    selection.fullDayFlow.map((block) => block.id),
+  );
+  assert.deepEqual(
+    projectedDay.planItems
+      .filter((item) => item.activityId)
+      .map((item) => item.activityId),
+    [daily.activity.id],
+  );
+  const reloadedStore = new MemoryStore(await store.readSnapshot());
+  const projectedAfterReload = await loadTodayWorkspace(reloadedStore, {
+    now: new Date("2026-09-08T08:05:00.000Z"),
+  });
+  assert.deepEqual(projectedAfterReload.planItems, projectedDay.planItems);
 
   const alternative = content.activities.find(
     (candidate) => candidate.id === selection.alternativeActivitySnapshot.id,
@@ -885,6 +912,270 @@ test("öğretmen haftalık değerlendirmeyi silmeden biriktirir ve sonraki plan 
   );
   assert.equal(nextWeekly.previousWeekEvaluationId, secondEvaluation.id);
   assert.equal(nextWeekly.nextPlanDecisionContext.decision, "adapt");
+  const carryForward = await loadPremiumWeeklyCarryForwardContexts(
+    store,
+    installed.monthlyPlanId,
+  );
+  assert.deepEqual(carryForward, [{
+    targetWeeklyPlanId: nextWeekly.id,
+    sourceWeeklyPlanId: weekly.id,
+    sourceWeekTitle: weekly.title,
+    sourcePeriodStart: weekly.periodStart,
+    sourcePeriodEnd: weekly.periodEnd,
+    evaluationId: secondEvaluation.id,
+    decision: "adapt",
+    evidenceSummary: secondEvaluation.evidenceSummary,
+    teacherReflection: secondEvaluation.reflection,
+    createdAt: secondEvaluation.createdAt,
+    applicationStatus: "pending-teacher-review",
+  }]);
+});
+
+test("MEB aylık değerlendirmesi üç boyutu, aktif sınıf kapsamını ve kaynak kimliklerini eklemeli olarak korur", async () => {
+  const secondStudentId = "00000000-0000-4000-8000-000000000883";
+  const teacherId = "00000000-0000-4000-8000-000000000882";
+  const store = activeStore();
+  store.snapshot.students.push({
+    ...base,
+    id: secondStudentId,
+    displayName: "İkinci Pilot Çocuk",
+    academicYearId: yearId,
+    classroomId,
+  });
+  const content = await valuesPack();
+  const installed = await installPremiumPlanBoard(store, {
+    pack: content,
+    curriculumProfile: profile,
+    teacherPreferredLensId: "guided-play",
+    now: new Date("2026-09-07T07:00:00.000Z"),
+  });
+
+  const createDay = async ({ weekIndex, civilDate, planId, activityId }) => {
+    const weekEntry = installed.weeklyPlanIds[weekIndex];
+    const activityTemplate = content.activities.find(
+      (activity) =>
+        activity.weekId === weekEntry.weekId && activity.activityRole === "main",
+    );
+    const selection = preparePremiumDailyTemplate(content, activityTemplate.id, {
+      annualPlanId: installed.annualPlanId,
+      monthlyPlanId: installed.monthlyPlanId,
+      weeklyPlanIds: installed.weeklyPlanIds,
+      teacherPreferredLensId: "guided-play",
+      teacherPreferredSupportingLensIds: [],
+    });
+    const targetCodes = new Set(selection.targetCodes);
+    const targets = curriculumTargetsForProfile(profile, "60-72")
+      .filter((target) => targetCodes.has(target.referenceCode));
+    return createPlanWithActivity(store, {
+      civilDate,
+      planId,
+      activityId,
+      planTitle: selection.planTitle,
+      activityTitle: selection.activityTitle,
+      startTime: "09:00",
+      endTime: "09:40",
+      curriculumProfile: profile,
+      curriculumTargets: targets,
+      assignmentMode: "whole-class",
+      studentIds: [studentId, secondStudentId],
+      premiumSource: selection,
+      now: new Date(`${civilDate}T06:00:00.000Z`),
+    });
+  };
+
+  const firstDay = await createDay({
+    weekIndex: 0,
+    civilDate: "2026-09-08",
+    planId: "00000000-0000-4000-8000-000000000884",
+    activityId: "00000000-0000-4000-8000-000000000885",
+  });
+  const secondDay = await createDay({
+    weekIndex: 1,
+    civilDate: "2026-09-15",
+    planId: "00000000-0000-4000-8000-000000000886",
+    activityId: "00000000-0000-4000-8000-000000000887",
+  });
+  const observationInputs = [
+    {
+      id: "00000000-0000-4000-8000-000000000888",
+      studentId,
+      daily: firstDay,
+      observedAt: "2026-09-08T07:30:00.000Z",
+      rawText: "Pilot çocuk rota kartında iki başlangıç noktası işaretledi.",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000889",
+      studentId: secondStudentId,
+      daily: firstDay,
+      observedAt: "2026-09-08T07:32:00.000Z",
+      rawText: "İkinci çocuk rota kartını akranına çevirerek seçimini anlattı.",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000890",
+      studentId,
+      daily: secondDay,
+      observedAt: "2026-09-15T07:30:00.000Z",
+      rawText: "Pilot çocuk ikinci hafta farklı bir malzeme yolu seçti.",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000891",
+      studentId: secondStudentId,
+      daily: secondDay,
+      observedAt: "2026-09-15T07:32:00.000Z",
+      rawText: "İkinci çocuk açık hava seçeneğini göstererek gerekçesini söyledi.",
+    },
+  ];
+  const captured = [];
+  const links = [];
+  for (const [index, input] of observationInputs.entries()) {
+    const result = await captureImmutableRawObservation(store, {
+      observationId: input.id,
+      studentId: input.studentId,
+      planId: input.daily.plan.id,
+      activityId: input.daily.activity.id,
+      rawText: input.rawText,
+      observedAt: input.observedAt,
+      now: new Date(new Date(input.observedAt).getTime() + 60_000),
+    });
+    captured.push(result.observation);
+    const target = input.daily.activity.curriculumTargets[0];
+    const link = await confirmObservationCurriculumLink(store, {
+      observationId: result.observation.id,
+      framework: profile.framework,
+      catalogId: profile.catalogId,
+      sourceVersion: profile.sourceVersion,
+      referenceOrigin: profile.referenceOrigin,
+      officialCatalogVerified: profile.officialCatalogVerified,
+      referenceCode: target.referenceCode,
+      referenceTitle: target.referenceTitle,
+      plannedTargetId: target.id,
+      approvedByUserId: teacherId,
+      now: new Date(new Date(input.observedAt).getTime() + 120_000 + index),
+    });
+    links.push(link);
+  }
+  store.snapshot.observations.find(
+    (observation) => observation.id === captured[0].id,
+  ).observationType = "anecdotal";
+
+  const programCriteria = PREMIUM_MONTHLY_PROGRAM_CRITERIA.map(({ id }) => ({
+    criterionId: id,
+    status: id === "duration-fit" ? "needs-adjustment" : "observed-working",
+  }));
+  const teacherCriteria = PREMIUM_MONTHLY_TEACHER_CRITERIA.map(({ id }) => ({
+    criterionId: id,
+    status: id === "time-management" ? "needs-adjustment" : "observed-working",
+  }));
+  const narratives = {
+    programCriteria,
+    programNarrative:
+      "Katılım yolları çeşitlendi; ikinci haftada süre ve geçiş düzeni uyarlama gerektirdi.",
+    teacherCriteria,
+    teacherNarrative:
+      "Planlama ile uygulama arasındaki geçişleri ve açık hava seçeneğine erişimi yeniden düşündüm.",
+    nextMonthRecommendation:
+      "Sonraki ay farklı gün ve ortamlarda gözlem toplamayı ve geçiş süresini uyarlamayı sürdüreceğim.",
+  };
+
+  const forgedOutsideMonth = {
+    ...structuredClone(captured[0]),
+    id: "00000000-0000-4000-8000-000000000892",
+    civilDate: "2026-10-01",
+  };
+  store.snapshot.observations.push(forgedOutsideMonth);
+  await assert.rejects(
+    recordPremiumMonthlyEvaluation(store, {
+      monthlyPlanId: installed.monthlyPlanId,
+      childEvidenceState: "insufficient-evidence",
+      childNarrative: "Tarih dışındaki kayıt aylık kaynağa alınmamalıdır.",
+      observationIds: [forgedOutsideMonth.id],
+      curriculumLinkIds: [],
+      ...narratives,
+      now: new Date("2026-09-30T09:00:00.000Z"),
+    }),
+    /tarih ve kaynak zincirindeki değişmez gözlemleri/,
+  );
+
+  await assert.rejects(
+    recordPremiumMonthlyEvaluation(store, {
+      monthlyPlanId: installed.monthlyPlanId,
+      childEvidenceState: "sufficient-evidence",
+      childNarrative: "Tek olay kaydı bütün ayı temsil etmemelidir.",
+      observationIds: [captured[0].id],
+      curriculumLinkIds: [links[0].id],
+      ...narratives,
+      now: new Date("2026-09-30T10:00:00.000Z"),
+    }),
+    /en az iki gözlem/,
+  );
+
+  await assert.rejects(
+    recordPremiumMonthlyEvaluation(store, {
+      monthlyPlanId: installed.monthlyPlanId,
+      childEvidenceState: "sufficient-evidence",
+      childNarrative: "İki hafta seçildi ancak aktif sınıfın tamamı temsil edilmedi.",
+      observationIds: [captured[0].id, captured[2].id],
+      curriculumLinkIds: [links[0].id, links[2].id],
+      ...narratives,
+      now: new Date("2026-09-30T11:00:00.000Z"),
+    }),
+    /aktif sınıftaki her çocuğun/,
+  );
+
+  const insufficient = await recordPremiumMonthlyEvaluation(store, {
+    monthlyPlanId: installed.monthlyPlanId,
+    childEvidenceState: "insufficient-evidence",
+    childNarrative:
+      "İki haftalık kayıt yalnız bir çocuğu temsil ettiği için kesin beceri hükmü kurulmadı.",
+    observationIds: [captured[0].id, captured[2].id],
+    curriculumLinkIds: [links[0].id, links[2].id],
+    ...narratives,
+    now: new Date("2026-09-30T12:00:00.000Z"),
+  });
+  assert.equal(insufficient.children.evidenceState, "insufficient-evidence");
+  assert.deepEqual(insufficient.children.coverage.uncoveredActiveStudentIds, [
+    secondStudentId,
+  ]);
+  assert.equal(insufficient.program.narrative, narratives.programNarrative);
+  assert.equal(insufficient.teacher.narrative, narratives.teacherNarrative);
+
+  const complete = await recordPremiumMonthlyEvaluation(store, {
+    monthlyPlanId: installed.monthlyPlanId,
+    childEvidenceState: "sufficient-evidence",
+    childNarrative:
+      "Farklı gün ve haftalardaki seçili kayıtlar iki çocuğun katılım yollarındaki çeşitliliği görünür kıldı.",
+    observationIds: captured.map((observation) => observation.id),
+    curriculumLinkIds: links.map((link) => link.id),
+    ...narratives,
+    now: new Date("2026-09-30T13:00:00.000Z"),
+  });
+  assert.equal(complete.children.coverage.observationCount, 4);
+  assert.equal(complete.children.coverage.anecdotalObservationCount, 1);
+  assert.equal(complete.children.coverage.distinctCivilDateCount, 2);
+  assert.equal(complete.children.coverage.distinctWeekCount, 2);
+  assert.equal(complete.children.coverage.activeStudentCount, 2);
+  assert.equal(complete.children.coverage.coveredActiveStudentCount, 2);
+  assert.deepEqual(complete.children.coverage.uncoveredActiveStudentIds, []);
+  assert.deepEqual(complete.children.observationIds, captured.map(({ id }) => id));
+  assert.deepEqual(complete.children.curriculumLinkIds, links.map(({ id }) => id));
+  assert.doesNotMatch(
+    JSON.stringify(complete),
+    /score|rating|skillConclusion|personalityJudgment|otomatik beceri hükmü/i,
+  );
+
+  const reloaded = await loadPremiumMonthlyReviewContext(
+    new MemoryStore(await store.readSnapshot()),
+    installed.monthlyPlanId,
+  );
+  assert.equal(reloaded.availableCoverage.observationCount, 4);
+  assert.equal(reloaded.availableCoverage.anecdotalObservationCount, 1);
+  assert.equal(reloaded.availableCoverage.activeStudentCount, 2);
+  assert.deepEqual(
+    reloaded.evaluations.map((evaluation) => evaluation.id),
+    [insufficient.id, complete.id],
+  );
+  assert.equal(reloaded.evaluations[0].program.narrative, narratives.programNarrative);
+  assert.equal(reloaded.evaluations[1].nextMonthRecommendation, narratives.nextMonthRecommendation);
 });
 
 test("öğretmen yaklaşım tercihini plan katmanlarına kaydeder; etkinlik snapshot'ını dönüştürmez", async () => {
@@ -894,6 +1185,7 @@ test("öğretmen yaklaşım tercihini plan katmanlarına kaydeder; etkinlik snap
     pack: content,
     curriculumProfile: profile,
     teacherPreferredLensId: "guided-play",
+    now: new Date("2026-09-07T07:00:00.000Z"),
   });
   const before = await store.readSnapshot();
   const templatesBefore = new Map(

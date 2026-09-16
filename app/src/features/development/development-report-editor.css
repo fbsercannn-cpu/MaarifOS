@@ -1,0 +1,29 @@
+.sheet-content:has(> .development-report-editor) { flex: 1; display: flex; min-height: 0; padding: 0; overflow: hidden; }
+.development-report-editor { width: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; color: #213d48; background: #fafaf6; }
+.development-report-editor[hidden] { display: none; }
+.development-report-editor__body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 18px 24px; touch-action: pan-y; }
+.development-report-person { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.development-report-person strong { font-size: 18px; }.development-report-person span { font-size: 12px; padding: 5px 9px; border-radius: 9px; background: #e3f2ea; }
+.development-report-notice { font-size: 12px; line-height: 1.55; color: #58696c; }
+.development-report-period { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 18px 0; }
+.development-report-period label,.development-report-field { display: grid; gap: 8px; font-size: 13px; font-weight: 700; min-width: 0; }
+.development-report-period input,.development-report-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 46px; border: 1px solid #bdceca; border-radius: 12px; background: #fff; color: #213d48; padding: 12px; font: inherit; font-size: 15px; font-weight: 400; }
+.development-report-field { margin-top: 20px; }.development-report-field textarea { line-height: 1.6; resize: vertical; }
+.development-report-evidence { border: 0; padding: 0; margin: 0; min-width: 0; }.development-report-evidence legend { font-size: 14px; font-weight: 750; margin-bottom: 8px; }
+.development-report-evidence article { border: 1px solid #d9e3de; border-radius: 14px; padding: 12px; margin-bottom: 10px; background: #fff; overflow-wrap: anywhere; }
+.development-report-evidence__select { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; cursor: pointer; }
+.development-report-evidence__select input,.development-report-confirm input { accent-color: #13786e; width: 22px; height: 22px; flex-shrink: 0; margin: 0; }
+.development-report-evidence__select time { font-size: 12px; font-weight: 700; }.development-report-evidence__select p { line-height: 1.6; margin: 8px 0; white-space: pre-wrap; }
+.development-report-evidence__select small { display: block; font-size: 12px; line-height: 1.5; color: #58716b; }
+.development-report-source summary,.development-report-previous summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 12px; font-weight: 700; color: #285e56; }
+.development-report-source p { font-size: 12px; line-height: 1.6; }.development-report-source small { font-size: 10px; overflow-wrap: anywhere; }
+.development-report-confirm { display: flex; gap: 12px; align-items: center; min-height: 54px; font-size: 13px; line-height: 1.5; margin: 20px 0; }
+.development-report-editor__footer { display: grid; gap: 8px; padding: 10px 18px max(14px, env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid #dce6df; box-shadow: 0 -4px 12px #173e3308; }
+.development-report-editor__footer p { margin: 0; font-size: 12px; }.development-report-editor__footer small { font-size: 11px; line-height: 1.4; color: #596d66; }
+.development-report-editor__footer button,.development-report-previous button { min-height: 46px; border: 1px solid #b8cec8; border-radius: 12px; padding: 10px 14px; color: #1f5d54; background: #f1f7f3; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.development-report-editor__footer .development-report-primary { background: #147a70; color: #fff; border-color: #147a70; }
+.development-report-editor button:disabled { opacity: .45; cursor: default; }.development-report-previous button { display: block; width: 100%; margin-bottom: 8px; text-align: start; }
+.development-report-error { padding: 12px; border-radius: 10px; background: #fff0eb; color: #903a28; font-size: 13px; line-height: 1.5; }
+.development-report-error button { min-height: 44px; border: 1px solid currentColor; border-radius: 8px; background: #fff; color: inherit; font: inherit; padding: 8px 12px; cursor: pointer; }
+.development-report-editor :focus-visible { outline: 3px solid #5eb4a3; outline-offset: 3px; }
+@media(max-width:350px) { .development-report-period { grid-template-columns: 1fr; }.development-report-editor__body { padding-inline: 12px; }.development-report-editor__footer { padding-inline: 12px; } }

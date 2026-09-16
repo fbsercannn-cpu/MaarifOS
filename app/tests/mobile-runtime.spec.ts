@@ -280,6 +280,35 @@ test("native MobileScroll delegates vertical gestures and click handling to the 
   expect(result.overscroll).toBe("0.00");
 });
 
+test("MobileScroll indicator reaches the exact ends of its visible track", async ({ page }) => {
+  const scroll = page.getByTestId("mobile-scroll");
+  const track = page.getByTestId("mobile-scrollbar");
+  const thumb = track.locator(".mobile-scrollbar-thumb");
+
+  await scroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const trackBox = await track.boundingBox();
+    const thumbBox = await thumb.boundingBox();
+    if (!trackBox || !thumbBox) return Number.POSITIVE_INFINITY;
+    return Math.abs(trackBox.y + trackBox.height - (thumbBox.y + thumbBox.height));
+  }).toBeLessThan(0.75);
+
+  await scroll.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+
+  await expect.poll(async () => {
+    const trackBox = await track.boundingBox();
+    const thumbBox = await thumb.boundingBox();
+    if (!trackBox || !thumbBox) return Number.POSITIVE_INFINITY;
+    return Math.abs(trackBox.y - thumbBox.y);
+  }).toBeLessThan(0.75);
+});
+
 test("horizontal intent stays in Carousel and cannot create parent momentum", async ({ page }) => {
   const carousel = page.locator(".fixture-carousel");
   const card = page.locator(".carousel-card").nth(1);
@@ -486,6 +515,12 @@ test("FlowStack pushes and pops screens while dismissing the keyboard", async ({
 
   await page.getByRole("button", { name: "Push level 2" }).click();
   await expect(page.getByRole("heading", { name: "Screen stacking works" })).toBeVisible();
+  await expect(page.locator('[data-flow-current="false"]')).toHaveAttribute("inert", "");
+  await expect(page.locator('[data-flow-current="false"]')).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(page.getByRole("heading", { name: "Screen stacking works" })).toBeFocused();
   await expect(page.getByTestId("keyboard-dock")).toHaveAttribute("data-visible", "false");
   const safeHeaderPlacement = await page.evaluate(() => {
     const screen = document.querySelector<HTMLElement>('[data-testid="device-screen"]')!;
@@ -505,4 +540,14 @@ test("FlowStack pushes and pops screens while dismissing the keyboard", async ({
   await expect(page.getByRole("heading", { name: "Screen stacking works" })).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("heading", { name: "Flow root" })).toBeVisible();
+});
+
+test("FlowStack azaltılmış hareket tercihinde sahne geçişini anında tamamlar", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/tests/runtime-fixture.html?fixture=flow");
+  await page.getByRole("button", { name: "Push level 2" }).click();
+
+  const current = page.getByTestId("flow-current");
+  await expect(page.getByRole("heading", { name: "Screen stacking works" })).toBeFocused();
+  await expect(current).toHaveCSS("transform", "none");
 });

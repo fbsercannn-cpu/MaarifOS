@@ -9,6 +9,7 @@ export const CALENDAR_ENTRY_TYPES = [
   "fruit_day",
   "activity",
   "adaptation_day",
+  "no_school",
   "official_marker",
 ] as const;
 

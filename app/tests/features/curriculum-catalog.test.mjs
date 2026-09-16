@@ -7,6 +7,7 @@ import {
   STARTER_CURRICULUM_TARGETS,
   curriculumAgeBandFromLabel,
   curriculumTargetsForProfile,
+  curriculumTargetsForResolvedAgeBand,
 } from "../../src/features/curriculum/curriculum-catalog.ts";
 import {
   TYMM_2024_AGE_BANDS,
@@ -242,7 +243,7 @@ test("kod, başlık, alan, yaş ve sayfa içeriği sabit katalog digest'i ile ko
   );
 });
 
-test("katalog adaptörü TYMM'yi yaşa göre filtreler ve yedek snapshot'ına yeni alan sızdırmaz", () => {
+test("katalog adaptörü TYMM'yi yaşa göre filtreler ve kaynak kanıtını snapshot'ta korur", () => {
   const profile = {
     framework: "tymm",
     programLabel: "Türkiye Yüzyılı Maarif Modeli",
@@ -267,8 +268,9 @@ test("katalog adaptörü TYMM'yi yaşa göre filtreler ve yedek snapshot'ına ye
         target.kind === "learning-outcome" &&
         target.catalogId === TYMM_2024_CATALOG_METADATA.catalogId &&
         target.sourceVersion === TYMM_2024_CATALOG_METADATA.sourceVersion &&
-        !Object.hasOwn(target, "ageBands") &&
-        !Object.hasOwn(target, "sourcePage"),
+        target.ageBands?.length === 1 &&
+        Number.isInteger(target.sourcePage) &&
+        target.sourceSha256 === TYMM_2024_CATALOG_METADATA.sourceSha256,
     ),
   );
 
@@ -276,6 +278,12 @@ test("katalog adaptörü TYMM'yi yaşa göre filtreler ve yedek snapshot'ına ye
   assert.equal(curriculumAgeBandFromLabel("48 - 60 AY"), "48-60");
   assert.equal(curriculumAgeBandFromLabel("60-72"), "60-72");
   assert.equal(curriculumAgeBandFromLabel("5 yaş"), null);
+  assert.deepEqual(curriculumTargetsForResolvedAgeBand(profile, null), []);
+  assert.deepEqual(curriculumTargetsForResolvedAgeBand(profile, undefined), []);
+  assert.equal(
+    curriculumTargetsForResolvedAgeBand(profile, "60-72").length,
+    targets60.length,
+  );
 });
 
 test("MEB 2024 legacy başlangıç hedefleri partial kalır", () => {

@@ -43,7 +43,11 @@ const VERIFIED_ACCESS_MARK = Symbol("maarifos-verified-premium-access");
 export interface VerifiedPremiumAccess {
   readonly [VERIFIED_ACCESS_MARK]: true;
   readonly status: PremiumAccessStatus;
-  readonly source: "signed-entitlement" | "development-preview";
+  readonly source:
+    | "signed-entitlement"
+    | "development-preview"
+    | "shared-built-in";
+  readonly claims: PremiumEntitlementClaims | null;
   readonly entitlementId: string;
   readonly deviceKeyThumbprint: string;
   readonly grant: PremiumEntitlementGrant;
@@ -239,7 +243,7 @@ function parseClaims(value: Record<string, unknown>): PremiumEntitlementClaims {
   if (!Array.isArray(value.grants) || value.grants.length === 0 || value.grants.length > 20) {
     throw new Error("Premium entitlement en az bir ve en fazla yirmi grant taşımalıdır.");
   }
-  const grants = value.grants.map(parseGrant);
+  const grants = Object.freeze(value.grants.map(parseGrant));
   const uniqueGrants = new Set(
     grants.map((grant) => `${grant.sku}\u0000${grant.contentReleaseId}`),
   );
@@ -322,6 +326,7 @@ function accessForGrant(
     [VERIFIED_ACCESS_MARK]: true as const,
     status,
     source: "signed-entitlement" as const,
+    claims,
     entitlementId: claims.entitlementId,
     deviceKeyThumbprint: claims.deviceKeyThumbprint,
     grant,
@@ -489,10 +494,84 @@ export function createDevelopmentPreviewAccess(input: {
     [VERIFIED_ACCESS_MARK]: true as const,
     status: "active" as const,
     source: "development-preview" as const,
+    claims: null,
     entitlementId: "development-preview",
     deviceKeyThumbprint: "development-preview",
     grant: Object.freeze({
       ...input,
+      accessMode: "staff-code" as const,
+      trialStartedAt: null,
+      accessExpiresAt: null,
+    }),
+    canUsePremiumContent: true,
+    canExportPremiumContent: true,
+    canReadExistingTeacherPlans: true as const,
+    clockRollbackDetected: false,
+    verifiedAtEpochSeconds,
+    offlineUntilEpochSeconds: Number.MAX_SAFE_INTEGER,
+    decisionExpiresAtEpochSeconds: Number.MAX_SAFE_INTEGER,
+  });
+}
+
+const SHARED_BUILT_IN_PACKS: readonly PremiumPackAccessReference[] =
+  Object.freeze([
+    Object.freeze({
+      sku: "TYMM-6072",
+      contentReleaseId: "tymm-6072-2026-09-v2",
+      id: "maarifos-tymm-6072-2026-2027-v2",
+      version: "2.0.0",
+      manifestDigest:
+        "sha256:f59acdadd13d535936ef23bd4667914e49ef8cec96a5acc72ef33008a979d2a1",
+      academicRelease: "2026-2027",
+    }),
+    Object.freeze({
+      sku: "TYMM-6072",
+      contentReleaseId: "tymm-6072-2026-09-v3",
+      id: "maarifos-tymm-6072-2026-2027-v3",
+      version: "3.0.0",
+      manifestDigest:
+        "sha256:9b4c2bcc155e3f6f8567ba5737249cd417405bc4205b75b68d194e63ca3eff1e",
+      academicRelease: "2026-2027",
+    }),
+  ]);
+
+/**
+ * Ortak uygulama koduyla açılan, sürüme gömülü ve hash zinciri doğrulanmış
+ * Maarif içeriğini eski export API'lerine taşır. Yalnız exact v2/v3 kaynak
+ * kimlikleri kabul edilir; bu helper satın alma, deneme veya cihaz lisansı
+ * üretmez.
+ */
+export function createSharedBuiltInAccess(
+  input: PremiumPackAccessReference,
+): VerifiedPremiumAccess {
+  const exactPack = SHARED_BUILT_IN_PACKS.find(
+    (candidate) =>
+      candidate.sku === input.sku &&
+      candidate.contentReleaseId === input.contentReleaseId &&
+      candidate.id === input.id &&
+      candidate.version === input.version &&
+      candidate.manifestDigest === input.manifestDigest &&
+      candidate.academicRelease === input.academicRelease,
+  );
+  if (!exactPack) {
+    throw new Error("Yerleşik Maarif içerik kimliği doğrulanamadı.");
+  }
+
+  const verifiedAtEpochSeconds = Math.floor(Date.now() / 1000);
+  return Object.freeze({
+    [VERIFIED_ACCESS_MARK]: true as const,
+    status: "active" as const,
+    source: "shared-built-in" as const,
+    claims: null,
+    entitlementId: `shared-built-in:${exactPack.id}`,
+    deviceKeyThumbprint: "shared-built-in",
+    grant: Object.freeze({
+      sku: exactPack.sku,
+      contentReleaseId: exactPack.contentReleaseId,
+      contentPackId: exactPack.id,
+      contentPackVersion: exactPack.version,
+      manifestDigest: exactPack.manifestDigest,
+      academicRelease: exactPack.academicRelease,
       accessMode: "staff-code" as const,
       trialStartedAt: null,
       accessExpiresAt: null,

@@ -3,17 +3,15 @@ import { expect, test, type Page } from "@playwright/test";
 const RELEASE_STORAGE_KEY = "maarifos.release.acknowledgement.v1";
 
 async function configureClassroom(page: Page) {
-  const setup = page.getByRole("dialog", { name: "Sınıf kurulumu" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   await expect(setup).toBeVisible();
+  await setup.getByLabel("Okul adı").fill("Kurgu Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Emine Öğretmen");
   await setup.getByLabel("Sınıf adı").fill("Güneş Sınıfı");
-  await setup.getByLabel("Yaş grubu").selectOption({ label: "60–72 ay" });
-  await setup.getByLabel("Çalışma düzeni").selectOption("morning");
   await setup
-    .getByLabel("Uygulanan program")
-    .selectOption({ label: "Türkiye Yüzyılı Maarif Modeli" });
-  await setup.getByRole("button", {
-    name: "Sınıfı ve çalışma düzenini kaydet",
-  }).click();
+    .getByLabel("Maarif Modeli yaş grubu")
+    .selectOption({ label: "60–72 ay" });
+  await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
@@ -26,11 +24,11 @@ test("boş yeni kurulum yanıltıcı güncellendi bildirimi göstermez", async (
     page.getByRole("dialog", { name: "MaarifOS güncellendi" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("dialog", { name: "Sınıf kurulumu" }),
+    page.getByRole("dialog", { name: "Sınıfını hazırla" }),
   ).toBeVisible();
 });
 
-test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda korur", async ({
+test("eski sürümden sonra güncellemeyi sessizce kaydeder ve tarihli notları ayarlarda korur", async ({
   page,
 }) => {
   await page.goto("/?native=1");
@@ -49,21 +47,19 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
 
   await page.reload();
 
-  const updateDialog = page.getByRole("dialog", {
-    name: "MaarifOS güncellendi",
-  });
-  await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.8.0");
-  await expect(updateDialog).toContainText("8 Ağustos 2026");
-  await expect(updateDialog).toContainText(
-    "Değerler eğitimi ve güvenli öğretmen akışı güçlendi",
-  );
-  await expect(updateDialog).toContainText("Sürüm 0.2.0 → 0.8.0");
-  await expect(updateDialog).toContainText("Kayıtlarınız korundu");
-  await updateDialog.getByRole("button", {
-    name: "Harika, başlayalım",
-  }).click();
-  await expect(updateDialog).toBeHidden();
+  await expect(
+    page.getByRole("dialog", { name: "MaarifOS güncellendi" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "MaarifOS 0.37.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect.poll(async () => page.evaluate((storageKey) => {
+    const value = window.localStorage.getItem(storageKey);
+    return value ? JSON.parse(value).acknowledgedVersion : null;
+  }, RELEASE_STORAGE_KEY)).toBe("0.37.0");
 
   await page.reload();
   await expect(
@@ -74,17 +70,17 @@ test("eski sürümden sonra tarihli notları bir kez gösterir ve ayarlarda koru
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.8.0");
-  await expect(settings).toContainText("8 Ağustos 2026");
+  await expect(settings).toContainText("MaarifOS 0.37.0");
+  await expect(settings).toContainText("10 Eylül 2026");
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
   await expect(settings).toContainText(
-    "Saygı, sorumluluk ve adalet merkezli Değerler Pedagojisi altyapısı",
+    "Belge merkezinde ders öncesi hazırlık, basılı sınıf kullanımı ve ders sonrası kayıt ayrılır; telefon sınıf içinde zorunlu tutulmaz ve yalnız kurumun güncel yetkili kanalı belirtilir.",
   );
 });
 
-test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", async ({
+test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi sessizce kaydeder", async ({
   page,
 }) => {
   await page.goto("/?native=1");
@@ -95,12 +91,19 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi görür", as
 
   await page.reload();
 
-  const updateDialog = page.getByRole("dialog", {
-    name: "MaarifOS güncellendi",
-  });
-  await expect(updateDialog).toBeVisible();
-  await expect(updateDialog).toContainText("Sürüm 0.8.0");
-  await expect(updateDialog).not.toContainText("Sürüm 0.2.0 → 0.8.0");
+  await expect(
+    page.getByRole("dialog", { name: "MaarifOS güncellendi" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "MaarifOS 0.37.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect.poll(async () => page.evaluate((storageKey) => {
+    const value = window.localStorage.getItem(storageKey);
+    return value ? JSON.parse(value).acknowledgedVersion : null;
+  }, RELEASE_STORAGE_KEY)).toBe("0.37.0");
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({
@@ -110,9 +113,7 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await configureClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım" }).click();
-  await page
-    .getByRole("button", { name: "Çocuk ekle", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   const studentName = addSheet.getByLabel("Çocuğun adı");
   await studentName.fill("Kaydedilmemiş öğretmen girdisi");
@@ -126,6 +127,42 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await expect(addSheet).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Şimdi güncelle" }),
+    page.getByRole("button", { name: /MaarifOS 0\.37\.0 hazır.*Yenile/ }),
   ).toBeVisible();
+});
+
+test("ana ekran ve Ayarlar bekleyen worker'ın gerçek sürümünü gösterir", async ({
+  page,
+}) => {
+  await page.goto("/?native=1");
+  await configureClassroom(page);
+
+  await page.evaluate(() => {
+    const status = {
+      phase: "update-ready",
+      offlineReady: true,
+      version: "0.11.0",
+      activeVersion: "0.10.0",
+      updateVersion: "0.11.0",
+      lastCheckedAt: "2026-08-09T10:00:00.000Z",
+      message: "Yeni sürüm hazır; açık kaydınızı tamamladıktan sonra güncelleyebilirsiniz.",
+    };
+    (window as Window & { __maarifosPwaStatus?: typeof status }).__maarifosPwaStatus = status;
+    window.dispatchEvent(
+      new CustomEvent("maarifos:pwa-status", { detail: status }),
+    );
+  });
+
+  await expect(page.getByText("MaarifOS 0.11.0 hazır", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
+  const settings = page.getByRole("dialog", {
+    name: "Hesap ve veri güvenliği",
+  });
+  await expect(settings).toContainText("Çevrim dışı paket 0.10.0");
+  await expect(settings).toContainText("0.11.0 hazır");
+  await expect(
+    settings.getByRole("button", {
+      name: "0.11.0 sürümüne güvenle güncelle",
+    }),
+  ).toBeEnabled();
 });

@@ -18,6 +18,7 @@ import {
 } from "../../core/domain/classroom-scope.ts";
 import type { DataSnapshot, StoredRecord } from "../../core/domain/model.ts";
 import { migrateLegacyClassroomScopes } from "../../core/migrations/classroom-scope-migration.ts";
+import { migrateLegacyAcademicYearOperationalStart } from "../../core/migrations/academic-year-operational-migration.ts";
 import type { LocalDataStore } from "../../core/repository/contracts.ts";
 import {
   normalizeCurriculumProfile,
@@ -26,34 +27,28 @@ import {
 } from "../evidence/evidence-flow.ts";
 import {
   STUDENT_ENROLLMENT_VERSION,
+  latestStudentEnrollment,
   studentEnrollments,
   type StudentEnrollment,
 } from "../archive/academic-year-archive.ts";
-import { SPONTANEOUS_OBSERVATION_ACTIVITY_KIND } from "../evidence/spontaneous-observation.ts";
+import { isAuthenticSpontaneousObservationActivity } from "../evidence/spontaneous-observation-integrity.ts";
+import { isTeacherOwnedDailyFlow } from "../../core/domain/teacher-owned-daily-flow.ts";
+import {
+  academicYearEffectiveOperationalStart,
+  academicYearOperationalStatus,
+  type AcademicYearOperationalStatus,
+} from "../../core/domain/academic-year-operational.ts";
 
 export { ACTIVE_CLASSROOM_SETTING_ID, ACTIVE_CLASSROOM_SETTING_TYPE };
 
 export type TodayActivityStatus = "planned" | "in_progress" | "completed";
-export type AcademicYearOperationalStatus =
-  | "active"
-  | "preparation"
-  | "ended";
-
-export function academicYearOperationalStatus(
-  startDate: string,
-  endDate: string,
-  civilDate: string,
-): AcademicYearOperationalStatus {
-  if (!isCivilDate(startDate) || !isCivilDate(endDate) || !isCivilDate(civilDate)) {
-    throw new Error("Eğitim yılı çalışma durumu için geçerli tarihler gereklidir.");
-  }
-  if (startDate > endDate) {
-    throw new Error("Eğitim yılı bitiş tarihi başlangıç tarihinden önce olamaz.");
-  }
-  if (civilDate < startDate) return "preparation";
-  if (civilDate > endDate) return "ended";
-  return "active";
-}
+export type TodayPlanItemKind =
+  | "activity"
+  | "premium-flow-block"
+  | "teacher-flow-block";
+export type TodayFlowBlockStatus = "planned" | "optional" | "skipped";
+export { academicYearOperationalStatus };
+export type { AcademicYearOperationalStatus };
 
 export function academicYearOperationalNotice(options: {
   status: AcademicYearOperationalStatus;
@@ -62,7 +57,7 @@ export function academicYearOperationalNotice(options: {
 }): string | null {
   if (options.status === "active") return null;
   if (options.status === "preparation") {
-    return `Hazırlık modu: eğitim yılı ${options.startDate} tarihinde başlayacak. Plan, yoklama ve gözlem için bugün etkin olan eğitim yılını seçin.`;
+    return `Yeni dönem hazır. Planlamaya devam edebilir veya çalışmayı bugün başlatıp yoklama, uygulama ve gözlemi hemen kullanabilirsiniz. Takvim başlangıcı ${options.startDate}.`;
   }
   return `Bu eğitim yılı ${options.endDate} tarihinde sona erdi. Plan, yoklama ve gözlem için yeni veya bugün etkin olan eğitim yılını seçin.`;
 }
@@ -74,10 +69,13 @@ export type ClassroomContext =
       academicYearId: string;
       academicYearName: string;
       academicYearStart: string;
+      academicYearOperationalStart?: string;
       academicYearEnd: string;
       operationalStatus: AcademicYearOperationalStatus;
       classroomId: string;
       classroomName: string;
+      schoolName?: string;
+      teacherName?: string;
       ageGroup?: string;
       curriculumProgram?: string;
       curriculumCatalogLabel?: string;
@@ -89,12 +87,24 @@ export type ClassroomContext =
 export interface TodayPlanItem {
   id: string;
   title: string;
-  startTime: string;
+  kind: TodayPlanItemKind;
+  startTime?: string;
   endTime?: string;
   subject?: string;
   curriculumConnection?: string;
   status: TodayActivityStatus;
   evidenceCount: number;
+  planId?: string;
+  activityId?: string;
+  activityTitle?: string;
+  flowBlockId?: string;
+  flowBlockStatus?: TodayFlowBlockStatus;
+  durationMinutes?: number;
+  purpose?: string;
+  flexibilityNote?: string;
+  transitionNote?: string;
+  teacherNote?: string;
+  canCaptureEvidence: boolean;
 }
 
 export interface TodayWorkspace {
@@ -117,6 +127,8 @@ export interface SaveClassroomConfigurationInput {
   classroom: {
     id?: string;
     name: string;
+    schoolName?: string;
+    teacherName?: string;
     ageGroup?: string;
     curriculumProgram?: string;
     curriculumCatalogLabel?: string;
@@ -130,6 +142,11 @@ export interface TransitionAcademicYearConfigurationInput
   extends SaveClassroomConfigurationInput {
   carryStudentIds: readonly string[];
   closedOn: string;
+  transitionKind?: "academic-year" | "same-period-curriculum";
+}
+
+export interface ActivateAcademicYearNowInput {
+  now?: Date;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -143,6 +160,18 @@ function requiredText(value: string, fieldName: string): string {
 function optionalText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
+}
+
+function normalizeIdentityText(value: string, fieldName: string): string {
+  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  if (!normalized) throw new Error(`${fieldName} boş bırakılamaz.`);
+  return normalized;
+}
+
+function existingIdentityText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  return normalized || undefined;
 }
 
 function validUuid(value: string | undefined, fieldName: string): string {
@@ -240,19 +269,30 @@ function classroomContext(
     }
   }
 
+  const schoolName = existingIdentityText(classroom.schoolName);
+  const teacherName = existingIdentityText(classroom.teacherName);
+
   return {
     status: "configured",
     academicYearId: classroom.academicYearId,
     academicYearName: academicYear.name.trim(),
     academicYearStart: academicYear.startDate,
+    ...(isCivilDate(academicYear.operationalStartDate)
+      ? { academicYearOperationalStart: academicYear.operationalStartDate }
+      : {}),
     academicYearEnd: academicYear.endDate,
     operationalStatus: academicYearOperationalStatus(
       academicYear.startDate,
       academicYear.endDate,
       civilDate,
+      isCivilDate(academicYear.operationalStartDate)
+        ? academicYear.operationalStartDate
+        : undefined,
     ),
     classroomId: classroom.id,
     classroomName: classroom.name.trim(),
+    ...(schoolName ? { schoolName } : {}),
+    ...(teacherName ? { teacherName } : {}),
     ...(classroom.ageGroup ? { ageGroup: classroom.ageGroup } : {}),
     ...(classroom.curriculumProgram ? { curriculumProgram: classroom.curriculumProgram } : {}),
     ...(classroom.curriculumCatalogLabel
@@ -288,6 +328,7 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
   return {
     id: record.id,
     title: record.title.trim(),
+    kind: "activity",
     startTime: record.startTime,
     ...(typeof record.endTime === "string" ? { endTime: record.endTime } : {}),
     ...(typeof record.subject === "string" && record.subject.trim()
@@ -298,24 +339,304 @@ function activityFromRecord(record: StoredRecord, civilDate: string): TodayPlanI
       : {}),
     status,
     evidenceCount: Math.max(0, storedCount),
+    ...(typeof record.planId === "string" ? { planId: record.planId } : {}),
+    activityId: record.id,
+    activityTitle: record.title.trim(),
+    canCaptureEvidence: true,
   };
 }
 
-export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
-  const civilDate = civilDateInIstanbul(now);
+interface PremiumFlowBlockRecord {
+  id: string;
+  title: string;
+  purpose?: string;
+  flexibilityNote?: string;
+  status: TodayFlowBlockStatus;
+  durationMinutes: number;
+  transitionNote?: string;
+  teacherNote?: string;
+  selectedActivityTemplateIds: string[];
+  alternativeActivityTemplateIds: string[];
+  appliedActivityTemplateIds: string[];
+}
+
+function optionalRecordText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function recordStringIds(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return null;
+  }
+  return [...new Set(value)];
+}
+
+function premiumFlowBlocksFromPlan(
+  plan: StoredRecord,
+  civilDate: string,
+): PremiumFlowBlockRecord[] | null {
+  if (
+    plan.planType !== "daily" ||
+    plan.civilDate !== civilDate ||
+    typeof plan.deletedAt === "string" ||
+    !plan.premiumDailyFlowSnapshot ||
+    typeof plan.premiumDailyFlowSnapshot !== "object" ||
+    Array.isArray(plan.premiumDailyFlowSnapshot)
+  ) {
+    return null;
+  }
+  const snapshot = plan.premiumDailyFlowSnapshot as Record<string, unknown>;
+  if (snapshot.planCivilDate !== civilDate || !Array.isArray(snapshot.blocks)) {
+    return null;
+  }
+  const parsed: PremiumFlowBlockRecord[] = [];
+  for (const candidate of snapshot.blocks) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return null;
+    }
+    const block = candidate as Record<string, unknown>;
+    const id = optionalRecordText(block.id);
+    const title = optionalRecordText(block.title);
+    const status = block.status;
+    const durationMinutes = block.durationMinutes;
+    const selectedActivityTemplateIds = recordStringIds(
+      block.selectedActivityTemplateIds,
+    );
+    const alternativeActivityTemplateIds = recordStringIds(
+      block.alternativeActivityTemplateIds,
+    );
+    const appliedActivityTemplateIds = recordStringIds(
+      block.appliedActivityTemplateIds,
+    );
+    if (
+      !id ||
+      !title ||
+      (status !== "planned" && status !== "optional" && status !== "skipped") ||
+      !Number.isInteger(durationMinutes) ||
+      (durationMinutes as number) < 5 ||
+      (durationMinutes as number) > 240 ||
+      !selectedActivityTemplateIds ||
+      !alternativeActivityTemplateIds ||
+      !appliedActivityTemplateIds
+    ) {
+      return null;
+    }
+    parsed.push({
+      id,
+      title,
+      ...(optionalRecordText(block.purpose)
+        ? { purpose: optionalRecordText(block.purpose) }
+        : {}),
+      ...(optionalRecordText(block.flexibilityNote)
+        ? { flexibilityNote: optionalRecordText(block.flexibilityNote) }
+        : {}),
+      status,
+      durationMinutes: durationMinutes as number,
+      ...(optionalRecordText(block.transitionNote)
+        ? { transitionNote: optionalRecordText(block.transitionNote) }
+        : {}),
+      ...(optionalRecordText(block.teacherNote)
+        ? { teacherNote: optionalRecordText(block.teacherNote) }
+        : {}),
+      selectedActivityTemplateIds,
+      alternativeActivityTemplateIds,
+      appliedActivityTemplateIds,
+    });
+  }
+  return parsed.length === 10 && new Set(parsed.map((block) => block.id)).size === 10
+    ? parsed
+    : null;
+}
+
+function activityTemplateId(item: TodayPlanItem, record: StoredRecord): string | null {
+  if (item.activityId !== record.id) return null;
+  return typeof record.appliedActivityTemplateId === "string"
+    ? record.appliedActivityTemplateId
+    : null;
+}
+
+function premiumFlowItemsFromPlan(
+  plan: StoredRecord,
+  blocks: readonly PremiumFlowBlockRecord[],
+  activityPairs: readonly { record: StoredRecord; item: TodayPlanItem }[],
+): { items: TodayPlanItem[]; consumedActivityIds: Set<string> } {
+  const planActivityPairs = activityPairs.filter(
+    ({ record }) => record.planId === plan.id,
+  );
+  const consumedActivityIds = new Set<string>();
+  const planAppliedTemplateId =
+    typeof plan.appliedActivityTemplateId === "string"
+      ? plan.appliedActivityTemplateId
+      : null;
+
+  const items = blocks.map((block) => {
+    const scheduledTemplateIds = new Set([
+      ...block.selectedActivityTemplateIds,
+      ...block.alternativeActivityTemplateIds,
+      ...block.appliedActivityTemplateIds,
+    ]);
+    const activityPair = planActivityPairs.find(({ record, item }) => {
+      if (consumedActivityIds.has(item.id)) return false;
+      const templateId = activityTemplateId(item, record) ?? planAppliedTemplateId;
+      return templateId !== null && scheduledTemplateIds.has(templateId);
+    });
+    if (activityPair) consumedActivityIds.add(activityPair.item.id);
+    const activity = activityPair?.item;
+    const canCaptureEvidence = Boolean(activity && block.status !== "skipped");
+    return {
+      id: activity?.id ?? `premium-flow:${plan.id}:${block.id}`,
+      title: block.title,
+      kind: "premium-flow-block" as const,
+      ...(activity?.startTime ? { startTime: activity.startTime } : {}),
+      ...(activity?.endTime ? { endTime: activity.endTime } : {}),
+      ...(activity?.subject ? { subject: activity.subject } : {}),
+      ...(activity?.curriculumConnection
+        ? { curriculumConnection: activity.curriculumConnection }
+        : {}),
+      status: activity?.status ?? "planned",
+      evidenceCount: activity?.evidenceCount ?? 0,
+      planId: plan.id,
+      ...(activity?.activityId ? { activityId: activity.activityId } : {}),
+      ...(activity?.title ? { activityTitle: activity.title } : {}),
+      flowBlockId: block.id,
+      flowBlockStatus: block.status,
+      durationMinutes: block.durationMinutes,
+      ...(block.purpose ? { purpose: block.purpose } : {}),
+      ...(block.flexibilityNote
+        ? { flexibilityNote: block.flexibilityNote }
+        : {}),
+      ...(block.transitionNote ? { transitionNote: block.transitionNote } : {}),
+      ...(block.teacherNote ? { teacherNote: block.teacherNote } : {}),
+      canCaptureEvidence,
+    };
+  });
+
+  return { items, consumedActivityIds };
+}
+
+function teacherOwnedFlowItemsFromPlan(
+  plan: StoredRecord,
+  activityPairs: readonly { record: StoredRecord; item: TodayPlanItem }[],
+): { items: TodayPlanItem[]; consumedActivityIds: Set<string> } | null {
+  if (!isTeacherOwnedDailyFlow(plan.teacherOwnedDailyFlow)) return null;
+  const planActivityPairs = activityPairs.filter(
+    ({ record }) => record.planId === plan.id,
+  );
+  const consumedActivityIds = new Set<string>();
+  const items = plan.teacherOwnedDailyFlow.blocks.map((block) => {
+    const activityPair = planActivityPairs.find(
+      ({ record, item }) =>
+        !consumedActivityIds.has(item.id) &&
+        record.teacherOwnedFlowBlockId === block.id,
+    );
+    if (activityPair) consumedActivityIds.add(activityPair.item.id);
+    const activity = activityPair?.item;
+    return {
+      id: activity?.id ?? `teacher-flow:${plan.id}:${block.id}`,
+      title: block.title,
+      kind: "teacher-flow-block" as const,
+      ...(activity?.startTime ? { startTime: activity.startTime } : {}),
+      ...(activity?.endTime ? { endTime: activity.endTime } : {}),
+      ...(activity?.subject ? { subject: activity.subject } : {}),
+      ...(activity?.curriculumConnection
+        ? { curriculumConnection: activity.curriculumConnection }
+        : {}),
+      status: activity?.status ?? "planned",
+      evidenceCount: activity?.evidenceCount ?? 0,
+      planId: plan.id,
+      ...(activity?.activityId ? { activityId: activity.activityId } : {}),
+      ...(activity?.title ? { activityTitle: activity.title } : {}),
+      flowBlockId: block.id,
+      flowBlockStatus: block.status,
+      durationMinutes: block.durationMinutes,
+      ...(block.transitionNote ? { transitionNote: block.transitionNote } : {}),
+      ...(block.teacherNote ? { teacherNote: block.teacherNote } : {}),
+      canCaptureEvidence: Boolean(activity && block.status !== "skipped"),
+    };
+  });
+  return { items, consumedActivityIds };
+}
+
+export function resolvePlanDayWorkspace(
+  snapshot: DataSnapshot,
+  civilDate: string,
+): TodayWorkspace {
+  if (!isCivilDate(civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
   const classroom = classroomContext(snapshot, civilDate);
   const scope = resolveActiveClassroomScope(snapshot);
   const scopedActivities = scope
     ? snapshot.activities.filter(
         (record) =>
-          record.activityKind !== SPONTANEOUS_OBSERVATION_ACTIVITY_KIND &&
+          !isAuthenticSpontaneousObservationActivity(
+            record,
+            snapshot.plans,
+            scope,
+            civilDate,
+          ) &&
           recordBelongsToClassroomScope(record, scope),
       )
     : [];
-  const basePlanItems = scopedActivities
-    .map((record) => activityFromRecord(record, civilDate))
-    .filter((item): item is TodayPlanItem => item !== null)
-    .sort((left, right) => left.startTime.localeCompare(right.startTime) || left.id.localeCompare(right.id));
+  const activityPairs = scopedActivities
+    .map((record) => ({ record, item: activityFromRecord(record, civilDate) }))
+    .filter(
+      (pair): pair is { record: StoredRecord; item: TodayPlanItem } =>
+        pair.item !== null,
+    );
+  const consumedActivityIds = new Set<string>();
+  const premiumFlowItems = scope
+    ? snapshot.plans
+        .filter((record) => recordBelongsToClassroomScope(record, scope))
+        .sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) ||
+            left.id.localeCompare(right.id),
+        )
+        .flatMap((plan) => {
+          const blocks = premiumFlowBlocksFromPlan(plan, civilDate);
+          if (!blocks) return [];
+          const projection = premiumFlowItemsFromPlan(plan, blocks, activityPairs);
+          for (const activityId of projection.consumedActivityIds) {
+            consumedActivityIds.add(activityId);
+          }
+          return projection.items;
+        })
+    : [];
+  const teacherOwnedFlowItems = scope
+    ? snapshot.plans
+        .filter(
+          (record) =>
+            record.civilDate === civilDate &&
+            recordBelongsToClassroomScope(record, scope),
+        )
+        .sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) ||
+            left.id.localeCompare(right.id),
+        )
+        .flatMap((plan) => {
+          const projection = teacherOwnedFlowItemsFromPlan(plan, activityPairs);
+          if (!projection) return [];
+          for (const activityId of projection.consumedActivityIds) {
+            consumedActivityIds.add(activityId);
+          }
+          return projection.items;
+        })
+    : [];
+  const unconsumedActivityItems = activityPairs
+    .map(({ item }) => item)
+    .filter((item) => !consumedActivityIds.has(item.id))
+    .sort(
+      (left, right) =>
+        (left.startTime ?? "99:99").localeCompare(right.startTime ?? "99:99") ||
+        left.id.localeCompare(right.id),
+    );
+  const basePlanItems = [
+    ...premiumFlowItems,
+    ...teacherOwnedFlowItems,
+    ...unconsumedActivityItems,
+  ];
   const todayObservations = scope
     ? snapshot.observations.filter(
         (record) =>
@@ -339,7 +660,9 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   }
   const planItems = basePlanItems.map((item) => ({
     ...item,
-    evidenceCount: evidenceCountByActivity.get(item.id) ?? item.evidenceCount,
+    evidenceCount: item.activityId
+      ? (evidenceCountByActivity.get(item.activityId) ?? item.evidenceCount)
+      : item.evidenceCount,
   }));
   const todayObservationIds = new Set(
     structuredTodayObservations.map((record) => record.id),
@@ -368,7 +691,10 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   return {
     civilDate,
     classroom,
-    currentActivity: planItems.find((item) => item.status === "in_progress") ?? null,
+    currentActivity:
+      planItems.find(
+        (item) => item.status === "in_progress" && item.canCaptureEvidence,
+      ) ?? null,
     planItems,
     pendingEvidenceLinks: structuredTodayObservations.filter(
       (record) => !linkedObservationIds.has(record.id),
@@ -378,11 +704,28 @@ export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()):
   };
 }
 
+export function resolveTodayWorkspace(snapshot: DataSnapshot, now = new Date()): TodayWorkspace {
+  return resolvePlanDayWorkspace(snapshot, civilDateInIstanbul(now));
+}
+
+export async function loadPlanDayWorkspace(
+  store: LocalDataStore,
+  options: { civilDate: string; now?: Date },
+): Promise<TodayWorkspace> {
+  if (!isCivilDate(options.civilDate)) {
+    throw new Error("Plan günü YYYY-AA-GG biçiminde olmalıdır.");
+  }
+  await migrateLegacyClassroomScopes(store, { now: options.now });
+  await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
+  return resolvePlanDayWorkspace(await store.readSnapshot(), options.civilDate);
+}
+
 export async function loadTodayWorkspace(
   store: LocalDataStore,
   options: { now?: Date } = {},
 ): Promise<TodayWorkspace> {
   await migrateLegacyClassroomScopes(store, { now: options.now });
+  await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
   return resolveTodayWorkspace(await store.readSnapshot(), options.now ?? new Date());
 }
 
@@ -403,6 +746,14 @@ export async function saveClassroomConfiguration(
   const classroomId = validUuid(input.classroom.id, "Sınıf");
   const academicYearName = requiredText(input.academicYear.name, "Eğitim yılı adı");
   const classroomName = requiredText(input.classroom.name, "Sınıf adı");
+  const requestedSchoolName =
+    input.classroom.schoolName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.schoolName, "Okul adı");
+  const requestedTeacherName =
+    input.classroom.teacherName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.teacherName, "Öğretmen adı soyadı");
   const schedule = normalizeClassroomSchedule(input.schedule);
   const curriculumProfile = input.classroom.curriculumProfile
     ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
@@ -441,6 +792,10 @@ export async function saveClassroomConfiguration(
           resolvedCurriculumProfile = undefined;
         }
       }
+      const resolvedSchoolName =
+        requestedSchoolName ?? existingIdentityText(existingClassroom?.schoolName);
+      const resolvedTeacherName =
+        requestedTeacherName ?? existingIdentityText(existingClassroom?.teacherName);
       const preservedClassroom: Record<string, unknown> = existingClassroom
         ? { ...existingClassroom }
         : {};
@@ -451,6 +806,8 @@ export async function saveClassroomConfiguration(
       delete preservedClassroom.curriculumProgram;
       delete preservedClassroom.curriculumCatalogLabel;
       delete preservedClassroom.curriculumProfileSnapshot;
+      delete preservedClassroom.schoolName;
+      delete preservedClassroom.teacherName;
       delete preservedSelection.archivedAt;
 
       await transaction.putMany("academicYears", [
@@ -474,6 +831,8 @@ export async function saveClassroomConfiguration(
           id: classroomId,
           academicYearId,
           name: classroomName,
+          ...(resolvedSchoolName ? { schoolName: resolvedSchoolName } : {}),
+          ...(resolvedTeacherName ? { teacherName: resolvedTeacherName } : {}),
           ...(optionalText(input.classroom.ageGroup)
             ? { ageGroup: optionalText(input.classroom.ageGroup) }
             : {}),
@@ -543,6 +902,14 @@ export async function transitionAcademicYearConfiguration(
     "Yeni eğitim yılı adı",
   );
   const nextClassroomName = requiredText(input.classroom.name, "Yeni sınıf adı");
+  const requestedSchoolName =
+    input.classroom.schoolName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.schoolName, "Okul adı");
+  const requestedTeacherName =
+    input.classroom.teacherName === undefined
+      ? undefined
+      : normalizeIdentityText(input.classroom.teacherName, "Öğretmen adı soyadı");
   const schedule = normalizeClassroomSchedule(input.schedule);
   const curriculumProfile = input.classroom.curriculumProfile
     ? normalizeCurriculumProfile(input.classroom.curriculumProfile)
@@ -602,6 +969,12 @@ export async function transitionAcademicYearConfiguration(
       if (!currentAcademicYear || !currentClassroom) {
         throw new Error("Arşivlenecek etkin eğitim yılı veya sınıf bulunamadı.");
       }
+      const samePeriodCurriculumTransition =
+        input.transitionKind === "same-period-curriculum";
+      const nextSchoolName =
+        requestedSchoolName ?? existingIdentityText(currentClassroom.schoolName);
+      const nextTeacherName =
+        requestedTeacherName ?? existingIdentityText(currentClassroom.teacherName);
       if (
         typeof currentAcademicYear.startDate !== "string" ||
         typeof currentAcademicYear.endDate !== "string" ||
@@ -612,7 +985,46 @@ export async function transitionAcademicYearConfiguration(
           "Önceki eğitim yılı kapanış günü kendi tarih aralığında olmalıdır.",
         );
       }
-      if (input.academicYear.startDate <= input.closedOn) {
+      if (samePeriodCurriculumTransition) {
+        const currentAcademicYearName =
+          typeof currentAcademicYear.name === "string"
+            ? currentAcademicYear.name.trim()
+            : "";
+        if (
+          nextAcademicYearName !== currentAcademicYearName ||
+          input.academicYear.startDate !== currentAcademicYear.startDate ||
+          input.academicYear.endDate !== currentAcademicYear.endDate
+        ) {
+          throw new Error(
+            "Aynı dönem program geçişinde eğitim yılı adı ve tarihleri değiştirilemez.",
+          );
+        }
+        if (curriculumProfile?.framework !== "tymm") {
+          throw new Error(
+            "Aynı dönem program geçişi yalnız yeni bir Maarif Modeli profiliyle yapılabilir.",
+          );
+        }
+        if (
+          typeof currentClassroom.curriculumProfileSnapshot === "object" &&
+          currentClassroom.curriculumProfileSnapshot !== null &&
+          !Array.isArray(currentClassroom.curriculumProfileSnapshot)
+        ) {
+          let currentFramework: CurriculumProfileSnapshot["framework"] | null =
+            null;
+          try {
+            currentFramework = normalizeCurriculumProfile(
+              currentClassroom.curriculumProfileSnapshot as unknown as CurriculumProfileInput,
+            ).framework;
+          } catch {
+            currentFramework = null;
+          }
+          if (currentFramework === "tymm") {
+            throw new Error(
+              "Etkin sınıf zaten Türkiye Yüzyılı Maarif Modeli profilini kullanıyor.",
+            );
+          }
+        }
+      } else if (input.academicYear.startDate <= input.closedOn) {
         throw new Error(
           "Yeni eğitim yılı başlangıcı önceki yılın kapanışından sonra olmalıdır.",
         );
@@ -638,11 +1050,7 @@ export async function transitionAcademicYearConfiguration(
       const carrySet = new Set(carryStudentIds);
       const changedStudents = currentStudents.map((student) => {
         const enrollments = studentEnrollments(student);
-        const currentEnrollment = enrollments.find(
-          (enrollment) =>
-            enrollment.academicYearId === currentScope.academicYearId &&
-            enrollment.classroomId === currentScope.classroomId,
-        );
+        const currentEnrollment = latestStudentEnrollment(enrollments, currentScope);
         const closedEnrollment: StudentEnrollment = {
           ...(currentEnrollment ?? {}),
           id: currentEnrollment?.id ?? crypto.randomUUID(),
@@ -678,7 +1086,9 @@ export async function transitionAcademicYearConfiguration(
           id: crypto.randomUUID(),
           academicYearId: nextAcademicYearId,
           classroomId: nextClassroomId,
-          startedOn: input.academicYear.startDate,
+          startedOn: samePeriodCurriculumTransition
+            ? input.closedOn
+            : input.academicYear.startDate,
           status: "active",
           schemaVersion: STUDENT_ENROLLMENT_VERSION,
         };
@@ -727,6 +1137,8 @@ export async function transitionAcademicYearConfiguration(
           id: nextClassroomId,
           academicYearId: nextAcademicYearId,
           name: nextClassroomName,
+          ...(nextSchoolName ? { schoolName: nextSchoolName } : {}),
+          ...(nextTeacherName ? { teacherName: nextTeacherName } : {}),
           ...(optionalText(input.classroom.ageGroup)
             ? { ageGroup: optionalText(input.classroom.ageGroup) }
             : {}),
@@ -776,7 +1188,9 @@ export async function transitionAcademicYearConfiguration(
       await transaction.putMany("auditLogs", [
         {
           id: crypto.randomUUID(),
-          action: "academic-year-transitioned",
+          action: samePeriodCurriculumTransition
+            ? "curriculum-profile-transitioned"
+            : "academic-year-transitioned",
           entityType: "academicYear",
           entityId: nextAcademicYearId,
           classroomCount: 1,
@@ -794,6 +1208,100 @@ export async function transitionAcademicYearConfiguration(
   const context = (await loadTodayWorkspace(store, { now })).classroom;
   if (context.status !== "configured") {
     throw new Error("Yeni eğitim yılı oluşturuldu ancak etkin sınıf okunamadı.");
+  }
+  return context;
+}
+
+/**
+ * Öğretmen, resmî/veri takvimi başlangıcını değiştirmeden seçili dönemi bu
+ * cihazda gerçek kayıt kullanımına açabilir. Yalnız operasyon başlangıcı ve
+ * denetim izi yazılır; dönem tarihleri ile öğrenci üyelikleri korunur.
+ */
+export async function activateAcademicYearNow(
+  store: LocalDataStore,
+  input: ActivateAcademicYearNowInput = {},
+): Promise<ClassroomContext> {
+  const now = input.now ?? new Date();
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Geçerli bir çalışma başlangıç zamanı gerekli.");
+  }
+  const timestamp = now.toISOString();
+  const civilDate = civilDateInIstanbul(now);
+
+  await store.transaction(
+    "readwrite",
+    ["academicYears", "classrooms", "settings", "auditLogs"],
+    async (transaction) => {
+      const [academicYears, classrooms, settings] =
+        await Promise.all([
+          transaction.getAll("academicYears"),
+          transaction.getAll("classrooms"),
+          transaction.getAll("settings"),
+        ]);
+      const scope = resolveActiveClassroomScope({
+        academicYears,
+        classrooms,
+        settings,
+      });
+      if (!scope) {
+        throw new Error("Çalışmayı başlatmak için etkin sınıf bulunmalıdır.");
+      }
+      const academicYear = academicYears.find(
+        (record) => record.id === scope.academicYearId,
+      );
+      if (
+        !academicYear ||
+        academicYear.status === "archived" ||
+        typeof academicYear.deletedAt === "string" ||
+        !isCivilDate(academicYear.startDate) ||
+        !isCivilDate(academicYear.endDate)
+      ) {
+        throw new Error("Etkin eğitim yılı doğrulanamadı.");
+      }
+      if (civilDate > academicYear.endDate) {
+        throw new Error("Sona ermiş eğitim yılı bugün için yeniden açılamaz.");
+      }
+      const effectiveStart = academicYearEffectiveOperationalStart({
+        startDate: academicYear.startDate,
+        operationalStartDate:
+          typeof academicYear.operationalStartDate === "string"
+            ? academicYear.operationalStartDate
+            : undefined,
+      });
+      if (civilDate >= effectiveStart) return;
+
+      await transaction.putMany("academicYears", [
+        {
+          ...academicYear,
+          operationalStartDate: civilDate,
+          operationalStartedAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ]);
+      await transaction.putMany("auditLogs", [
+        {
+          id: crypto.randomUUID(),
+          action: "academic-year-activated-early",
+          entityType: "academicYear",
+          entityId: scope.academicYearId,
+          classroomId: scope.classroomId,
+          metadata: {
+            dataStartDate: academicYear.startDate,
+            operationalStartDate: civilDate,
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          civilDate,
+          deletedAt: null,
+          schemaVersion: 1,
+        },
+      ]);
+    },
+  );
+
+  const context = (await loadTodayWorkspace(store, { now })).classroom;
+  if (context.status !== "configured" || context.operationalStatus !== "active") {
+    throw new Error("Eğitim yılı başlatıldı ancak çalışma alanı yeniden açılamadı.");
   }
   return context;
 }
@@ -816,38 +1324,53 @@ export async function setTodayActivityStatus(
     throw new Error("Etkinliği güncellemek için önce aktif sınıf yapılandırılmalıdır.");
   }
 
-  await store.transaction("readwrite", ["activities"], async (transaction) => {
-    const activities = await transaction.getAll("activities");
-    const existing = activities.find(
-      (record) =>
-        record.id === activityId &&
-        typeof record.deletedAt !== "string" &&
-        recordBelongsToClassroomScope(record, scope),
-    );
-    if (!existing) {
-      throw new Error("Etkinlik aktif sınıfta bulunamadı; mevcut kayıtlar değiştirilmedi.");
-    }
-    if (
-      status === "in_progress" &&
-      activities.some(
+  await store.transaction(
+    "readwrite",
+    ["plans", "activities"],
+    async (transaction) => {
+      const [plans, activities] = await Promise.all([
+        transaction.getAll("plans"),
+        transaction.getAll("activities"),
+      ]);
+      const existing = activities.find(
         (record) =>
-          record.id !== activityId &&
-          record.status === "in_progress" &&
-          record.civilDate === existing.civilDate &&
+          record.id === activityId &&
           typeof record.deletedAt !== "string" &&
           recordBelongsToClassroomScope(record, scope),
-      )
-    ) {
-      throw new Error(
-        "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
       );
-    }
-    await transaction.putMany("activities", [
-      {
-        ...existing,
-        status,
-        updatedAt: now.toISOString(),
-      },
-    ]);
-  });
+      if (!existing) {
+        throw new Error(
+          "Etkinlik aktif sınıfta bulunamadı; mevcut kayıtlar değiştirilmedi.",
+        );
+      }
+      if (
+        status === "in_progress" &&
+        activities.some(
+          (record) =>
+            record.id !== activityId &&
+            record.status === "in_progress" &&
+            !isAuthenticSpontaneousObservationActivity(
+              record,
+              plans,
+              scope,
+              existing.civilDate,
+            ) &&
+            record.civilDate === existing.civilDate &&
+            typeof record.deletedAt !== "string" &&
+            recordBelongsToClassroomScope(record, scope),
+        )
+      ) {
+        throw new Error(
+          "Bu gün için başka bir etkinlik devam ediyor; önce onu tamamlayın.",
+        );
+      }
+      await transaction.putMany("activities", [
+        {
+          ...existing,
+          status,
+          updatedAt: now.toISOString(),
+        },
+      ]);
+    },
+  );
 }

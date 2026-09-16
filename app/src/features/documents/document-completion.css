@@ -1,0 +1,11 @@
+.month-package-panel, .document-history-panel { min-width: 0; padding: 16px; border: 1px solid #d5e3e8; border-radius: 18px; background: #fff; color: #17324d; overflow-wrap: anywhere; }
+.month-package-panel h2, .document-history-panel h3 { margin: 0 0 8px; font-size: 17px; }
+.month-package-panel p, .document-history-panel p { font-size: 13px; line-height: 1.5; }
+.month-package-panel button, .document-history-panel button { min-height: 44px; max-width: 100%; padding: 10px 12px; border: 1px solid #387b83; border-radius: 10px; background: #e4f4f2; color: #17324d; font: inherit; font-size: 13px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.month-package-panel button:disabled, .document-history-panel button:disabled { opacity: .5; cursor: default; }
+.month-package-panel label { min-height: 44px; font-size: 13px; line-height: 1.5; }
+.month-package-panel input[type="month"] { min-height: 44px; max-width: 100%; padding: 8px; border: 1px solid #8aa6b2; border-radius: 8px; color: #17324d; background: #fff; font: inherit; }
+.month-package-panel input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: #187c7b; }
+.month-package-panel button:focus-visible, .document-history-panel button:focus-visible { outline: 3px solid #117eaa; outline-offset: 3px; }
+.document-history-panel article { padding: 12px 0; border-top: 1px solid #d5e3e8; }
+.document-history-panel article strong { font-size: 14px; }

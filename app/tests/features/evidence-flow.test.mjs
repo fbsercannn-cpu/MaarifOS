@@ -6,6 +6,7 @@ import {
   ACTIVE_CLASSROOM_SETTING_TYPE,
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
+import { canonicalJson } from "../../src/core/backup/canonical-json.ts";
 import { archiveAcademicYear } from "../../src/features/archive/academic-year-archive.ts";
 import {
   CURRICULUM_PROGRAM_LABELS,
@@ -18,10 +19,13 @@ import {
   normalizeCurriculumProfile,
 } from "../../src/features/evidence/evidence-flow.ts";
 import {
+  OFFICIAL_STARTER_CATALOG_PROFILES,
   STARTER_CURRICULUM_TARGETS,
   curriculumTargetsForProfile,
 } from "../../src/features/curriculum/curriculum-catalog.ts";
 import { persistDashboardObservation } from "../../src/features/dashboard/dashboard-data.ts";
+import { ACTIVITY_STUDIO_ITEMS } from "../../src/features/activity-studio/activity-studio-model.ts";
+import { createPedagogicalPlanBridge } from "../../src/features/pedagogical-os/pedagogical-plan-bridge.ts";
 
 class MemoryStore {
   snapshot;
@@ -125,6 +129,97 @@ function activeStore() {
   return new MemoryStore(snapshot);
 }
 
+test("pedagojik öneri kaynağı plan ve etkinliğe aynı atomik snapshot olarak yazılır", async () => {
+  const store = activeStore();
+  const sourceActivity = ACTIVITY_STUDIO_ITEMS.find((item) =>
+    item.ageBands.includes("48-60"),
+  );
+  assert.ok(sourceActivity);
+  const pedagogicalProvenance = createPedagogicalPlanBridge({
+    activity: sourceActivity,
+    civilDate: "2026-09-01",
+    ageBand: "48-60",
+    scenarioId: "low-energy",
+    participationRouteId: "movement",
+    now: new Date("2026-09-01T06:05:00.000Z"),
+  });
+
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planId,
+    planTitle: `${sourceActivity.title} planı`,
+    activityId,
+    activityTitle: sourceActivity.title,
+    startTime: "09:30",
+    endTime: "10:00",
+    curriculumProfile,
+    ...planAssignment,
+    pedagogicalProvenance,
+    now: new Date("2026-09-01T06:10:00.000Z"),
+  });
+
+  assert.deepEqual(
+    result.plan.pedagogicalProvenance,
+    pedagogicalProvenance,
+  );
+  assert.deepEqual(
+    result.activity.pedagogicalProvenance,
+    pedagogicalProvenance,
+  );
+  const snapshot = await store.readSnapshot();
+  assert.deepEqual(
+    snapshot.plans[0].pedagogicalProvenance,
+    snapshot.activities[0].pedagogicalProvenance,
+  );
+
+});
+
+test("farklı gün taşıyan özgün pedagojik kaynak doğrudan servis çağrısında plan gününe atomik bağlanır", async () => {
+  const store = activeStore();
+  const sourceActivity = ACTIVITY_STUDIO_ITEMS.find((item) =>
+    item.ageBands.includes("48-60"),
+  );
+  assert.ok(sourceActivity);
+  const pedagogicalProvenance = createPedagogicalPlanBridge({
+    activity: sourceActivity,
+    civilDate: "2026-09-02",
+    ageBand: "48-60",
+    scenarioId: "balanced",
+    participationRouteId: "multiple",
+    now: new Date("2026-09-01T06:05:00.000Z"),
+  });
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planTitle: `${sourceActivity.title} planı`,
+    activityTitle: sourceActivity.title,
+    startTime: "09:30",
+    endTime: "10:00",
+    curriculumProfile,
+    ...planAssignment,
+    pedagogicalProvenance,
+    now: new Date("2026-09-01T06:10:00.000Z"),
+  });
+
+  assert.equal(pedagogicalProvenance.civilDate, "2026-09-02");
+  assert.equal(result.plan.civilDate, "2026-09-01");
+  assert.equal(result.activity.civilDate, "2026-09-01");
+  assert.equal(result.plan.pedagogicalProvenance.civilDate, "2026-09-01");
+  assert.equal(result.activity.pedagogicalProvenance.civilDate, "2026-09-01");
+  assert.equal(
+    result.plan.pedagogicalProvenance.sourceActivityId,
+    pedagogicalProvenance.sourceActivityId,
+  );
+  assert.deepEqual(
+    result.plan.pedagogicalProvenance,
+    result.activity.pedagogicalProvenance,
+  );
+  const snapshot = await store.readSnapshot();
+  assert.deepEqual(
+    snapshot.plans[0].pedagogicalProvenance,
+    snapshot.activities[0].pedagogicalProvenance,
+  );
+});
+
 async function createEvidenceChain(store) {
   const planActivity = await createPlanWithActivity(store, {
     civilDate: "2026-09-01",
@@ -204,6 +299,98 @@ test("D1 plan-etkinlik-ham gözlem-onaylı bağ-kaynaklı taslak zincirini eksik
   assert.deepEqual(draft.draft.observationIds, [observationId]);
   assert.equal(draft.draft.evidenceCitations[0].observationId, observationId);
   assert.equal(draft.draft.evidenceCitations[0].rawText, undefined);
+});
+
+test("resmî TYMM planı bütüncül graf referansını plan-etkinlik-gözlem-değerlendirme zincirinde exact korur", async () => {
+  const store = activeStore();
+  const officialProfile = {
+    framework: "tymm",
+    programLabel: CURRICULUM_PROGRAM_LABELS.tymm,
+    catalogId: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.catalogId,
+    sourceVersion: OFFICIAL_STARTER_CATALOG_PROFILES.tymm.sourceVersion,
+    referenceOrigin: "official-catalog",
+    officialCatalogVerified: true,
+  };
+  store.snapshot.classrooms[0].curriculumProfileSnapshot = officialProfile;
+  const officialTarget = curriculumTargetsForProfile(
+    officialProfile,
+    "60-72",
+  ).find((target) => target.referenceCode === "FAB.1");
+  assert.ok(officialTarget);
+
+  const created = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planId,
+    activityId,
+    planTitle: "Bütüncül kaynaklı fen planı",
+    activityTitle: "Su kaplarını gözlemleme",
+    startTime: "09:00",
+    curriculumProfile: officialProfile,
+    curriculumTargets: [officialTarget],
+    assignmentMode: "selected-students",
+    studentIds: [student],
+    now: new Date("2026-09-01T06:10:00.000Z"),
+  });
+  const targetSnapshot = created.activity.curriculumTargets[0];
+  assert.equal(
+    targetSnapshot.holisticGraphReference.graphId,
+    "meb-tymm-okul-oncesi-2024-holistic-graph",
+  );
+  assert.equal(
+    targetSnapshot.holisticGraphReference.reviewStatus,
+    "pending-human-review",
+  );
+  assert.equal(
+    canonicalJson(created.plan.curriculumTargets[0].holisticGraphReference),
+    canonicalJson(targetSnapshot.holisticGraphReference),
+  );
+
+  await captureImmutableRawObservation(store, {
+    observationId,
+    studentId: student,
+    planId,
+    activityId,
+    rawText: "Çocuk iki kabı yan yana getirip su seviyelerini parmağıyla gösterdi.",
+    observedAt: "2026-09-01T07:00:00.000Z",
+    now: new Date("2026-09-01T07:01:00.000Z"),
+  });
+  const link = await confirmObservationCurriculumLink(store, {
+    observationId,
+    framework: officialProfile.framework,
+    catalogId: officialProfile.catalogId,
+    sourceVersion: officialProfile.sourceVersion,
+    referenceCode: officialTarget.referenceCode,
+    referenceTitle: officialTarget.referenceTitle,
+    referenceOrigin: "official-catalog",
+    officialCatalogVerified: true,
+    plannedTargetId: officialTarget.id,
+    now: new Date("2026-09-01T08:00:00.000Z"),
+  });
+  assert.equal(link.schemaVersion, 2);
+  assert.equal(
+    canonicalJson(link.holisticGraphReference),
+    canonicalJson(targetSnapshot.holisticGraphReference),
+  );
+
+  const assessment = await createCitedAssessmentDraft(store, {
+    draftId,
+    studentId: student,
+    observationIds: [observationId],
+    assessmentTargetIds: [officialTarget.id],
+    teacherAssessmentText:
+      "Seçili kanıtta çocuk iki kaptaki görünür seviyeleri karşılaştırdı.",
+    periodStart: "2026-09-01",
+    periodEnd: "2026-09-30",
+    now: new Date("2026-09-30T12:00:00.000Z"),
+  });
+  assert.equal(
+    assessment.draft.evidenceCitations[0].confirmedCurriculumLinkIds[0],
+    link.id,
+  );
+  assert.equal(
+    assessment.draft.referenceVerificationStatus,
+    "official-catalog-verified",
+  );
 });
 
 test("genel gözlem yakalama puan, kalıcı etiket ve hassas veriyi hiçbir alandan yazamaz", async () => {
@@ -537,6 +724,187 @@ test("seçili çocuk kapsamı bilinmeyen çocuğu atomik olarak reddeder", async
   const snapshot = await store.readSnapshot();
   assert.equal(snapshot.plans.length, 0);
   assert.equal(snapshot.activities.length, 0);
+});
+
+test("elle yazılan gözlem hedefi servis katmanında da resmî katalog hedefi gibi saklanamaz", async () => {
+  const store = activeStore();
+  await createEvidenceChain(store);
+  const before = canonicalJson(await store.readSnapshot());
+
+  await assert.rejects(
+    confirmObservationCurriculumLink(store, {
+      observationId,
+      framework: "tymm",
+      catalogId: curriculumProfile.catalogId,
+      sourceVersion: curriculumProfile.sourceVersion,
+      referenceCode: "ELLE-GIRILEN-01",
+      referenceTitle: "Öğretmen tarafından elle yazılan hedef",
+      referenceOrigin: "official-catalog",
+      officialCatalogVerified: true,
+    }),
+    /Elle yazılan program referansı resmî katalog hedefi olarak işaretlenemez/u,
+  );
+  assert.equal(canonicalJson(await store.readSnapshot()), before);
+
+  const link = await confirmObservationCurriculumLink(store, {
+    observationId,
+    framework: "tymm",
+    catalogId: curriculumProfile.catalogId,
+    sourceVersion: curriculumProfile.sourceVersion,
+    referenceCode: "ELLE-GIRILEN-01",
+    referenceTitle: "Öğretmen tarafından elle yazılan hedef",
+    referenceOrigin: "teacher-declared",
+    officialCatalogVerified: false,
+  });
+  assert.equal(link.referenceOrigin, "teacher-declared");
+  assert.equal(link.officialCatalogVerified, false);
+  assert.equal(link.targetSourceUrl, "about:blank");
+});
+
+test("anlık gözlem bağlamı açıkken bugünün planı aynı işlemde devam ediyor olarak oluşturulur", async () => {
+  const store = activeStore();
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000489",
+        planType: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "active",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000490",
+        planId: "00000000-0000-4000-8000-000000000489",
+        activityKind: "spontaneous-observation",
+        title: "Anlık gözlemler",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+  });
+
+  const result = await createPlanWithActivity(store, {
+    civilDate: "2026-09-01",
+    planId: "00000000-0000-4000-8000-000000000492",
+    planTitle: "Canlı fen planı",
+    activityId: "00000000-0000-4000-8000-000000000494",
+    activityTitle: "Batar mı, yüzer mi?",
+    startTime: "09:00",
+    curriculumProfile,
+    ...planAssignment,
+    initialActivityStatus: "in_progress",
+    now: new Date("2026-09-01T06:20:00.000Z"),
+  });
+  const snapshot = await store.readSnapshot();
+
+  assert.equal(result.activity.status, "in_progress");
+  assert.equal(snapshot.plans.length, 2);
+  assert.equal(snapshot.activities.length, 2);
+  assert.equal(
+    snapshot.activities.find((record) => record.id === result.activity.id)?.status,
+    "in_progress",
+  );
+});
+
+test("yalnız etkinlik işareti taşıyan sahte anlık bağlam devam eden etkinlik çakışmasını atlatamaz", async () => {
+  const store = activeStore();
+  const spoofedPlanId = "00000000-0000-4000-8000-000000000496";
+  const spoofedActivityId = "00000000-0000-4000-8000-000000000497";
+  await store.transaction("readwrite", ["plans", "activities"], async (transaction) => {
+    await transaction.putMany("plans", [
+      {
+        ...base,
+        id: spoofedPlanId,
+        planType: "daily",
+        title: "Normal günlük plan",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: spoofedActivityId,
+        planId: spoofedPlanId,
+        activityKind: "spontaneous-observation",
+        title: "İşareti değiştirilmiş gerçek etkinlik",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+        curriculumTargets: [],
+        maarifRefs: [],
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planId: "00000000-0000-4000-8000-000000000498",
+      planTitle: "İz bırakmaması gereken plan",
+      activityId: "00000000-0000-4000-8000-000000000499",
+      activityTitle: "İz bırakmaması gereken etkinlik",
+      startTime: "10:30",
+      curriculumProfile,
+      ...planAssignment,
+      initialActivityStatus: "in_progress",
+      now: new Date("2026-09-01T07:30:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+
+  const snapshot = await store.readSnapshot();
+  assert.deepEqual(snapshot.plans.map((record) => record.id), [spoofedPlanId]);
+  assert.deepEqual(snapshot.activities.map((record) => record.id), [spoofedActivityId]);
+});
+
+test("başka gerçek etkinlik sürerken plan ve etkinlik birlikte, iz bırakmadan reddedilir", async () => {
+  const store = activeStore();
+  await store.transaction("readwrite", ["activities"], async (transaction) => {
+    await transaction.putMany("activities", [
+      {
+        ...base,
+        id: "00000000-0000-4000-8000-000000000491",
+        title: "Devam eden gerçek etkinlik",
+        status: "in_progress",
+        academicYearId: year,
+        classroomId: classroom,
+      },
+    ]);
+  });
+
+  await assert.rejects(
+    createPlanWithActivity(store, {
+      civilDate: "2026-09-01",
+      planId: "00000000-0000-4000-8000-000000000493",
+      planTitle: "Reddedilecek plan",
+      activityId: "00000000-0000-4000-8000-000000000495",
+      activityTitle: "Reddedilecek etkinlik",
+      startTime: "10:00",
+      curriculumProfile,
+      ...planAssignment,
+      initialActivityStatus: "in_progress",
+      now: new Date("2026-09-01T06:25:00.000Z"),
+    }),
+    /başka bir etkinlik devam ediyor/,
+  );
+  const snapshot = await store.readSnapshot();
+
+  assert.equal(snapshot.plans.length, 0);
+  assert.equal(snapshot.activities.length, 1);
+  assert.equal(snapshot.activities[0].id, "00000000-0000-4000-8000-000000000491");
 });
 
 test("gözlem ve resmî hedef bağı etkinlikte planlanan öğrenci-hedef kapsamından çıkamaz", async () => {

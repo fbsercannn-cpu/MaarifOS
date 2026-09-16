@@ -290,15 +290,18 @@ test("v5 değer kanıtı yalnız açık öğretmen onayıyla kurulur; provenance
     [firstLinkId],
   );
 
+  const plannedCurriculumTarget = chain.daily.activity.curriculumTargets[0];
+  assert.ok(plannedCurriculumTarget);
   const curriculumLink = await confirmObservationCurriculumLink(store, {
     observationId,
     framework: profile.framework,
     catalogId: profile.catalogId,
     sourceVersion: profile.sourceVersion,
-    referenceCode: "TYMM-OÖ-DEĞER-01",
-    referenceTitle: "Kurgu program bağlantısı",
+    referenceCode: plannedCurriculumTarget.referenceCode,
+    referenceTitle: plannedCurriculumTarget.referenceTitle,
     referenceOrigin: profile.referenceOrigin,
     officialCatalogVerified: profile.officialCatalogVerified,
+    plannedTargetId: plannedCurriculumTarget.id,
     now: new Date("2026-09-08T08:05:00.000Z"),
   });
   assert.equal(curriculumLink.approvedByUserId, link.confirmedByActorId);

@@ -18,6 +18,8 @@ export interface ClassroomSchedule {
 export interface ClassroomRecord extends StoredRecord {
   academicYearId: string;
   name: string;
+  schoolName?: string;
+  teacherName?: string;
   ageGroup?: string;
   curriculumProgram?: string;
   curriculumCatalogLabel?: string;
@@ -109,6 +111,11 @@ export function isClassroomRecord(record: StoredRecord): record is ClassroomReco
     isCivilDate(record.civilDate) &&
     (record.schemaVersion === 1 || record.schemaVersion === CLASSROOM_SCHEMA_VERSION) &&
     (record.deletedAt === undefined || record.deletedAt === null || isUtcIso(record.deletedAt)) &&
+    // Eski kayıtlarda bu iki alan hiç bulunmayabilir veya boş bırakılmış
+    // olabilir. Yeni yazma akışı boş değerleri reddeder; okuma ise eski sınıfı
+    // erişilemez hâle getirmemek için boş metni "alan yok" olarak kabul eder.
+    (record.schoolName === undefined || typeof record.schoolName === "string") &&
+    (record.teacherName === undefined || typeof record.teacherName === "string") &&
     (record.ageGroup === undefined || isNonEmptyString(record.ageGroup)) &&
     (record.curriculumProgram === undefined || isNonEmptyString(record.curriculumProgram)) &&
     (record.curriculumCatalogLabel === undefined || isNonEmptyString(record.curriculumCatalogLabel)) &&

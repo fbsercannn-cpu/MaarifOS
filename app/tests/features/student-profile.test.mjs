@@ -7,19 +7,125 @@ import {
   composeStudentDisplayName,
   formatStudentPhone,
   isStudentProfilePhotoDataUrl,
+  isStudentSpreadsheetImportReview,
+  isValidStudentNationalIdentityNumber,
   normalizeStudentContacts,
+  normalizeStudentCareDetails,
   normalizeStudentPhone,
   normalizeStudentProfile,
   normalizeTurkishSearchText,
   splitStudentDisplayName,
   studentProfileFromRecord,
 } from "../../src/core/domain/student.ts";
+
+test("sağlık ve güvenlik bilgilerini veri-minimum ve sınırlı biçimde normalleştirir", () => {
+  assert.deepEqual(
+    normalizeStudentCareDetails({
+      homeAddress: "  Merkezefendi / Denizli  ",
+      allergies: " Fındık ",
+      dietaryNeeds: " Laktozsuz ",
+      medicationNotes: " Veli yazılı talimatı dosyada ",
+      emergencyNotes: " Önce anne aranır ",
+      physicianName: " Dr. Kurgu ",
+      physicianPhone: " (0258) 123 45 67 ",
+      medicalDevices: " Gözlük ",
+      guardianEmail: " veli@example.com ",
+      familyEducationNeeds: " Oyunla öğrenme ",
+      familyParticipationPreferences: " Cuma çevrim içi ",
+      photoVideoPermissionOnFile: true,
+      fieldTripPermissionOnFile: true,
+      digitalCommunicationPermissionOnFile: true,
+      permissionFormDate: "2026-08-24",
+    }),
+    {
+      homeAddress: "Merkezefendi / Denizli",
+      allergies: "Fındık",
+      dietaryNeeds: "Laktozsuz",
+      medicationNotes: "Veli yazılı talimatı dosyada",
+      emergencyNotes: "Önce anne aranır",
+      physicianName: "Dr. Kurgu",
+      physicianPhone: "(0258) 123 45 67",
+      medicalDevices: "Gözlük",
+      guardianEmail: "veli@example.com",
+      familyEducationNeeds: "Oyunla öğrenme",
+      familyParticipationPreferences: "Cuma çevrim içi",
+      photoVideoPermissionOnFile: true,
+      fieldTripPermissionOnFile: true,
+      digitalCommunicationPermissionOnFile: true,
+      permissionFormDate: "2026-08-24",
+    },
+  );
+  assert.equal(normalizeStudentCareDetails({ allergies: " " }), undefined);
+  assert.throws(
+    () => normalizeStudentCareDetails({ emergencyNotes: "x".repeat(1_001) }),
+    /1_?000|1000/,
+  );
+  assert.throws(
+    () => normalizeStudentCareDetails({ guardianEmail: "gecersiz" }),
+    /e-posta/,
+  );
+});
 import {
   ACTIVE_CLASSROOM_SETTING_ID,
   ACTIVE_CLASSROOM_SETTING_TYPE,
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import { persistStudentRosterChange } from "../../src/features/dashboard/dashboard-data.ts";
+import { isEntityRecord } from "../../src/core/repository/entities.ts";
+
+test("anne ve baba mesleği telefonsuz kayıtta korunur; acil iletişim telefon gerektirir", () => {
+  const contacts = normalizeStudentContacts([
+    { id: "00000000-0000-4000-8000-000000000981", kind: "mother", relationship: "Anne", name: "Kurgu Anne", occupation: " Mimar ", phone: "" },
+    { id: "00000000-0000-4000-8000-000000000982", kind: "father", relationship: "Baba", name: "Kurgu Baba", occupation: "Teknisyen", phone: "0555 123 45 67" },
+    { id: "00000000-0000-4000-8000-000000000983", kind: "other", relationship: "Teyze", name: "Kurgu Yakın", phone: "0555 123 45 68", isEmergencyContact: true },
+  ]);
+  assert.equal(contacts[0].occupation, "Mimar");
+  assert.equal(contacts[0].phone, "");
+  const record = {
+    id: "00000000-0000-4000-8000-000000000984", displayName: "Kurgu Çocuk", contacts,
+    createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T06:00:00.000Z", civilDate: "2026-09-07", schemaVersion: 9,
+  };
+  assert.deepEqual(studentProfileFromRecord(record)?.contacts, contacts);
+  assert.equal(isEntityRecord("students", record), true);
+  assert.throws(() => normalizeStudentContacts([{ ...contacts[0], isEmergencyContact: true }]), /telefon/);
+  assert.throws(() => normalizeStudentContacts([{ ...contacts[0], occupation: "x".repeat(121) }]), /120/);
+});
+
+test("özel çocuk notu ve isteğe bağlı aile durumları ayrı korunur", () => {
+  const careDetails = normalizeStudentCareDetails({
+    childPrivateNotes: " Geçişlerde önceden haber verilmesi yardımcı oluyor. ",
+    familySituationNotes: " Ailenin bildirdiği okul iletişim düzeni. ",
+    parentsSeparated: true, motherDeceased: false, fatherDeceased: true, martyrChild: true, veteranChild: true,
+  });
+  assert.deepEqual(careDetails, {
+    childPrivateNotes: "Geçişlerde önceden haber verilmesi yardımcı oluyor.",
+    familySituationNotes: "Ailenin bildirdiği okul iletişim düzeni.",
+    parentsSeparated: true, fatherDeceased: true, martyrChild: true, veteranChild: true,
+  });
+  assert.throws(() => normalizeStudentCareDetails({ childPrivateNotes: "x".repeat(2001) }), /2000/);
+  assert.equal(normalizeStudentCareDetails({ motherDeceased: false, parentsSeparated: false }), undefined);
+  const migrated = studentProfileFromRecord({ id: crypto.randomUUID(), displayName: "Kurgu Çocuk", careDetails,
+    schemaVersion: 8, profileSchemaVersion: 8, createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T06:00:00.000Z" });
+  assert.deepEqual(migrated.careDetails, careDetails);
+  assert.equal(migrated.profileSchemaVersion, STUDENT_PROFILE_SCHEMA_VERSION);
+});
+
+test("Excel mükerrer inceleme kanıtı yalnız açık karar, UUID ve UTC zaman çizgisi kabul eder", () => {
+  const record = { id: "00000000-0000-4000-8000-000000000985", createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T08:00:00.000Z" };
+  const review = { sourceRow: 7, reviewedAtUtc: "2026-09-07T07:00:00.000Z", duplicateCandidateIds: ["00000000-0000-4000-8000-000000000986"], _MUKERRER_INCELE: true, decision: "distinct-student-confirmed" };
+  assert.equal(isStudentSpreadsheetImportReview(review, record), true);
+  for (const invalid of [
+    { ...review, sourceRow: 0 }, { ...review, sourceRow: 1.5 }, { ...review, sourceRow: 1_048_577 },
+    { ...review, reviewedAtUtc: "2026-09-07T05:59:59.000Z" },
+    { ...review, reviewedAtUtc: "2026-09-07T08:00:01.000Z" },
+    { ...review, reviewedAtUtc: "2026-09-07T10:00:00.000+03:00" },
+    { ...review, duplicateCandidateIds: [] },
+    { ...review, duplicateCandidateIds: [record.id] },
+    { ...review, duplicateCandidateIds: [review.duplicateCandidateIds[0], review.duplicateCandidateIds[0]] },
+    { ...review, _MUKERRER_INCELE: false }, { ...review, decision: "automatic" },
+    { ...review, sourceName: "unaccepted extra field" },
+  ]) assert.equal(isStudentSpreadsheetImportReview(invalid, record), false);
+});
 
 class MemoryStore {
   snapshot;
@@ -68,7 +174,8 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
       preferredName: "  Deniz  ",
       birthDate: "2021-04-18",
       optionalCode: "  KELEBEK-07  ",
-      enrollmentDate: "  2025-09-01  ",
+      nationalIdentityNumber: "  10000000146  ",
+      enrollmentYear: "  2025  ",
       homeLanguages: "  Türkçe, İngilizce  ",
       interests: "  Su deneyleri ve ritim oyunları  ",
       strengths: "  Akranlarını oyuna davet ediyor  ",
@@ -84,7 +191,8 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
     preferredName: "Deniz",
     birthDate: "2021-04-18",
     optionalCode: "KELEBEK-07",
-    enrollmentDate: "2025-09-01",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe, İngilizce",
     interests: "Su deneyleri ve ritim oyunları",
     strengths: "Akranlarını oyuna davet ediyor",
@@ -94,7 +202,7 @@ test("öğrenci profilini Türkçe öğretmen kullanımına uygun ve veri-minimu
   });
 });
 
-test("gelecek tarihleri, doğumdan önce kaydı ve kimlik numarası gibi uzun sayısal kodu reddeder", () => {
+test("gelecek tarihleri, geçersiz kayıt yılını ve T.C. kimlik numarasını reddeder", () => {
   assert.throws(
     () =>
       normalizeStudentProfile(
@@ -117,30 +225,44 @@ test("gelecek tarihleri, doğumdan önce kaydı ve kimlik numarası gibi uzun sa
         {
           displayName: "Deniz Yılmaz",
           birthDate: "2021-04-18",
-          enrollmentDate: "2021-04-17",
+          enrollmentYear: "2020",
         },
         "2026-07-28",
       ),
-    /doğum tarihinden önce/i,
+    /doğum yılından önce/i,
   );
   assert.throws(
     () =>
       normalizeStudentProfile(
         {
           displayName: "Deniz Yılmaz",
-          enrollmentDate: "2026-07-29",
+          enrollmentYear: "2027",
         },
         "2026-07-28",
       ),
-    /kayıt tarihi gelecekte olamaz/i,
+    /kayıt yılı gelecekte olamaz/i,
   );
+  assert.throws(
+    () =>
+      normalizeStudentProfile(
+        {
+          displayName: "Deniz Yılmaz",
+          nationalIdentityNumber: "10000000145",
+        },
+        "2026-07-28",
+      ),
+    /11 haneli ve geçerli/i,
+  );
+  assert.equal(isValidStudentNationalIdentityNumber("10000000146"), true);
+  assert.equal(isValidStudentNationalIdentityNumber("00000000146"), false);
 });
 
 test("boş isteğe bağlı alanları saklamaz ve veri-minimum metin sınırlarını uygular", () => {
   const profile = normalizeStudentProfile(
     {
       displayName: "Deniz Yılmaz",
-      enrollmentDate: " ",
+      nationalIdentityNumber: " ",
+      enrollmentYear: " ",
       homeLanguages: "  ",
       interests: "",
       strengths: "\n",
@@ -315,7 +437,7 @@ test("zengin profil alanlarını eski kayıt biçiminden güvenle okur", () => {
     displayName: "Kurgu Öğrenci",
     firstName: "Kurgu",
     lastName: "Öğrenci",
-    enrollmentDate: "2025-09-01",
+    enrollmentYear: "2025",
     homeLanguages: "Türkçe",
     interests: "Blok oyunları",
     strengths: "Grup oyununa katılım",
@@ -406,6 +528,8 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
     preferredName: "Kurgu",
     birthDate: "2021-04-18",
     optionalCode: "K-7",
+    nationalIdentityNumber: "10000000146",
+    enrollmentYear: "2025",
     enrollmentDate: "2025-09-01",
     homeLanguages: "Türkçe",
     interests: "Su oyunları",
@@ -423,13 +547,15 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
       preferredName: " ",
       birthDate: "",
       optionalCode: " ",
-      enrollmentDate: "",
+      nationalIdentityNumber: "",
+      enrollmentYear: "",
       homeLanguages: " ",
       interests: "",
       strengths: "\n",
       supportPreferences: "\t",
     },
     archived: false,
+    now: new Date("2026-06-01T09:00:00.000Z"),
   });
 
   const record = (await store.readSnapshot()).students[0];
@@ -437,6 +563,8 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
     "preferredName",
     "birthDate",
     "optionalCode",
+    "nationalIdentityNumber",
+    "enrollmentYear",
     "enrollmentDate",
     "homeLanguages",
     "interests",

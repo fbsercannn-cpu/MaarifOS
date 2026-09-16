@@ -341,6 +341,34 @@ saymaz. Dönem ve yıl sonu kesinleşmiş hükümleri sonraki dilimde ayrı
 `AssessmentJudgment` kayıtları olarak, eski dönem snapshot'larını ezmeden
 tutulacaktır. Ayrıntı: `CURRICULUM_EVIDENCE_ARCHITECTURE.md`.
 
+### MEB 2024 Ek 3 Anekdot Kayıt Formu yaşam döngüsü
+
+`observationType: anecdotal` olan değişmez gözlem, resmî formun tek kanıt
+kaynağıdır. Form tamamlaması yeni bir gözlem oluşturmaz; `reportDrafts`
+koleksiyonunda `reportType: meb-2024-anecdote-form` ve `schemaVersion: 1` ile
+aynı `selectedObservationIds[0]` değerine bağlanır.
+
+- `studentIds[0]`, tarih ve gözlenen durum gözlem kaydından gelir.
+- `editableSections.observedLocation`, etkinlik/plan ortamından güvenle
+  türetilemezse öğretmen tarafından sonradan tamamlanır.
+- Gözlenen beceriler form kaydına serbest metin olarak yazılmaz; yalnız etkin,
+  `teacher-confirmed` ve `sourceVersion` taşıyan `EvidenceCurriculumLink`
+  kayıtlarından okunur.
+- `editableSections.observerGeneralAssessment` ham gözlemden ayrı öğretmen
+  metnidir. Varsa aynı gözleme bağlı `evidence-assessment` taslağından yeniden
+  yazdırmadan alınabilir; kaynak taslak kimliği ayrıca korunur.
+- Taslak her düzenlemede `reviewStatus: pending` durumuna döner. Dışa aktarım
+  için öğretmen onayı, onaylayan yerel öğretmen kimliği, onay zamanı, kullanılan
+  program bağlantısı kimlikleri ve program kaynak sürümleri birlikte kilitlenir.
+- Program bağlantısı sonradan değişirse form yeniden öğretmen incelemesi ister;
+  sahte beceri, mekân veya değerlendirme metni üretilmez.
+- PDF ve DOCX üretimi yalnız `status: ready`, `reviewStatus: approved` ve eksiksiz
+  resmî alanlarla açılır. `observationId`, program kaynak sürümü ve dışa aktarım
+  zamanı dosya metadata'sında izlenebilir; resmî görünür alanlara yeni alan
+  eklenmez.
+- Bu yaşam döngüsü `portfolioSelections` yazmaz. Portfolyo kullanımı ayrı ve açık
+  öğretmen ya da öğretmen-çocuk seçimi gerektirir.
+
 ## Eğitim yılı arşivi
 
 Yıl kapanışı `AcademicYear.status = archived` ve sınıflarda
