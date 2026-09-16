@@ -182,25 +182,276 @@ export async function downloadOfficialFormPdf(
 
 /**
  * A4 CSS Paged Media doğrudan yazdırma motoru.
- * Pencere başlığını geçici olarak belge adına ayarlar; böylece "PDF olarak kaydet" seçildiğinde dosya adı otomatik dolar.
- * Sayfa gövdesine geçici olarak "printing-official-form" sınıfı ekleyerek tüm harici navigasyon ve ekran öğelerini izole eder.
+ * Sayfadaki .official-sheet elementini izole bir görünmez iframe içerisine aktararak
+ * ana SPA kabuğundan, alt gezinme çubuğundan ve mobil kaydırma yapısından %100 yalıtır.
+ */
+/**
+ * A4 CSS Paged Media doğrudan yazdırma motoru.
+ * Sayfadaki resmî belge elementini (.official-sheet, .official-form-container) izole bir
+ * off-screen iframe içerisine klonlar. Ana SPA kabuğundan, alt navigasyon çubuğundan (.bottom-nav)
+ * ve mobil kaydırma yapısından %100 yalıtarak saf A4 çıktısı üretir.
+ * Tüm input ve textarea değerlerini düz metne dönüştürür; butonları ve arayüz kontrollerini temizler.
  */
 export function printOfficialFormA4(documentTitle: string): void {
-  const previousTitle = document.title;
-  if (typeof document !== "undefined" && document.body) {
-    document.body.classList.add("printing-official-form");
+  if (typeof document === "undefined") return;
+
+  const targetElement = document.querySelector<HTMLElement>(
+    ".official-sheet, .official-form-container, .a4-printable, [data-printable='true']",
+  );
+
+  if (!targetElement) {
+    // Fallback: Doğrudan pencereyi yazdır
+    const previousTitle = document.title;
+    try {
+      document.title = documentTitle;
+      window.print();
+    } finally {
+      window.setTimeout(() => {
+        document.title = previousTitle;
+      }, 1500);
+    }
+    return;
   }
-  try {
-    document.title = documentTitle;
-    window.print();
-  } finally {
-    window.setTimeout(() => {
-      document.title = previousTitle;
-      if (typeof document !== "undefined" && document.body) {
-        document.body.classList.remove("printing-official-form");
-      }
-    }, 1500);
-  }
+
+  // Belge elemanını klonla
+  const clone = targetElement.cloneNode(true) as HTMLElement;
+
+  // Orijinal formdaki tüm input, textarea ve select değerlerini klona aktar
+  const originalInputs = targetElement.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
+  const cloneInputs = clone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
+
+  originalInputs.forEach((input, index) => {
+    const cloneInput = cloneInputs[index];
+    if (!cloneInput) return;
+
+    let text = "";
+    if (input instanceof HTMLSelectElement) {
+      text = input.options[input.selectedIndex]?.text || input.value;
+    } else {
+      text = input.value;
+    }
+
+    const existingSpan = cloneInput.parentElement?.querySelector<HTMLElement>(".print-only-text");
+    if (existingSpan) {
+      if (text) existingSpan.textContent = text;
+      existingSpan.style.display = "block";
+    } else {
+      const span = document.createElement("span");
+      span.className = "print-only-text";
+      span.textContent = text;
+      span.style.display = "block";
+      span.style.whiteSpace = "pre-wrap";
+      span.style.wordBreak = "break-word";
+      cloneInput.parentElement?.insertBefore(span, cloneInput);
+    }
+  });
+
+  // Klon içerisinden tüm arayüz butonlarını, aksiyon barlarını ve form kontrollerini kaldır
+  clone.querySelectorAll("button, select, input, textarea, .official-form-actions, .no-print, .official-workspace-header").forEach((el) => el.remove());
+
+  // Yatay belge tespiti (EK-15, Sınıf Beceri Matrisi vb.)
+  const isLandscape =
+    targetElement.classList.contains("is-landscape") ||
+    targetElement.querySelector(".is-landscape") !== null ||
+    documentTitle.toLowerCase().includes("ek-15") ||
+    documentTitle.toLowerCase().includes("matris") ||
+    documentTitle.toLowerCase().includes("cizelge");
+
+  // İzole off-screen iframe oluştur (visibility: hidden ve display: none YASAKTIR - Chromium beyaz sayfa basar!)
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("tabindex", "-1");
+  frame.title = documentTitle;
+  Object.assign(frame.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: isLandscape ? "297mm" : "210mm",
+    height: isLandscape ? "210mm" : "297mm",
+    border: "0",
+    opacity: "0",
+    pointerEvents: "none",
+    zIndex: "-9999",
+  });
+
+  const htmlContent = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>${documentTitle.replace(/[<>&"]/g, "")}</title>
+  <style>
+    @page {
+      size: ${isLandscape ? "A4 landscape" : "A4 portrait"};
+      margin: 8mm 10mm 10mm 10mm;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: ${isLandscape ? "7.5pt" : "8.5pt"};
+      line-height: 1.35;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .official-form-modal,
+    .official-workspace-overlay,
+    .official-workspace-body {
+      position: static !important;
+      inset: auto !important;
+      background: transparent !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    .official-form-container,
+    .official-sheet {
+      width: 100% !important;
+      max-width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+      background: #ffffff !important;
+    }
+    .official-sheet__header,
+    .official-form-header {
+      text-align: center;
+      margin-bottom: 8pt;
+      display: block !important;
+    }
+    .official-sheet__title,
+    .official-form-header h1,
+    .official-form-header h2 {
+      font-size: 13pt !important;
+      font-weight: 800 !important;
+      color: #173862 !important;
+      text-align: center !important;
+      margin: 0 0 6pt 0 !important;
+      letter-spacing: 0.5px !important;
+      display: block !important;
+    }
+    .official-sheet__guidance {
+      background: #fafafa !important;
+      border-left: 2.5pt solid #555 !important;
+      padding: 4pt 8pt !important;
+      font-size: 8pt !important;
+      color: #222 !important;
+      margin-bottom: 6pt !important;
+      display: block !important;
+    }
+    table, table.official-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin-bottom: 6pt !important;
+      border: 1.5pt solid #173862 !important;
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+    thead {
+      display: table-header-group !important;
+    }
+    tfoot {
+      display: table-footer-group !important;
+    }
+    tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    th, td, .official-table th, .official-table td {
+      border: 1pt solid #475569 !important;
+      padding: 4pt 6pt !important;
+      font-size: ${isLandscape ? "7.5pt" : "8.5pt"} !important;
+      line-height: 1.25 !important;
+      vertical-align: top !important;
+      color: #000000 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .official-table__section-header {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+      font-weight: 700 !important;
+      font-size: 9pt !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .official-table__label {
+      background-color: #f8fafc !important;
+      font-weight: 600 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .no-print, .official-form-actions, .of-input, .of-textarea, .no-print-select, button {
+      display: none !important;
+    }
+    .print-only-text {
+      display: block !important;
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      color: #000000 !important;
+      font-size: ${isLandscape ? "7.5pt" : "8.5pt"} !important;
+    }
+    .official-sheet__footer,
+    .official-form-footer {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: flex-end !important;
+      margin-top: 8pt !important;
+      padding-top: 4pt !important;
+      border-top: 1pt solid #cbd5e1 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .signature-line {
+      margin-top: 6pt !important;
+      color: #334155 !important;
+    }
+    .official-sheet__page-num {
+      font-weight: 800 !important;
+      color: #173862 !important;
+    }
+  </style>
+</head>
+<body>
+  ${clone.outerHTML}
+</body>
+</html>`;
+
+  frame.srcdoc = htmlContent;
+
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+    } catch {
+      window.print();
+    } finally {
+      window.setTimeout(() => {
+        frame.remove();
+      }, 5000);
+    }
+  };
+
+  frame.onload = () => {
+    window.setTimeout(doPrint, 250);
+  };
+
+  document.body.appendChild(frame);
+
+  // Failsafe timer (onload gecikirse veya tetiklenmezse devreye girer)
+  window.setTimeout(() => {
+    if (!printed) doPrint();
+  }, 1000);
 }
 
 /**

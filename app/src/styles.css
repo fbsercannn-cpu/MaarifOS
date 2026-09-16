@@ -866,7 +866,7 @@ p {
   nav,
   nav *,
   header.prototype-header,
-  header:not(.official-sheet__header),
+  header:not(.official-sheet__header):not(.official-form-header),
   .alpha-dock,
   .keyboard-dock,
   .mobile-carousel,
@@ -911,7 +911,12 @@ p {
 
   .maarif-app-shell,
   .maarif-app-content,
-  .maarif-scroll {
+  .maarif-scroll,
+  .mobile-page,
+  .mobile-scroll,
+  .mobile-scroll-content {
+    position: static !important;
+    inset: auto !important;
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
@@ -922,13 +927,6 @@ p {
     border: none !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  /* Resmi form arka plan izolasyonu: Çalışma alanı arkasındaki ekran kartlarını gizle */
-  body:has(.official-workspace-overlay) .simple-workspace > *:not(.official-workspace-overlay),
-  body:has(.official-workspace-overlay) .desk-document-center > *:not(.official-workspace-overlay),
-  body:has(.official-form-modal) .simple-workspace > *:not(.official-form-modal):not(.official-workspace-overlay),
-  body:has(.official-form-modal) .desk-document-center > *:not(.official-form-modal):not(.official-workspace-overlay) {
-    display: none !important;
+    transform: none !important;
   }
 }
