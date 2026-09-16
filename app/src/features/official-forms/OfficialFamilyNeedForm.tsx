@@ -133,6 +133,34 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}`,
+      sheetName: "EK-9 Aile İhtiyaç",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-9 AİLE EĞİTİMİ İHTİYAÇ BELİRLEME FORMU",
+      subtitle: `Sınıf: ${formData.className} · Öğrenci: ${formData.studentName} · Veli: ${formData.parentName}`,
+      metadata: [
+        { label: "Sınıf / Şube", value: formData.className },
+        { label: "Veli Adı Soyadı", value: formData.parentName },
+        { label: "Öğrenci Adı Soyadı", value: formData.studentName },
+        { label: "Tarih", value: formData.date },
+      ],
+      columns: [
+        { header: "Kategori / Bölüm", key: "section", width: 28, align: "left" },
+        { header: "Tercih Edilen Detaylar ve Talepler", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "A. ÖNCELİKLİ EĞİTİM KONULARI", content: formData.selectedTopics.map((t, idx) => `[${idx + 1}] ${t}`).join("\n") },
+        { section: "B. TERCİH EDİLEN UYGULAMA BİÇİMİ", content: formData.preferredFormat.join(", ") },
+        { section: "C. UYGUN SIKLIK VE ZAMAN", content: `Sıklık: ${formData.frequency} | Zaman: ${formData.preferredTime.join(", ")}` },
+        { section: "D. AİLE EĞİTİMLERİNDEN BEKLENTİLER", content: formData.expectations },
+        { section: "E. ÖZEL DURUM BİLGİLENDİRMESİ", content: formData.specialSituation },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   const toggleTopic = (topic: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -151,16 +179,34 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
     }));
   };
 
+  const toggleTime = (t: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      preferredTime: prev.preferredTime.includes(t)
+        ? prev.preferredTime.filter((item) => item !== t)
+        : [...prev.preferredTime, t],
+    }));
+  };
+
   return (
     <div className="official-form-modal">
       <div className="official-form-container a4-printable">
-        {/* Actions Toolbar */}
+        {/* Modal Actions */}
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-9 Aile Eğitimi İhtiyaç Belirleme Formu (TTKB Sayfa 188–189)</strong>
-            <small>Resmî Format · A4 Çıktı ve Word (.doc) Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word (.doc) Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              title="Aile ihtiyaç anketini Excel (.xlsx) olarak indir"
+            >
+              📊 Excel (.xlsx)
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>

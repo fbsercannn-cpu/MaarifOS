@@ -136,6 +136,51 @@ export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => voi
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows: Array<Record<string, unknown>> = dimensions.map((d, idx) => ({
+      no: idx + 1,
+      title: d.title,
+      question: d.guidingQuestion,
+      notes: d.notes,
+    }));
+
+    rows.push({
+      no: dimensions.length + 1,
+      title: "ÇOCUK ALINTILARI",
+      question: "Günün Cümleleri",
+      notes: quotes.join(" \n• "),
+    });
+
+    rows.push({
+      no: dimensions.length + 2,
+      title: "ÖĞRETMEN YANSITMASI",
+      question: "Gün Sonu Öz Değerlendirme",
+      notes: teacherReflection,
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Gunu_Degerlendirme_Cemberi_${date}`,
+      sheetName: "Günü Değerlendirme",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — GÜNÜ DEĞERLENDİRME ÇEMBERİ VE YANSITMA TUTANAĞI",
+      subtitle: `${schoolName} · Tarih: ${date} · Öğretmen: ${teacherName} · Katılım: ${presentCount}/${totalCount}`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Katılım", value: `${presentCount} / ${totalCount}` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Çember Boyutu", key: "title", width: 26, align: "left" },
+        { header: "Yönlendirici Soru", key: "question", width: 35, align: "left" },
+        { header: "Sınıf Paylaşımları, Ortak Çıkarımlar ve Alıntılar", key: "notes", width: 60, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -144,6 +189,15 @@ export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => voi
           <h3 className="of-action-title">Günü Değerlendirme Çemberi ve Yansıtma Tutanağı</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Günü değerlendirme tutanağını Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

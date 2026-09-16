@@ -133,6 +133,50 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const scoreMap: Record<string, { text: string; val: number }> = {
+      smile: { text: "Gülücük 😊 (Evet / Başarılı)", val: 3 },
+      neutral: { text: "Düşünceli 😐 (Kısmen / Geliştirilmeli)", val: 2 },
+      sad: { text: "Üzgün 🙁 (Hayır / Destek Gerekli)", val: 1 },
+    };
+
+    const rows = items.map((item, index) => {
+      const scoreObj = item.score ? scoreMap[item.score] : { text: "Seçilmedi", val: 0 };
+      return {
+        no: index + 1,
+        question: item.question,
+        scoreText: scoreObj.text,
+        scoreVal: scoreObj.val,
+      };
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Oz_ve_Akran_Degerlendirme_${studentName.replace(/\s+/g, "_")}`,
+      sheetName: "Öz ve Akran Değ.",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — ÇOCUK ÖZ DEĞERLENDİRME VE AKRAN DEĞERLENDİRME FORMU",
+      subtitle: `${schoolName} · Öğrenci: ${studentName} · Akran: ${peerName} · Tarih: ${date} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Değerlendiren Öğrenci", value: studentName },
+        { label: "Birlikte Çalışılan Akran", value: peerName },
+        { label: "Etkinlik / Bağlam", value: activityName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Öz Değerlendirme Yorumu", value: childComment },
+        { label: "Akran Değerlendirme Yorumu", value: peerComment },
+        { label: "Öğretmen Notu", value: teacherNote },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öz Değerlendirme Boyutu / İfade", key: "question", width: 55, align: "left" },
+        { header: "Çocuğun Seçimi (Sembol)", key: "scoreText", width: 32, align: "center" },
+        { header: "Puan Eşdeğeri (1-3)", key: "scoreVal", width: 16, align: "center", isNumeric: true },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -141,6 +185,14 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
           <h3 className="of-action-title">Öz Değerlendirme ve Akran Değerlendirme Formu</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

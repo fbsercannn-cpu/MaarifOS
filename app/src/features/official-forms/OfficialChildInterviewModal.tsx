@@ -169,6 +169,40 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = qaList.map((q, idx) => ({
+      no: idx + 1,
+      category: q.category.toLocaleUpperCase('tr-TR'),
+      question: q.question,
+      childResponse: q.childResponse || "-",
+      teacherNote: q.teacherNote || "-",
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Cocukla_Gorusme_${studentName.replace(/\s+/g, '_')}`,
+      sheetName: "Çocuk Mülakatı",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — ÇOCUKLA BİREYSEL GÖRÜŞME (MÜLAKAT) KAYDI",
+      subtitle: `${studentName} (${studentAge}) · Tarih: ${interviewDate} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Öğrenci Adı", value: studentName },
+        { label: "Yaş / Ay", value: studentAge },
+        { label: "Görüşme Tarihi", value: interviewDate },
+        { label: "Görüşme Konusu", value: interviewTopic },
+        { label: "Öğretmen", value: teacherName },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Gelişim Boyutu", key: "category", width: 18, align: "center" },
+        { header: "Sorulan Pedagojik Soru", key: "question", width: 45, align: "left" },
+        { header: "Çocuğun Birebir İfadesi", key: "childResponse", width: 40, align: "left" },
+        { header: "Öğretmenin Gözlem ve Yorumu", key: "teacherNote", width: 40, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Controls (No Print) */}
@@ -179,6 +213,15 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
           <span className="of-tag of-tag--emerald">Mülakat &amp; Düşünce Kaydı</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Çocuk görüşme formunu Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>

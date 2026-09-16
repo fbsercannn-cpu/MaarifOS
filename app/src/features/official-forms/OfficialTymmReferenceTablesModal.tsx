@@ -17,6 +17,156 @@ export function OfficialTymmReferenceTablesModal({ onClose }: Props) {
 
   const handlePrint = () => window.print();
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    if (selectedSubTab === "ek11") {
+      const rows = [
+        { no: 1, code: "SDB1.1", name: "Kendini Tanıma (Öz Farkındalık)", sb: "SDB1.1.SB1. Kendine ilişkin farkındalık geliştirmek\nSDB1.1.SB2. Duygularını tanımak ve adlandırmak", g: "G1. Fiziksel özelliklerini ve ilgi alanlarını ifade eder.\nG2. Temel duyguları (sevinç, üzüntü, öfke, korku) mimik ve sözle ifade eder." },
+        { no: 2, code: "SDB1.2", name: "Kendini Düzenleme (Öz Düzenleme)", sb: "SDB1.2.SB1. Duygularını düzenlemek\nSDB1.2.SB3. Davranışlarını düzenlemek", g: "G1. Yoğun duygular karşısında sakinleşme stratejilerini kullanır.\nG2. Sırasını bekler; merkezlerdeki kurallara uyar; etkinliğe odaklanır." },
+        { no: 3, code: "SDB2.1", name: "İletişim", sb: "SDB2.1.SB1. Etkili dinleme ve konuşma\nSDB2.1.SB2. Beden dilini kullanma", g: "G1. Konuşanın yüzüne bakar; sözünü kesmeden dinler.\nG2. Nezaket sözcüklerini (lütfen, teşekkür ederim, özür dilerim) bağlama uygun kullanır." },
+        { no: 4, code: "SDB2.2", name: "İş Birliği", sb: "SDB2.2.SB1. Birlikte çalışma ve paylaşma\nSDB2.2.SB2. Ortak hedefe odaklanma", g: "G1. Grup oyunlarında materyalleri arkadaşlarıyla paylaşır.\nG2. Görev dağılımına uyum sağlar; arkadaşına yardım teklif eder." },
+        { no: 5, code: "SDB2.3", name: "Sosyal Farkındalık", sb: "SDB2.3.SB1. Başkalarının duygularını anlama\nSDB2.3.SB2. Bireysel farklılıklara saygı", g: "G1. Üzülen veya sevinen arkadaşının duygusunu fark eder.\nG2. Farklı özelliklere sahip çocuklara anlayış ve saygıyla yaklaşır." },
+        { no: 6, code: "SDB3.1", name: "Uyum", sb: "SDB3.1.SB1. Değişen koşullara uyum sağlama", g: "G1. Etkinlik veya merkez geçişlerinde yönlendirmelere kolayca ayak uydurur." },
+        { no: 7, code: "SDB3.3", name: "Sorumlu Karar Verme", sb: "SDB3.3.SB1. Seçenekleri değerlendirme ve karar alma", g: "G1. Kendi yapacağı etkinliği veya oyun merkezini bilinçli şekilde seçer." },
+      ];
+      await exportOfficialTableToExcel({
+        fileName: "MEB_TTKB_EK11_Sosyal_Duygusal_Beceriler",
+        sheetName: "EK-11 SDB",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI TTKB — EK-11 SOSYAL-DUYGUSAL ÖĞRENME BECERİLERİ (SDB)",
+        subtitle: "TTKB Okul Öncesi Eğitim Programı Sayfa 193–196 Resmî Müfredat Referans Çizelgesi",
+        metadata: [{ label: "Evrak Türü", value: "EK-11 Resmî Müfredat Tablosu" }],
+        columns: [
+          { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+          { header: "Kod", key: "code", width: 12, align: "center" },
+          { header: "Beceri Alanı", key: "name", width: 30, align: "left" },
+          { header: "Süreç Bileşeni (SB)", key: "sb", width: 45, align: "left" },
+          { header: "Okul Öncesi Göstergesi (G)", key: "g", width: 55, align: "left" },
+        ],
+        rows,
+        includeSubtotals: false,
+      });
+    } else if (selectedSubTab === "ek12") {
+      const values = [
+        { code: "D1", name: "ADALET", def: "D1.1. Hak ve özgürlüklerini bilmek ve korumak\nD1.2. Hakkaniyetli davranmak", app: "Oyunlarda ve materyal kullanımında eşit sıra alma; haksızlık karşısında itiraz edebilme." },
+        { code: "D2", name: "AİLE BÜTÜNLÜĞÜ", def: "D2.1. Aile içi dayanışma\nD2.2. Aile içi iletişimi güçlendirmek", app: "Aile bireylerinin meslekleri, evdeki sorumluluklar ve sevgi bağları sohbetleri." },
+        { code: "D3", name: "ÇALIŞKANLIK", def: "D3.1. Azimli olmak\nD3.2. Planlı olmak\nD3.3. Araştırmacı olmak", app: "Başladığı boyama veya kule inşaatını bitirme; merkezdeki materyalleri toplama." },
+        { code: "D4", name: "DOSTLUK", def: "D4.1. Arkadaşlarına destek olmak\nD4.2. Güvene dayalı ilişkiler", app: "Yalnız kalan arkadaşını oyuna davet etme; üzgün arkadaşına sarılma." },
+        { code: "D5", name: "DUYARLILIK", def: "D5.1. İnsana değer vermek\nD5.2. Çevreye ve canlılara değer vermek", app: "Sınıf bitkisini sulama; okul bahçesindeki karıncaları ezmeme; hayvanları koruma." },
+        { code: "D6", name: "DÜRÜSTLÜK", def: "D6.1. Samimi olmak\nD6.2. Doğru ve güvenilir olmak", app: "Yaptığı eylemi dürüstçe açıklama; arkadaşının eşyasını izinsiz almama." },
+        { code: "D7", name: "ESTETİK", def: "D7.1. Duyusal derinliği anlamak\nD7.2. Sanatsal zevkler", app: "Doğanın renk ve dokularını fark etme; eserini özenle sergileme." },
+        { code: "D8", name: "MAHREMİYET", def: "D8.1. Kişisel özgürlük alanını korumak", app: "Dokunulmazlık alanlarının bilincinde olma; başkasının özel alanına saygı duyma." },
+        { code: "D9", name: "MERHAMET", def: "D9.1. Vicdanlı olmak\nD9.2. Şefkatli olmak", app: "Yaralanan veya ağlayan arkadaşına şefkatle yaklaşma; sokak hayvanlarına su verme." },
+        { code: "D12", name: "SABIR", def: "D12.1. Kontrollü olmak\nD12.2. İstikrarlı olmak", app: "Kaydırakta sıra bekleme; arkadaşının sözünü bitirmesini bekleme." },
+        { code: "D13", name: "SAĞLIKLI YAŞAM", def: "D13.1. Dengeli beslenmek\nD13.2. Fiziksel hareket", app: "Meyve saatinde sağlıklı yiyecekleri tercih etme; yemekten önce el yıkama." },
+        { code: "D14", name: "SAYGI", def: "D14.1. Nezaketli olmak\nD14.2. Değerlere saygı", app: "Sınıfa girince selam verme; bayrağa ve İstiklâl Marşı'na saygı gösterme." },
+        { code: "D15", name: "SEVGİ", def: "D15.1. Anlayışlı ve barışçıl olmak", app: "Arkadaşlarına, ailesine ve doğaya sevgiyle sarılma; barışçıl oyun dili kurma." },
+        { code: "D16", name: "SORUMLULUK", def: "D16.1. Kendine karşı görevler\nD16.3. Görev bilinci", app: "Montunu askıya asma; ayakkabısını giyme; sınıf nöbetçiliği görevini yapma." },
+        { code: "D17", name: "TASARRUF", def: "D17.2. İsraftan kaçınmak", app: "Ellerini sabunlarken musluğu kapatma; kağıt havluyu tek yaprak kullanma." },
+        { code: "D18", name: "TEMİZLİK", def: "D18.1. Kişisel bakım\nD18.2. Ortam temizliği", app: "Etkinlik sonrası masayı silme; yerdeki çöpleri kutuya atma; hijyen kuralları." },
+        { code: "D19", name: "VATANSEVERLİK", def: "D19.1. Millî bilinç\nD19.2. Millî kimlik", app: "29 Ekim, 23 Nisan coşkusu; Atatürk'ü tanıma ve sevme; Türk bayrağını koruma." },
+        { code: "D20", name: "YARDIMSEVERLİK", def: "D20.1. Cömert olmak\nD20.2. Dayanışma", app: "Dağılan boyaları toplamaya yardım etme; paylaşımcı olma." },
+      ];
+      const rows = values.map((v, i) => ({
+        no: i + 1,
+        code: v.code,
+        name: v.name,
+        def: v.def,
+        app: v.app,
+      }));
+      await exportOfficialTableToExcel({
+        fileName: "MEB_TTKB_EK12_Erdem_Deger_Eylem",
+        sheetName: "EK-12 Değerler",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI TTKB — EK-12 ERDEM: DEĞER-EYLEM TABLOSU (20 DEĞER)",
+        subtitle: "TTKB Okul Öncesi Eğitim Programı Sayfa 197–203 Resmî Müfredat Referans Çizelgesi",
+        metadata: [{ label: "Evrak Türü", value: "EK-12 Resmî Değerler Kataloğu" }],
+        columns: [
+          { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+          { header: "Kod", key: "code", width: 10, align: "center" },
+          { header: "Değer Başlığı", key: "name", width: 22, align: "left" },
+          { header: "Resmî Eylem Tanımı", key: "def", width: 45, align: "left" },
+          { header: "Okul Öncesi Sınıf İçi Yaklaşım & Yöntem", key: "app", width: 55, align: "left" },
+        ],
+        rows,
+        includeSubtotals: false,
+      });
+    } else if (selectedSubTab === "ek13") {
+      const tendencies = [
+        { group: "Benlik Eğilimleri (E1)", code: "E1.1", name: "Merak", desc: "Çevresini, doğayı ve nesneleri derinlemesine inceleme isteği." },
+        { group: "Benlik Eğilimleri (E1)", code: "E1.2", name: "Bağımsızlık", desc: "Kendi işini kendi yapabilme, öz güvenli eylem sergileme." },
+        { group: "Benlik Eğilimleri (E1)", code: "E1.3", name: "Azim ve Kararlılık", desc: "Zorlukla karşılaştığında vazgeçmeme, başladığı işi bitirme." },
+        { group: "Benlik Eğilimleri (E1)", code: "E1.4", name: "Kendine İnanma (Öz Yeterlilik)", desc: "\"Ben bunu yapabilirim\" algısı." },
+        { group: "Benlik Eğilimleri (E1)", code: "E1.5", name: "Kendine Güvenme (Öz Güven)", desc: "Duygu ve fikirlerini topluluk önünde rahatça ifade edebilme." },
+        { group: "Sosyal Eğilimler (E2)", code: "E2.1", name: "Empati", desc: "Arkadaşının ne hissettiğini tahmin edip anlayabilme." },
+        { group: "Sosyal Eğilimler (E2)", code: "E2.2", name: "Sorumluluk", desc: "Sınıf kurallarına ve görevlerine bağlı kalma." },
+        { group: "Sosyal Eğilimler (E2)", code: "E2.3", name: "Girişkenlik", desc: "Yeni oyun başlatabilme, gruba dahil olabilme." },
+        { group: "Sosyal Eğilimler (E2)", code: "E2.4", name: "Güven", desc: "Arkadaşlarına ve öğretmenine güven duyabilme." },
+        { group: "Sosyal Eğilimler (E2)", code: "E2.5", name: "Oyunseverlik", desc: "Kurallı ve kuralsız oyunlara neşeyle katılabilme." },
+        { group: "Entelektüel Eğilimler (E3)", code: "E3.2", name: "Odaklanma", desc: "Dikkatini dağıtmadan etkinliğe yoğunlaşabilme." },
+        { group: "Entelektüel Eğilimler (E3)", code: "E3.3", name: "Yaratıcılık", desc: "Malzemeleri alışılmışın dışında, özgün kurgularda kullanabilme." },
+        { group: "Entelektüel Eğilimler (E3)", code: "E3.5", name: "Açık Fikirlilik", desc: "Başka çocukların alternatif fikirlerini deneyebilme." },
+        { group: "Entelektüel Eğilimler (E3)", code: "E3.6", name: "Analitiklik", desc: "Neden-sonuç ilişkilerini ve örüntüleri çözümleyebilme." },
+        { group: "Entelektüel Eğilimler (E3)", code: "E3.8", name: "Soru Sorma", desc: "\"Neden, nasıl, ne zaman?\" sorularıyla derinleşebilme." },
+      ];
+      const rows = tendencies.map((t, i) => ({
+        no: i + 1,
+        group: t.group,
+        code: t.code,
+        name: t.name,
+        desc: t.desc,
+      }));
+      await exportOfficialTableToExcel({
+        fileName: "MEB_TTKB_EK13_Egilimler",
+        sheetName: "EK-13 Eğilimler",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI TTKB — EK-13 EĞİLİMLER TABLOSU",
+        subtitle: "TTKB Okul Öncesi Eğitim Programı Sayfa 204 Resmî Müfredat Referans Çizelgesi",
+        metadata: [{ label: "Evrak Türü", value: "EK-13 Eğilimler Kataloğu" }],
+        columns: [
+          { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+          { header: "Eğilim Grubu", key: "group", width: 25, align: "left" },
+          { header: "Kod", key: "code", width: 10, align: "center" },
+          { header: "Eğilim Adı", key: "name", width: 25, align: "left" },
+          { header: "Tanım ve Gösterge", key: "desc", width: 60, align: "left" },
+        ],
+        rows,
+        includeSubtotals: false,
+      });
+    } else {
+      const literacies = [
+        { code: "OB1", name: "BİLGİ OKURYAZARLIĞI", skill: "Bilgi İhtiyacını Fark Etme", comp: "Bilgi ihtiyacını fark etmek; bilgi türlerini (hikâye, doğa, gündelik) tanımak." },
+        { code: "OB2", name: "DİJİTAL OKURYAZARLIK", skill: "Dijital Araçları Anlama", comp: "Akıllı tahta, tablet ve ses kayıt cihazlarının eğitim amaçlı olduğunu bilmek; ekran süresi sınırını kavramak." },
+        { code: "OB3", name: "FİNANSAL OKURYAZARLIK", skill: "İhtiyaç ve İstek Ayrımı", comp: "İhtiyaç (beslenme, giyim) ile istek (oyuncak) arasındaki farkı kavramak; paranın değişim aracı olduğunu anlamak." },
+        { code: "OB4", name: "GÖRSEL OKURYAZARLIK", skill: "Görsel İpuçlarını Okuma", comp: "Resimli kitaplardaki detayları betimlemek; piktogram ve sembolleri (tuvalet, acil çıkış, geri dönüşüm) okumak." },
+        { code: "OB5", name: "KÜLTÜR OKURYAZARLIĞI", skill: "Kültürel Unsurları Tanıma", comp: "Geleneksel oyunlar, ninniler, bayramlar ve yerel motiflerin farkına varmak." },
+        { code: "OB6", name: "VATANDAŞLIK OKURYAZARLIĞI", skill: "Toplumsal Kurallar", comp: "Toplumsal kuralların (sıraya girme, yere çöp atmama) farkına varmak; hak ve sorumlulukları bilmek." },
+        { code: "OB7", name: "VERİ OKURYAZARLIĞI", skill: "Soru Sorma ve Basit Grafik", comp: "Sınıf yoklama grafiği, hava durumu tablosu gibi somut verileri okumak ve karşılaştırmak." },
+        { code: "OB8", name: "SÜRDÜRÜLEBİLİRLİK", skill: "Doğa ve Kaynak Bilinci", comp: "Su, enerji ve gıda israfından kaçınmak; geri dönüştürülebilir atıkları ayrıştırmak." },
+      ];
+      const rows = literacies.map((l, i) => ({
+        no: i + 1,
+        code: l.code,
+        name: l.name,
+        skill: l.skill,
+        comp: l.comp,
+      }));
+      await exportOfficialTableToExcel({
+        fileName: "MEB_TTKB_EK14_Okuryazarlik_Becerileri",
+        sheetName: "EK-14 Okuryazarlık",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI TTKB — EK-14 OKURYAZARLIK BECERİLERİ TABLOSU",
+        subtitle: "TTKB Okul Öncesi Eğitim Programı Sayfa 205–206 Resmî Müfredat Referans Çizelgesi",
+        metadata: [{ label: "Evrak Türü", value: "EK-14 Okuryazarlık Becerileri" }],
+        columns: [
+          { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+          { header: "Kod", key: "code", width: 10, align: "center" },
+          { header: "Okuryazarlık Türü", key: "name", width: 30, align: "left" },
+          { header: "Bütünleşik Beceri", key: "skill", width: 30, align: "left" },
+          { header: "Süreç Bileşeni (Okul Öncesi)", key: "comp", width: 60, align: "left" },
+        ],
+        rows,
+        includeSubtotals: false,
+      });
+    }
+  };
+
   return (
     <div className="official-form-modal">
       <div className="official-form-container a4-printable" style={{ maxWidth: "1150px" }}>
@@ -27,6 +177,14 @@ export function OfficialTymmReferenceTablesModal({ onClose }: Props) {
             <small>Talim ve Terbiye Kurulu Başkanlığı Müfredat Kataloğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              onClick={handleExportExcel}
+              style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+            >
+              📊 Excel (.xlsx)
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır
             </button>

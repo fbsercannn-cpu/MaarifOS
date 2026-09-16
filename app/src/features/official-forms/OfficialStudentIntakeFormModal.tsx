@@ -87,6 +87,36 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `Ogrenciyi_Tanima_Formu_${studentName.replace(/\s+/g, "_")}`,
+      sheetName: "Öğrenciyi Tanıma",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — SENE BAŞI ÖĞRENCİYİ TANIMA VE AİLE BİLGİ FORMU",
+      subtitle: `${studentName} · Doğum: ${birthDate} · Kan Grubu: ${bloodType} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Öğrenci Adı Soyadı", value: studentName },
+        { label: "Doğum Tarihi", value: birthDate },
+        { label: "Kan Grubu", value: bloodType },
+        { label: "Ebeveyn", value: parentName },
+        { label: "İletişim", value: parentPhone },
+        { label: "Öğretmen", value: teacherName },
+      ],
+      columns: [
+        { header: "Kategori / Gelişim Alanı", key: "section", width: 28, align: "left" },
+        { header: "Aile Beyanı ve Sağlık / Gelişim Detayları", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "ACİL DURUM İLETİŞİMİ", content: `Telefon: ${parentPhone} | Acil Durum: ${emergencyContact}` },
+        { section: "TESLİM ALMAYA YETKİLİLER", content: pickupAuthPersons },
+        { section: "1. SAĞLIK VE ALERJİ", content: `Alerjiler: ${allergies}\nKronik Rahatsızlık: ${chronicDiseases}` },
+        { section: "2. GÜNLÜK YAŞAM & ÖZ BAKIM", content: `Beslenme: ${nutritionHabits}\nTuvalet: ${toiletIndependence}\nUyku: ${sleepHabits}` },
+        { section: "3. DUYGUSAL ÖZELLİKLER & İLGİLER", content: `Korkular ve Sakinleşme: ${fearsAndCalming}\nÖzel İlgiler ve Oyunlar: ${specialInterests}` },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -95,6 +125,15 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
           <h3 className="of-action-title">Öğrenciyi Tanıma ve Aile Bilgi Formu</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Öğrenci tanıma formunu Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

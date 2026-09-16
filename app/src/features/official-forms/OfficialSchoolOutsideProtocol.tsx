@@ -207,6 +207,44 @@ export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const checkedCount = checklist.filter((c) => c.checked).length;
+    const rows = checklist.map((item, index) => ({
+      no: index + 1,
+      category: item.category,
+      title: item.title,
+      ruleText: item.ruleText,
+      status: item.checked ? "UYGUN / TAMAMLANDI [✓]" : "EKSİK / PLANLANIYOR [⚠️]",
+      score: item.checked ? 1 : 0,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_EK3_Okul_Disi_Guvenlik_Protokolu_${activityDate.replace(/\./g, "_")}`,
+      sheetName: "Okul Dışı Protokol",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-3 OKUL DIŞI ÖĞRENME GÜVENLİK, İZİN VE DENETİM PROTOKOLÜ",
+      subtitle: `${schoolName} · ${destination} · Tarih: ${activityDate} · Sorumlu: ${responsibleTeacher}`,
+      metadata: [
+        { label: "Okul", value: schoolName },
+        { label: "Hedef / Güzergâh", value: destination },
+        { label: "Tarih", value: activityDate },
+        { label: "Sorumlu Öğretmen", value: responsibleTeacher },
+        { label: "Refakatçi / Personel", value: companionCount },
+        { label: "Protokol Hazırlığı", value: `${checkedCount}/${checklist.length} Madde Tamamlandı (%${Math.round((checkedCount / checklist.length) * 100)})` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Aşama", key: "category", width: 18, align: "left" },
+        { header: "Güvenlik & Uygulama Kuralı", key: "title", width: 35, align: "left" },
+        { header: "Mevzuat ve Denetim Standardı", key: "ruleText", width: 60, align: "left" },
+        { header: "Durum", key: "status", width: 25, align: "center" },
+        { header: "Puan", key: "score", width: 10, align: "center", isNumeric: true },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -222,6 +260,21 @@ export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            onClick={handleDownloadExcel}
+            style={{
+              padding: "7px 12px",
+              background: "#15803d",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button
             onClick={handleDownloadDoc}
             style={{

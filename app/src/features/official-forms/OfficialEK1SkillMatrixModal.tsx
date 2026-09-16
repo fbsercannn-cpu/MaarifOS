@@ -363,6 +363,40 @@ export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = filteredSkills.map((skill, index) => ({
+      no: index + 1,
+      domain: skill.domain,
+      code: skill.code,
+      ageBand: `${skill.ageBand} Ay`,
+      outcomeTitle: skill.outcomeTitle,
+      processComponents: skill.processComponents.join("\n"),
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_TTKB_EK1_Kazanim_Havuzu_${selectedDomain.replace(/\s+/g, "_")}`,
+      sheetName: "EK-1 Kazanımlar",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI TTKB — EK-1 KAZANIM VE SÜREÇ BİLEŞENLERİ TABLOSU",
+      subtitle: `Filtre: ${selectedAge === "Tümü" ? "Tüm Yaşlar" : `${selectedAge} Ay`} · Alan: ${selectedDomain} · Toplam: ${filteredSkills.length} Kazanım`,
+      metadata: [
+        { label: "Yaş Bandı", value: selectedAge === "Tümü" ? "Tüm Yaşlar" : `${selectedAge} Ay` },
+        { label: "Öğrenme Alanı", value: selectedDomain },
+        { label: "Kazanım Sayısı", value: `${filteredSkills.length}` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Alan", key: "domain", width: 18, align: "left" },
+        { header: "Kod", key: "code", width: 12, align: "center" },
+        { header: "Yaş Bandı", key: "ageBand", width: 14, align: "center" },
+        { header: "Öğrenme Çıktısı (Kazanım)", key: "outcomeTitle", width: 45, align: "left" },
+        { header: "Süreç Bileşenleri / Göstergeler", key: "processComponents", width: 55, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -383,6 +417,21 @@ export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
               {copyFeedback}
             </span>
           )}
+          <button
+            onClick={handleDownloadExcel}
+            style={{
+              padding: "7px 12px",
+              background: "#15803d",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button
             onClick={handleDownloadDoc}
             style={{

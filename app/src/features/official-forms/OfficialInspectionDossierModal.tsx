@@ -155,6 +155,42 @@ export function OfficialInspectionDossierModal({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = documents.map((d, i) => ({
+      no: i + 1,
+      code: d.code,
+      title: d.title,
+      ttkbRef: d.ttkbRef,
+      status: d.status,
+      note: d.note,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: "Maarif_Mufettisligi_Sinif_Teftis_Dosyasi_Indeksi",
+      sheetName: "Teftiş Dosyası İndeksi",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — MAARİF MÜFETTİŞLİĞİ RESMÎ TEFTİŞ VE EVRAK DOSYASI İNDEKSİ",
+      subtitle: `${schoolName} · ${className} · Eğitim Yılı: ${academicYear} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Şube", value: className },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Eğitim Yılı", value: academicYear },
+        { label: "Toplam Dosya Grubu", value: String(documents.length) },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Evrak Kodu", key: "code", width: 18, align: "center" },
+        { header: "Resmî Dosya / Enstrüman Adı", key: "title", width: 45, align: "left" },
+        { header: "TTKB Sayfa Ref.", key: "ttkbRef", width: 16, align: "center" },
+        { header: "Hazırlık Durumu", key: "status", width: 22, align: "center" },
+        { header: "Müfettişlik Açıklama ve Notları", key: "note", width: 50, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -170,6 +206,23 @@ export function OfficialInspectionDossierModal({ onClose }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => void handleDownloadExcel()}
+            style={{
+              padding: "7px 12px",
+              background: "#ecfdf5",
+              color: "#065f46",
+              border: "1px solid #a7f3d0",
+              borderRadius: "6px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+            title="Teftiş dosyası indeksini Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx) İndir
+          </button>
           <button
             onClick={handleDownloadDoc}
             style={{

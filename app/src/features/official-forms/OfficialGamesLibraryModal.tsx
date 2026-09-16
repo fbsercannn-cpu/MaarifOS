@@ -169,6 +169,45 @@ export function OfficialGamesLibraryModal({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = OFFICIAL_GAMES_DATABASE.map((game, index) => ({
+      no: index + 1,
+      name: game.name,
+      category: game.category,
+      ageBand: game.ageBand,
+      playerCount: game.playerCount,
+      skillsGained: game.skillsGained,
+      materials: game.materials,
+      howToPlay: game.howToPlay.join("\n"),
+      teacherTip: game.teacherTip,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: "MEB_Resmi_Oyun_Sandigi_ve_Geleneksel_Oyunlar",
+      sheetName: "Oyun Kütüphanesi",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — RESMÎ OYUN SANDIĞI & GELENEKSEL ÇOCUK OYUNLARI KATALOĞU",
+      subtitle: "TTKB Sayfa 86–91 Okul Öncesinde Oyun Standartları",
+      metadata: [
+        { label: "Oyun Havuzu", value: "Tüm Kategoriler" },
+        { label: "Kapsanan Oyun Sayısı", value: `${OFFICIAL_GAMES_DATABASE.length} Oyun` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Oyun Adı", key: "name", width: 25, align: "left" },
+        { header: "Kategori", key: "category", width: 22, align: "left" },
+        { header: "Yaş Bandı", key: "ageBand", width: 14, align: "center" },
+        { header: "Oyuncu Sayısı", key: "playerCount", width: 18, align: "center" },
+        { header: "Desteklenen Beceriler", key: "skillsGained", width: 35, align: "left" },
+        { header: "Gerekli Materyaller", key: "materials", width: 25, align: "left" },
+        { header: "Nasıl Oynanır (Kurallar)", key: "howToPlay", width: 50, align: "left" },
+        { header: "Öğretmene Pedagojik İpucu", key: "teacherTip", width: 35, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -184,6 +223,21 @@ export function OfficialGamesLibraryModal({ onClose }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            onClick={handleDownloadExcel}
+            style={{
+              padding: "7px 12px",
+              background: "#15803d",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button
             onClick={handleSpinWheel}
             disabled={wheelSpinning}

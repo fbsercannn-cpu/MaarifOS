@@ -105,6 +105,37 @@ export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => v
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `Baris_Masasi_Tutanagi_${date.replace(/[^a-zA-Z0-9]/g, "_")}`,
+      sheetName: "Barış Masası",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — BARIŞ MASASI VE AKRAN ÇATIŞMASI ÇÖZÜM PROTOKOLÜ",
+      subtitle: `${schoolName} · Tarih: ${date} · Öğrenciler: ${childA} & ${childB} · Arabulucu: ${teacherName}`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Tarih", value: date },
+        { label: "1. Öğrenci", value: childA },
+        { label: "2. Öğrenci", value: childB },
+        { label: "Merkez / Yer", value: location },
+        { label: "Arabulucu Öğretmen", value: teacherName },
+      ],
+      columns: [
+        { header: "Protokol Adımı", key: "step", width: 28, align: "left" },
+        { header: "Uygulama, Çocuk İfadeleri ve Pedagojik İzleme", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { step: "OLAY ÖZETİ VE ÇATIŞMA NEDENİ", content: incidentDescription },
+        { step: "1. ADIM: SAKİNLEŞME & DUYGU TANIMA", content: step1CoolDown },
+        { step: "2. ADIM: SIRAYLA DİNLEME & İFADE", content: `${childA}: ${step2ListeningA}\n${childB}: ${step2ListeningB}` },
+        { step: "3. ADIM: EMPATİ VE DUYGU YANSITMASI", content: step3Empathy },
+        { step: "4. ADIM: ORTAK ÇÖZÜM VE ANLAŞMA", content: step4Solution },
+        { step: "ÖĞRETMENİN İZLEME VE GERİ BİLDİRİMİ", content: teacherFollowup },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -113,6 +144,15 @@ export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => v
           <h3 className="of-action-title">Barış Masası &amp; Çatışma Çözme Protokolü</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Barış masası tutanağını Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

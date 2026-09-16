@@ -111,6 +111,41 @@ export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () =>
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = DIGITAL_RULES.map((r, index) => ({
+      no: index + 1,
+      title: r.title,
+      description: r.description,
+      parentCommitment: r.parentCommitment,
+      status: "KABUL VE TAAHHÜT EDİLDİ [✓]",
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Dijital_Ogrenme_Taahhutnamesi_${studentName.replace(/\s+/g, "_")}`,
+      sheetName: "Dijital Taahhütname",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — DİJİTAL ÖĞRENME, EKRAN SÜRESİ VE ÇOCUK MAHREMİYETİ TAAHHÜTNAMESİ",
+      subtitle: `${schoolName} · Öğrenci: ${studentName} · Veli: ${parentName} · Tarih: ${date} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Öğrenci", value: studentName },
+        { label: "Öğrenci Velisi", value: parentName },
+        { label: "Okul", value: schoolName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Mevzuat Dayanağı", value: "TTKB s. 107–108 Dijital Öğrenme Ortamları İlkeleri" },
+      ],
+      columns: [
+        { header: "Madde", key: "no", width: 8, align: "center", isNumeric: true },
+        { header: "İlke Başlığı", key: "title", width: 35, align: "left" },
+        { header: "Pedagojik Standart & Açıklama", key: "description", width: 55, align: "left" },
+        { header: "Veli Taahhüdü", key: "parentCommitment", width: 50, align: "left" },
+        { header: "Durum", key: "status", width: 28, align: "center" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Actions (No Print) */}
@@ -121,6 +156,14 @@ export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () =>
           <span className="of-tag of-tag--emerald">Ekran Bilinci &amp; Mahremiyet Taahhütnamesi</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>

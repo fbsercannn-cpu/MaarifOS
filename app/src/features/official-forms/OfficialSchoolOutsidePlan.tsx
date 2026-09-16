@@ -152,15 +152,62 @@ export function OfficialSchoolOutsidePlan({ initialData, onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `EK-4_Okul_Disi_Plan_${formData.place.replace(/\s+/g, "_")}_${formData.date}`,
+      sheetName: "EK-4 Okul Dışı Plan",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-4 OKUL DIŞI ÖĞRENME ETKİNLİĞİ PLANI",
+      subtitle: `${formData.schoolName} · ${formData.place} · Tarih: ${formData.date} · Öğretmen: ${formData.teacherName}`,
+      metadata: [
+        { label: "Okul Adı", value: formData.schoolName },
+        { label: "Etkinlik Yeri", value: formData.place },
+        { label: "Tarih", value: formData.date },
+        { label: "Yaş Grubu", value: formData.ageGroup },
+        { label: "Öğretmen", value: formData.teacherName },
+        { label: "Katılımcı", value: `${formData.girlCount} Kız, ${formData.boyCount} Erkek (Toplam: ${Number(formData.girlCount) + Number(formData.boyCount)})` },
+      ],
+      columns: [
+        { header: "Bölüm / Parametre", key: "section", width: 30, align: "left" },
+        { header: "Plan Açıklama ve Detayları", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "ETKİNLİK YERİ VE TARİHİ", content: `${formData.place} (${formData.date})` },
+        { section: "GİDİŞ-DÖNÜŞ SAATLERİ", content: formData.departureReturnHours },
+        { section: "GÖREVLİ ÖĞRETMEN / PERSONEL", content: formData.staff },
+        { section: "KATILAN EBEVEYNLER", content: formData.parents },
+        { section: "TAŞIT BİLGİSİ & GÜZERGÂH", content: `${formData.vehicleInfo} | Güzergâh: ${formData.route}` },
+        { section: "ALAN BECERİLERİ & ÇIKTILAR", content: formData.domainSkills },
+        { section: "EĞİLİMLER", content: formData.tendencies },
+        { section: "PROGRAMLAR ARASI BİLEŞENLER", content: formData.interdisciplinary },
+        { section: "KAVRAMLAR & MATERYALLER", content: `Kavramlar: ${formData.concepts}\nMateryaller: ${formData.materials}` },
+        { section: "ETKİNLİK ÖNCESİ HAZIRLIK", content: formData.beforeActivity },
+        { section: "ETKİNLİK SÜRECİ (UYGULAMA)", content: formData.duringActivity },
+        { section: "ETKİNLİK SONRASI DEĞERLENDİRME", content: formData.afterActivity },
+        { section: "DEĞERLENDİRME SORULARI", content: formData.evaluationQuestions },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-modal">
       <div className="official-form-container a4-printable">
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-4 Okul Dışı Öğrenme Etkinliği Plan Örneği (TTKB Sayfa 180–181)</strong>
-            <small>Resmî Format · A4 Çıktı ve Word Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              title="Okul dışı öğrenme planını Excel (.xlsx) olarak indir"
+            >
+              📊 Excel (.xlsx)
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>

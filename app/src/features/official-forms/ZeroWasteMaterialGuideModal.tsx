@@ -151,6 +151,40 @@ Destekleriniz için teşekkür eder, doğaya duyarlı nesiller yetiştirmeyi dil
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    let rowNo = 1;
+    const rows = displayedCategories.flatMap((c) =>
+      c.materials.map((m) => ({
+        no: rowNo++,
+        centerName: c.centerName,
+        materialName: m.name,
+        usage: m.pedagogicalUsage,
+        source: m.source,
+      }))
+    );
+
+    await exportOfficialTableToExcel({
+      fileName: "MEB_Sifir_Atik_Dogal_Materyal_Rehberi",
+      sheetName: "Sıfır Atık Materyaller",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — SIFIR ATIK VE DOĞAL PEDAGOJİK MATERYAL PUSULASI (OB8)",
+      subtitle: "TTKB Okul Öncesi Eğitim Programı Sayfa 97 ve 206 Sürdürülebilirlik Okuryazarlığı Standartları",
+      metadata: [
+        { label: "Filtre", value: selectedCenter === "all" ? "Tüm Öğrenme Merkezleri" : displayedCategories[0]?.centerName || "" },
+        { label: "Kapsanan Materyal", value: `${rows.length} Çeşit Atık/Doğal Malzeme` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenme Merkezi", key: "centerName", width: 25, align: "left" },
+        { header: "Atık / Doğal Malzeme", key: "materialName", width: 30, align: "left" },
+        { header: "Pedagojik Kullanım & Etkinlik Amacı", key: "usage", width: 55, align: "left" },
+        { header: "Temin Kaynağı", key: "source", width: 25, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -171,6 +205,21 @@ Destekleriniz için teşekkür eder, doğaya duyarlı nesiller yetiştirmeyi dil
               {copyFeedback}
             </span>
           )}
+          <button
+            onClick={handleDownloadExcel}
+            style={{
+              padding: "7px 12px",
+              background: "#15803d",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button
             onClick={handleCopyWhatsAppList}
             style={{

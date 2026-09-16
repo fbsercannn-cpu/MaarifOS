@@ -87,6 +87,45 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = [
+      { section: "Etkinlik Künyesi", item: "Katılımcı Veli", detail: parentName },
+      { section: "Etkinlik Künyesi", item: "Öğrenci", detail: studentName },
+      { section: "Etkinlik Künyesi", item: "Velinin Mesleği / Uzmanlık Alanı", detail: parentProfession },
+      { section: "Etkinlik Künyesi", item: "Uygulama Tarihi ve Süresi", detail: `${date} (${duration})` },
+      { section: "Etkinlik Künyesi", item: "Etkinliğin Adı", detail: activityName },
+      { section: "Etkinlik Künyesi", item: "Etkinliğin Türü", detail: activityType },
+      { section: "Pedagojik Çerçeve", item: "Hedeflenen Beceriler ve Değerler", detail: targetSkills },
+      { section: "Pedagojik Çerçeve", item: "Kullanılacak Materyaller", detail: materials },
+      { section: "Uygulama Aşamaları", item: "1. Giriş ve Isınma (Merak Uyandırma)", detail: introStep },
+      { section: "Uygulama Aşamaları", item: "2. Gelişme ve Uygulama (Birlikte Deneyimleme)", detail: devStep },
+      { section: "Uygulama Aşamaları", item: "3. Sonuç ve Değerlendirme (Ürün & Paylaşım)", detail: conclusionStep },
+      { section: "Süreç Değerlendirmesi", item: "Katılımcı Velinin Görüş ve Duyguları", detail: parentNotes },
+      { section: "Süreç Değerlendirmesi", item: "Öğretmenin Pedagojik Değerlendirmesi", detail: teacherEvaluation },
+    ];
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Aile_Katilimi_Etkinlik_Plani_${date}`,
+      sheetName: "Aile Katılım Planı",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — AİLE KATILIMI ETKİNLİK UYGULAMA PLANI",
+      subtitle: `${activityName} · Veli: ${parentName} · Öğrenci: ${studentName} · Tarih: ${date}`,
+      metadata: [
+        { label: "Katılımcı Veli", value: parentName },
+        { label: "Öğrenci", value: studentName },
+        { label: "Uygulama Tarihi", value: `${date} (${duration})` },
+        { label: "Etkinlik Türü", value: activityType },
+      ],
+      columns: [
+        { header: "Bölüm", key: "section", width: 22, align: "left" },
+        { header: "Plan Maddesi", key: "item", width: 35, align: "left" },
+        { header: "İçerik ve Açıklama", key: "detail", width: 65, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Actions (No Print) */}
@@ -97,6 +136,14 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
           <span className="of-tag of-tag--emerald">Sınıf İçi Veli Etkinlik Planı</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>

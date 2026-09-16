@@ -76,6 +76,58 @@ export function AttendancePanels(props: AttendancePanelsProps) {
       .forEach((s) => props.onToggleStatus(s.id, "present"));
   };
 
+  const handleExportAttendanceExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("../official-forms/official-form-export-service.ts");
+    const rows = props.students.map((s, index) => {
+      const isMarked = s.attendanceMarked !== false;
+      const status = isMarked ? s.status : "unmarked";
+      const statusText = status === "present" ? "Var" : status === "absent" ? "Yok" : status === "late" ? "Geç" : "İşaretsiz";
+      const notes = (s.events ?? [])
+        .map((e) => [e.localTime, e.teacherNote || e.reason || e.type].filter(Boolean).join(" "))
+        .filter(Boolean)
+        .join(", ");
+      return {
+        no: index + 1,
+        name: s.name,
+        statusText,
+        isPresent: status === "present" ? 1 : 0,
+        isAbsent: status === "absent" ? 1 : 0,
+        isLate: status === "late" ? 1 : 0,
+        notes: notes || "-",
+      };
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Yoklama_${props.civilDate}`,
+      sheetName: "Günlük Yoklama",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI OKUL ÖNCESİ GÜNLÜK VE AYLIK YOKLAMA ÇİZELGESİ",
+      subtitle: `${props.formattedCivilDate} Sınıf Yoklama Cetveli`,
+      metadata: [
+        { label: "Tarih", value: props.civilDate },
+        { label: "Sınıf Mevcudu", value: String(props.students.length) },
+        { label: "Katılım", value: `${presentCount} Var (%${Math.round((presentCount / (props.students.length || 1)) * 100)})` },
+        { label: "Devamsız", value: `${absentCount} Yok` },
+        { label: "Geç Kalan", value: `${lateCount} Geç` },
+      ],
+      columns: [
+        { header: "No", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenci Adı Soyadı", key: "name", width: 28, align: "left" },
+        { header: "Durum", key: "statusText", width: 14, align: "center" },
+        { header: "Var (1)", key: "isPresent", width: 10, align: "center", isNumeric: true },
+        { header: "Yok (1)", key: "isAbsent", width: 10, align: "center", isNumeric: true },
+        { header: "Geç (1)", key: "isLate", width: 10, align: "center", isNumeric: true },
+        { header: "Saat & Notlar", key: "notes", width: 35, align: "left" },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
+  const handlePrintAttendance = async () => {
+    const { printOfficialFormA4 } = await import("../official-forms/official-form-export-service.ts");
+    printOfficialFormA4(`Yoklama_${props.civilDate}`);
+  };
+
   return (
     <>
       <BottomSheet
@@ -91,6 +143,50 @@ export function AttendancePanels(props: AttendancePanelsProps) {
             {props.calculationDetails}
           </details>
         ) : null}
+
+        {/* Hızlı Dışa Aktarma Butonları */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "flex-end", marginBottom: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => void handleExportAttendanceExcel()}
+            style={{
+              background: "#ecfdf5",
+              color: "#065f46",
+              border: "1px solid #a7f3d0",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            title="SUBTOTAL(109) formül enjeksiyonlu resmî Excel yoklama tablosu indir"
+          >
+            📊 Yoklama Excel (.xlsx)
+          </button>
+          <button
+            type="button"
+            onClick={() => void handlePrintAttendance()}
+            style={{
+              background: "#f0fdf4",
+              color: "#166534",
+              border: "1px solid #bbf7d0",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            title="A4 formatında yazdır veya PDF olarak kaydet"
+          >
+            🖨️ A4 Yazdır / PDF
+          </button>
+        </div>
 
         {/* E5 Hızlı Özet Şeridi */}
         <div className="qag-summary-bar">

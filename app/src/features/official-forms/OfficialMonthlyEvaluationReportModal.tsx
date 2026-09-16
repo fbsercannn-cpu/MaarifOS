@@ -159,6 +159,51 @@ export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows: Array<Record<string, unknown>> = [];
+
+    rows.push({
+      dimension: "1. ÇOCUK AÇISINDAN",
+      type: "Ölçütler",
+      content: selectedChildCriteria.join(" \n• "),
+      narrative: childNarrative,
+    });
+    rows.push({
+      dimension: "2. PROGRAM AÇISINDAN",
+      type: "Ölçütler",
+      content: selectedProgramCriteria.join(" \n• "),
+      narrative: programNarrative,
+    });
+    rows.push({
+      dimension: "3. ÖĞRETMEN AÇISINDAN",
+      type: "Ölçütler",
+      content: selectedTeacherCriteria.join(" \n• "),
+      narrative: teacherNarrative,
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `3B_Aylik_Degerlendirme_${selectedMonth.replace(/\s+/g, "_")}`,
+      sheetName: "3B Aylık Değerlendirme",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — AYLIK EĞİTİM PLANI 3 BOYUTLU DEĞERLENDİRME RAPORU",
+      subtitle: `${schoolName} · ${className} · Ay: ${selectedMonth} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Şube", value: className },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Değerlendirilen Ay", value: selectedMonth },
+      ],
+      columns: [
+        { header: "Değerlendirme Boyutu", key: "dimension", width: 24, align: "left" },
+        { header: "Tür", key: "type", width: 14, align: "center" },
+        { header: "Seçilen Resmî Ölçütler (Tablo 1-2-3)", key: "content", width: 55, align: "left" },
+        { header: "Öğretmenin Ay Sonu Yansıtması ve Genel Kanaati", key: "narrative", width: 50, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK & ARAÇLAR */}
@@ -174,6 +219,23 @@ export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => void handleDownloadExcel()}
+            style={{
+              padding: "7px 12px",
+              background: "#ecfdf5",
+              color: "#065f46",
+              border: "1px solid #a7f3d0",
+              borderRadius: "6px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+            title="3 Boyutlu değerlendirme raporunu Microsoft Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx) İndir
+          </button>
           <button
             onClick={handleDownloadDoc}
             style={{

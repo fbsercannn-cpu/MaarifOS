@@ -141,6 +141,53 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = students.map((s, index) => ({
+      no: index + 1,
+      name: s.name,
+      ageMonth: s.ageMonth,
+      turkce: s.turkce,
+      matematik: s.matematik,
+      fen: s.fen,
+      sosyal: s.sosyal,
+      hareketSaglik: s.hareketSaglik,
+      sanat: s.sanat,
+      muzik: s.muzik,
+      sdbDegerler: s.sdbDegerler,
+      teacherOpinion: s.teacherOpinion,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Beceri_Edinim_Raporlari_${term.replace(/\s+/g, "_")}`,
+      sheetName: "Beceri Edinim",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — OKUL ÖNCESİ BECERİ EDİNİM RAPORLARI (E-OKUL MATRİSİ)",
+      subtitle: `${schoolName} · ${term} · Değerlendiren Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Okul", value: schoolName },
+        { label: "Dönem", value: term },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Kapsanan Öğrenci", value: `${students.length} Öğrenci` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenci Adı Soyadı", key: "name", width: 22, align: "left" },
+        { header: "Yaş", key: "ageMonth", width: 10, align: "center" },
+        { header: "Türkçe Alan Becerileri", key: "turkce", width: 35, align: "left" },
+        { header: "Matematik Alan Becerileri", key: "matematik", width: 35, align: "left" },
+        { header: "Fen Alan Becerileri", key: "fen", width: 35, align: "left" },
+        { header: "Sosyal Alan Becerileri", key: "sosyal", width: 35, align: "left" },
+        { header: "Hareket ve Sağlık", key: "hareketSaglik", width: 35, align: "left" },
+        { header: "Sanat Alan Becerileri", key: "sanat", width: 35, align: "left" },
+        { header: "Müzik Alan Becerileri", key: "muzik", width: 35, align: "left" },
+        { header: "Sosyal-Duygusal & Değerler", key: "sdbDegerler", width: 35, align: "left" },
+        { header: "Öğretmen Genel Kanaati", key: "teacherOpinion", width: 40, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   const domainFields: { key: keyof StudentReportData; label: string; icon: string }[] = [
     { key: "turkce", label: "Türkçe Alan Becerileri", icon: "📖" },
     { key: "matematik", label: "Matematik Alan Becerileri", icon: "🔢" },
@@ -163,6 +210,14 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
           <span className="of-tag of-tag--emerald">e-Okul Beceri Edinim Raporu</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--gold" onClick={handleCopyAllForEOkul}>
             {copiedField === "all" ? "✓ Kopyalandı!" : "📋 e-Okul İçin Tümünü Kopyala"}
           </button>

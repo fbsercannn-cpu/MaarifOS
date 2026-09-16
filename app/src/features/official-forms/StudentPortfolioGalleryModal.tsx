@@ -121,6 +121,50 @@ export function StudentPortfolioGalleryModal({ onClose }: Props) {
 
   const handlePrint = () => window.print();
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const filteredItems = items.filter((it) => {
+      if (selectedStudent !== "all" && it.studentName !== selectedStudent) return false;
+      if (selectedTag !== "all" && it.tag !== selectedTag) return false;
+      return true;
+    });
+
+    const rows = filteredItems.map((it, index) => ({
+      no: index + 1,
+      studentName: it.studentName,
+      title: it.title,
+      date: it.date,
+      domain: it.domain,
+      tag: it.tag,
+      childQuote: it.childQuote,
+      teacherNote: it.teacherNote,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Portfolyo_Urun_Seckisi_${selectedStudent === "all" ? "Tum_Sinif" : selectedStudent.replace(/\s+/g, "_")}`,
+      sheetName: "Portfolyo Kataloğu",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — ÖĞRENCİ GELİŞİM DOSYASI (PORTFOLYO) ÜRÜN SEÇKİSİ",
+      subtitle: `Filtre: ${selectedStudent === "all" ? "Tüm Sınıf" : selectedStudent} · Kategori: ${selectedTag === "all" ? "Tüm Türler" : selectedTag} · TTKB Sayfa 110, 177`,
+      metadata: [
+        { label: "Öğrenci Kapsamı", value: selectedStudent === "all" ? "Tüm Sınıf" : selectedStudent },
+        { label: "Ürün Türü", value: selectedTag === "all" ? "Tüm Türler" : selectedTag },
+        { label: "Toplam Eser / Kanıt Sayısı", value: `${filteredItems.length} Ürün` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenci Adı", key: "studentName", width: 20, align: "left" },
+        { header: "Ürün / Eser Başlığı", key: "title", width: 35, align: "left" },
+        { header: "Tarih", key: "date", width: 14, align: "center" },
+        { header: "Öğrenme Alanı", key: "domain", width: 24, align: "left" },
+        { header: "Tür / Etiket", key: "tag", width: 18, align: "left" },
+        { header: "Çocuğun Kendi İfadesi", key: "childQuote", width: 40, align: "left" },
+        { header: "Öğretmenin Pedagojik Notu", key: "teacherNote", width: 45, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   const filteredItems = items.filter((item) => {
     const matchStudent = selectedStudent === "all" || item.studentName === selectedStudent;
     const matchTag = selectedTag === "all" || item.tag === selectedTag;
@@ -137,6 +181,14 @@ export function StudentPortfolioGalleryModal({ onClose }: Props) {
             <small>Süreç Odaklı Değerlendirme · Sanatsal ve Bilişsel Ürün Arşivi</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              onClick={handleExportExcel}
+              style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+            >
+              📊 Excel (.xlsx)
+            </button>
             <button
               type="button"
               className="of-btn"

@@ -224,6 +224,56 @@ export function DifferentiationGuideModal({ onClose }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = OFFICIAL_DIFFERENTIATION_MATRIX.flatMap((d, index) => [
+      {
+        no: `${index + 1}.1`,
+        domain: d.domain,
+        domainCode: d.domainCode,
+        strategyType: "Destekleme (Özel Gereksinim & Destek)",
+        title: d.supportStrategies.adaptationTitle,
+        actionSteps: d.supportStrategies.actionSteps.join("\n"),
+        materialHint: d.supportStrategies.materialHint,
+        familyRecommendation: d.supportStrategies.familyRecommendation,
+      },
+      {
+        no: `${index + 1}.2`,
+        domain: d.domain,
+        domainCode: d.domainCode,
+        strategyType: "Zenginleştirme (İleri Düzey & Yetenek)",
+        title: d.enrichmentStrategies.adaptationTitle,
+        actionSteps: d.enrichmentStrategies.actionSteps.join("\n"),
+        materialHint: d.enrichmentStrategies.materialHint,
+        familyRecommendation: d.enrichmentStrategies.familyRecommendation,
+      },
+    ]);
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Farklilastirma_ve_BEP_Kilavuzu_${targetStudentName.replace(/\s+/g, "_")}`,
+      sheetName: "Farklılaştırma Kılavuzu",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — BİREYSELLEŞTİRİLMİŞ FARKLILAŞTIRMA VE UYARLAMA REHBERİ",
+      subtitle: `Öğrenci: ${targetStudentName} · TTKB Sayfa 105–108 Zenginleştirme ve Destekleme Standartları`,
+      metadata: [
+        { label: "Öğrenci", value: targetStudentName },
+        { label: "Öğretmen Notu", value: customTeacherNote },
+        { label: "Kapsanan Alan", value: `${OFFICIAL_DIFFERENTIATION_MATRIX.length} Öğrenme Alanı` },
+      ],
+      columns: [
+        { header: "No", key: "no", width: 8, align: "center" },
+        { header: "Öğrenme Alanı", key: "domain", width: 25, align: "left" },
+        { header: "Alan Kodu", key: "domainCode", width: 14, align: "center" },
+        { header: "Farklılaştırma Türü", key: "strategyType", width: 28, align: "left" },
+        { header: "Uyarlama Başlığı", key: "title", width: 35, align: "left" },
+        { header: "Uygulama Adımları & Stratejiler", key: "actionSteps", width: 50, align: "left" },
+        { header: "Tavsiye Materyaller", key: "materialHint", width: 35, align: "left" },
+        { header: "Aileye Ev Tavsiyesi", key: "familyRecommendation", width: 40, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK VE EYLEMLER */}
@@ -239,6 +289,25 @@ export function DifferentiationGuideModal({ onClose }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            onClick={handleDownloadExcel}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              background: "#15803d",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            <span>📊</span>
+            <span>Excel (.xlsx)</span>
+          </button>
           <button
             onClick={handleDownloadDoc}
             style={{

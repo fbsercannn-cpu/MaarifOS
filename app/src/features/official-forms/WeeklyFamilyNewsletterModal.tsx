@@ -221,6 +221,37 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `Haftalik_Veli_Bulteni_Hafta_${current.weekNumber}`,
+      sheetName: `Hafta ${current.weekNumber} Bülten`,
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — HAFTALIK VELİ BÜLTENİ VE EV PUSULASI",
+      subtitle: `${current.schoolName} · ${current.className} · Hafta: ${current.weekNumber} (${current.dateRange}) · Öğretmen: ${current.teacherName}`,
+      metadata: [
+        { label: "Okul Adı", value: current.schoolName },
+        { label: "Şube", value: current.className },
+        { label: "Öğretmen", value: current.teacherName },
+        { label: "Hafta", value: `${current.weekNumber} (${current.dateRange})` },
+        { label: "Tema / Odak", value: current.themeTitle },
+      ],
+      columns: [
+        { header: "Bülten Bölümü", key: "section", width: 28, align: "left" },
+        { header: "İçerik, Şarkı, Ev Etkinliği ve Açıklamalar", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "HAFTANIN TEMASI", content: current.themeTitle },
+        { section: "KAVRAMLAR", content: current.conceptsLearned.join(", ") },
+        { section: "ERDEM & DEĞER", content: `${current.virtueAndValue.value} (${current.virtueAndValue.action})` },
+        { section: "ŞARKI / ŞİİR", content: `${current.songOrPoem.title}\n${current.songOrPoem.lyrics}` },
+        { section: "EV ETKİNLİĞİ", content: `${current.homeActivity.title}\n${current.homeActivity.description}\nMalzemeler: ${current.homeActivity.materials}` },
+        { section: "SOHBET BAŞLATICILAR", content: current.chatPrompts.map((p, i) => `${i + 1}. "${p}"`).join("\n") },
+        { section: "DUYURULAR & NOTLAR", content: current.announcements },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* ÜST BAŞLIK VE EYLEM ÇUBUĞU */}
@@ -231,7 +262,7 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
             <span>Haftalık Görsel Veli Bülteni & Ev Etkinlik Pusulası</span>
           </h2>
           <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
-            TTKB s. 102–104 Aile Katılımı ve Bilgilendirme | WhatsApp uyumlu, tek tıkla A4 renkli çıktı ve Word (.doc)
+            TTKB s. 102–104 Aile Katılımı ve Bilgilendirme | WhatsApp uyumlu, tek tıkla A4 renkli çıktı, Excel (.xlsx) ve Word (.doc)
           </p>
         </div>
 
@@ -241,6 +272,27 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
               {copyFeedback}
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => void handleDownloadExcel()}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              background: "#ecfdf5",
+              color: "#065f46",
+              border: "1px solid #a7f3d0",
+              borderRadius: "6px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+            title="Haftalık bülten tablosunu Excel (.xlsx) olarak indir"
+          >
+            <span>📊</span>
+            <span>Excel (.xlsx) İndir</span>
+          </button>
           <button
             onClick={handleCopyWhatsApp}
             style={{

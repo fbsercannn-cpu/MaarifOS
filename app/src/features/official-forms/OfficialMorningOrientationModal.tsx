@@ -113,6 +113,40 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `Gune_Baslama_Tutanagi_${date}`,
+      sheetName: "Güne Başlama Çemberi",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — GÜNE BAŞLAMA ZAMANI VE DUYGU PANOSU TUTANAĞI",
+      subtitle: `${schoolName} · Tarih: ${date} · Öğretmen: ${teacherName} · Mevcut: ${presentCount}/${totalCount}`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Mevcut", value: `${presentCount} / ${totalCount}` },
+        { label: "Selamlaşma", value: greetingType },
+        { label: "Hava Durumu", value: weatherType },
+      ],
+      columns: [
+        { header: "Bölüm / Duygu", key: "section", width: 28, align: "left" },
+        { header: "Sayı / Detay", key: "countOrText", width: 20, align: "center" },
+        { header: "Pedagojik Karşılama Stratejisi ve Yorum", key: "strategy", width: 55, align: "left" },
+      ],
+      rows: [
+        { section: "😊 Neşeli / Mutlu", countOrText: String(moods.happy), strategy: "Grup etkinliklerinde aktif katılım ve liderlik rolleri desteklendi." },
+        { section: "🤩 Heyecanlı / Coşkulu", countOrText: String(moods.excited), strategy: "Merkez oyunlarında odaklanma ve keşif odaklı materyallere yönlendirildi." },
+        { section: "😌 Sakin / Huzurlu", countOrText: String(moods.calm), strategy: "Kitap ve sanat merkezinde derinleşmeleri sağlandı." },
+        { section: "🥱 Yorgun / Uykulu", countOrText: String(moods.tired), strategy: "Su içme, hafif esneme hareketleri ve sakin karşılama rutini uygulandı." },
+        { section: "🥺 Üzgün / Endişeli", countOrText: String(moods.sadOrAnxious), strategy: "Bireysel ilgi, empati çemberi ve güven verici yetişkin teması sağlandı." },
+        { section: "GÜNÜN MESAJI", countOrText: "-", strategy: morningMessage },
+        { section: "MERAK SORUSU", countOrText: "-", strategy: curiosityQuestion },
+        { section: "SABAH UYUM GÖZLEMLERİ", countOrText: "-", strategy: specialSupportNotes },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -121,6 +155,15 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
           <h3 className="of-action-title">Güne Başlama Zamanı &amp; Duygu Panosu Tutanağı</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Güne başlama tutanağını Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

@@ -180,6 +180,56 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const levelTitles: Record<number, string> = {
+      1: "1. Düzey: Başlangıç",
+      2: "2. Düzey: Gelişmekte",
+      3: "3. Düzey: Yetkin",
+    };
+
+    const rows = RUBRIC_CRITERIA.map((c, index) => {
+      const score = scores[c.id] || 1;
+      return {
+        no: index + 1,
+        domain: c.domain,
+        skillName: c.skillName,
+        levelTitle: levelTitles[score],
+        score,
+        level1: c.level1,
+        level2: c.level2,
+        level3: c.level3,
+      };
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Gozlem_Rubrigi_${studentName.replace(/\s+/g, "_")}`,
+      sheetName: "Gelişim Rubriği",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — SÜREÇ ODAKLI DERECELİ PUANLAMA ANAHTARI (RUBRİK)",
+      subtitle: `${schoolName} · ${studentName} (${ageGroup}) · Tarih: ${date} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Öğrenci", value: studentName },
+        { label: "Yaş Grubu", value: ageGroup },
+        { label: "Etkinlik", value: contextName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Toplam Skor", value: `${totalScore} / ${maxScore} (%${percentage})` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenme Alanı", key: "domain", width: 28, align: "left" },
+        { header: "Hedeflenen Beceri", key: "skillName", width: 32, align: "left" },
+        { header: "Ulaşılan Düzey", key: "levelTitle", width: 20, align: "center" },
+        { header: "Puan (1-3)", key: "score", width: 12, align: "center", isNumeric: true },
+        { header: "1. Düzey: Başlangıç", key: "level1", width: 35, align: "left" },
+        { header: "2. Düzey: Gelişmekte", key: "level2", width: 35, align: "left" },
+        { header: "3. Düzey: Yetkin", key: "level3", width: 35, align: "left" },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -188,6 +238,15 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
           <h3 className="of-action-title">Süreç Odaklı Dereceli Puanlama Anahtarı (Rubrik)</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="Süreç odaklı rubrik puanlarını Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

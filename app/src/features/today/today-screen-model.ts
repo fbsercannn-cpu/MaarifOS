@@ -287,7 +287,7 @@ export function createTeacherCyclePresentation(
       ? "plan"
       : workspace.daily.activityCount > workspace.daily.completedActivityCount
         ? "apply"
-        : workspace.pendingCurriculumLinkCount > 0
+        : workspace.daily.observationCount === 0 && workspace.pendingCurriculumLinkCount > 0
           ? "observe"
           : weekly.tone === "attention" || monthly.tone === "attention"
             ? "evaluate"

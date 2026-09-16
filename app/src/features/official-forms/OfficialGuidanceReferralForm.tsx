@@ -93,6 +93,40 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const reasonLabels = referralReason
+      .map((r) => REASONS.find((item) => item.id === r)?.label)
+      .filter(Boolean)
+      .join(", ");
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Rehberlik_Yonlendirme_${studentName.replace(/\s+/g, '_')}`,
+      sheetName: "PDR Yönlendirme",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — REHBERLİK SERVİSİ ÖĞRENCİ YÖNLENDİRME FORMU",
+      subtitle: `${studentName} (${studentAge}) · Tarih: ${referralDate} · Öğretmen: ${teacherName}`,
+      metadata: [
+        { label: "Öğrenci", value: studentName },
+        { label: "Yaş / Ay", value: studentAge },
+        { label: "Veli & İletişim", value: parentContact },
+        { label: "Tarih", value: referralDate },
+        { label: "Öğretmen", value: teacherName },
+      ],
+      columns: [
+        { header: "Bölüm", key: "section", width: 28, align: "left" },
+        { header: "Açıklama ve Pedagojik Detay", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "YÖNLENDİRME ALANLARI", content: reasonLabels + (customReason ? ` - ${customReason}` : "") },
+        { section: "1. SINIF İÇİ GÖZLENEN DURUMLAR", content: observations },
+        { section: "2. UYGULANAN ÖNLEYİCİ TEDBİRLER", content: classroomInterventions },
+        { section: "3. VELİ GÖRÜŞMELERİ ÖZETİ", content: familyMeetings },
+        { section: "4. PDR SERVİSİNDEN BEKLENTİLER", content: referralExpectation },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Actions (No Print) */}
@@ -103,6 +137,15 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
           <span className="of-tag of-tag--emerald">Öğrenci Yönlendirme ve Takip Formu</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+            onClick={() => void handleDownloadExcel()}
+            title="PDR yönlendirme formunu Excel (.xlsx) olarak indir"
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>

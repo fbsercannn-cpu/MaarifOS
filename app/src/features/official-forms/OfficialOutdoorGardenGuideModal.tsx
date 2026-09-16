@@ -184,6 +184,42 @@ export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => v
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = items.map((item, index) => ({
+      no: index + 1,
+      category: item.category,
+      title: item.title,
+      requirement: item.requirement,
+      status: item.isChecked ? "UYGUN [✓]" : "DİKKAT [⚠️]",
+      statusScore: item.isChecked ? 1 : 0,
+    }));
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Acik_Hava_Bahce_Guvenlik_Rehberi_${date}`,
+      sheetName: "Bahçe Güvenlik",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — AÇIK HAVA, BAHÇE VE DOĞA OYUNLARI GÜVENLİK REHBERİ",
+      subtitle: `${schoolName} · Tarih: ${date} · Öğretmen: ${teacherName} · Hava: ${weatherCondition}`,
+      metadata: [
+        { label: "Okul", value: schoolName },
+        { label: "Tarih", value: date },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Hava Durumu", value: weatherCondition },
+        { label: "Güvenlik Hazırlık Durumu", value: `${checkedCount}/${items.length} Standart Tamamlandı (%${Math.round((checkedCount / items.length) * 100)})` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Kategori", key: "category", width: 25, align: "left" },
+        { header: "Güvenlik & Uygulama Maddesi", key: "title", width: 35, align: "left" },
+        { header: "Resmî Standart & Güvenlik Şartı", key: "requirement", width: 60, align: "left" },
+        { header: "Durum", key: "status", width: 16, align: "center" },
+        { header: "Puan", key: "statusScore", width: 10, align: "center", isNumeric: true },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <div className="official-form-container">
       <div className="of-action-bar no-print">
@@ -192,6 +228,14 @@ export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => v
           <h3 className="of-action-title">Açık Hava, Bahçe &amp; Doğa Oyunları Güvenlik Rehberi</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

@@ -160,6 +160,36 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `EK-10_Aile_Katilimi_Tercih_Formu_${formData.studentName.replace(/\s+/g, "_")}`,
+      sheetName: "EK-10 Aile Katılımı",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-10 AİLE KATILIMI TERCİH FORMU",
+      subtitle: `Sınıf: ${formData.className} · Öğrenci: ${formData.studentName} · Veli: ${formData.parentName}`,
+      metadata: [
+        { label: "Sınıf / Şube", value: formData.className },
+        { label: "Veli Adı Soyadı", value: formData.parentName },
+        { label: "Öğrenci Adı Soyadı", value: formData.studentName },
+        { label: "Tarih", value: formData.date },
+      ],
+      columns: [
+        { header: "Katılım Kategorisi", key: "section", width: 28, align: "left" },
+        { header: "Tercih Edilen Etkinlikler ve Destekler", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "A. SINIF İÇİ ETKİNLİKLERE KATILIM", content: formData.inClassActivities.map((a, idx) => `[${idx + 1}] ${a}`).join("\n") },
+        { section: "B. EVDE DESTEKLEYİCİ ÇALIŞMALAR", content: formData.homeSupport.map((a, idx) => `[${idx + 1}] ${a}`).join("\n") },
+        { section: "C. MESLEK / ÖZEL YETENEK PAYLAŞIMI", content: formData.professionShare.join("\n") },
+        { section: "D. OKUL DIŞI ETKİNLİKLERDE DESTEK", content: formData.outsideSchool.join("\n") },
+        { section: "E. MATERYAL VE EĞİTİM ORTAMI DESTEĞİ", content: formData.materialSupport.join("\n") },
+        { section: "F. GENEL KATILIM TERCİHİ VE ZAMAN", content: `Tercih: ${formData.participationPreference} | Uygun Zaman: ${formData.availableTimes}` },
+        { section: "G. DİĞER KATKI VE ÖNERİLER", content: formData.otherNotes },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
   const toggleItem = (listName: keyof FamilyParticipationFormData, item: string) => {
     setFormData((prev) => {
       const arr = (prev[listName] as string[]) || [];
@@ -175,9 +205,18 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-10 Aile Katılımı Tercih Formu (TTKB Sayfa 190–192)</strong>
-            <small>Resmî Format · A4 Çıktı ve Word (.doc) Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word (.doc) Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              title="Aile katılımı anketini Excel (.xlsx) olarak indir"
+            >
+              📊 Excel (.xlsx)
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>

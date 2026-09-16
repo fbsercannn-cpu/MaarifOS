@@ -206,6 +206,51 @@ export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () =>
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const statusMap: Record<string, string> = {
+      uygun: "UYGUN [✓]",
+      kismen: "KISMEN [⚠️]",
+      eksik: "EKSİK [✗]",
+    };
+
+    let rowNo = 1;
+    const rows = centers.flatMap(c =>
+      c.items.map(it => ({
+        no: rowNo++,
+        centerName: c.centerName,
+        criterion: it.criterion,
+        status: statusMap[it.status] || it.status,
+        score: it.status === "uygun" ? 2 : it.status === "kismen" ? 1 : 0,
+        notes: it.notes || "-",
+      }))
+    );
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Ogrenme_Merkezleri_Denetim_${auditDate}`,
+      sheetName: "Merkezler Denetim",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — ÖĞRENME MERKEZLERİ STANDART DONATIM VE GÜVENLİK DENETİM TUTANAĞI",
+      subtitle: `${schoolName} · ${className} · Tarih: ${auditDate} · Denetleyen: ${auditorName}`,
+      metadata: [
+        { label: "Okul", value: schoolName },
+        { label: "Sınıf / Şube", value: className },
+        { label: "Denetim Tarihi", value: auditDate },
+        { label: "Denetleyen Öğretmen", value: auditorName },
+        { label: "Standart Uyum Skoru", value: `%${complianceScore} (${uygunCount} Uygun, ${kismenCount} Kısmen, ${eksikCount} Eksik)` },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "Öğrenme Merkezi", key: "centerName", width: 22, align: "left" },
+        { header: "Denetim Kriteri", key: "criterion", width: 50, align: "left" },
+        { header: "Durum", key: "status", width: 16, align: "center" },
+        { header: "Puan", key: "score", width: 10, align: "center", isNumeric: true },
+        { header: "Açıklama / Tespit / Önlem", key: "notes", width: 35, align: "left" },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Actions (No Print) */}
@@ -216,6 +261,14 @@ export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () =>
           <span className="of-tag of-tag--emerald">MEB Donatım &amp; Güvenlik Standardı</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>

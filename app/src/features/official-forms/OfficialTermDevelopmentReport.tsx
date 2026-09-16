@@ -219,6 +219,71 @@ export function OfficialTermDevelopmentReport({
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const levelLabels: Record<SkillLevel, string> = {
+      gelistirilmeli: "Geliştirilmeli (1)",
+      iyi: "İyi Düzeyde (2)",
+      cok_basarili: "Çok Başarılı (3)",
+    };
+
+    const rows = students.map((s, index) => {
+      const r = allRatings[s.id] || {};
+      const op = opinions[s.id] || TEACHER_OPINION_PRESETS[0];
+      return {
+        no: index + 1,
+        studentNo: s.studentNo || String(100 + index + 1),
+        name: s.name,
+        birthDate: s.birthDate || "-",
+        turkce: levelLabels[r.turkce || "iyi"],
+        matematik: levelLabels[r.matematik || "cok_basarili"],
+        fen: levelLabels[r.fen || "iyi"],
+        sosyal: levelLabels[r.sosyal || "iyi"],
+        hareket: levelLabels[r.hareket_saglik || "cok_basarili"],
+        sanat: levelLabels[r.sanat || "cok_basarili"],
+        muzik: levelLabels[r.muzik || "iyi"],
+        sdb: levelLabels[r.sdb || "iyi"],
+        degerler: levelLabels[r.degerler || "cok_basarili"],
+        okuryazarlik: levelLabels[r.okuryazarlik || "iyi"],
+        opinion: op,
+      };
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Resmi_Gelisim_Raporu_Toplu_${term}_Donem`,
+      sheetName: "Sınıf Gelişim Karnesi",
+      title: `T.C. MİLLÎ EĞİTİM BAKANLIĞI — OKUL ÖNCESİ DÖNEM SONU GELİŞİM RAPORU (${term}. DÖNEM)`,
+      subtitle: `${schoolName} · ${className} · ${academicYear} Eğitim Öğretim Yılı`,
+      metadata: [
+        { label: "Okul Adı", value: schoolName },
+        { label: "Şube", value: className },
+        { label: "Öğretmen", value: teacherName },
+        { label: "Müdür", value: principalName },
+        { label: "Dönem", value: `${term}. Dönem` },
+        { label: "Mevcut", value: String(students.length) },
+      ],
+      columns: [
+        { header: "Sıra", key: "no", width: 6, align: "center", isNumeric: true },
+        { header: "No", key: "studentNo", width: 8, align: "center" },
+        { header: "Öğrenci Adı Soyadı", key: "name", width: 24, align: "left" },
+        { header: "Doğum Tarihi", key: "birthDate", width: 14, align: "center" },
+        { header: "Türkçe (TADB)", key: "turkce", width: 18, align: "center" },
+        { header: "Matematik (MAB)", key: "matematik", width: 18, align: "center" },
+        { header: "Fen (FAB)", key: "fen", width: 18, align: "center" },
+        { header: "Sosyal (SAB)", key: "sosyal", width: 18, align: "center" },
+        { header: "Hareket & Sağlık", key: "hareket", width: 18, align: "center" },
+        { header: "Sanat (SNAB)", key: "sanat", width: 18, align: "center" },
+        { header: "Müzik (MÜAB)", key: "muzik", width: 18, align: "center" },
+        { header: "Sosyal-Duygusal (SDB)", key: "sdb", width: 20, align: "center" },
+        { header: "Erdem-Değer", key: "degerler", width: 18, align: "center" },
+        { header: "Okuryazarlık (OB)", key: "okuryazarlik", width: 18, align: "center" },
+        { header: "Öğretmenin Genel Kanaati", key: "opinion", width: 45, align: "left" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   const currentRatings = allRatings[currentStudent.id] || {};
   const currentOpinion = opinions[currentStudent.id] || TEACHER_OPINION_PRESETS[0];
 
@@ -229,9 +294,18 @@ export function OfficialTermDevelopmentReport({
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>MEB Okul Öncesi Resmî Gelişim Raporu (Karne) — TTKB s. 109–114</strong>
-            <small>Dönem Sonu Karnesi · A4 Resmî Çıktı ve Word İndirme</small>
+            <small>Dönem Sonu Karnesi · A4 Resmî Çıktı, Word İndirme ve Toplu Sınıf Excel</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              title="Tüm sınıfın dönem sonu gelişim karnesini toplu Excel (.xlsx) olarak indir"
+            >
+              📊 Sınıf Karnesi Excel (.xlsx)
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır (Karne Bas)
             </button>

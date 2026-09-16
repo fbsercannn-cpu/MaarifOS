@@ -146,6 +146,47 @@ export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () =>
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    const rows = [
+      ...decisions.map((d, i) => ({
+        type: "Gündem ve Karar",
+        col1: `Madde ${i + 1}: ${d.topic}`,
+        col2: d.decision,
+        col3: "Oy Birliği ile Kabul Edildi",
+      })),
+      ...attendees.map((a, i) => ({
+        type: "Katılımcı Veli Hazirun",
+        col1: `${i + 1}. ${a.parentName} (${a.studentName} Velisi)`,
+        col2: `İletişim: ${a.phone}`,
+        col3: a.signed ? "İmzalandı [✓]" : "İmza Eksik [✗]",
+      })),
+    ];
+
+    await exportOfficialTableToExcel({
+      fileName: `MEB_Veli_Toplantisi_Tutanagi_${meetingDate}`,
+      sheetName: "Toplantı Tutanağı",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — GENEL VELİ TOPLANTISI TUTANAĞI VE ALINAN KARARLAR",
+      subtitle: `${schoolName} · ${className} · Tarih: ${meetingDate} · Başkan: ${teacherName}`,
+      metadata: [
+        { label: "Okul", value: schoolName },
+        { label: "Şube", value: className },
+        { label: "Toplantı Başlığı", value: meetingTitle },
+        { label: "Tarih", value: meetingDate },
+        { label: "Toplantı Başkanı", value: teacherName },
+        { label: "Katılımcı Veli Sayısı", value: `${attendees.length} Veli` },
+      ],
+      columns: [
+        { header: "Kayıt Türü", key: "type", width: 22, align: "left" },
+        { header: "Gündem Başlığı / Veli Bilgisi", key: "col1", width: 35, align: "left" },
+        { header: "Alınan Karar / İletişim Detayı", key: "col2", width: 55, align: "left" },
+        { header: "Durum / İmza", key: "col3", width: 25, align: "center" },
+      ],
+      rows,
+      includeSubtotals: false,
+    });
+  };
+
   return (
     <div className="official-form-container">
       {/* Header Actions (No Print) */}
@@ -156,6 +197,14 @@ export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () =>
           <span className="of-tag of-tag--emerald">Veli Toplantı Tutanağı &amp; Kararları</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            onClick={handleExportExcel}
+            style={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
+          >
+            📊 Excel (.xlsx)
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF
           </button>
