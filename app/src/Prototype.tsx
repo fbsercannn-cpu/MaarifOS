@@ -982,20 +982,30 @@ function parseAppLockSetting(
   if (!record || record.deletedAt || record.settingType !== APP_LOCK_SETTING_TYPE) {
     return null;
   }
-  assertAppLockConfig(record.config);
-  assertAppLockAttemptState(record.attemptState);
-  return record as AppLockSettingRecord;
+  try {
+    assertAppLockConfig(record.config);
+    assertAppLockAttemptState(record.attemptState);
+    return record as AppLockSettingRecord;
+  } catch (error) {
+    console.warn("[MaarifOS] Bozuk veya uyumsuz uygulama kilidi kaydı kurtarıldı:", error);
+    return null;
+  }
 }
 
 async function loadAppLockSetting(
   store: IndexedDbDataStore,
 ): Promise<AppLockSettingRecord | null> {
-  return store.transaction("readonly", ["settings"], async (transaction) => {
-    const records = await transaction.getAll("settings");
-    return parseAppLockSetting(
-      records.find((record) => record.id === APP_LOCK_SETTING_ID),
-    );
-  });
+  try {
+    return await store.transaction("readonly", ["settings"], async (transaction) => {
+      const records = await transaction.getAll("settings");
+      return parseAppLockSetting(
+        records.find((record) => record.id === APP_LOCK_SETTING_ID),
+      );
+    });
+  } catch (error) {
+    console.warn("[MaarifOS] Uygulama kilidi okunurken hata oluştu, kilit devre dışı bırakılarak devam edildi:", error);
+    return null;
+  }
 }
 
 async function persistAppLockSetting(
