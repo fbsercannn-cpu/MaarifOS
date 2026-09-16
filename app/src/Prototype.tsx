@@ -14302,6 +14302,7 @@ export default function Prototype() {
         {followupRequest ? <Suspense fallback={<p role="status">Takip defteri açılıyor…</p>}><TeacherFollowupWorkspace store={store} initialStudentId={followupRequest.studentId} initialSection={followupRequest.section} initialPickupCivilDate={followupRequest.civilDate} refreshKey={persistenceState.lastCommittedAt} disabled={writesBlocked || dataBusy} onOpenStudent={id => { setFollowupRequest(null); openStudentProfile(id, "contacts"); }} onOpenPlans={() => { setFollowupRequest(null); navigate("plans"); }} onChanged={() => { setFollowupRevision(value => value + 1); void refreshD1Workspaces().catch(() => setAnnouncement("Kayıt saklandı; plan ekranını yeniden açarak güncelleyebilirsiniz.")); }} /></Suspense> : null}
       </BottomSheet>
       <AttendancePanels
+        store={store}
         open={attendanceOpen}
         onOpenChange={changeAttendanceOpen}
         students={attendanceRoster}

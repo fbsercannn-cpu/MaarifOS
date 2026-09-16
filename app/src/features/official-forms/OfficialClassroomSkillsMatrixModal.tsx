@@ -129,6 +129,105 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
     }
   };
 
+  const handleDownloadMultiSheetExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      const x = await import("xlsx");
+      const wb = x.utils.book_new();
+
+      // 1. ÖZET SEKME: Sınıf Matrisi (Tüm öğrenciler x 10 alan becerisi)
+      const summaryAoa: unknown[][] = [
+        ["T.C. MİLLÎ EĞİTİM BAKANLIĞI — SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ"],
+        [`Şube: ${className}  |  Dönem: ${term}  |  Eğitim Yılı: ${schoolYear}  |  Öğretmen: ${teacherName}`],
+        ["Ölçüt Düzeyleri: 1: Geliştirilmeli (Başlangıç) | 2: İyi Düzeyde (Gelişmekte) | 3: Çok Başarılı (Yetkin)"],
+        [],
+        [
+          "No",
+          "Öğrenci Adı Soyadı",
+          ...DOMAINS.map((d) => d.short),
+          "Genel Ortalama",
+        ],
+      ];
+
+      students.forEach((s, idx) => {
+        const rowAvg = Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1));
+        summaryAoa.push([
+          idx + 1,
+          s.name,
+          ...DOMAINS.map((d) => s[d.key]),
+          rowAvg,
+        ]);
+      });
+
+      const headerRowIdx = 4;
+      const lastDataRowIdx = summaryAoa.length - 1;
+      const startRow1Based = headerRowIdx + 2;
+      const endRow1Based = lastDataRowIdx + 1;
+
+      const totalRow: unknown[] = [
+        "SINIF ORTALAMALARI",
+        "",
+        ...DOMAINS.map((_, dIdx) => {
+          const colLetter = String.fromCharCode(67 + dIdx);
+          return { f: `SUBTOTAL(109, ${colLetter}${startRow1Based}:${colLetter}${endRow1Based}) / ${students.length}` };
+        }),
+        "—",
+      ];
+      summaryAoa.push(totalRow);
+
+      const wsSummary = x.utils.aoa_to_sheet(summaryAoa);
+      wsSummary["!cols"] = [
+        { wch: 6 },
+        { wch: 25 },
+        ...DOMAINS.map(() => ({ wch: 12 })),
+        { wch: 16 },
+      ];
+      x.utils.book_append_sheet(wb, wsSummary, "Sınıf Matrisi Özeti");
+
+      // 2. HER ÖĞRENCİ İÇİN AYRI BİREYSEL KARNE SEKMESİ (Sekme 2..N+1)
+      students.forEach((s) => {
+        const studentAoa: unknown[][] = [
+          [`T.C. MİLLÎ EĞİTİM BAKANLIĞI — BİREYSEL BECERİ VE EDİNİM KARNESİ`],
+          [`Öğrenci: ${s.name}  |  Şube: ${className}  |  Dönem: ${term}`],
+          [],
+          ["Gelişim / Öğrenme Alanı", "Kısa Kod", "Düzey Puanı (1-3)", "Pedagojik Değerlendirme Düzeyi", "Öğretmen Gözlemi"],
+        ];
+
+        DOMAINS.forEach((d) => {
+          const score = s[d.key];
+          const levelText = score === 3 ? "Çok Başarılı (Yetkin)" : score === 2 ? "İyi Düzeyde (Gelişmekte)" : "Geliştirilmeli (Başlangıç)";
+          const note = score === 3
+            ? "Kazanım ve göstergeleri bağımsız ve tutarlı sergilemektedir."
+            : score === 2
+            ? "Rehberlik eşliğinde beceriyi başarıyla uygulamaktadır."
+            : "Etkinliklerde bireysel destekleme ve zenginleştirme önerilir.";
+          studentAoa.push([d.label, d.short, score, levelText, note]);
+        });
+
+        const studentAvg = (DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1);
+        studentAoa.push([]);
+        studentAoa.push(["GENEL GELİŞİM SKORU", "", studentAvg, "Bütüncül TYMM Uyumu", `${s.name} gelişim sürecini başarıyla sürdürmektedir.`]);
+
+        const wsStudent = x.utils.aoa_to_sheet(studentAoa);
+        wsStudent["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 28 }, { wch: 45 }];
+
+        const safeSheetName = s.name.slice(0, 28);
+        x.utils.book_append_sheet(wb, wsStudent, safeSheetName);
+      });
+
+      const { downloadBrowserFile } = await import("../documents/browser-file-download.ts");
+      const { XLSX_MIME_TYPE } = await import("./official-form-export-service.ts");
+      const bytes = new Uint8Array(x.write(wb, { type: "array", bookType: "xlsx", compression: true }));
+      downloadBrowserFile({
+        bytes,
+        mimeType: XLSX_MIME_TYPE,
+        fileName: `MEB_Sinif_Gelisim_Matrisi_Cok_Sekmeli_${schoolYear.replace('/', '-')}.xlsx`,
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const handleExportWord = () => {
     const htmlContent = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -211,11 +310,30 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
         <div className="of-actions-bar__right">
           <button
             type="button"
+            className="of-btn"
+            style={{
+              background: "#047857",
+              color: "#ffffff",
+              border: "1px solid #047857",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+            onClick={handleDownloadMultiSheetExcel}
+            disabled={isExportingExcel}
+            title="Her öğrenci için ayrı karne sekmesi içeren 21 sekmeli toplu Excel (.xlsx)"
+          >
+            📑 Tüm Sınıf Çok Sekmeli Excel
+          </button>
+          <button
+            type="button"
             className="of-btn of-btn--excel"
             onClick={handleDownloadExcel}
             disabled={isExportingExcel}
           >
-            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Matris (.xlsx)"}
           </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF (Yatay)

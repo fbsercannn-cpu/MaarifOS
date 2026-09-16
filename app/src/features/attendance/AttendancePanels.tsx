@@ -13,6 +13,7 @@ import type {
   AttendanceRecord,
   AttendanceStatus,
 } from "../../core/domain/attendance";
+import type { LocalDataStore } from "../../core/repository/contracts";
 import type { DashboardStudent } from "../dashboard/dashboard-data";
 import { formatAttendanceHistorySummary } from "./attendance-history";
 import {
@@ -26,6 +27,7 @@ import {
 import "./quick-attendance.css";
 
 export interface AttendancePanelsProps {
+  store?: LocalDataStore;
   calculationDetails?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -123,6 +125,15 @@ export function AttendancePanels(props: AttendancePanelsProps) {
     });
   };
 
+  const handleExportMonthlyAttendanceExcel = async () => {
+    const { exportMonthlyAttendanceExcel } = await import("./attendance-excel-service.ts");
+    await exportMonthlyAttendanceExcel({
+      civilDate: props.civilDate,
+      students: props.students,
+      store: props.store,
+    });
+  };
+
   const handlePrintAttendance = async () => {
     const { printOfficialFormA4 } = await import("../official-forms/official-form-export-service.ts");
     printOfficialFormA4(`Yoklama_${props.civilDate}`);
@@ -148,6 +159,26 @@ export function AttendancePanels(props: AttendancePanelsProps) {
         <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "flex-end", marginBottom: "8px", flexWrap: "wrap" }}>
           <button
             type="button"
+            onClick={() => void handleExportMonthlyAttendanceExcel()}
+            style={{
+              background: "#047857",
+              color: "#ffffff",
+              border: "1px solid #047857",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            title="Aylık Öğrenci × Gün devamsızlık matrisi ve SUBTOTAL(109) toplamları (.xlsx)"
+          >
+            📅 Aylık Matris Excel (.xlsx)
+          </button>
+          <button
+            type="button"
             onClick={() => void handleExportAttendanceExcel()}
             style={{
               background: "#ecfdf5",
@@ -162,9 +193,9 @@ export function AttendancePanels(props: AttendancePanelsProps) {
               alignItems: "center",
               gap: "4px",
             }}
-            title="SUBTOTAL(109) formül enjeksiyonlu resmî Excel yoklama tablosu indir"
+            title="SUBTOTAL(109) formül enjeksiyonlu resmî Excel günlük yoklama tablosu indir"
           >
-            📊 Yoklama Excel (.xlsx)
+            📊 Günlük Yoklama (.xlsx)
           </button>
           <button
             type="button"

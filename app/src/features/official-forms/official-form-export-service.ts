@@ -142,6 +142,45 @@ export async function exportOfficialTableToExcel({
 }
 
 /**
+ * Direct PDF indirme motoru.
+ * createSemanticTaggedPdf ile doğrudan standart A4 PDF dosyası üretir ve indirir.
+ */
+export async function downloadOfficialFormPdf(
+  fileName: string,
+  title: string,
+  metadata: Array<{ label: string; value: string }>,
+  headers: string[],
+  rows: string[][],
+): Promise<void> {
+  try {
+    const { createSemanticTaggedPdf } = await import("../documents/semantic-tagged-pdf.ts");
+    const bytes = await createSemanticTaggedPdf({
+      title,
+      language: "tr-TR",
+      orientation: "portrait",
+      nodes: [
+        { kind: "heading", level: 1, text: title },
+        ...metadata.map((m) => ({ kind: "paragraph" as const, tone: "meta" as const, text: `${m.label}: ${m.value}` })),
+        {
+          kind: "table",
+          headers,
+          rows,
+          fontSize: 9,
+          cellPadding: 4,
+        },
+      ],
+    });
+    downloadBrowserFile({
+      bytes,
+      mimeType: "application/pdf",
+      fileName: fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`,
+    });
+  } catch {
+    printOfficialFormA4(fileName);
+  }
+}
+
+/**
  * A4 CSS Paged Media doğrudan yazdırma motoru.
  * Pencere başlığını geçici olarak belge adına ayarlar; böylece "PDF olarak kaydet" seçildiğinde dosya adı otomatik dolar.
  */

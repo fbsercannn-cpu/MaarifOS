@@ -120,6 +120,44 @@ export function OfficialDailyRoutinesTracker({
   const completedCount = routines.filter((r) => completedRoutines[r.id]).length;
   const progressPercent = Math.round((completedCount / routines.length) * 100);
 
+  const handleDownloadRoutinesExcel = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const { exportOfficialTableToExcel } = await import("../official-forms/official-form-export-service.ts");
+    const rows = routines.map((r) => {
+      const isDone = Boolean(completedRoutines[r.id]);
+      return {
+        order: r.order,
+        title: r.title,
+        timeHint: r.timeHint,
+        subtitle: r.subtitle,
+        status: isDone ? "Tamamlandı (✓)" : "Bekliyor (-)",
+        isDoneNum: isDone ? 1 : 0,
+      };
+    });
+
+    await exportOfficialTableToExcel({
+      fileName: `Gunun_5_Resmi_Rutini_Takip_${dateIso}`,
+      sheetName: "Rutin Takip",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — GÜNÜN 5 RESMÎ RUTİNİ TAKİP VE DENETİM ÇİZELGESİ",
+      subtitle: `Tarih: ${dateIso} · MEB TTKB Okul Öncesi Eğitim Programı Sayfa 92`,
+      metadata: [
+        { label: "Tarih", value: dateIso },
+        { label: "Tamamlanan Rutin", value: `${completedCount} / 5 (%${progressPercent})` },
+        { label: "Mevzuat", value: "MEB TTKB Günün Akışı ve 5 Resmî Rutini" },
+      ],
+      columns: [
+        { header: "Sıra", key: "order", width: 8, align: "center", isNumeric: true },
+        { header: "Resmî Rutin Adı", key: "title", width: 32 },
+        { header: "Önerilen Zaman", key: "timeHint", width: 18, align: "center" },
+        { header: "Pedagojik Süreç ve Kapsam", key: "subtitle", width: 45 },
+        { header: "Durum", key: "status", width: 18, align: "center" },
+        { header: "Puan (1)", key: "isDoneNum", width: 10, align: "center", isNumeric: true },
+      ],
+      rows,
+      includeSubtotals: true,
+    });
+  };
+
   return (
     <section
       className="official-routines-tracker no-print"
@@ -181,6 +219,24 @@ export function OfficialDailyRoutinesTracker({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Rutin Excel Çıktısı Butonu */}
+          <button
+            type="button"
+            onClick={handleDownloadRoutinesExcel}
+            style={{
+              padding: "4px 8px",
+              background: "#ecfdf5",
+              color: "#065f46",
+              border: "1px solid #a7f3d0",
+              borderRadius: "6px",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+            title="Günün 5 resmî rutini takip Excel çizelgesi indir (SUBTOTAL 109 Korumalı)"
+          >
+            📊 Rutin Excel (.xlsx)
+          </button>
           {/* Circular / pill indicator */}
           <div
             style={{

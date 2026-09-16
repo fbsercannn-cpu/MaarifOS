@@ -96,7 +96,7 @@ export function OfficialFormExportBar({
           </button>
         )}
 
-        {onDownloadPdf && (
+        {(onDownloadPdf || onPrintA4) && (
           <button
             type="button"
             className="of-btn"
@@ -110,9 +110,9 @@ export function OfficialFormExportBar({
               cursor: "pointer",
               borderRadius: "6px",
             }}
-            onClick={onDownloadPdf}
+            onClick={onDownloadPdf ?? onPrintA4}
             disabled={isBusy}
-            title="Doğrudan PDF olarak hazırla"
+            title="Doğrudan resmî formatta PDF indir veya kaydet"
           >
             📑 PDF İndir
           </button>

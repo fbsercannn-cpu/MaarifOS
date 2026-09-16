@@ -36,7 +36,35 @@ function markDismissed(mondayDate: string): void {
 export function WeeklyFocusCard({ focus, mondayCivilDate }: WeeklyFocusCardProps) {
   const [dismissed, setDismissed] = useState(() => wasDismissedThisWeek(mondayCivilDate));
 
-  if (dismissed) return null;
+  if (dismissed) {
+    return (
+      <aside
+        className="weekly-focus-minichip no-print"
+        aria-label="Haftalık Odak Mini Rozeti"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "6px 12px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "8px",
+          margin: "8px 0",
+          fontSize: "0.82rem",
+          color: "#1e40af",
+          cursor: "pointer",
+        }}
+        onClick={() => setDismissed(false)}
+        title="Haftalık Odak Detayını Aç"
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>🎯</span>
+          <span><strong>Bu Hafta:</strong> {focus.theme} ({focus.weekLabel})</span>
+        </div>
+        <span style={{ fontSize: "0.75rem", color: "#2563eb", fontWeight: 600 }}>Genişlet ▾</span>
+      </aside>
+    );
+  }
 
   return (
     <section className="weekly-focus-card" aria-label="Haftalik Odak">

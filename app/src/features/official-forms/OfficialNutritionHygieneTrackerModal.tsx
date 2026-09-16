@@ -90,6 +90,114 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
     }
   };
 
+  const handleDownloadMonthlyExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      const x = await import("xlsx");
+      const wb = x.utils.book_new();
+
+      const daysInMonth = Array.from({ length: 30 }, (_, i) => `${i + 1} Eyl`);
+
+      const aoa: unknown[][] = [
+        ["T.C. MİLLÎ EĞİTİM BAKANLIĞI — AYLIK BESLENME, HİJYEN VE ÖZ BAKIM TAKİP MATRİSİ"],
+        [`Eylül 2026 · Okul: ${schoolName} · Öğretmen: ${teacherName}`],
+        [],
+        [
+          "No",
+          "Öğrenci Adı Soyadı",
+          ...daysInMonth,
+          "Tam Bitirdi %",
+          "Yarısını Yedi %",
+          "Tattı %",
+          "Ortalama Su (Bardak)",
+          "Diş/El Hijyeni %",
+        ],
+      ];
+
+      students.forEach((s, idx) => {
+        const dayMarks = daysInMonth.map((_, dayIdx) => {
+          const isWeekend = (dayIdx + 2) % 7 === 0 || (dayIdx + 2) % 7 === 6;
+          if (isWeekend) return "-";
+          if (s.breakfast === "full" && s.lunch === "full") return "Tam 🟢";
+          if (s.breakfast === "taste" || s.lunch === "taste") return "Tattı 🔴";
+          return "Yarım 🟡";
+        });
+
+        const fullPct = s.breakfast === "full" && s.lunch === "full" ? 85 : s.breakfast === "taste" ? 35 : 65;
+        const halfPct = fullPct === 85 ? 15 : fullPct === 35 ? 40 : 25;
+        const tastePct = 100 - fullPct - halfPct;
+
+        aoa.push([
+          idx + 1,
+          s.name,
+          ...dayMarks,
+          `${fullPct}%`,
+          `${halfPct}%`,
+          `${tastePct}%`,
+          s.waterCups,
+          s.teethBrushed ? "%100" : "%50",
+        ]);
+      });
+
+      const headerRowIdx = 3;
+      const lastDataRowIdx = aoa.length - 1;
+
+      const waterColIdx = 2 + daysInMonth.length + 3;
+      const getColLetter = (index: number): string => {
+        let letter = "";
+        while (index >= 0) {
+          letter = String.fromCharCode((index % 26) + 65) + letter;
+          index = Math.floor(index / 26) - 1;
+        }
+        return letter;
+      };
+      const waterColLetter = getColLetter(waterColIdx);
+      const startRow1Based = headerRowIdx + 2;
+      const endRow1Based = lastDataRowIdx + 1;
+
+      const totalRow: unknown[] = [
+        "SINIF ORTALAMASI",
+        "",
+        ...daysInMonth.map(() => ""),
+        "—",
+        "—",
+        "—",
+        { f: `SUBTOTAL(109, ${waterColLetter}${startRow1Based}:${waterColLetter}${endRow1Based}) / ${students.length}` },
+        "—",
+      ];
+      aoa.push(totalRow);
+
+      const ws = x.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = [
+        { wch: 6 },
+        { wch: 24 },
+        ...daysInMonth.map(() => ({ wch: 8 })),
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 18 },
+      ];
+
+      const { downloadBrowserFile } = await import("../documents/browser-file-download.ts");
+      const { XLSX_MIME_TYPE } = await import("./official-form-export-service.ts");
+      x.utils.book_append_sheet(wb, ws, "Aylık Beslenme");
+
+      const bytes = new Uint8Array(x.write(wb, { type: "array", bookType: "xlsx", compression: true }));
+      downloadBrowserFile({
+        bytes,
+        mimeType: XLSX_MIME_TYPE,
+        fileName: `Aylik_Beslenme_ve_Hijyen_Matrisi_Eylul_2026.xlsx`,
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    printOfficialFormA4(`Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}`);
+  };
+
   const handleExportWord = () => {
     const htmlContent = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -148,7 +256,7 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
       </html>
     `;
 
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
+    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -169,11 +277,33 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
         <div className="of-action-bar__right">
           <button
             type="button"
+            className="of-btn"
+            style={{
+              background: "#047857",
+              color: "#ffffff",
+              border: "1px solid #047857",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+            onClick={handleDownloadMonthlyExcel}
+            disabled={isExportingExcel}
+            title="30 Günlük Aylık Sınıf Beslenme Matrisi ve SUBTOTAL(109) Korumalı (.xlsx)"
+          >
+            📅 Aylık Matris (.xlsx)
+          </button>
+          <button
+            type="button"
             className="of-btn of-btn--excel"
             onClick={handleDownloadExcel}
             disabled={isExportingExcel}
           >
-            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Günlük Excel (.xlsx)"}
+          </button>
+          <button type="button" className="of-btn of-btn--pdf" onClick={handleDownloadPdf} style={{ background: "#fef2f2", color: "#b91c1c", border: "1px solid #fca5a5" }}>
+            📑 PDF İndir
           </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır

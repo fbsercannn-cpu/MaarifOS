@@ -19,7 +19,21 @@ export function TeacherReportCenterPanel(props:TeacherReportCenterPanelProps){
  let model:TeacherReportModel|null=null,modelError="";if(snapshot)try{model=teacherReportModel(snapshot,{period,day,studentIds:children,termStart,termEnd});}catch(e){modelError=e instanceof Error?e.message:"Rapor dönemi geçersiz.";}
  const selectedRows=selected??model?.rows.map(r=>r.id)??[],locked=disabled||loading||busy;
  const change=()=>{setRevision(v=>v+1);try{props.onChanged?.();}catch{setMessage("Kayıt tamamlandı; güncel raporu yeniden açabilirsiniz.");}};
- const switchPeriod=(value:ReportPeriod)=>{setPeriod(value);setSelected(null);setAttachments([]);setAssessments([]);};
+  const switchPeriod = (value: ReportPeriod) => {
+    setPeriod(value);
+    setSelected(null);
+    setAttachments([]);
+    setAssessments([]);
+    if (value === "day") {
+      setDay(civilDateInIstanbul(new Date()));
+    } else if (value === "term") {
+      setTermStart("2026-09-14");
+      setTermEnd("2027-01-22");
+    } else if (value === "year") {
+      setTermStart("2026-09-14");
+      setTermEnd("2027-06-12");
+    }
+  };
  async function openReport(){if(!model||locked||guard.current)return;guard.current=true;setBusy(true);setError("");const token=generation.current;try{const {createTeacherReportRecipe}=await import("./teacher-report-document.ts");const recipe=await createTeacherReportRecipe(store,model.input,{recordIds:selectedRows,attachmentIds:attachments});if(token!==generation.current||disabledRef.current)throw new Error("Kaynak kapsamı değişti; güncel seçimi yeniden açın.");await requestPdfDocument(recipe);}catch(e){setError(e instanceof Error?e.message:"Rapor hazırlanamadı.");}finally{guard.current=false;setBusy(false);}}
  async function saveAssessments(){if(!snapshot||locked||guard.current||!assessments.length)return;guard.current=true;setBusy(true);setError("");try{await completeTeacherAssessments(store,{snapshot,ids:assessments});setMessage("Seçtiğiniz kendi değerlendirmeleriniz kaydedildi.");setAssessments([]);change();}catch(e){setError(e instanceof Error?e.message:"Değerlendirme kaydedilemedi.");}finally{guard.current=false;setBusy(false);}}
   async function exportDirect(format: "excel" | "word" | "pdf" | "zip" | "print") {
