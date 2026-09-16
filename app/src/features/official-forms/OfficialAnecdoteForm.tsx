@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
 import "./official-forms.css";
 
 export interface OfficialAnecdoteFormData {
@@ -23,6 +27,7 @@ export function OfficialAnecdoteForm({
   studentList = [],
   onClose,
 }: Props) {
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [formData, setFormData] = useState<OfficialAnecdoteFormData>({
     studentName: initialData?.studentName || (studentList[0]?.name ?? ""),
     date: initialData?.date || new Date().toISOString().slice(0, 10),
@@ -41,7 +46,37 @@ export function OfficialAnecdoteForm({
   });
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`EK-2_Anekdot_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `EK-2_Anekdot_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`,
+        sheetName: "EK-2 Anekdot",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-2 ANEKDOT KAYIT FORMU",
+        subtitle: `Öğrenci: ${formData.studentName} · Tarih: ${formData.date} · Mekân: ${formData.observedPlace}`,
+        metadata: [
+          { label: "Çocuğun Adı Soyadı", value: formData.studentName },
+          { label: "Tarih", value: formData.date },
+          { label: "Gözlenen Mekân", value: formData.observedPlace },
+          { label: "Öğretmen", value: formData.teacherName || "Öğretmen" },
+        ],
+        columns: [
+          { header: "Form Bölümü", key: "section", width: 25 },
+          { header: "Gözlem ve Değerlendirme Kaydı", key: "content", width: 75 },
+        ],
+        rows: [
+          { section: "GÖZLENEN DURUM", content: formData.observedSituation },
+          { section: "GÖZLENEN BECERİLER", content: formData.observedSkills },
+          { section: "GENEL DEĞERLENDİRME", content: formData.generalEvaluation },
+          { section: "GÖZLEMCİ / ÖĞRETMEN", content: formData.teacherName || "" },
+        ],
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleDownloadWord = () => {
@@ -136,6 +171,16 @@ export function OfficialAnecdoteForm({
             <small>Resmî Format · A4 Çıktı ve Word Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              disabled={isExportingExcel}
+              title="Microsoft Excel (.xlsx) olarak indir"
+            >
+              {isExportingExcel ? "Excel Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+            </button>
             <button
               type="button"
               className="of-btn of-btn--print"

@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { OfficialConceptsAndDaysPalette } from "./OfficialConceptsAndDaysPalette.tsx";
 import { OFFICIAL_MEB_DAILY_SAMPLE_PLANS } from "./officialSamplePlansService.ts";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
+import { OfficialPlanLinkedOutputsModal } from "./OfficialPlanLinkedOutputsModal.tsx";
 import "./official-forms.css";
 
 export interface DailyPlanFormData {
@@ -34,6 +39,8 @@ interface Props {
 }
 
 export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
+  const [isSampleOutputsOpen, setIsSampleOutputsOpen] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [formData, setFormData] = useState<DailyPlanFormData>({
     schoolName: initialData?.schoolName || "Atatürk Anaokulu",
     ageGroup: initialData?.ageGroup || "60-72 Ay",
@@ -61,7 +68,53 @@ export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
     communityEngagement: initialData?.communityEngagement || "Okul kütüphanesi ziyareti planlanır.",
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-6_Gunluk_Plan_${formData.date}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `EK-6_Gunluk_Plan_${formData.date}`,
+        sheetName: "EK-6 Günlük Plan",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-6 GÜNLÜK PLAN",
+        subtitle: `${formData.schoolName} · ${formData.ageGroup} · Tarih: ${formData.date} · Öğretmen: ${formData.teacherName}`,
+        metadata: [
+          { label: "Okul Adı", value: formData.schoolName },
+          { label: "Öğretmenin Adı", value: formData.teacherName },
+          { label: "Yaş Grubu", value: formData.ageGroup },
+          { label: "Tarih", value: formData.date },
+        ],
+        columns: [
+          { header: "Bileşen / Bölüm", key: "section", width: 28 },
+          { header: "İçerik / Plan Detayları", key: "content", width: 70 },
+        ],
+        rows: [
+          { section: "ALAN BECERİLERİ & ÇIKTILAR", content: formData.domainSkills },
+          { section: "EĞİLİMLER", content: formData.tendencies },
+          { section: "SOSYAL-DUYGUSAL (SDB)", content: formData.socialEmotional },
+          { section: "DEĞERLER", content: formData.values },
+          { section: "OKURYAZARLIK BECERİLERİ", content: formData.literacy },
+          { section: "KAVRAMLAR", content: formData.concepts },
+          { section: "SÖZCÜKLER", content: formData.words },
+          { section: "MATERYALLER", content: formData.materials },
+          { section: "EĞİTİM ORTAMLARI", content: formData.learningEnvironments },
+          { section: "1. GÜNE BAŞLAMA RUTİNİ", content: formData.startingDay },
+          { section: "2. MERKEZLERDE OYUN", content: formData.centersPlay },
+          { section: "3. BESLENME VE TEMİZLİK", content: formData.nutritionCleanup },
+          { section: "4. ETKİNLİKLER (SÜREÇ)", content: formData.activities },
+          { section: "ZENGİNLEŞTİRME (İleri Düzey)", content: formData.enrichment },
+          { section: "DESTEKLEME (BEP)", content: formData.support },
+          { section: "5. GÜNÜ DEĞERLENDİRME", content: formData.dayEvaluation },
+          { section: "AİLE KATILIMI", content: formData.familyEngagement },
+          { section: "OKUL DIŞI ÖĞRENME", content: formData.communityEngagement },
+        ],
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const handleDownloadWord = () => {
     const htmlContent = `<!DOCTYPE html>
@@ -177,6 +230,25 @@ export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
                 <option key={p.id} value={p.id}>{p.ageGroup} ({p.pageRef}): {p.planTitle}</option>
               ))}
             </select>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #93c5fd", fontWeight: 700 }}
+              onClick={() => setIsSampleOutputsOpen(true)}
+              title="Bu plana bağlı bülten, alışveriş listesi ve 10 blokluk akış çıktısı"
+            >
+              📦 Bağlı Örnek Çıktılar
+            </button>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              disabled={isExportingExcel}
+              title="Microsoft Excel (.xlsx) olarak indir"
+            >
+              {isExportingExcel ? "Excel Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
@@ -411,6 +483,19 @@ export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
           </footer>
         </div>
       </div>
+
+      <OfficialPlanLinkedOutputsModal
+        isOpen={isSampleOutputsOpen}
+        onClose={() => setIsSampleOutputsOpen(false)}
+        planTitle="EK-6 Günlük Plan"
+        civilDate={formData.date}
+        ageGroup={formData.ageGroup}
+        domainSkills={formData.domainSkills}
+        concepts={formData.concepts}
+        materials={formData.materials}
+        activities={formData.activities}
+        values={formData.values}
+      />
     </div>
   );
 }

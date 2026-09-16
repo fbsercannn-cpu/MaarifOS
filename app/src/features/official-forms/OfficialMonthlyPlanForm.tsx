@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { OfficialConceptsAndDaysPalette } from "./OfficialConceptsAndDaysPalette.tsx";
 import { OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS } from "./officialSamplePlansService.ts";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
+import { OfficialPlanLinkedOutputsModal } from "./OfficialPlanLinkedOutputsModal.tsx";
 import "./official-forms.css";
 
 export interface MonthlyPlanFormData {
@@ -52,6 +57,8 @@ const EVALUATION_PRESETS = {
 };
 
 export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
+  const [isSampleOutputsOpen, setIsSampleOutputsOpen] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [formData, setFormData] = useState<MonthlyPlanFormData>({
     schoolName: initialData?.schoolName || "Atatürk Anaokulu",
     month: initialData?.month || "Ekim 2026",
@@ -104,7 +111,50 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
       "Bu ay uygulanan etkinliklerde çocukların fen ve doğa merkezindeki merak düzeyi çok yüksekti. Sonbahar temasında açık hava kullanımının öğrenmeyi pekiştirdiği gözlendi. Önümüzdeki ay ritim ve müzik aletlerinin çeşitlendirilmesi planlanmaktadır."
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-5_Aylik_Plan_${formData.month}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `EK-5_Aylik_Plan_${formData.month.replace(/\s+/g, "_")}`,
+        sheetName: "EK-5 Aylık Plan",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-5 AYLIK EĞİTİM PLANI",
+        subtitle: `${formData.schoolName} · ${formData.ageGroup} · Ay: ${formData.month} · Öğretmen: ${formData.teacherName}`,
+        metadata: [
+          { label: "Okul Adı", value: formData.schoolName },
+          { label: "Ay / Yıl", value: formData.month },
+          { label: "Yaş Grubu", value: formData.ageGroup },
+          { label: "Öğretmenin Adı", value: formData.teacherName },
+        ],
+        columns: [
+          { header: "Bileşen / Alan", key: "section", width: 28 },
+          { header: "Aylık Plan Detayları / Kazanımlar", key: "content", width: 70 },
+        ],
+        rows: [
+          { section: "ALAN BECERİLERİ & ÇIKTILAR", content: formData.domainSkills },
+          { section: "EĞİLİMLER", content: formData.tendencies },
+          { section: "SOSYAL-DUYGUSAL (SDB)", content: formData.socialEmotional },
+          { section: "DEĞERLER (D)", content: formData.values },
+          { section: "OKURYAZARLIK BECERİLERİ", content: formData.literacy },
+          { section: "KAVRAMLAR", content: formData.concepts },
+          { section: "BELİRLİ GÜN VE HAFTALAR", content: formData.specialDays },
+          { section: "ÖĞRENME-ÖĞRETME YAŞANTILARI", content: formData.learningExperiences },
+          { section: "FARKLILAŞTIRMA - ZENGİNLEŞTİRME", content: formData.enrichment },
+          { section: "FARKLILAŞTIRMA - DESTEKLEME", content: formData.support },
+          { section: "AİLE VE TOPLUM KATILIMI", content: formData.familyCommunityEngagement },
+          { section: "DEĞERLENDİRME - ÇOCUK AÇISINDAN", content: formData.childEvaluation },
+          { section: "DEĞERLENDİRME - PROGRAM AÇISINDAN", content: formData.programEvaluation },
+          { section: "DEĞERLENDİRME - ÖĞRETMEN AÇISINDAN", content: formData.teacherEvaluation },
+          { section: "ÖĞRETMENİN ÖZ YANSITMASI", content: formData.teacherReflections },
+        ],
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const handleDownloadWord = () => {
     const htmlContent = `<!DOCTYPE html>
@@ -248,6 +298,25 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                 <option key={p.id} value={p.id}>{p.ageGroup} ({p.pageRef}): {p.planTitle}</option>
               ))}
             </select>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #93c5fd", fontWeight: 700 }}
+              onClick={() => setIsSampleOutputsOpen(true)}
+              title="Bu plana bağlı bülten, malzeme listesi ve 10 blokluk akış çıktısı"
+            >
+              📦 Bağlı Örnek Çıktılar
+            </button>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              disabled={isExportingExcel}
+              title="Microsoft Excel (.xlsx) olarak indir"
+            >
+              {isExportingExcel ? "Excel Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+            </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
@@ -680,6 +749,19 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
           </footer>
         </div>
       </div>
+
+      <OfficialPlanLinkedOutputsModal
+        isOpen={isSampleOutputsOpen}
+        onClose={() => setIsSampleOutputsOpen(false)}
+        planTitle={`EK-5 Aylık Plan (${formData.month})`}
+        civilDate={formData.month}
+        ageGroup={formData.ageGroup}
+        domainSkills={formData.domainSkills}
+        concepts={formData.concepts}
+        materials="Aylık etkinlik ve merkez materyalleri"
+        activities={formData.learningExperiences}
+        values={formData.values}
+      />
     </div>
   );
 }

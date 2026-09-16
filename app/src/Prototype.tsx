@@ -1561,6 +1561,7 @@ function EvidenceCaptureScreen({
   initialDraft,
   students,
   actions,
+  availableActivities,
 }: {
   activity: EvidenceActivitySummary;
   ageBand?: Tymm2024AgeBand;
@@ -1568,6 +1569,7 @@ function EvidenceCaptureScreen({
   initialDraft?: EvidenceCaptureSeed;
   students: Student[];
   actions: EvidenceFlowActions;
+  availableActivities?: EvidenceActivitySummary[];
 }) {
   const [captureActivity, setCaptureActivity] = useState(activity);
   const eligibleStudents = captureActivity.assignedStudentIds.length > 0
@@ -1582,6 +1584,7 @@ function EvidenceCaptureScreen({
   const [groupConfirmed, setGroupConfirmed] = useState(false);
   const [rawText, setRawText] = useState("");
   const [context, setContext] = useState("");
+  const [contextEditorOpen, setContextEditorOpen] = useState(false);
   const [childQuote, setChildQuote] = useState("");
   const [legacyDetailsReviewRequired, setLegacyDetailsReviewRequired] =
     useState(false);
@@ -2245,19 +2248,139 @@ function EvidenceCaptureScreen({
             className={`quick-context-banner quick-context-banner--${captureActivity.contextKind}`}
             aria-label="Gözlem bağlamı"
           >
-            <TargetIcon aria-hidden="true" />
-            <span>
-              <strong>
-                {captureActivity.contextKind === "planned-activity"
-                  ? "Plan etkinliğine bağlı gözlem"
-                  : "Plan dışı anlık gözlem"}
-              </strong>
-              <small>
-                {captureActivity.contextKind === "planned-activity"
-                  ? `${captureActivity.startTime} · ${captureActivity.title}`
-                  : "Bu güne ait anlık davranışı kaydedin."}
-              </small>
-            </span>
+            <div className="quick-context-banner__header">
+              <div className="quick-context-banner__info">
+                <TargetIcon aria-hidden="true" />
+                <span>
+                  <strong>
+                    {context.trim()
+                      ? `Bağlam: ${context}`
+                      : captureActivity.contextKind === "planned-activity"
+                      ? "Plan etkinliğine bağlı gözlem"
+                      : "Plan dışı / Anlık gözlem"}
+                  </strong>
+                  <small>
+                    {captureActivity.contextKind === "planned-activity"
+                      ? `${captureActivity.startTime} · ${captureActivity.title}`
+                      : "Serbest zaman, rutin veya anlık gözlenen durum."}
+                  </small>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="quick-context-toggle-btn"
+                onClick={() => setContextEditorOpen((prev) => !prev)}
+                aria-expanded={contextEditorOpen}
+                disabled={draftLoading || busy}
+                title="Gözlemin gerçekleştiği ortam, merkez veya etkinliği düzenleyin"
+              >
+                {contextEditorOpen ? "▲ Kapat" : "✏️ Bağlamı Değiştir"}
+              </button>
+            </div>
+
+            {contextEditorOpen ? (
+              <div className="quick-context-editor">
+                {availableActivities && availableActivities.length > 0 ? (
+                  <div className="quick-context-row">
+                    <span className="quick-context-sublabel">Günün Planlı Etkinlikleri:</span>
+                    <div className="quick-context-chips" role="group" aria-label="Planlı etkinlikler">
+                      {availableActivities.map((act) => (
+                        <button
+                          key={act.id}
+                          type="button"
+                          className={`quick-context-chip ${captureActivity.id === act.id ? "is-active" : ""}`}
+                          onClick={() => {
+                            setCaptureActivity(act);
+                            if (!context.trim()) setContext(act.title);
+                          }}
+                          disabled={draftLoading || busy}
+                        >
+                          📌 {act.startTime ? `${act.startTime} ` : ""}{act.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="quick-context-row">
+                  <span className="quick-context-sublabel">Öğrenme Merkezi / Ortam Seç:</span>
+                  <div className="quick-context-chips" role="group" aria-label="Öğrenme merkezleri">
+                    {[
+                      { label: "🧱 Blok Merkezi", text: "Blok Merkezi" },
+                      { label: "📚 Kitap Merkezi", text: "Kitap Merkezi" },
+                      { label: "🎨 Sanat Merkezi", text: "Sanat Merkezi" },
+                      { label: "🔬 Fen Merkezi", text: "Fen ve Doğa Merkezi" },
+                      { label: "🎵 Müzik Merkezi", text: "Müzik Merkezi" },
+                      { label: "🎭 Dramatik Oyun", text: "Dramatik Oyun Merkezi" },
+                      { label: "🌳 Bahçe / Açık Hava", text: "Bahçe / Açık Hava" },
+                      { label: "🍽️ Beslenme & Rutin", text: "Beslenme ve Öz Bakım Rutini" },
+                      { label: "⚡ Serbest Zaman", text: "Serbest Zaman Oyunu" },
+                    ].map((item) => (
+                      <button
+                        key={item.text}
+                        type="button"
+                        className={`quick-context-chip ${context.includes(item.text) ? "is-active" : ""}`}
+                        onClick={() => {
+                          setContext(item.text);
+                        }}
+                        disabled={draftLoading || busy}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="quick-context-row">
+                  <span className="quick-context-sublabel">TYMM Alanı İle Eşle:</span>
+                  <div className="quick-context-chips" role="group" aria-label="TYMM Öğrenme Alanları">
+                    {[
+                      { id: "social-emotional", label: "🟡 Sosyal-Duygusal", name: "Sosyal-Duygusal Beceriler" },
+                      { id: "math", label: "🔵 Matematik", name: "Matematik Alan Becerileri" },
+                      { id: "science", label: "🟢 Fen", name: "Fen Alan Becerileri" },
+                      { id: "language", label: "🟣 Türkçe", name: "Türkçe Alan Becerileri" },
+                      { id: "movement", label: "🔴 Hareket / Sağlık", name: "Hareket ve Sağlık Becerileri" },
+                      { id: "art", label: "🟠 Sanat", name: "Sanat Alan Becerileri" },
+                      { id: "music", label: "🎵 Müzik", name: "Müzik Alan Becerileri" },
+                    ].map((domainItem) => {
+                      const isCatActive = categories.includes(domainItem.id as QuickObservationCategory);
+                      return (
+                        <button
+                          key={domainItem.id}
+                          type="button"
+                          className={`quick-context-chip ${isCatActive ? "is-active" : ""}`}
+                          onClick={() => {
+                            toggleCategory(domainItem.id as QuickObservationCategory);
+                            if (!context.trim()) setContext(domainItem.name);
+                          }}
+                          disabled={draftLoading || busy}
+                        >
+                          {domainItem.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="quick-context-input-wrap">
+                  <label htmlFor="quick-context-custom-input">
+                    <strong>Gözlem Bağlamı Notu (Kolay Düzenleme):</strong>
+                  </label>
+                  <KeyboardInput
+                    id="quick-context-custom-input"
+                    type="text"
+                    className="quick-context-input"
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="Örn: Blok merkezinde kule yaparken, Bahçe koşu oyununda, Masada resim çizerken..."
+                    disabled={draftLoading || busy}
+                  />
+                  <small style={{ color: "#64748b", fontSize: "11px" }}>
+                    Öğretmen bu bağlamı dilediği gibi değiştirebilir; kaydet butonuna basıldığında doğrudan rapora işlenir.
+                  </small>
+                </div>
+              </div>
+            ) : null}
           </section>
           {eligibleStudents.length === 0 ? (
             <section className="d1-empty-state">
@@ -3016,6 +3139,7 @@ function EvidenceCaptureFlow({
   initialDraft,
   students,
   actions,
+  availableActivities,
 }: {
   activity: EvidenceActivitySummary;
   ageBand?: Tymm2024AgeBand;
@@ -3025,6 +3149,7 @@ function EvidenceCaptureFlow({
   initialDraft?: EvidenceCaptureSeed;
   students: Student[];
   actions: EvidenceFlowActions;
+  availableActivities?: EvidenceActivitySummary[];
 }) {
   const initial = useMemo<FlowScreen>(
     () =>
@@ -3048,6 +3173,7 @@ function EvidenceCaptureFlow({
                 initialDraft={initialDraft}
                 students={students}
                 actions={actions}
+                availableActivities={availableActivities}
               />
             ),
           },
@@ -15194,6 +15320,7 @@ export default function Prototype() {
               initialDraft={evidenceFlowRequest.initialDraft}
               students={students}
               actions={evidenceFlowActions}
+              availableActivities={evidenceWorkspace?.activities}
             />
           </Dialog.Content>
         </Dialog.Root>

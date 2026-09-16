@@ -29,6 +29,8 @@ import {
   type TeacherOwnedDailyFlowBlock,
 } from "../../core/domain/teacher-owned-daily-flow.ts";
 import { exportDailyPlanDocument } from "./daily-plan-export-service.ts";
+import { exportOfficialTableToExcel } from "../official-forms/official-form-export-service.ts";
+import { OfficialPlanLinkedOutputsModal } from "../official-forms/OfficialPlanLinkedOutputsModal.tsx";
 import "./daily-plan-enhancements.css";
 
 export interface DailyPlanDrawerProps {
@@ -70,8 +72,9 @@ export function DailyPlanDrawer({
   const [planRecord, setPlanRecord] = useState<StoredRecord | null>(null);
   const [linkedActivities, setLinkedActivities] = useState<StoredRecord[]>([]);
   const [evaluation, setEvaluation] = useState<DailyPlanEvaluationRecord | null>(null);
-  const [exportingFormat, setExportingFormat] = useState<"word" | "pdf" | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<"word" | "pdf" | "excel" | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [showLinkedOutputs, setShowLinkedOutputs] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -111,6 +114,61 @@ export function DailyPlanDrawer({
         ageBand,
       });
       setExportMessage(`✅ ${res.fileName} başarıyla indirildi.`);
+    } catch (err) {
+      setExportMessage(`❌ Hata: ${err instanceof Error ? err.message : "Dışa aktarılamadı"}`);
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setExportingFormat("excel");
+      setExportMessage(null);
+      const blocks = flow?.blocks ?? [];
+      const rows = blocks.map((b) => {
+        const matchingActs = linkedActivities.filter(
+          (a) => (typeof a.timeOfDay === "string" && a.timeOfDay === b.id) || (typeof a.period === "string" && a.period === b.id)
+        );
+        const actSummary = matchingActs.map((a) => (typeof a.title === "string" ? a.title : "")).filter(Boolean).join(", ");
+        return {
+          timeRange: `${b.durationMinutes > 0 ? `${b.durationMinutes} dk` : "Rutin"}`,
+          title: b.title,
+          detail: actSummary ? `${b.transitionNote ? `${b.transitionNote} — ` : ""}Etkinlik: ${actSummary}` : (b.transitionNote || "-"),
+          status: b.status === "planned" ? "Planlandı" : "İsteğe Bağlı",
+        };
+      });
+
+      await exportOfficialTableToExcel({
+        fileName: `Gunluk_Egitim_Plani_${civilDate}`,
+        sheetName: "Günlük Plan",
+        title: `T.C. MİLLÎ EĞİTİM BAKANLIĞI — GÜNLÜK EĞİTİM PLANI VE AKIŞI (${civilDate})`,
+        subtitle: planRecord?.title ? String(planRecord.title) : "Günün Eğitim Planı",
+        metadata: [
+          { label: "Tarih", value: civilDate },
+          { label: "Yaş Grubu", value: ageBand ? `${ageBand.replace("-", "–")} Ay` : "60-72 Ay" },
+          { label: "Bağlı Etkinlik Sayısı", value: `${linkedActivities.length}` },
+          { label: "3D Değerlendirme", value: evaluation ? "Girilmiş" : "Beklemede" },
+        ],
+        columns: [
+          { header: "Süre / Rutin", key: "timeRange", width: 16, align: "center" },
+          { header: "Blok / Akış Başlığı", key: "title", width: 28 },
+          { header: "Etkinlik & Pedagojik Geçiş Notu", key: "detail", width: 50 },
+          { header: "Durum", key: "status", width: 16, align: "center" },
+        ],
+        rows: rows.length > 0 ? rows : [
+          { timeRange: "30 dk", title: "Güne Başlama Zamanı", detail: "Sabah karşılama, duygu panosu ve sohbet çemberi", status: "Planlandı" },
+          { timeRange: "60 dk", title: "Öğrenme Merkezlerinde Oyun", detail: "Blok, Kitap, Sanat ve Fen merkezlerinde ilgiye göre dağılım", status: "Planlandı" },
+          { timeRange: "30 dk", title: "Beslenme & Hijyen", detail: "El yıkama, kahvaltı ve diş fırçalama öz bakım rutini", status: "Planlandı" },
+          { timeRange: "45 dk", title: "1. Etkinlik (Büyük Grup)", detail: linkedActivities[0]?.title ? String(linkedActivities[0].title) : "Bütünleştirilmiş Sanat ve Türkçe Etkinliği", status: "Planlandı" },
+          { timeRange: "45 dk", title: "Öğle Yemeği & Dinlenme", detail: "Sağlıklı beslenme ve sakinleştirici masal dinletisi", status: "Planlandı" },
+          { timeRange: "45 dk", title: "Açık Hava & Bahçe Oyunları", detail: "Geleneksel çocuk oyunları ve doğa gözlemi", status: "Planlandı" },
+          { timeRange: "45 dk", title: "2. Etkinlik (Küçük Grup)", detail: linkedActivities[1]?.title ? String(linkedActivities[1].title) : "Matematik ve Fen Deney Masası", status: "Planlandı" },
+          { timeRange: "30 dk", title: "İkindi Beslenmesi & Meyve", detail: "Meyve saati ve su tüketimi çetelesi", status: "Planlandı" },
+          { timeRange: "30 dk", title: "Günü Değerlendirme Çemberi", detail: "Günün 3 boyutlu yansıtması, kapanış şarkısı ve eve gidiş", status: "Planlandı" },
+        ],
+      });
+      setExportMessage(`✅ Gunluk_Egitim_Plani_${civilDate}.xlsx başarıyla indirildi.`);
     } catch (err) {
       setExportMessage(`❌ Hata: ${err instanceof Error ? err.message : "Dışa aktarılamadı"}`);
     } finally {
@@ -158,6 +216,15 @@ export function DailyPlanDrawer({
         <section className="daily-plan-drawer__export-bar" aria-label="Planı İndir ve Yazdır">
           <button
             type="button"
+            className="daily-export-btn daily-export-btn--excel"
+            disabled={exportingFormat !== null}
+            onClick={() => void handleExportExcel()}
+          >
+            <DownloadIcon aria-hidden="true" />
+            <span>{exportingFormat === "excel" ? "Excel Hazırlanıyor..." : "Excel İndir (.xlsx)"}</span>
+          </button>
+          <button
+            type="button"
             className="daily-export-btn daily-export-btn--word"
             disabled={exportingFormat !== null}
             onClick={() => void handleExport("word")}
@@ -173,6 +240,13 @@ export function DailyPlanDrawer({
           >
             <ReaderIcon aria-hidden="true" />
             <span>{exportingFormat === "pdf" ? "PDF Hazırlanıyor..." : "PDF / A4 Yazdır (.pdf)"}</span>
+          </button>
+          <button
+            type="button"
+            className="daily-export-btn daily-export-btn--linked"
+            onClick={() => setShowLinkedOutputs(true)}
+          >
+            <span>📦 Bağlı Örnek Çıktılar</span>
           </button>
         </section>
 
@@ -324,6 +398,21 @@ export function DailyPlanDrawer({
           )}
         </section>
       </div>
+
+      {showLinkedOutputs && (
+        <OfficialPlanLinkedOutputsModal
+          isOpen={showLinkedOutputs}
+          onClose={() => setShowLinkedOutputs(false)}
+          planTitle={planRecord?.title ? String(planRecord.title) : "Günün Eğitim Planı"}
+          civilDate={civilDate}
+          ageGroup={ageBand ? `${ageBand.replace("-", "–")} Ay` : "60-72 Ay"}
+          activities={
+            linkedActivities.length > 0
+              ? linkedActivities.map((a, i) => `${i + 1}. ${a.title ?? "Etkinlik"}`).join("\n")
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

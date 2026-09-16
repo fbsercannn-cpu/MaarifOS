@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
 import "./official-forms.css";
 
 interface StudentMealRow {
@@ -20,6 +24,7 @@ const DEFAULT_STUDENTS: StudentMealRow[] = [
 ];
 
 export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: () => void }) {
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
   const [teacherName, setTeacherName] = useState("Emine Öğretmen");
   const [date, setDate] = useState("2026-09-15");
@@ -45,7 +50,44 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}`,
+        sheetName: "Beslenme & Hijyen",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — GÜNLÜK BESLENME, HİJYEN VE ÖZ BAKIM TAKİP ÇİZELGESİ",
+        subtitle: `Tarih: ${date} · Menü: ${menuToday}`,
+        metadata: [
+          { label: "Okul / Kurum Adı", value: schoolName },
+          { label: "Sınıf Öğretmeni", value: teacherName },
+          { label: "Tarih", value: date },
+          { label: "Günün Menüsü", value: menuToday },
+        ],
+        columns: [
+          { header: "Öğrenci Adı Soyadı", key: "name", width: 25 },
+          { header: "Kahvaltı Tüketimi", key: "breakfastStr", width: 18, align: "center" },
+          { header: "Öğle Yemeği Tüketimi", key: "lunchStr", width: 18, align: "center" },
+          { header: "Su Tüketimi (Bardak)", key: "waterCups", width: 22, align: "right", isNumeric: true },
+          { header: "Diş / El Hijyeni", key: "teethBrushedStr", width: 16, align: "center" },
+          { header: "Öğretmen Gözlem Notu", key: "notes", width: 35 },
+        ],
+        rows: students.map((s) => ({
+          name: s.name,
+          breakfastStr: s.breakfast === "full" ? "Tam Bitirdi" : s.breakfast === "half" ? "Yarısını Yedi" : "Tattı",
+          lunchStr: s.lunch === "full" ? "Tam Bitirdi" : s.lunch === "half" ? "Yarısını Yedi" : "Tattı",
+          waterCups: s.waterCups,
+          teethBrushedStr: s.teethBrushed ? "Yapıldı (✓)" : "Yapılmadı (-)",
+          notes: s.notes,
+        })),
+        includeSubtotals: true,
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleExportWord = () => {
@@ -125,6 +167,14 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
           <h3 className="of-action-title">Beslenme, Hijyen &amp; Öz Bakım Takip Çizelgesi</h3>
         </div>
         <div className="of-action-bar__right">
+          <button
+            type="button"
+            className="of-btn of-btn--excel"
+            onClick={handleDownloadExcel}
+            disabled={isExportingExcel}
+          >
+            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+          </button>
           <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
             🖨️ A4 Yazdır
           </button>

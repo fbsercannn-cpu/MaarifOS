@@ -477,6 +477,16 @@
   border: 1.5px solid transparent;
 }
 
+.daily-export-btn--excel {
+  background: #f0fdf4;
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.daily-export-btn--excel:hover:not(:disabled) {
+  background: #dcfce7;
+}
+
 .daily-export-btn--word {
   background: #eff6ff;
   border-color: #2563eb;
@@ -495,6 +505,16 @@
 
 .daily-export-btn--pdf:hover:not(:disabled) {
   background: #fce7f3;
+}
+
+.daily-export-btn--linked {
+  background: #fefce8;
+  border-color: #ca8a04;
+  color: #a16207;
+}
+
+.daily-export-btn--linked:hover:not(:disabled) {
+  background: #fef9c3;
 }
 
 .daily-export-btn:disabled {

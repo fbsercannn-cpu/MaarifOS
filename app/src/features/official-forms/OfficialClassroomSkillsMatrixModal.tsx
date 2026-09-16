@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
 import "./official-forms.css";
 
 interface StudentSkillRow {
@@ -49,6 +53,7 @@ const DOMAINS: { key: keyof Omit<StudentSkillRow, "id" | "name">; label: string;
 ];
 
 export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () => void }) {
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [students, setStudents] = useState<StudentSkillRow[]>(INITIAL_STUDENTS);
   const [term, setTerm] = useState("1. Dönem Sonu İzleme");
   const [schoolYear, setSchoolYear] = useState("2026-2027");
@@ -79,7 +84,49 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
   });
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`MEB_Sinif_Gelisim_Matrisi_${schoolYear.replace('/', '-')}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `MEB_Sinif_Gelisim_Matrisi_${schoolYear.replace('/', '-')}`,
+        sheetName: "Gelişim Matrisi",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ",
+        subtitle: `${className} · ${term} · ${teacherName}`,
+        metadata: [
+          { label: "Eğitim Yılı", value: schoolYear },
+          { label: "Dönem", value: term },
+          { label: "Şube", value: className },
+          { label: "Öğretmen", value: teacherName },
+          { label: "Ölçütler", value: "1: Geliştirilmeli | 2: İyi Düzeyde | 3: Çok Başarılı" },
+        ],
+        columns: [
+          { header: "No", key: "no", width: 8, align: "center", isNumeric: true },
+          { header: "Öğrenci Adı Soyadı", key: "name", width: 25 },
+          ...DOMAINS.map((d) => ({
+            header: d.short,
+            key: d.key,
+            width: 14,
+            align: "center" as const,
+            isNumeric: true,
+          })),
+          { header: "Genel Ort.", key: "overallAvg", width: 14, align: "center", isNumeric: true },
+        ],
+        rows: students.map((s, idx) => {
+          const rowAvg = Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1));
+          return {
+            no: idx + 1,
+            name: s.name,
+            ...DOMAINS.reduce((acc, d) => ({ ...acc, [d.key]: s[d.key] }), {}),
+            overallAvg: rowAvg,
+          };
+        }),
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleExportWord = () => {
@@ -162,6 +209,14 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
           <span className="of-tag of-tag--emerald">10 Boyutlu Sınıf Profil Karnesi</span>
         </div>
         <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn of-btn--excel"
+            onClick={handleDownloadExcel}
+            disabled={isExportingExcel}
+          >
+            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Excel (.xlsx)"}
+          </button>
           <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
             🖨️ A4 Yazdır / PDF (Yatay)
           </button>

@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { generateCurriculumMatrix } from "./planToChecklistSync.ts";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+  type ExcelColumnDefinition,
+} from "./official-form-export-service.ts";
 import "./official-forms.css";
 
 export const MONTHS = [
@@ -137,6 +142,7 @@ interface Props {
 export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
   const storageKey = "maarif_ek15_matrix_60_72";
 
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [schoolName, setSchoolName] = useState("Atatürk Anaokulu");
   const [teacherName, setTeacherName] = useState("Emine Öğretmen");
   const [academicYear, setAcademicYear] = useState("2026-2027");
@@ -196,7 +202,57 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
     });
   }, [activeCategory, searchTerm]);
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-15_Aylik_Plan_Kontrol_Cizelgesi_${academicYear}_${ageBand}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      const columns: ExcelColumnDefinition[] = [
+        { header: "Bileşen / Alan", key: "subCategory", width: 22 },
+        { header: "Resmî Kod", key: "code", width: 14 },
+        { header: "Öğrenme Çıktısı / Açıklama", key: "description", width: 45 },
+        ...MONTHS.map((m) => ({
+          header: m,
+          key: m,
+          width: 10,
+          align: "center" as const,
+          isNumeric: true,
+        })),
+      ];
+
+      const rows = EK15_ITEMS.map((item) => {
+        const rowData: Record<string, unknown> = {
+          subCategory: item.subCategory,
+          code: item.code,
+          description: item.description,
+        };
+        for (const m of MONTHS) {
+          rowData[m] = matrix[item.id]?.[m] ? 1 : 0;
+        }
+        return rowData;
+      });
+
+      await exportOfficialTableToExcel({
+        fileName: `EK-15_Aylik_Plan_Kontrol_Cizelgesi_${academicYear}_${ageBand}`,
+        sheetName: `EK-15 (${ageBand} Ay)`,
+        title: `T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-15 AYLIK EĞİTİM PLANI KONTROL ÇİZELGESİ (${ageBand} AY)`,
+        subtitle: `${schoolName} · Öğretmen: ${teacherName} · Eğitim Yılı: ${academicYear}`,
+        metadata: [
+          { label: "Okul Adı", value: schoolName },
+          { label: "Öğretmen", value: teacherName },
+          { label: "Eğitim Yılı", value: academicYear },
+          { label: "Yaş Grubu", value: `${ageBand} Ay` },
+        ],
+        columns,
+        rows,
+        includeSubtotals: true,
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const handleDownloadWord = () => {
     const tableRows = EK15_ITEMS.map((item) => {
@@ -299,6 +355,16 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
               }}
             >
               🗑️ Temizle
+            </button>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              disabled={isExportingExcel}
+              title="Formül ve filtre korumalı Microsoft Excel (.xlsx) olarak indir"
+            >
+              {isExportingExcel ? "Excel Hazırlanıyor..." : "📊 Excel (.xlsx)"}
             </button>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır
