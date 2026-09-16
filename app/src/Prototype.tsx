@@ -131,6 +131,7 @@ import {
 } from "./core/storage/storage-health";
 import {
   dashboardAttendanceCounts,
+  dashboardStateFromSnapshot,
   LEGACY_STORAGE_KEY,
   loadDashboardState,
   persistAttendanceUpdate,
@@ -4640,7 +4641,25 @@ export default function Prototype() {
     void Promise.all([
       runHydrationStep(
         "dashboard",
-        loadDashboardState(store, fallbackDashboardState),
+        loadDashboardState(store, fallbackDashboardState).catch(async (error) => {
+          console.warn(
+            "[MaarifOS Self-Healing] Dashboard hydration error encountered, initiating autonomous recovery:",
+            error,
+          );
+          try {
+            const snapshot = await store.readSnapshot();
+            const currentCivilDate = isCivilDate(fallbackDashboardState.attendanceCivilDate)
+              ? fallbackDashboardState.attendanceCivilDate
+              : civilDateInIstanbul(new Date());
+            return dashboardStateFromSnapshot(snapshot, currentCivilDate);
+          } catch (recoveryError) {
+            console.warn(
+              "[MaarifOS Self-Healing] Snapshot recovery failed, falling back to safe defaults:",
+              recoveryError,
+            );
+            return fallbackDashboardState;
+          }
+        }),
       ),
       runHydrationStep("today", loadTodayWorkspace(store)),
       runHydrationStep("evidence", loadEvidenceWorkspace(store)),
@@ -4795,6 +4814,10 @@ export default function Prototype() {
           loadDashboardState(store, {
             ...fallbackDashboardState,
             attendanceCivilDate: currentCivilDate,
+          }).catch(async (error) => {
+            console.warn("[MaarifOS Self-Healing] Day refresh dashboard error, recovering from snapshot:", error);
+            const snapshot = await store.readSnapshot();
+            return dashboardStateFromSnapshot(snapshot, currentCivilDate);
           }),
           loadTodayWorkspace(store, { now: new Date() }),
           loadEvidenceWorkspace(store, { now: new Date() }),

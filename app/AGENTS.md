@@ -1,6 +1,35 @@
 # Mobile Prototype Agent Guide
 
+## 12 Eylül 2026 — çıkış, kutu ve aile dönüşü
+
+Kullanıcı günün çıkış paketini, 12'li A4 malzeme kutusu etiketlerini ve gerçek aile yanıtından plan/görüşme oluşturan panoyu istedi. Bu yüzeyler aynı kanonik hazırlık kayıtlarını kullanır: başka ekrandan eklenen aynı kaynak/madde yeniden oluşturulmaz, eksik kalan maddeler tamamlanır. Kutuyu hazır işaretlemek uygulama veya gözlem değildir. Boş yüzeyler ilgili gerçek hazırlama işlemine düğme sunar. Çocukla ilişkili etkinlik başlığını içeren etiketin belge geçmişi de gerçek çocuk kapsamını korur. Yeni günlük/haftalık/aylık/dönemlik/yıllık idare rapor merkezi bu turda öneridir; uygulanmış veya zorunlu resmî form olarak gösterilmez. Ek 4 Beceri Edinim Raporu ile Ek 18 Aylık Plan Kontrol Çizelgesi ayrı tutulur.
+
+
+## 12 Eylül 2026 — sınıf belgeleri ve hafif kaynaklar
+
+Kullanıcı dört aracı istedi: yatay A4 günlük teslim çizelgesi; gerçek günlük plana atanan küçük grup için A4 üzerinde altı kart; seçilen etkinlikten A4 üzerinde iki aile oyun kartı ve gerçek yanıt kaydı; seçilen belgelerden klasör kapağı/içindekiler/ayraç/sırt etiketi. Belgeler kayıtlı kaynaklardan hazırlanır, seçilen eylem gerçek kaydı tamamlar. Öğretmenin kendi değerlendirmesi kaydedilince ikinci insan incelemesi kuyruğuna girmez; uzman doğrulaması yapılmış gibi gösterilmez. Kullanıcının hız isteği, önceki uyum PDF ve sayfa görsellerini uygulamaya gömme kararının yerine geçer: ağır dosyalar üretimden çıkarılır, hafif kaynak metni ve kayıt bağları korunur. Yerel özgün kaynak arşivi silinmez. Belge indirmesinin kendi geçmiş yazımı açık önizlemeyi geçersiz kılmamalıdır.
+
+
+## 10 Eylül 2026 — tek sayfa A4 ve işi tamamlayan seçimler
+
+Son kullanıcı tercihi sınıf listesinin varsayılanını tek sayfalık yatay A4 yaptı: üstte okul anteti ve sınıf, altta öğretmen adı ve Okul Öncesi Öğretmeni; sıra, öğrenci adı soyadı, T.C., anne adı/mesleği/telefonu, baba adı/mesleği/telefonu ve üçüncü kişi adı/yakınlığı/telefonu. Üçüncü kişi mesleği yok. Kaynak değerler kesilmez; fiziksel sayfa ve okunabilirlik gerçek PDF/Excel baskısıyla doğrulanır. Diğer üç kullanım düzeni alternatif olarak kalır. Öğretmen adımları gerçek kaynağa bağlı hazırlanır ve tek seçimle kalıcı sonucu tamamlar; yapılmamış gözlem veya pedagojik sonuç uydurulmaz. Belge yenileme aynı kapsamı korur, önceki sürüm erişilebilir kalır; ay sonu dosyası seçili belgeleri gerçek pakete dönüştürür.
+
+
 ## Durable MaarifOS Product Decisions
+
+- 10 Eylül 2026 sınıf listesi kararı: Günlük dikey işaret çizelgesi, yatay iletişim blokları ve dikey ayrıntılı döküm üç hazır amaçtır. İletişimde öğrenci kimliği üstte tam genişlikte, üç yakın grubu altında yer alır; normal çocuklar aynı sayfaya birlikte yerleşir. Amaç seçimi önizlemeyi doğrudan hazırlar. Önizlemede düzen değişirken seçilmiş çocuk, dönem ve alanlar korunur; günlük ek alanlar ayrı ayrıntıda eksiksiz gösterilir. Önceki geniş sütun düzeni klasik seçenek olarak kalır. Kaynağa bağlı Excel ve gerçek PDF çıktısı birlikte doğrulanır.
+
+- 9 Eylül 2026 doğrulanabilir öğretmen akışı kararı: Belge kullanımı ders öncesi hazırlık, isteğe bağlı basılı sınıf kullanımı ve ders sonrası kayıt olarak ayrılır; telefon sınıfta zorunlu tutulmaz ve paylaşım yalnız kurumun güncel yetkili kanalına öğretmenin açık seçimiyle gider. Yerel veli görüşmesi hazırlığı resmî randevu, Ek 4/e-Okul hazırlığı resmî aktarım değildir. Planlandı, uygulandı, gözlendi ve öğretmen yargısı ayrı kaynak durumlarıdır; oyun uygulaması, uyarlama, yansıtma, aile önerisi ve geri bildirim aynı kaynağa bağlı ayrı olaylardır. Pedagojik eşleme iki bağımsız dış sicil kanıtlı gerçek okul öncesi uzmanı olmadan yayımlanabilir gösterilmez; ajan ve kurgu kimlik uzman yerine geçmez. Dışa aktarım çocuk, alıcı, amaç ve alan kapsamını önce gösterir, bilinmeyen kapsamı çocuksuz saymaz ve kaynak/seçim değişince eski çıktıyı durdurur. Gerçek öğretmen pilotu beş öğretmen × dört exact görev ve 20 ham kayıt ister; test fixture'ı veya ajan sonucu pilot sonucu değildir. Ürün aidat, servis, canlı aile mesajlaşması, zorunlu bulut veya gömülü üretken yapay zekâ ile genişletilmez.
+
+- 8 Eylül 2026 canlı belge tasarımı: Kullanıcı öğretmen çıktılarında soluk gri metin/pastel tek ton istemiyor. Sınıf PDF ve Excel belgeleri koyu okunaklı metin, gerçek kalın başlık/font ağırlıkları ve okul öncesine uygun canlı turkuaz/mavi/mercan/sarı grup vurguları kullanır. Renk bilgiyi destekler; grup adı da yazıyla bulunur. Başka kuruma ait referans logoları veya kimlikleri alınmaz; öğretmenin kendi kaydettiği okul logosu korunur. Önce mevcut işlevsel kapsam testleriyle tamamlanır, sonra görsel yenileme, son kontroller ve açıkça istenmiş yayın yapılır. Gerçek PDF ve Excel baskısı görülmeden yalnız renk kodu veya metin testi yeterli kabul sayılmaz.
+
+- 8 Eylül 2026 seçilebilir sınıf listesi kararı: Sıra ve okul numarası ayrı alanlardır. Standart yirmi kayıt/iletişim alanı başlangıçta seçilir; kullanıcı kimlik, doğum, anne/baba mesleği, diğer yakın, öncelikli/acil iletişim rolü, teslim yetkisi ve adresi ayrı ayrı kapatabilir. PDF, yazdırma ve Excel aynı kapsamı kullanır. Sağlık ve aile özel notları bu standart iletişim alanlarıyla karıştırılmaz. Kaynak değer gösterim uğruna değiştirilmez. Belge başlığı, kurum adı ve etiketler bağlama göre yazılır; yaş birimi `ay` küçük kalır. Tekrarlı noktalı başlık satırları yerine düzenli kurum–başlık–bilgi–tablo–imza hiyerarşisi kullanılır.
+
+- 8 Eylül 2026 sınıf listesi kararı: Kullanıcının `VELİ İLETİŞİM BİLGİLERİ 2025.xls` dosyasındaki iletişim grupları ve sütun mantığı belge için görsel kaynaktır. Ad ve soyadlar belgede Türkçe ilk harf büyük biçiminde gösterilir; telefon, numara, kısaltma ve adres anlamı korunur. Kaynak öğrenci kaydı gösterim uğruna ezilmez. Üçüncü kişinin adı, yakınlığı/ünvanı, telefonu ve tam adres kesilmeden tabloya yerleşir. Profesyonel mizanpaj gerçek PDF sayfaları üzerinde doğrulanır.
+
+- 31 Ağustos 2026 tasarım devamı: Kullanıcı görsel yön seçimini HALİS'e bıraktı. Seçilen yön, günlük akış odağı + kısa etkinlik rehberi + çocuğa bağlı hızlı gözlem zinciridir. Kayıtlı plan ve öneri görsel/metinsel olarak ayrılır; öneri yalnız açık öğretmen eylemiyle kayda dönüşür. Çakışan veya kopuk plan ile bekleyen kayıt, dekoratif öğretim kartıyla örtülmez. Etkinliğin gerçek kaynak hedefleri eşleşmiyorsa özel öneri uydurulmaz; yaşa göre genel örnekler görünür kalır. Bu düzenleme mevcut beş gezinme hedefini, ham gözlemi, veri sözleşmesini ve korunan mobil çalışma zamanını değiştirmez.
+
+- Sınıf kaydedilmiş ve yıl hazırlık durumundaysa Bugün ekranının ana eylemi doğrudan `Eğitim yılını başlat` olmalıdır; plan ve yedek önerileri bu geçişi kilitlemez. Varsayılan Bugün yüzeyi tek ana eylem ve en fazla iki takip eylemi gösterir. Çocuk satırından doğrudan açılan gelişim kaydında öğretmen yaş bandına uygun somut davranışı seçebilir; seçmek yalnız taslak oluşturur, açık Kaydet davranışı ve kaynaklı Maarif bağlantısını birlikte kaydeder. Bu örnekler resmî gelişim kontrol listesi, tanı veya otomatik başarı değerlendirmesi gibi sunulmaz.
 
 - Values education is the non-optional pedagogical operating system of MaarifOS. Every annual, monthly, weekly, daily, activity, observation, evaluation, family/community, and nature-continuity plan must preserve an explicit `value -> action -> evidence -> reflection -> next plan` trace. TYMM and EÇE remain separate official program ontologies; no automatic code conversion is allowed.
 - Turkish-Islamic cultural grounding must be expressed through age-appropriate lived ethics such as adalet, emanet, kul hakkı, merhamet, edep/nezaket, honest work, gratitude without waste, family and neighbourly care, mutual aid, cleanliness, stewardship of nature, and protection of national/cultural heritage. Never score a child or family’s belief, worship, sect, clothing, family form, or ritual participation; never use fear, shame, forced disclosure, coerced ritual, moral ranking, or personality labels as evidence of values.
@@ -95,3 +124,33 @@ When any text-entry control loses focus, dismiss the simulated keyboard. If the 
 - Fixed phone chrome should not animate with pushed screens. Screen content can animate; the status bar, camera cutout, and preview chrome should stay put.
 - Keep the keyboard below the home indicator/safe area layer in z-index, and above ordinary app UI while visible.
 - Keep the home indicator as the topmost safe-area layer in the z-index above everything else in the prototype.
+
+
+## 7 Eylül 2026 — öğrenci dosyası, belge ve kaynak tasarımı
+
+- Öğretmen ünvanı uygulama belgelerinde `Okul Öncesi Öğretmeni` olarak yazılır.
+- Sınıf listesi A4 yatay, anne/baba ad-telefon-meslek sütunları ayrı; üçüncü kişi adı/yakınlığı/ünvanı/telefonu aynı ana iletişim tablosundadır. Birden çok yakın öğrenciye bağlı ayrı satırlarda korunur; üçüncü kişi mesleği, kimlik ve açık adres ayrıntı çizelgesinde eksiksiz yer alır. Özel aile/çocuk notları genel iletişim çizelgesine kendiliğinden eklenmez.
+- Öğrenci dosyası isteğe bağlı çocuk özel bilgi notu, aile açıklaması, anne-baba ayrı yaşama, anne/baba vefatı, şehit/gazi çocuğu bilgisini saklar. Kaynak veriden aile durumu veya teslim yetkisi çıkarılmaz.
+- Sınıf listesindeki silme onayla geri alınabilir arşive taşır; aynı kimlikle geri alma ve geçmiş kayıtları koruma esastır.
+- Veli iletişim XLS/XLSX/CSV/TSV aktarımı yerelde okunur; başlık/sayfa seçimi, sütun eşleştirme, düzenlenebilir önizleme, kanonik mükerrer kontrolü, açık seçim ve atomik toplu kayıt zorunludur. Yeni mükerrer eşleşmesi eski onayı geçersiz kılar; ayrı öğrenci kararı işaretli inceleme kaydıyla yedekte korunur.
+- Doğum günleri Bugün ekranında doğum gününden üç gün önce başlayıp günün kendisi dahil gösterilir; yıl geçişi ve 29 Şubat açık kuralla ele alınır.
+- Kullanıcının sağladığı 2026–2027 Okula Uyum Rehberi 35 sayfasıyla özgün PDF, sayfa görselleri ve tam metin olarak ek bilgi kaynağıdır; kısaltma tam belgenin yerini almaz.
+
+## 7 Eylül 2026 master denetimi - kalıcı tasarım kuralları
+
+- Anne/baba soyadı çocuğun soyadından yalnız açık öneri eylemiyle eklenir; girilmiş farklı soyadları veya üçüncü kişi adları sessizce değiştirilmez.
+- Adres yeni kayıt, profil ve Excel düzenlemesinde aynı kayda bağlıdır: dört alan `careDetails.homeAddressParts`, belgelere giden tam adres bunun `careDetails.homeAddress` izdüşümüdür. İlçe/il Acıpayam/Denizli görünür varsayılanları kaydı tek başına doldurmaz; üçüncü alan mahalle, dördüncü alan cadde/sokak–numaradır. Eski tek metin adresler tahminle bölünmez.
+- Gerçek yeniden kayıt yeni üyelik dönemi açar; yanlışlıkla silmeyi geri alma ayrılık geçmişini yeniden yazmaz. Son aktif üyelik seçimi ortak latestStudentEnrollment yardımcısından yapılır.
+- Yoklama raporu önce sınıf/yıl/tarih kapsamını süzer, sonra çocuk-gün kanonik kayıtlarını sayar; mükerrer kaynakları silmez.
+- Görünen eğitim yılı adı takvim anahtarı değildir. Gün sonu toplamı ve parmak izi aynı öğrenci/katılımcı kümesini kullanmalıdır.
+
+
+## 10 Eylül 2026 — seçerek işi tamamlama
+
+- Öğretmene yalnız yumuşak uyarı veya boş form yönlendirmesi sunulmaz: mevcut kaynaklardan hazırlanmış kategori, başlık ve eğitim adımı seçenekleri açık öğretmen eylemiyle gerçek kayda ve bağlantıya dönüşür; tamamlanan sonuç gösterilir. Ham gözlem değişmez, planlama uygulandı/gözlendi sayılmaz.
+- Yanlış eklenmiş aktif veya arşiv öğrenci için doğrudan `Tamamen sil` eylemi bulunur. Öğrenci ve silinecek kapsam görünür; onay seçimle verilir. Kalıcı silme, bağlı veriler ve cihaz içi kurtarma kopyalarıyla atomiktir; diğer çocukların kayıtları korunur. İndirilmiş eski yedeklerin kapsamı ayrıca açıklanır.
+
+- Kaydedilmiş gözlemin olay tarihi öğretmen tarafından sonradan düzeltilebilir; kaydedilme zamanı ve ham metin korunur. Gözlemden sonraki destek planı, gözlemin asıl etkinlik/program bağlantısı yerine geçmez. Kaydedilmiş gözleme dokunmak doğrudan tarih ve bağlama seçeneklerini açar.
+- Seçerek tamamlama ortak ürün davranışıdır: gözlem, günlük/aylık plan ve yıl–ay–hafta–gün omurgasında sistem mevcut kaynaklardan hazır seçenek üretir; öğretmenin seçimi gerçek kaydı/ilişkiyi yazar ve sıradaki somut adımı gösterir. Eksik bağ için yalnız açıklama veya boş forma gönderme yeterli değildir.
+
+- Hazır iş paketi ürün kararı: MaarifOS ilgili kategori, kaynak, plan ve takip adımlarını birlikte hazırlar; sonuç kapsamını gösteren seçeneğe dokunmak işlemi tamamlar. Normal atama için ikinci onay istenmez. Mevcut uygun kayıt yeniden kullanılır, toplu seçim desteklenir ve güvenli geri alma sunulur. Önceki açık tercihler önerilere yardımcı olabilir; ham gözlem veya pedagojik sonuç kendiliğinden değiştirilmez.

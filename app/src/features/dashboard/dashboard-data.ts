@@ -119,6 +119,19 @@ const DASHBOARD_SETTINGS_ID = "00000000-0000-4000-9000-000000000001";
 export const LEGACY_STORAGE_KEY = "maarifos-akis-pusulasi-v1";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function safeRandomUuid(): string {
+  if (typeof globalThis !== "undefined" && globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    try {
+      return globalThis.crypto.randomUUID();
+    } catch {}
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const studentFromRecord = (record: StoredRecord): DashboardStudent | null => {
   const profile = studentProfileFromRecord(record);
   if (!profile) return null;
@@ -664,7 +677,7 @@ function scopeFields(scope: ActiveClassroomScope | null): Record<string, unknown
       };
 }
 
-function dashboardStateFromSnapshot(
+export function dashboardStateFromSnapshot(
   snapshot: Awaited<ReturnType<LocalDataStore["readSnapshot"]>>,
   attendanceCivilDate: string,
 ): DashboardState {
@@ -836,7 +849,7 @@ export function migrateLegacyDashboardState(
   const migratedStudentIds = new Map(
     studentsToMigrate.map((student) => [
       student.id,
-      UUID_PATTERN.test(student.id) ? student.id : crypto.randomUUID(),
+      UUID_PATTERN.test(student.id) ? student.id : safeRandomUuid(),
     ]),
   );
   const migratedStudents = legacyStudents !== null
@@ -859,11 +872,11 @@ export function migrateLegacyDashboardState(
             mappedStudentId ??
             (UUID_PATTERN.test(observation.studentId)
               ? observation.studentId
-              : crypto.randomUUID());
+              : safeRandomUuid());
           const relationIsValid = migratedStudentIdSet.has(resolvedStudentId);
           return {
             ...observation,
-            id: UUID_PATTERN.test(observation.id) ? observation.id : crypto.randomUUID(),
+            id: UUID_PATTERN.test(observation.id) ? observation.id : safeRandomUuid(),
             studentId: resolvedStudentId,
             ...(!relationIsValid
               ? { requiresStudentReview: true, legacyStudentId: observation.studentId }
@@ -1295,7 +1308,7 @@ export async function persistStudentRosterChange(
     }
     const enrollment: StudentEnrollment = {
       ...(matchingEnrollment ?? {}),
-      id: matchingEnrollment?.id ?? crypto.randomUUID(),
+      id: matchingEnrollment?.id ?? safeRandomUuid(),
       academicYearId: scope.academicYearId,
       classroomId: scope.classroomId,
       startedOn:
