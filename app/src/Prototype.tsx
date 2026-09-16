@@ -10054,7 +10054,7 @@ export default function Prototype() {
             <div>
               <span className="d1-kicker">OTOMATİK HAZIR</span>
               <strong>2026–2027 MEB resmî takvimi</strong>
-              <small>Uyum: 7–11 Eylül · Dersler: 14 Eylül 2026–25 Haziran 2027</small>
+              <small>1. Dönem Aktif · 14 Eylül 2026 – 25 Haziran 2027</small>
             </div>
             {officialAcademicCalendarApplied ? (
               <span className="official-calendar-applied" role="status">
@@ -10065,14 +10065,6 @@ export default function Prototype() {
                 2026–2027 dönemini hazırla
               </button>
             )}
-            <a
-              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="MEB duyurusunu yeni sekmede aç"
-            >
-              MEB duyurusunu aç
-            </a>
           </section>
 
           <details className="classroom-calendar-details">
@@ -11875,7 +11867,7 @@ export default function Prototype() {
           <CalendarIcon aria-hidden="true" />
           <span>
             <strong>2026–2027 eğitim takvimi</strong>
-            <small>Uyum günleri, veli toplantısı, meyve günü ve notlar</small>
+            <small>Ders akışı, veli toplantısı, meyve günü ve etkinlikler</small>
           </span>
           <ChevronRightIcon aria-hidden="true" />
         </button>
@@ -12093,21 +12085,12 @@ export default function Prototype() {
           <section className="calendar-source-card">
             <CalendarIcon aria-hidden="true" />
             <div>
-              <span className="d1-kicker">Resmî kaynak</span>
-              <strong>Okul öncesi uyum eğitimi 7–11 Eylül 2026</strong>
+              <span className="d1-kicker">Resmî Takvim</span>
+              <strong>1. Dönem Dersleri Aktif (14 Eylül 2026 – 22 Ocak 2027)</strong>
               <small>
-                Birinci dönem 14 Eylül 2026’da başlar; eğitim öğretim yılı
-                25 Haziran 2027’de biter.
+                2026–2027 Eğitim Öğretim Yılı · 2. Dönem Bitişi: 25 Haziran 2027.
               </small>
             </div>
-            <a
-              href={OFFICIAL_ACADEMIC_CALENDAR_2026_2027.events[0].sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="MEB resmî kaynağını yeni sekmede aç"
-            >
-              MEB
-            </a>
           </section>
 
           <div className="calendar-month-toolbar">
