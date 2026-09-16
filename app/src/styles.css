@@ -909,13 +909,26 @@ p {
     break-inside: avoid !important;
   }
 
-  /* Resmi form yazdırma izolasyonu */
-  body.printing-official-form > #root > .native-app-runtime > *:not(main),
-  body.printing-official-form main > *:not(.official-workspace-overlay):not(.official-form-modal),
-  body:has(.official-workspace-overlay) > #root > .native-app-runtime > *:not(main),
-  body:has(.official-workspace-overlay) main > *:not(.official-workspace-overlay),
-  body:has(.official-form-modal) > #root > .native-app-runtime > *:not(main),
-  body:has(.official-form-modal) main > *:not(.official-form-modal):not(.official-workspace-overlay) {
+  .maarif-app-shell,
+  .maarif-app-content,
+  .maarif-scroll {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Resmi form arka plan izolasyonu: Çalışma alanı arkasındaki ekran kartlarını gizle */
+  body:has(.official-workspace-overlay) .simple-workspace > *:not(.official-workspace-overlay),
+  body:has(.official-workspace-overlay) .desk-document-center > *:not(.official-workspace-overlay),
+  body:has(.official-form-modal) .simple-workspace > *:not(.official-form-modal):not(.official-workspace-overlay),
+  body:has(.official-form-modal) .desk-document-center > *:not(.official-form-modal):not(.official-workspace-overlay) {
     display: none !important;
   }
 }
