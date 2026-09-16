@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { installCivilClock } from "./helpers/development-workspace-ui";
 
 test.describe.configure({ timeout: 60_000 });
 
@@ -16,8 +17,8 @@ async function configureClassroom(page: Page) {
     .filter({ hasText: "Takvim ayrıntıları" })
     .locator("summary")
     .click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-08-31");
   await setup
     .locator("details")
     .filter({ hasText: "İleri ayarlar" })
@@ -26,15 +27,48 @@ async function configureClassroom(page: Page) {
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
+  const startYear = page.getByRole("button", { name: "Eğitim yılını başlat", exact: true });
+  if (await startYear.isVisible()) {
+    await startYear.click();
+    await expect(startYear).toBeHidden();
+  }
 }
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill(name);
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
+  await expect(addStudent).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
+}
+
+async function openClassroomOperations(page: Page) {
+  const classroom = page.getByRole("main", { name: "Sınıfım" });
+  if (!(await classroom.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  }
+  await expect(classroom).toBeVisible();
+
+  const operations = classroom.locator("details.simple-classroom__operations");
+  if ((await operations.getAttribute("open")) === null) {
+    await operations.locator(":scope > summary").click();
+  }
+  await expect(operations).toHaveAttribute("open", "");
+  return operations;
+}
+
+async function openAttendance(page: Page) {
+  const operations = await openClassroomOperations(page);
+  await operations
+    .getByRole("button", { name: /^Bugünün yoklaması/u })
+    .click();
+  const attendance = page.getByRole("dialog", {
+    name: "Bugünün devam durumu",
+  });
+  await expect(attendance).toBeVisible();
+  return attendance;
 }
 
 type EncryptedBackupFixture = {
@@ -154,8 +188,7 @@ test("IndexedDB yazma hatasında yoklama geri alınır ve yeni yazmalar fail-clo
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroom(page);
   await addChild(page, childName);
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
+  await openAttendance(page);
   const student = page.locator("button.student-row").filter({ hasText: childName });
   await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
 
@@ -198,8 +231,7 @@ test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", asyn
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroom(page);
   await addChild(page, childName);
-  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
+  await openAttendance(page);
   const student = page.locator("button.student-row").filter({ hasText: childName });
   await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
 
@@ -238,15 +270,24 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
   const firstChild = "Taslak Bir";
   const secondChild = "Taslak İki";
   const draftText = "Bloklarla iki köprü kurdu ve arkadaşına sırasını anlattı.";
+  await installCivilClock(page);
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroom(page);
   await addChild(page, firstChild);
   await addChild(page, secondChild);
 
-  await page.getByRole("button", { name: "Etkinlikler", exact: true }).click();
-  const applyTrigger = page
-    .getByRole("button", { name: /etkinliğini Çocuk Modunda uygula/ })
-    .first();
+  await page.getByRole("navigation", { name: "Ana menü", exact: true })
+    .getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
+  await page.getByRole("button", { name: /^Oyun ve materyaller/u }).click();
+  const activity = page.locator("article.activity-card").first();
+  const activityTitle = (await activity.getByRole("heading").textContent())?.trim() ?? "";
+  expect(activityTitle).not.toBe("");
+  await activity.getByRole("button", { name: /rehberini aç$/u }).click();
+  const guide = page.locator("main.activity-teacher-guide");
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await guide.locator("summary").filter({ hasText: "Program bağlantısı ve araçlar" }).click();
+  const applyTrigger = guide.getByRole("button", { name: /etkinliğini Çocuk Modunda uygula$/u });
   await applyTrigger.click();
   const observationTrigger = page.getByRole("button", {
     name: "Bu etkinlik için gözlem yaz",
@@ -273,8 +314,9 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
   await expect(page.getByLabel("Ne oldu?")).toHaveValue(draftText);
 
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("heading", { name: "Etkinlik ve Materyal Stüdyosu" })).toBeVisible();
-  await expect(applyTrigger).toBeFocused();
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await expect(guide.getByRole("button", { name: "Çocuğa gözlem ekle", exact: true })).toBeFocused();
+  await expect(guide.locator("details.activity-teacher-guide__details")).toHaveAttribute("open", "");
 
   await applyTrigger.click();
   await page
@@ -315,7 +357,7 @@ test("uygulama kilidi oturum parolasını saklamadan erişilebilir modal olarak 
   await expect(lockGate).toBeHidden();
 });
 
-test("Ana menü etkinlik, plan ve çıktı merkezlerini kalıcı gösterir, AI vaatlerini açmaz", async ({
+test("Ana menü kayıt, plan ve belge merkezlerini kalıcı gösterir, AI vaatlerini açmaz", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
@@ -323,10 +365,10 @@ test("Ana menü etkinlik, plan ve çıktı merkezlerini kalıcı gösterir, AI v
   const navigation = page.getByRole("navigation", { name: "Ana menü" });
   await expect(navigation.getByRole("button", { name: "Bugün", exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Sınıfım", exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Etkinlikler", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Gözlem", exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Planlar", exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Çıktılar", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Çıktılar" })).toHaveCount(0);
+  await expect(navigation.getByRole("button", { name: "Belgeler", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Belgeler" })).toHaveCount(0);
 });
 
 test("doğrulanmış IndexedDB hydration açık metin legacy v1 gölgesini kaldırır", async ({
@@ -508,7 +550,7 @@ test("kayıp kasa anahtarı yalnız doğrulanmış şifreli yedek ve açık onay
   ]);
   await expect(page.getByTestId("persistence-gate")).toBeHidden();
   await expect(
-    page.getByRole("main", { name: /Günaydın Güvenli Öğretmen/ }),
+    page.getByTestId("today-screen"),
   ).toBeVisible();
 });
 

@@ -1,0 +1,7 @@
+import test from "node:test";import assert from "node:assert/strict";
+import {familyResponseFixture} from "../fixtures/family-response-fixture.mjs";
+import {familyResponseBoardModel} from "../../src/features/family-response-board/family-response-board-model.ts";
+const now=new Date("2026-09-12T09:00:00.000Z");
+test("board separates actual response from pending child and supplies future teaching dates",async()=>{const f=await familyResponseFixture();const model=familyResponseBoardModel(await f.store.readSnapshot(),undefined,now);assert.equal(model.rows.length,2);assert.equal(model.rows[0].feedback.length,1);assert.equal(model.rows[1].feedback.length,0);assert.equal(model.selectedDay,"2026-09-14");assert.ok(model.days.every(day=>day>"2026-09-12"));assert.equal(model.canPlan,true);assert.equal(model.rows[0].contacts[0].id,f.contactId);});
+
+test("default skips occupied first teaching day while explicit selected date is retained",async()=>{const f=await familyResponseFixture();const snapshot=await f.store.readSnapshot();const day="2026-09-14";snapshot.plans.push({...f.source.plan,id:"00000000-0000-4000-9500-000000006999",civilDate:day});const automatic=familyResponseBoardModel(snapshot,undefined,now);assert.equal(automatic.selectedDay,"2026-09-15");assert.ok(!automatic.emptyDays.includes(day));const explicit=familyResponseBoardModel(snapshot,day,now);assert.equal(explicit.selectedDay,day);assert.equal(explicit.canPlan,false);});

@@ -1,0 +1,60 @@
+import { test, expect } from "@playwright/test";
+
+test("üretim: ilk çevrimdışı gözlem kategori ve plana bağlanır, yeniden açılır ve öğrenci kalıcı silinir", async ({ page, context }) => {
+  await page.clock.setFixedTime(new Date("2026-09-10T09:00:00.000Z"));
+  await page.goto("/classroom?native=1", { waitUntil: "networkidle" });
+  const setup = page.getByRole("dialog", { name: "Sınıfını hazırla", exact: true });
+  await setup.getByLabel("Okul adı").fill("Kurgu Çevrimdışı Anaokulu");
+  await setup.getByLabel("Öğretmen adı soyadı").fill("Kurgu Öğretmen");
+  await setup.getByLabel("Sınıf adı").fill("Kurgu İşlem Sınıfı");
+  await setup.getByLabel("Maarif Modeli yaş grubu", { exact: true }).selectOption({ label: "60–72 ay" });
+  await setup.getByRole("button", { name: "Sınıfımı hazırla", exact: true }).click();
+  await expect(setup).toBeHidden();
+  await expect.poll(() => page.evaluate(() => Boolean((window as Window & { __maarifosPwaStatus?: { offlineReady?: boolean } }).__maarifosPwaStatus?.offlineReady)), { timeout: 60000 }).toBe(true);
+  await context.setOffline(true);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  const add = page.getByRole("dialog", { name: "Çocuk ekle", exact: true });
+  await add.getByLabel("Çocuğun adı", { exact: true }).fill("Kurgu Çevrimdışı Çocuk");
+  await add.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
+  await expect(add).toBeHidden();
+  await page.getByRole("button", { name: "Kurgu Çevrimdışı Çocuk için Maarif gelişim gözlemi ekle", exact: true }).click();
+  await page.getByRole("textbox", { name: "Ne oldu?", exact: true }).fill("Kurgu çocuk hikâyeyi kendi cümleleriyle anlattı.");
+  await page.getByRole("button", { name: "Gözlemi kaydet", exact: true }).click();
+  const completion = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  await completion.getByRole("button", { name: "Dil ve iletişim", exact: true }).click();
+  await expect(completion).toContainText("Yerleştirildiği başlık: Dil ve iletişim");
+  await page.screenshot({ path: "output/action-completion-production/category-and-options.png" });
+  await completion.getByText("Aynı bağlamda yeniden gözle", { exact: true }).click();
+  await completion.getByRole("button", { name: "Seç ve haftalık plana ekle", exact: true }).click();
+  await expect(completion).toContainText("Sonraki destek adımı haftalık plana kaydedildi.");
+  await completion.getByRole("button", { name: "Kaydedilen planı aç", exact: true }).click();
+  const plans = page.getByRole("dialog", { name: "Kayıtlı öğretmen planı", exact: true });
+  await expect(plans.locator(".teacher-owned-plan-week-record")).toContainText("Kurgu Çevrimdışı Çocuk");
+  await expect(plans.locator(".teacher-owned-plan-week-record")).toContainText("Benzer bir oyun fırsatı sunacağım.");
+  await page.screenshot({ path: "output/action-completion-production/saved-weekly-plan.png" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Kurgu Çevrimdışı Çocuk için Maarif gelişim gözlemi ekle", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Seç ve haftalık plana ekle", exact: true })).toHaveCount(0);
+  // Follow-up events have strictly increasing instants even with a frozen test clock.
+  // Deletion must happen later, as it does after the teacher has reviewed the saved plan.
+  await page.clock.setFixedTime(new Date("2026-09-10T09:01:00.000Z"));
+  await page.getByText("Sınıf işlemleri", { exact: true }).click();
+  await page.getByRole("button", { name: "Kurgu Çevrimdışı Çocuk için diğer işlemler", exact: true }).click();
+  await page.getByRole("button", { name: "Kurgu Çevrimdışı Çocuk öğrencisini tamamen sil", exact: true }).click();
+  const deletion = page.getByRole("dialog", { name: "Kalıcı öğrenci silme", exact: true });
+  await expect(deletion.getByRole("heading", { name: "Kurgu Çevrimdışı Çocuk", exact: true })).toBeVisible();
+  await expect(deletion.getByLabel("Silme etkisi")).toContainText("gözlem");
+  await expect.poll(async () => (await deletion.boundingBox())?.y ?? Infinity).toBeLessThan(200);
+  await page.screenshot({ path: "output/action-completion-production/permanent-delete-preview.png", animations: "disabled" });
+  await deletion.getByRole("checkbox").check();
+  await deletion.getByRole("button", { name: "Öğrenciyi ve bağlı kayıtları kalıcı sil", exact: true }).click();
+  await expect.poll(async () => {
+    if (!(await deletion.isVisible())) return "closed";
+    return await deletion.locator("[role=alert]").textContent({ timeout: 300 }).catch(() => "pending");
+  }, { timeout: 10000 }).toBe("closed");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Kurgu Çevrimdışı Çocuk", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => navigator.onLine)).toBe(false);
+});

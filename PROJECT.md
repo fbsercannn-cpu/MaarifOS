@@ -650,6 +650,29 @@ Pilot geri bildirimleri:
 - Telefon depolama kullanımı
 - Uygulamanın okul akışını kesip kesmediği
 
+### 12.1 Gerçek öğretmen görev pilotu sözleşmesi
+
+0.34 sürümündeki öğretmen iş yükü pilotu, beş gerçek okul öncesi öğretmeniyle aynı dört görevi ölçer. Teknik test, kurgu veri veya ajan çıktısı gerçek öğretmen sonucu sayılmaz. Uygulama protokolü görünür kılar; ham gerçek ölçümler dış pilot çalışma kitabında saklanır.
+
+- `P01`: hızlı gözlem görevini tamamla. On beş saniye yalnız bu görev için ikincil tasarım hedefidir ve pilot geçme eşiği değildir.
+- `P02`: aynı çocuğun iki kaynak gözlemini doğru dönem ve program alanıyla Ek 4/e-Okul hazırlık görünümünde bul. Bitişte iki doğru kaynak ve dönem görünür; işlem resmî aktarım sayılmaz.
+- `P03`: hazır yerel görüşme hazırlığını aç, resmî sisteme geçiş yolunu göster ve resmî işlemin tamamlanmadığını doğru açıkla. MaarifOS gerçek randevu oluşturmaz.
+- `P04`: tek çocuğu, gerekli alanları, alıcıyı ve amacı doğrula; PDF'yi indirip aç. Gözlemci belgedeki çocuk ve alan kapsamını doğrular.
+
+Beş öğretmen × dört görev ile tam ham evren 20 kayıttır. Kabul için en az 19 doğru tamamlama, bütün ham sürelerin medyanında en çok 25 saniye, başarılı her görevde en çok 45 saniye, sıfır yanlış çocuk/kapsam olayı, sıfır sahte resmî tamamlanma iddiası ve tekrar giriş sayısında sıfır medyan birlikte sağlanmalıdır. Süreler aykırı değer kırpması veya winsorization ile değiştirilmez. Yardımlı, başarısız ve bırakılan görevler ham kayıtta korunur. Bu koşulların biri eksikse pilot geçmiş sayılmaz.
+
+### 12.2 0.34 doğrulanabilir iş akışı sınırları
+
+- Belge kullanımı ders öncesi hazırlık, basılı sınıf kullanımı ve ders sonrası kaydı ayrı gösterir. Telefon sınıfta zorunlu tutulmaz; uygulama dosyayı kendiliğinden göndermez ve kurumun güncel yetkili kanalını öğretmenin seçmesi gerekir.
+- TYMM eşleme kuyruğu yayımlanabilir olmadan önce aynı aday ve dört ölçüt için dış sicille doğrulanmış iki ayrı gerçek okul öncesi uzmanının gerekçeli kararını ister. Ajan, kurgu kişi veya tek koordinatör uzman onayı yerine geçmez.
+- Bekleyen eşleme kuyruğunun uzmanlara verilebilir CSV/JSON paketi `npm run tymm:review-package -- generate --output <dizin> --generated-at <UTC>` ile üretilir ve `npm run tymm:review-package -- --verify <dizin>` ile doğrulanır. Paket üretmek pedagojik onay vermez; karar alanları gerçek iki uzmanın kimlik kanıtı ve gerekçesi gelene kadar boş, adaylar da engelli kalır. Ayrıntılı sözleşme `docs/TYMM_INSAN_INCELEME_PAKETI.md` içindedir.
+- Yerel veli görüşmesi hazırlığı ile resmî randevu işlemi ayrıdır. Ek 4/e-Okul görünümü seçilmiş kaynak gözlemlere döner; otomatik aktarım, puan veya beceri edinimi üretmez.
+- Planlandı, uygulandı, gözlendi ve öğretmen yargısı ayrı kaynaklardan gösterilir. Oyun uygulaması, uyarlama, öğretmen yansıtması, aile önerisi ve aile geri bildirimi aynı kaynağa bağlı farklı olaylardır.
+- Resmî kaynak tarihi veya sürümü, dosya özeti, sayfa sayısı, erişim denetimi ve yerel çevrimdışı paket durumu ayrı alanlardır. Erişilemeyen kaynak kullanılabilir, bekleyen eşleme de onaylı gösterilmez.
+- Dışa aktarım çocuk, alıcı, amaç ve alan kapsamını üretimden önce gösterir. Kaynak veya seçim değişirse eski çıktı iptal edilir. Belirlenemeyen çocuk kapsamı çocuksuz diye kesinleştirilmez; kullanıcı önizlemeye yönlendirilir.
+- Büyük belge metin dizini ilerlemeli ve iptal edilebilir olmalıdır. İptal kaynak baytlarını değiştirmez; arama yeniden başlatılabilir ve belge tekrar açılabilir.
+- Ürün kapsamı plan, gözlem, değerlendirme, belge, yedekleme ve sınıf kayıtlarıdır. Aidat, servis, canlı aile mesajlaşması, zorunlu bulut veya gömülü üretken yapay zekâ eklenmez. Yeni kapsam için ölçülmüş öğretmen görevi ve tekrar giriş azaltımı şarttır.
+
 ---
 
 ## 13. Nihai ürün ilkesi

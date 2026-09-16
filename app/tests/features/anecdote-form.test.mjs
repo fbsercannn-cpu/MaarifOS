@@ -576,9 +576,9 @@ test("DOCX resmî alan sırasını, A4 geometriyi ve görünmez izlenebilirlik m
     "Çocuğun Adı Soyadı",
     "Tarih",
     "Gözlenen Mekân",
-    "Gözlenen Durum",
+    "Gözlenen Durum — ham gözlem ve çocuğun sözü",
     "Gözlenen Beceriler",
-    "Gözlemcinin Genel Değerlendirmesi",
+    "Gözlemcinin Genel Değerlendirmesi — öğretmen yorumu",
   ];
   let cursor = -1;
   for (const label of labels) {
@@ -587,9 +587,12 @@ test("DOCX resmî alan sırasını, A4 geometriyi ve görünmez izlenebilirlik m
     cursor = next;
   }
   assert.match(documentXml, /Bu formu doldurmanıza neden olan durumu açıklamanız beklenmektedir/);
+  assert.match(documentXml, /Aşağıdaki metin ham gözlem kaydıdır/);
   assert.match(documentXml, /Deniz Yılmaz/);
   assert.match(documentXml, /FAB\.1/);
   assert.match(documentXml, /kap biçimi ile sıvı seviyesinin görünümü/);
+  assert.match(documentXml, /MEB 2024 Okul Öncesi Eğitim Programı/);
+  assert.match(documentXml, /https:\/\/mus\.meb\.gov\.tr\/meb_iys_dosyalar/);
   assert.match(customXml, new RegExp(observationId));
   assert.match(customXml, new RegExp(profile.sourceVersion.replaceAll(".", "\\.")));
   assert.match(customXml, new RegExp(exportedAt.replaceAll(".", "\\.")));

@@ -23,15 +23,14 @@ test("eğitim yılı yazma guardı hem enqueue hem commit anında canlı İstanb
   assert.doesNotMatch(prototypeSource, /^const currentCivilDate\s*=/m);
 });
 
-test("Kayıt Ekle gözlem seçimi chooser'ı evidence geçiş kilidiyle kapatır ve iki dialogu birlikte bırakmaz", () => {
-  const captureOpenIndex = prototypeSource.indexOf("void openStudentObservation();");
-  assert.notEqual(captureOpenIndex, -1);
+test("Gözlem gözlem seçimi chooser'ı evidence geçiş kilidiyle kapatır ve iki dialogu birlikte bırakmaz", () => {
   const captureAction = prototypeSource.slice(
-    Math.max(0, captureOpenIndex - 500),
-    captureOpenIndex + 100,
+    prototypeSource.indexOf("const handleNav ="),
+    prototypeSource.indexOf('if (id === "classroom")'),
   );
   assert.match(captureAction, /void openStudentObservation\(\)/);
-  assert.doesNotMatch(captureAction, /setCaptureMenuOpen\(false\)/);
+  assert.match(captureAction, /setCaptureMenuOpen\(false\)/);
+  assert.doesNotMatch(captureAction, /navigatePrimaryRoute\("activities"\)/);
   const observationOpen = prototypeSource.slice(
     prototypeSource.indexOf("const openStudentObservation = async"),
     prototypeSource.indexOf("const openCaptureEntry ="),
@@ -62,7 +61,7 @@ test("Kayıt Ekle gözlem seçimi chooser'ı evidence geçiş kilidiyle kapatır
   );
 });
 
-test("Kayıt Ekle takvim geçişi async okumadan önce hedef yüzeyi kilitler", () => {
+test("Gözlem takvim geçişi async okumadan önce hedef yüzeyi kilitler", () => {
   const calendarOpen = prototypeSource.slice(
     prototypeSource.indexOf("const openAcademicCalendar = async"),
     prototypeSource.indexOf("const openTodayPlans ="),

@@ -332,7 +332,27 @@ export function stageSitesPackage({ root, destination } = {}) {
     }
 
     normalizeTreeMetadata(stagingRoot);
-    renameSync(stagingRoot, resolvedDestination);
+    let renamed = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        renameSync(stagingRoot, resolvedDestination);
+        renamed = true;
+        break;
+      } catch (error) {
+        if ((error.code === "EPERM" || error.code === "EBUSY") && attempt < 4) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100 * (attempt + 1));
+          continue;
+        }
+        if (error.code === "EPERM" || error.code === "EBUSY") {
+          cpSync(stagingRoot, resolvedDestination, { recursive: true });
+          rmSync(stagingRoot, { recursive: true, force: true });
+          normalizeTreeMetadata(resolvedDestination);
+          renamed = true;
+          break;
+        }
+        throw error;
+      }
+    }
   } finally {
     rmSync(stagingRoot, { recursive: true, force: true });
   }

@@ -15,6 +15,13 @@ import {
   permanentlyDeleteArchivedStudent,
   previewPermanentStudentDeletion,
 } from "../../src/features/students/student-lifecycle.ts";
+import { makeDevelopmentReportFixture } from "../fixtures/development-report-fixture.mjs";
+import {
+  approveDevelopmentReport,
+  assertDevelopmentReportBackupIntegrity,
+  getDevelopmentReportReadModel,
+  saveDevelopmentReportDraft,
+} from "../../src/features/development/development-report.ts";
 
 class MemoryStore {
   snapshot;
@@ -640,4 +647,41 @@ test("ana silme ve recovery purge sonrasında enjekte commit hatası iki tarafı
   assert.deepEqual(store.snapshot, snapshotBefore);
   assert.deepEqual(store.recoverySnapshots, recoveryBefore);
   assert.equal(store.recoveryPurgeCount, 0);
+});
+
+test("silme önizlemesi yeni raporları sayar; aynı etkinlikteki diğer çocuğun raporu korunur", async () => {
+  const fixture = await makeDevelopmentReportFixture();
+  const { input, otherStudentId: departingStudentId } = fixture;
+  fixture.store.snapshot.activities[0].studentIds = [input.studentId, departingStudentId];
+  const first = await saveDevelopmentReportDraft(fixture.store, input);
+  const approved = await approveDevelopmentReport(fixture.store, {
+    reportId: first.id, expectedRevision: first.revision, now: input.now,
+  });
+  const departingDraft = await saveDevelopmentReportDraft(fixture.store, {
+    ...input, studentId: departingStudentId, selectedObservationIds: [], teacherEvaluation: "",
+  });
+  const store = new MemoryStore(await fixture.store.readSnapshot());
+  const departingStudent = store.snapshot.students.find((record) => record.id === departingStudentId);
+  departingStudent.active = false;
+  departingStudent.enrollmentStatus = "left";
+  store.recoverySnapshots = [
+    { id: "kurgu-iki-cocuk-snapshot", envelope: { payload: structuredClone(store.snapshot) } },
+    { id: "kurgu-sadece-diger-cocuk", envelope: { payload: { students: [{ id: input.studentId }] } } },
+  ];
+  assert.equal(previewPermanentStudentDeletion(store.snapshot, departingStudentId).reportCount, 1);
+  assert.equal(previewPermanentStudentDeletion(store.snapshot, input.studentId).reportCount, 1);
+  assert.deepEqual(approved.evidenceSnapshots[0].contextSnapshot.assignedStudentIds, [input.studentId]);
+  const result = await permanentlyDeleteArchivedStudent(store, {
+    studentId: departingStudentId, confirmationName: departingStudent.displayName,
+    now: new Date("2026-09-09T08:00:00.000Z"),
+  });
+  assert.equal(result.reportCount, 1);
+  assert.equal(result.purgedRecoverySnapshotCount, 1);
+  assert.equal(store.snapshot.settings.some((record) => record.id === departingDraft.id), false);
+  assert.deepEqual(store.snapshot.settings.find((record) => record.id === approved.id), approved);
+  assert.equal(store.snapshot.observations.some((record) => record.id === fixture.observationId), true);
+  assert.equal(JSON.stringify(store.snapshot).includes(departingStudentId), false);
+  assert.equal(JSON.stringify(store.recoverySnapshots).includes(departingStudentId), false);
+  assert.equal((await getDevelopmentReportReadModel(store.snapshot, approved.id)).sourceStatus, "stale");
+  await assertDevelopmentReportBackupIntegrity(store.snapshot);
 });

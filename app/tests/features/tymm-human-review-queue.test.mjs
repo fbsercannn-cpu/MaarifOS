@@ -6,6 +6,10 @@ import {
   AGE_MONTH_PACKAGE_REVIEW_QUEUE,
   assertTymmHumanReviewQueueCoverage,
 } from "../../src/features/pedagogical-os/tymm-human-review-queue.ts";
+import {
+  TYMM_PENDING_MAPPING_DISCLOSURE,
+  TYMM_PENDING_MAPPING_PUBLICATION_STATE,
+} from "../../src/features/pedagogical-os/tymm-human-review-ledger.ts";
 
 test("357/357 etkinlik×yaş ve 30/30 yaş×ay kaydı insan inceleme kuyruğunda eksiksizdir", () => {
   assert.doesNotThrow(() => assertTymmHumanReviewQueueCoverage());
@@ -26,10 +30,19 @@ test("insan uzman onayı olmayan adaylar exact eşleme veya resmî MEB etkinliğ
     assert.equal(item.officialMebActivity, false);
     assert.equal(item.mapping, null);
     assert.equal(item.reviewStatus, "pending-human-review");
+    assert.equal(item.publicationState, TYMM_PENDING_MAPPING_PUBLICATION_STATE);
+    assert.equal(item.reviewDisclosure, TYMM_PENDING_MAPPING_DISCLOSURE);
     assert.deepEqual(item.independentPreschoolExpertApprovals, []);
     assert.ok(item.ageAdaptation.length > 0);
     assert.ok(item.differentiation.length > 0);
     assert.ok(item.evidencePrompt.length > 0);
+  }
+  for (const item of AGE_MONTH_PACKAGE_REVIEW_QUEUE) {
+    assert.equal(item.packageMapping, null);
+    assert.equal(item.reviewStatus, "pending-human-review");
+    assert.equal(item.publicationState, TYMM_PENDING_MAPPING_PUBLICATION_STATE);
+    assert.match(item.reviewDisclosure, /doğrulanmış değildir/u);
+    assert.deepEqual(item.independentPreschoolExpertApprovals, []);
   }
 });
 

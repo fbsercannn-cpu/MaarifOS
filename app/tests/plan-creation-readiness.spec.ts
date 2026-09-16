@@ -2,11 +2,36 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectNoUntriagedAxeViolations } from "./smoke/accessibility-fixtures";
 
 const TEST_STUDENT_NAME = "Plan Akışı Çocuğu";
-const FUTURE_PLAN_DATE = "2026-08-28";
+const CURRENT_PLAN_DATE = "2026-08-27";
 const EDITABLE_FUTURE_PLAN_DATE = "2027-06-08";
+const TEST_NOW_UTC = "2026-08-27T06:00:00.000Z";
 
 test.describe.configure({ timeout: 120_000 });
 test.use({ viewport: { width: 390, height: 844 } });
+test.beforeEach(async ({ page }) => {
+  const offsetMs = Date.parse(TEST_NOW_UTC) - Date.now();
+  // Keep browser timers and animation clocks moving; shift only civil time so
+  // the source-week assertions do not depend on the machine's current date.
+  await page.addInitScript((offset: number) => {
+    const NativeDate = Date;
+    globalThis.Date = new Proxy(NativeDate, {
+      construct(target, args) {
+        return Reflect.construct(
+          target,
+          args.length ? args : [NativeDate.now() + offset],
+        );
+      },
+      apply() {
+        return new NativeDate(NativeDate.now() + offset).toString();
+      },
+      get(target, key, receiver) {
+        return key === "now"
+          ? () => NativeDate.now() + offset
+          : Reflect.get(target, key, receiver);
+      },
+    });
+  }, offsetMs);
+});
 
 async function configureClassroomWithStudent(
   page: Page,
@@ -33,7 +58,7 @@ async function configureClassroomWithStudent(
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
-    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
     .last()
     .click();
   await page.getByLabel("Çocuğun adı").fill(TEST_STUDENT_NAME);
@@ -192,7 +217,7 @@ async function openDailyPlanWizard(page: Page) {
   return dialog;
 }
 
-async function readSavedPlan(page: Page, civilDate = FUTURE_PLAN_DATE) {
+async function readSavedPlan(page: Page, civilDate = CURRENT_PLAN_DATE) {
   return page.evaluate(async (expectedCivilDate) => {
     const core = await import("/src/core/index.ts");
     const store = new core.IndexedDbDataStore();
@@ -292,7 +317,7 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
   await expect(dialog.getByRole("button", { name: "Planı kaydet" })).toBeEnabled();
 
   await dialog.getByText("Başlık ve saati değiştir", { exact: true }).click();
-  await dialog.getByLabel("Plan tarihi").fill(FUTURE_PLAN_DATE);
+  await dialog.getByLabel("Plan tarihi").fill(CURRENT_PLAN_DATE);
   await dialog.getByRole("button", { name: "Planı kaydet" }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
@@ -306,10 +331,10 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
   expect(saved.teacherOwnedFlowCount).toBe(10);
   expect(saved.targetCodes).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
   await page
-    .locator(".simple-today__desk-grid")
-    .getByRole("button", { name: /Günün planı/u })
+    .getByRole("region", { name: "Neyi hazırlayacaksınız?" })
+    .getByRole("button", { name: /Günlük eğitim planı/i })
     .click();
   const planSheet = page.getByRole("dialog", { name: "Gün planı" });
   await expect(planSheet).toBeVisible();

@@ -1,9 +1,37 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import {installCivilClock} from "./helpers/development-workspace-ui";
+
+async function openClassroomAttendance(page: Page) {
+  const classroom = page.getByRole("main", { name: "Sınıfım", exact: true });
+  await expect(classroom).toBeVisible();
+  const operations = classroom.locator("details.simple-classroom__operations");
+  if ((await operations.getAttribute("open")) === null) {
+    await operations.locator(":scope > summary").click();
+  }
+  await operations
+    .getByRole("button", {
+      name: /^Bugünün yoklaması (?:Çocuklara dokunarak işaretleyin|Tamamlandı)$/u,
+    })
+    .click();
+}
+
+async function revealTodayPlan(page: Page) {
+  await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  const plans = page.getByRole("main", { name: "Planlar", exact: true });
+  await expect(plans).toBeVisible();
+  const plan = plans
+    .getByRole("region", { name: "Neyi hazırlayacaksınız?" })
+    .getByRole("button", { name: /Günlük eğitim planı/u });
+  await expect(plan).toBeVisible();
+  return plan;
+}
 
 test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama ve plan akışını korur", async ({
   page,
 }) => {
   test.setTimeout(60_000);
+  const runtimeErrors:string[]=[];page.on("pageerror", error=>runtimeErrors.push(error.name));
+  await installCivilClock(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/", { waitUntil: "networkidle" });
   const civilDate = await page.evaluate(async () => {
@@ -37,9 +65,15 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
     .selectOption("full_day");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
+  expect(runtimeErrors).toEqual([]);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: /(?:İlk )?öğrenci(?:yi)? ekle/i }).first().click();
+  await expect(page.getByRole("button",{name:/Ölçüm takvimi için eğitim yılını düzenle/})).toBeVisible();
+  expect(runtimeErrors).toEqual([]);
+  await page
+    .getByRole("main", { name: "Sınıfım", exact: true })
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
+    .click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill("Kurgu Gün Sonu Öğrencisi");
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
@@ -47,13 +81,10 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
 
   await expect(page.getByTestId("teacher-day-close")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Günü kapat/ })).toHaveCount(0);
-  const planTrigger = page
-    .getByRole("region", { name: "Bugünün işi tek yerde" })
-    .getByRole("button", { name: /Günün planı/ });
-  await expect(planTrigger).toBeVisible();
+  await revealTodayPlan(page);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
+  await openClassroomAttendance(page);
   const attendance = page.getByRole("dialog", {
     name: "Bugünün devam durumu",
   });
@@ -67,7 +98,7 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
   await expect(attendance).toBeHidden();
 
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
+  await openClassroomAttendance(page);
   await expect(
     page
       .getByRole("dialog", { name: "Bugünün devam durumu" })
@@ -78,9 +109,6 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
-  await page
-    .getByRole("region", { name: "Bugünün işi tek yerde" })
-    .getByRole("button", { name: /Günün planı/ })
-    .click();
+  await (await revealTodayPlan(page)).click();
   await expect(page.getByRole("dialog", { name: "Günlük plan oluşturma" })).toBeVisible();
 });

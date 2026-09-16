@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 60_000 });
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+});
 
 async function ensureClassroomConfigured(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
@@ -23,8 +26,7 @@ async function ensureClassroomConfigured(page: Page) {
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
-    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
-    .last()
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
     .click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addSheet.getByLabel("Çocuğun adı").fill(name);
@@ -34,25 +36,26 @@ async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
-async function openQuickObservation(page: Page) {
+async function openQuickObservation(page: Page, childName: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
-    .getByRole("region", { name: /Sınıf(?:taki çocuklar| listesi)/i })
-    .getByRole("button", { name: "Gözlem", exact: true })
-    .first()
+    .getByRole("region", { name: "Çocuklar", exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: childName })
+    .getByRole("button", {
+      name: `${childName} için Maarif gelişim gözlemi ekle`,
+      exact: true,
+    })
     .click();
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
-  await expect(
-    page
-      .getByRole("region", { name: "Gözlem yapılacak çocuk" })
-      .getByRole("button")
-      .first(),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".quick-selected-child")).toContainText(childName);
+  await expect(page.locator(".quick-selected-child").getByRole("button", { name: "Çocuğu değiştir", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Gözlem yapılacak çocuk" })).toHaveCount(0);
 }
 
 function studentProfileButton(page: Page, name: string) {
   return page
-    .getByRole("region", { name: /Sınıf(?:taki çocuklar| listesi)/i })
+    .getByRole("region", { name: "Çocuklar", exact: true })
     .getByRole("listitem")
     .filter({ hasText: name })
     .getByRole("button")
@@ -137,7 +140,7 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
   await page.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await addChild(page, "Eski Taslak Kurgu Çocuk");
-  await openQuickObservation(page);
+  await openQuickObservation(page, "Eski Taslak Kurgu Çocuk");
   await page.getByLabel("Ne oldu?").fill(rawText);
   await expect(
     page.getByRole("status").filter({ hasText: "Taslak bu cihazda korundu" }),
@@ -146,7 +149,7 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
 
   await page.reload({ waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  await openQuickObservation(page);
+  await openQuickObservation(page, "Eski Taslak Kurgu Çocuk");
 
   const legacyReview = page.getByTestId("quick-legacy-review");
   await expect(legacyReview).toBeVisible();
@@ -174,7 +177,7 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
   await page.goto("/", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
-  await openQuickObservation(page);
+  await openQuickObservation(page, childName);
 
   await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
   await page.getByRole("button", { name: "Çocuk sözü", exact: true }).click();

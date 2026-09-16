@@ -1,4 +1,4 @@
-﻿export interface ReleaseMetadata {
+export interface ReleaseMetadata {
   readonly version: string;
   readonly releasedOn: string;
   readonly title: string;
@@ -58,10 +58,21 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.45.0",
-  releasedOn: "2026-09-12",
-  title: "Öğretmenin günü, çizelgeler ve idare dosyası",
+  version: "0.60.0",
+  releasedOn: "2026-09-16",
+  title: "34 Resmî MEB TTKB Enstrümanı, Müfettiş Teftiş Dosyası ve Tam Müfredat Ekosistemi",
   notes: Object.freeze([
+    "34 resmî MEB TTKB enstrümanı 5 pedagojik kategoride (Plan & Çizelge, Ölçme & Değerlendirme, Aile & Rehberlik, Ortam & Güvenlik, Müfredat & Kaynak) tam entegre edildi.",
+    "32 dosya grubuyla Maarif Müfettişliği teftiş kontrol listesi, evrak indeksi, dosya sırtlığı ve teslim tutanağı hazırlandı.",
+    "Sene Başı Öğrenciyi Tanıma ve Aile Bilgi Formu (TTKB s. 193–196) kan grubu, kronik hastalık, teslim yetkilileri ve korku/sakinleşme rehberiyle A4/Word olarak sunuldu.",
+    "Günlük Beslenme, Hijyen ve Öz Bakım Takip Çizelgesi (TTKB Rutin 3, s. 92, 98) 3 düzeyli porsiyon tüketimi, su sayacı, el yıkama ve diş fırçalama çetelesiyle eklendi.",
+    "EK-15 Aylık Eğitim Planı Kontrol Çizelgesi 36-48, 48-60 ve 60-72 ay yaş gruplarında 10 aylık tam müfredat matrisi ve plandan otomatik doldurma yeteneğine kavuştu.",
+    "Dönem Sonu Gelişim Raporu (Resmî Karne, s. 109–114) 10 gelişim alanında 3 düzeyli gösterge, hazır öğretmen görüşleri ve katlanır A4 mizanpajıyla hazırdır.",
+    "Süreç Odaklı Gözlem Rubriği (s. 109), Beceri Edinim Raporu (e-Okul Entegratörü, s. 110) ve Sınıf Beceriler Matrisi (s. 109–114) veri kaybı olmadan A4/Word çıktısı üretir.",
+    "Barış Masası Akran Çatışması Çözüm Protokolü (s. 84, 108), Güne Başlama / Duygu Panosu (s. 93–94) ve Günü Değerlendirme Çemberi (s. 92, 100–102) sınıfta sürtünmesiz akış sağlar.",
+    "Açık Hava & Bahçe Güvenlik Rehberi (s. 104–106), Öğrenme Merkezleri Donatım Denetimi (s. 97–104) ve Sıfır Atık Materyal Pusulası (OB8, s. 97, 206) fiziksel ortamı güvenceye alır.",
+    "Dijital Portfolyo Galerisi (s. 110), Haftalık Veli Bülteni (s. 102–104), Bireyselleştirilmiş Farklılaştırma / BEP Rehberi (s. 105–108) ve Oyun Temelli Kütüphane (s. 86–91) aktiftir.",
+    "Sıfır harici API bağımlılığı, %100 yerel şifreli depolama, A4 CSS paged media bükümü ve Microsoft Excel yerel formül enjeksiyonu korundu.",
     "Ana sayfa hızlı gözlem, ders modu ve yarının hazırlığını birleştirir; çocuk ekleme ve Excel aktarma Sınıfım içindedir.",
     "Meyve ve haftanın çocuğu çizelgelerinde yeni ay, sabitleme, değişim, erteleme ve Excel değişikliklerini seçerek uygulama hazırdır.",
     "İdare ve öğretmen dosyası gerçek kayıtlardan günlük, haftalık, aylık, dönemlik ve yıllık PDF, Word, Excel ve ZIP üretir.",

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
-  addAccessibilityStudent,
+  addAccessibilityChild,
   configureAccessibilityClassroom,
   PHONE_VIEWPORT_WIDTHS,
 } from "./accessibility-fixtures";
@@ -193,18 +193,17 @@ test.describe("44×44 mobil dokunma hedefi matrisi", () => {
       await audit("bugun-bos");
 
       await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-      await expect(page.getByText("Henüz öğrenci eklenmedi", { exact: true })).toBeVisible();
+      await expect(page.getByText("Henüz çocuk eklenmedi", { exact: true })).toBeVisible();
       await audit("sinif-bos");
 
-      await addAccessibilityStudent(page);
+      await addAccessibilityChild(page);
       await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
       await audit("sinif-dolu");
 
       const routes = [
         ["Bugün", "bugun-dolu", page.getByTestId("today-screen")],
-        ["Etkinlikler", "etkinlikler-dolu", page.locator("main.activity-studio")],
         ["Planlar", "planlar-dolu", page.getByRole("heading", { name: "Planlar", exact: true })],
-        ["Çıktılar", "ciktilar-dolu", page.getByRole("heading", { name: "Çıktılar", exact: true })],
+        ["Belgeler", "belgeler-dolu", page.getByRole("heading", { name: "Belgeler", exact: true })],
       ] as const;
       for (const [navigation, state, ready] of routes) {
         await page.getByRole("button", { name: navigation, exact: true }).click();
@@ -217,20 +216,44 @@ test.describe("44×44 mobil dokunma hedefi matrisi", () => {
         .locator("button.simple-student-list__profile")
         .filter({ hasText: "Kurgu Erişilebilirlik Çocuğu" })
         .click();
-      await expect(
-        page.getByRole("dialog", { name: "Kurgu Erişilebilirlik Çocuğu profili" }),
-      ).toBeVisible();
-      await audit("ogrenci-profili-modal");
+      const profile = page.getByRole("dialog", {
+        name: "Kurgu Erişilebilirlik Çocuğu profili",
+      });
+      await expect(profile).toBeVisible();
+      const profileDetails = profile.locator("details.student-profile-context-details");
+      await profile.getByText("Kayıt arşivi ve çocuk bilgileri", { exact: true }).click();
+      await expect(profileDetails).toHaveAttribute("open", "");
+      const profileTabs = profile.getByRole("navigation", {
+        name: "Çocuk profili bölümleri",
+      });
+      await expect(profileTabs.getByRole("button")).toHaveCount(5);
+      const tabMetrics = await profileTabs.getByRole("button").evaluateAll((buttons) => {
+        const parentRect = buttons[0]?.parentElement?.getBoundingClientRect();
+        return buttons.map((button) => {
+          const rect = button.getBoundingClientRect();
+          return {
+            label: button.textContent?.trim() ?? "",
+            fontSize: Number.parseFloat(getComputedStyle(button).fontSize),
+            width: rect.width,
+            height: rect.height,
+            insideParent:
+              Boolean(parentRect) &&
+              rect.left >= (parentRect?.left ?? 0) - 0.5 &&
+              rect.right <= (parentRect?.right ?? 0) + 0.5,
+          };
+        });
+      });
+      expect(tabMetrics.every(({ fontSize }) => fontSize >= 12), JSON.stringify(tabMetrics)).toBe(true);
+      expect(tabMetrics.every(({ width, height }) => width >= 44 && height >= 44), JSON.stringify(tabMetrics)).toBe(true);
+      expect(tabMetrics.every(({ insideParent }) => insideParent), JSON.stringify(tabMetrics)).toBe(true);
+      await audit("cocuk-profili-modal");
       await page
         .getByRole("button", {
           name: "Kurgu Erişilebilirlik Çocuğu profili ekranını kapat",
         })
         .click();
 
-      await page
-        .getByRole("group", { name: "Kurgu Erişilebilirlik Çocuğu hızlı işlemleri" })
-        .getByRole("button", { name: "Gözlem", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Gözlem", exact: true }).click();
       await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
       await audit("hizli-gozlem-dolu");
 

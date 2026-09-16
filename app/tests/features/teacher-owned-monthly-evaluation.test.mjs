@@ -401,7 +401,7 @@ test("eksik çocukla yeterli hükmü reddeder; yetersiz kanıt kaydını dürüs
       nextMonthRecommendation: "Daha fazla kanıt topla",
       now: new Date("2026-09-30T15:00:00.000Z"),
     }),
-    (error) => error?.code === "invalid-input" && /aktif sınıftaki her çocuğun/.test(error.message),
+    (error) => error?.code === "invalid-input" && /dönem içinde sınıfa kayıtlı her çocuğun/.test(error.message),
   );
   assert.deepEqual(await store.readSnapshot(), before);
 
@@ -421,4 +421,20 @@ test("eksik çocukla yeterli hükmü reddeder; yetersiz kanıt kaydını dürüs
   });
   assert.equal(insufficient.children.evidenceState, "insufficient-evidence");
   assert.equal(insufficient.children.coverage.observationCount, 0);
+});
+
+
+test("aylık temsil güncel roster yerine dönem üyeliğini, gözlem ise olay gününü esas alır", async () => {
+  const fixture = await monthlyStore();
+  const { store, monthly } = fixture;
+  const member = store.snapshot.students.find(student => student.id === studentIds[0]);
+  member.enrollmentStatus = "left"; member.active = false;
+  member.enrollments = [{ id: "00000000-0000-4000-8000-00000000ce01", academicYearId: yearId, classroomId, startedOn: "2026-09-07", endedOn: "2026-09-10", status: "left", schemaVersion: 1 }];
+  const late = store.snapshot.students.find(student => student.id === studentIds[1]);
+  late.enrollments = [{ id: "00000000-0000-4000-8000-00000000ce02", academicYearId: yearId, classroomId, startedOn: "2026-09-16", status: "active", schemaVersion: 1 }];
+  const context = await loadTeacherMonthlyReviewContext(store, monthly.id);
+  assert.equal(context.activeStudents.some(student => student.id === studentIds[0]), true);
+  assert.equal(context.observations.some(observation => observation.studentIds.includes(studentIds[0])), true);
+  assert.equal(context.observations.some(observation => observation.studentIds.includes(studentIds[1])), false);
+  assert.equal(store.snapshot.observations.length, 3);
 });

@@ -1,6 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 390, height: 844 } });
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+});
 
 const CYCLE_COUNT = 20;
 const MAX_INTERACTIONS_PER_CYCLE = 3;
@@ -67,8 +70,7 @@ async function configureClassroom(page: Page) {
 async function addFictionalChild(page: Page, childName = CHILD_NAME) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
-    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
-    .last()
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
     .click();
   await page.getByLabel("Çocuğun adı").fill(childName);
   await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
@@ -76,14 +78,26 @@ async function addFictionalChild(page: Page, childName = CHILD_NAME) {
 }
 
 function classroomList(page: Page) {
-  return page.getByRole("region", { name: /Sınıf(?:taki çocuklar| listesi)/i });
+  return page.getByRole("region", { name: "Çocuklar", exact: true });
 }
 
 function studentObservationShortcut(page: Page) {
   return classroomList(page)
     .getByRole("listitem")
     .filter({ hasText: CHILD_NAME })
-    .getByRole("button", { name: "Gözlem", exact: true });
+    .getByRole("button", {
+      name: `${CHILD_NAME} için Maarif gelişim gözlemi ekle`,
+      exact: true,
+    });
+}
+
+async function openBatchObservation(page: Page) {
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+  const operations = page.locator(".simple-classroom__operations");
+  if ((await operations.getAttribute("open")) === null) {
+    await operations.getByText("Sınıf işlemleri", { exact: true }).click();
+  }
+  await operations.getByRole("button", { name: /^Toplu gözlem/ }).click();
 }
 
 async function assertRemovedDuplicateFields(page: Page) {
@@ -91,6 +105,13 @@ async function assertRemovedDuplicateFields(page: Page) {
     page.getByLabel("Bağlam / ne sırasında?", { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Çocuğun sözü", { exact: true })).toHaveCount(0);
+}
+
+async function assertPreselectedChild(page: Page) {
+  const selectedChild = page.locator(".quick-selected-child");
+  await expect(selectedChild).toContainText(CHILD_NAME);
+  await expect(selectedChild.getByRole("button", { name: "Çocuğu değiştir", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Gözlem yapılacak çocuk" })).toHaveCount(0);
 }
 
 async function interact(
@@ -138,6 +159,34 @@ async function readObservations(page: Page) {
   });
 }
 
+async function readSavedBatchDraftSummary(page: Page, rawText: string) {
+  return page.evaluate(async (expectedRawText) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("maarifos-local");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const drafts = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+        const request = database.transaction("settings", "readonly").objectStore("settings").getAll();
+        request.onsuccess = () => resolve(request.result.filter((record) =>
+          record.settingType === "quick-observation-draft" &&
+          record.captureScope === "selected-children" &&
+          record.deletedAt === null &&
+          record.rawText === expectedRawText));
+        request.onerror = () => reject(request.error);
+      });
+      return {
+        count: drafts.length,
+        childCount: new Set(drafts.map((draft) => draft.studentId)).size,
+        batchCount: new Set(drafts.map((draft) => draft.batchId)).size,
+      };
+    } finally {
+      database.close();
+    }
+  }, rawText);
+}
+
 test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kalıcı kanıt üretir", async ({
   page,
 }) => {
@@ -160,10 +209,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
   // Sınıfım kısayolu ilk çocuğu seçili açar. Aşağıdaki etkileşim sözleşmesi
   // tam olarak "çocuk seçildikten sonra" ölçülür.
   await studentObservationShortcut(page).click();
-  const initialStudent = page
-    .getByRole("region", { name: "Gözlem yapılacak çocuk" })
-    .getByRole("button", { name: new RegExp(CHILD_NAME) });
-  await expect(initialStudent).toHaveAttribute("aria-pressed", "true");
+  await assertPreselectedChild(page);
   await page.getByText("İstersen ayrıntı ekle", { exact: true }).click();
   await page.getByRole("button", { name: "Çocuk sözü", exact: true }).click();
 
@@ -177,10 +223,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
         "click",
         quickObservationShortcut,
       );
-      const selectedStudent = page
-        .getByRole("region", { name: "Gözlem yapılacak çocuk" })
-        .getByRole("button", { name: new RegExp(CHILD_NAME) });
-      await expect(selectedStudent).toHaveAttribute("aria-pressed", "true");
+      await assertPreselectedChild(page);
     }
 
     await assertRemovedDuplicateFields(page);
@@ -253,9 +296,14 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
   await page.reload({ waitUntil: "domcontentloaded" });
   await acknowledgeReleaseIfNeeded(page);
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await expect(
-    classroomList(page).getByText(new RegExp(`${CYCLE_COUNT} gözlem$`)),
-  ).toBeVisible();
+  await classroomList(page)
+    .getByRole("listitem")
+    .filter({ hasText: CHILD_NAME })
+    .locator(".simple-student-list__profile")
+    .click();
+  const profile = page.getByRole("dialog", { name: `${CHILD_NAME} profili` });
+  await profile.getByText("Kayıt arşivi ve çocuk bilgileri", { exact: true }).click();
+  await expect(profile.getByRole("button", { name: new RegExp(`Toplam gözlem\\s*${CYCLE_COUNT}$`) })).toBeVisible();
 
   const afterReload = await readObservations(page);
   expect(afterReload).toEqual(beforeReload);
@@ -288,8 +336,7 @@ test("390×844 yarım kalan toplu gözlem çocukları ve metniyle geri açılır
     await addFictionalChild(page, childName);
   }
 
-  await page.getByRole("button", { name: "Bugün", exact: true }).click();
-  await page.getByRole("button", { name: "Hızlı gözlem", exact: true }).click();
+  await openBatchObservation(page);
   const dialog = page.getByRole("dialog", {
     name: "Gözlem ve değerlendirme akışı",
   });
@@ -299,13 +346,17 @@ test("390×844 yarım kalan toplu gözlem çocukları ve metniyle geri açılır
   const draftText =
     "Üç çocuk ortak yapıyı sırayla birer parça ekleyerek birlikte sürdürdü.";
   await dialog.getByLabel("Ne oldu?").fill(draftText);
-  await page.waitForTimeout(700);
+  await expect.poll(() => readSavedBatchDraftSummary(page, draftText)).toEqual({
+    count: childNames.length,
+    childCount: childNames.length,
+    batchCount: 1,
+  });
   await dialog
     .getByRole("button", { name: "Gözlem notu akışını kapat" })
     .click();
   await expect(dialog).toBeHidden();
 
-  await page.getByRole("button", { name: "Hızlı gözlem", exact: true }).click();
+  await openBatchObservation(page);
   await expect(dialog).toBeVisible();
   const restoredHeaderBox = await dialog.locator(".quick-observation-header").boundingBox();
   expect(restoredHeaderBox).not.toBeNull();

@@ -6,6 +6,7 @@ import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import {
   generateStandaloneTeacherOwnedPlanExportFile,
   teacherOwnedPlanDocumentBasisLabel,
+  buildStandaloneTeacherOwnedPlanParagraphs,
 } from "../../src/features/planning/teacher-owned-plan-document.ts";
 
 const annualId = "00000000-0000-4000-8000-000000000a03";
@@ -80,6 +81,16 @@ function syntheticGraph() {
     ],
   };
 }
+
+test("yapısal bireysel destek metni Word/PDF paragraflarında teknik kimliksiz korunur", () => {
+  const graph = syntheticGraph();
+  graph.months[0].weeks[0].teacherContent.followupSupportSteps = [{ decisionId: "00000000-0000-4000-8000-000000000b01", studentId: "00000000-0000-4000-8000-000000000b02", text: "Kurgu çocuğa farklı blok seçenekleri sun." }];
+  const paragraphs = buildStandaloneTeacherOwnedPlanParagraphs(graph);
+  const serialized = JSON.stringify(paragraphs);
+  assert.match(serialized, /Bireysel destek adımları/);
+  assert.match(serialized, /Kurgu çocuğa farklı blok seçenekleri sun/);
+  assert.doesNotMatch(serialized, /000000000b0[12]|followupSupportSteps|\[object Object\]/);
+});
 
 const context = {
   schoolName: "Kurgu İlkokulu",

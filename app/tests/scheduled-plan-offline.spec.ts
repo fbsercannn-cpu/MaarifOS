@@ -312,6 +312,7 @@ test("üretim service worker'ı gelecek planı çevrimdışı reload sonrası In
   expect(await page.evaluate(() => navigator.onLine)).toBe(false);
 
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
   await page.getByRole("button", { name: /^Okul etkinliği ekle/ }).click();
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await calendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();

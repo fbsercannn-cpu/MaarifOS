@@ -229,6 +229,7 @@ test("yoklama, plan, etkinlik ve program bağı tamamlanınca kapanışa hazırd
   assert.equal(workspace.status, "open");
   assert.deepEqual(workspace.issues, []);
   assert.deepEqual(workspace.evidence, {
+    isTeachingDay: true,
     expectedStudentCount: 2,
     attendanceMarkedCount: 2,
     attendanceCompleted: true,
@@ -388,6 +389,51 @@ test("sonradan kaydolan çocuk geçmiş günün kapanışını ve parmak izini b
   assert.equal(workspace.evidence.expectedStudentCount, 2);
   assert.equal(workspace.evidenceFingerprint, closure.evidenceFingerprint);
   assert.equal(workspace.status, "closed");
+});
+
+test("açık üyelik geçmişindeki sonraki katılım eski kapanış paydasına girmez", async () => {
+  const store = new MemoryStore(configuredSnapshot({ complete: true, linked: true }));
+  const closure = await closeTeacherDay(store, { civilDate, nextDayNote: "", now: closeTime });
+  await store.transaction("readwrite", ["students"], async (transaction) => {
+    await transaction.putMany("students", [record(crypto.randomUUID(), {
+      active: true, enrollmentStatus: "active", enrollments: [{
+        id: crypto.randomUUID(), academicYearId: ids.academicYear, classroomId: ids.classroom,
+        startedOn: "2026-08-12", status: "active", schemaVersion: 1,
+      }],
+    })]);
+  });
+  const workspace = await loadTeacherDayClosureWorkspace(store, { civilDate });
+  assert.equal(workspace.evidence.expectedStudentCount, 2);
+  assert.equal(workspace.evidenceFingerprint, closure.evidenceFingerprint);
+  assert.equal(workspace.status, "closed");
+});
+
+test("erken hazırlık dönemi yalnız resmî ilk güne kayıtlı çocuğu öne alır", () => {
+  const snapshot = configuredSnapshot();
+  snapshot.academicYears[0].startDate = "2026-08-14";
+  snapshot.academicYears[0].operationalStartDate = "2026-08-10";
+  snapshot.students.forEach((student, index) => {
+    student.enrollments = [{ id: crypto.randomUUID(), academicYearId: ids.academicYear,
+      classroomId: ids.classroom, startedOn: index === 0 ? "2026-08-14" : "2026-08-20",
+      status: "active", schemaVersion: 1 }];
+  });
+  assert.equal(resolveTeacherDayClosureWorkspace(snapshot, civilDate).evidence.expectedStudentCount, 1);
+});
+
+test("gün sonu katılımcı dizisini süzer; ayrılan çocuğun gözlemi boş sınıfta iş üretmez", () => {
+  const snapshot = configuredSnapshot({ complete: true, linked: false });
+  const before = resolveTeacherDayClosureWorkspace(snapshot, civilDate);
+  const departedId = crypto.randomUUID();
+  snapshot.students.push(record(departedId, { active: false, enrollments: [{
+    id: crypto.randomUUID(), academicYearId: ids.academicYear, classroomId: ids.classroom,
+    startedOn: "2026-08-01", endedOn: "2026-08-05", status: "left", schemaVersion: 1,
+  }] }));
+  snapshot.observations.push(record(crypto.randomUUID(), { studentIds: [departedId], rawText: "Kurgu kanıt" }));
+  const after = resolveTeacherDayClosureWorkspace(snapshot, civilDate);
+  assert.deepEqual(after.evidence, before.evidence);
+  assert.equal(after.evidenceFingerprint, before.evidenceFingerprint);
+  snapshot.observations.at(-1).studentIds.push(ids.studentA);
+  assert.equal(resolveTeacherDayClosureWorkspace(snapshot, civilDate).evidence.observationCount, before.evidence.observationCount + 1);
 });
 
 test("kapanıştan sonra kanıt değişirse eski kaydı silmeden stale işaretler", async () => {
@@ -667,7 +713,7 @@ test("beş günlük aynı eksik tek sourceIssueId zincirinde kalır; çözüm ve
     "2026-08-12",
     "2026-08-13",
     "2026-08-14",
-    "2026-08-15",
+    "2026-08-17",
   ];
   for (const date of dates) {
     await closeTeacherDay(store, {
@@ -678,7 +724,7 @@ test("beş günlük aynı eksik tek sourceIssueId zincirinde kalır; çözüm ve
   }
   const before = resolveTeacherDayCarryForwardLifecycle(
     await store.readSnapshot(),
-    "2026-08-16",
+    "2026-08-18",
   ).find((item) => item.issueCode === "daily-plan-missing" && item.state === "open");
   assert.ok(before);
   assert.equal(before.sourceIssueId, before.sourceIssueIdentity);
@@ -689,17 +735,17 @@ test("beş günlük aynı eksik tek sourceIssueId zincirinde kalır; çözüm ve
     sourceIssueIdentity: before.sourceIssueId,
     state: "resolved",
     note: "Toplu açık iş çözüldü.",
-    now: new Date("2026-08-16T12:00:00.000Z"),
+    now: new Date("2026-08-18T12:00:00.000Z"),
   });
   const afterResolve = resolveTeacherDayCarryForwardLifecycle(
     await store.readSnapshot(),
-    "2026-08-16",
+    "2026-08-18",
   ).find((item) => item.sourceIssueId === before.sourceIssueId);
   assert.equal(afterResolve?.state, "resolved");
   assert.equal(afterResolve?.occurrenceCivilDates.length, 5);
   const resolvedWorkspace = resolveTeacherDayClosureWorkspace(
     await store.readSnapshot(),
-    "2026-08-16",
+    "2026-08-18",
   );
   assert.equal(
     resolvedWorkspace.carryForwardItems.some(
@@ -718,18 +764,18 @@ test("beş günlük aynı eksik tek sourceIssueId zincirinde kalır; çözüm ve
     sourceIssueIdentity: before.sourceIssueId,
     state: "reopened",
     note: "Yanlış çözüm tıklaması geri alındı.",
-    now: new Date("2026-08-16T12:05:00.000Z"),
+    now: new Date("2026-08-18T12:05:00.000Z"),
   });
   assert.equal(reopened.previousTransitionId, resolved.id);
   const afterReopen = resolveTeacherDayCarryForwardLifecycle(
     await store.readSnapshot(),
-    "2026-08-16",
+    "2026-08-18",
   ).find((item) => item.sourceIssueId === before.sourceIssueId);
   assert.equal(afterReopen?.state, "open");
   assert.equal(afterReopen?.occurrenceCivilDates.length, 5);
   const reopenedWorkspace = resolveTeacherDayClosureWorkspace(
     await store.readSnapshot(),
-    "2026-08-16",
+    "2026-08-18",
   );
   assert.equal(
     reopenedWorkspace.resolvedCarryForwardItems.some(

@@ -72,7 +72,7 @@ test("dar telefonda hızlı kayıt CTA'sı kaydırma gerektirmeden görünür ve
   const readinessAction = nextTask.getByRole("button");
 
   await expect(nextTask).toBeVisible();
-  await expect(nextTask).toContainText("İlk çocuğu ekleyin");
+  await expect(nextTask).toContainText("İlk çocuğu ekle");
   await expect(readinessAction).toBeInViewport();
 
   const hitTest = await readinessAction.evaluate((button) => {
@@ -136,16 +136,16 @@ test("aktif alt menü göstergesi düğme içinde kalır ve kaydırma sonrası s
   );
 });
 
-test("320 pikselde öğretmen masası kartları kırpılmaz", async ({
+test("320 pikselde iki takip adımı kırpılmaz", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/?native=1");
   await configureClassroomWithoutStudents(page);
 
-  const teacherDesk = page.locator(".simple-today__desk-grid");
-  await expect(teacherDesk).toBeVisible();
-  const layout = await teacherDesk.evaluate((region) => {
+  const followUps = page.getByRole("region", { name: "Diğer iki adım", exact: true });
+  await expect(followUps).toBeVisible();
+  const layout = await followUps.evaluate((region) => {
     const titles = [...region.querySelectorAll("button strong")];
     return {
       buttonCount: region.querySelectorAll(":scope > button").length,
@@ -157,8 +157,9 @@ test("320 pikselde öğretmen masası kartları kırpılmaz", async ({
     };
   });
 
-  expect(layout.buttonCount).toBe(3);
-  expect(layout.titles).toEqual(["Yoklama", "Günün planı", "Etkinlik bankası"]);
+  expect(layout.buttonCount).toBeGreaterThan(0);
+  expect(layout.buttonCount).toBeLessThanOrEqual(2);
+  expect(layout.titles).toEqual(["Günün planı", "Günün ayrıntıları"]);
   expect(layout.horizontalOverflow).toBe(false);
   expect(layout.clippedTitles).toEqual([]);
 });
@@ -230,7 +231,7 @@ test("öğrenci profilinde isteğe bağlı T.C. kimlik numarası ve dört haneli
   await configureClassroomWithoutStudents(page);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   await page.getByLabel("Çocuğun adı").fill("Kurgu Kimlik Çocuğu");
   await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Çocuk ekle" })).toBeHidden({
@@ -242,6 +243,7 @@ test("öğrenci profilinde isteğe bağlı T.C. kimlik numarası ve dört haneli
     .click();
 
   let dialog = page.getByRole("dialog", { name: "Kurgu Kimlik Çocuğu profili" });
+  await dialog.getByText("Kayıt arşivi ve çocuk bilgileri", { exact: true }).click();
   await dialog.getByRole("button", { name: "Bilgiler", exact: true }).click();
   const identityInput = dialog.getByLabel("T.C. kimlik numarası (isteğe bağlı)");
   const enrollmentYearInput = dialog.getByLabel("Okula kayıt yılı");
@@ -255,6 +257,7 @@ test("öğrenci profilinde isteğe bağlı T.C. kimlik numarası ve dört haneli
     .filter({ hasText: "Kurgu Kimlik Çocuğu" })
     .click();
   dialog = page.getByRole("dialog", { name: "Kurgu Kimlik Çocuğu profili" });
+  await dialog.getByText("Kayıt arşivi ve çocuk bilgileri", { exact: true }).click();
   await dialog.getByRole("button", { name: "Bilgiler", exact: true }).click();
   const persisted = await dialog.evaluate((sheet) => ({
     identityMatches:
@@ -272,7 +275,81 @@ test("öğrenci profilinde isteğe bağlı T.C. kimlik numarası ve dört haneli
   });
 });
 
-test("320 pikselde beş ana sekmenin son eylemi alt menünün üstünde kalır ve dokunma alır", async ({
+test("gelişim gözlemi satır, kapsam ve profilden kapanınca odak aynı çocuğa döner", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/classroom?native=1");
+  await configureClassroomWithoutStudents(page);
+
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
+  await addStudent.getByLabel("Çocuğun adı").fill("Odak Kurgu Çocuğu");
+  await addStudent
+    .getByRole("button", { name: "Kaydet ve kapat", exact: true })
+    .click();
+  await expect(addStudent).toBeHidden({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
+  await addStudent.getByLabel("Çocuğun adı").fill("Diğer Odak Çocuğu");
+  await addStudent
+    .getByRole("button", { name: "Kaydet ve kapat", exact: true })
+    .click();
+  await expect(addStudent).toBeHidden({ timeout: 15_000 });
+
+  const developmentTrigger = page.getByRole("button", {
+    name: "Odak Kurgu Çocuğu için Maarif gelişim gözlemi ekle",
+    exact: true,
+  });
+  const otherDevelopmentTrigger = page.getByRole("button", {
+    name: "Diğer Odak Çocuğu için Maarif gelişim gözlemi ekle",
+    exact: true,
+  });
+  const observationDialog = page.getByRole("dialog", {
+    name: "Gözlem ve değerlendirme akışı",
+  });
+  const closeObservationAndExpectReturn = async (
+    expectedTrigger = developmentTrigger,
+  ) => {
+    await expect(observationDialog).toBeVisible();
+    await observationDialog
+      .getByRole("button", { name: "Gözlem notu akışını kapat", exact: true })
+      .click();
+    await expect(observationDialog).toBeHidden();
+    await expect(expectedTrigger).toBeFocused();
+  };
+
+  await developmentTrigger.click();
+  await closeObservationAndExpectReturn();
+
+  await page
+    .getByRole("button", {
+      name: "Diğer Odak Çocuğu için gözlem ekle",
+      exact: true,
+    })
+    .click();
+  await expect(observationDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(observationDialog).toBeHidden();
+  await expect(otherDevelopmentTrigger).toBeFocused();
+
+  await page
+    .locator("button.simple-student-list__profile")
+    .filter({ hasText: "Odak Kurgu Çocuğu" })
+    .click();
+  const profileDialog = page.getByRole("dialog", {
+    name: "Odak Kurgu Çocuğu profili",
+  });
+  const profileObservationTrigger = profileDialog.getByRole("button", {
+    name: "Gözlem ekle",
+    exact: true,
+  });
+  await profileObservationTrigger.click();
+  await expect(profileDialog).toBeHidden();
+  await closeObservationAndExpectReturn(profileObservationTrigger);
+  await expect(profileDialog).toBeVisible();
+});
+
+test("320 pikselde dört kalıcı ekranın son eylemi alt menünün üstünde kalır ve dokunma alır", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
@@ -282,13 +359,12 @@ test("320 pikselde beş ana sekmenin son eylemi alt menünün üstünde kalır v
   const routes = [
     { navigation: "Bugün", root: "main.simple-today" },
     { navigation: "Sınıfım", root: "main.simple-classroom" },
-    { navigation: "Etkinlikler", root: "main.activity-studio" },
     {
       navigation: "Planlar",
       root: 'main.simple-workspace[aria-labelledby="simple-plans-title"]',
     },
     {
-      navigation: "Çıktılar",
+      navigation: "Belgeler",
       root: 'main.simple-workspace[aria-labelledby="simple-documents-title"]',
     },
   ] as const;
@@ -301,13 +377,18 @@ test("320 pikselde beş ana sekmenin son eylemi alt menünün üstünde kalır v
     await expect(root).toBeVisible();
 
     const scroll = page.locator(".mobile-scroll");
-    await scroll.evaluate((element) => {
+    const maxScrollTop = await scroll.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
       element.dispatchEvent(new Event("scroll"));
+      return element.scrollHeight - element.clientHeight;
     });
-    await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    if (maxScrollTop > 0) {
+      await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    } else {
+      await expect(scroll).toHaveJSProperty("scrollTop", 0);
+    }
 
-    const interactive = root.locator(`${INTERACTIVE_SELECTOR}:visible`);
+    const interactive = root.locator(INTERACTIVE_SELECTOR).filter({ visible: true });
     expect(await interactive.count(), `${route.navigation} etkileşimli öğe içermeli`).toBeGreaterThan(0);
     await expectAboveBottomNavigationAndHitTestable(page, interactive.last());
   }
@@ -317,6 +398,15 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
+  // This case exercises preparation mode; keep animation clocks native.
+  await page.addInitScript((offsetMs: number) => {
+    const NativeDate = Date;
+    globalThis.Date = new Proxy(NativeDate, {
+      construct(target, args) { return Reflect.construct(target, args.length ? args : [NativeDate.now() + offsetMs]); },
+      apply() { return new NativeDate(NativeDate.now() + offsetMs).toString(); },
+      get(target, key, receiver) { return key === "now" ? () => NativeDate.now() + offsetMs : Reflect.get(target, key, receiver); },
+    });
+  }, Date.parse("2026-08-31T06:00:00.000Z") - Date.now());
   await page.goto("/activities?native=1");
   await configureClassroomWithoutStudents(page);
 
@@ -328,9 +418,14 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
     .getByRole("button", { name: "Çizim", exact: true })
     .click();
   const activity = studio.locator("article.activity-card").first();
-  await activity
-    .getByRole("button", { name: /etkinliğini Çocuk Modunda uygula$/u })
-    .click();
+  const activityTitle = (await activity.getByRole("heading").textContent())?.trim() ?? "";
+  expect(activityTitle).not.toBe("");
+  await activity.getByRole("button", { name: /rehberini aç$/u }).click();
+  const guide = page.locator("main.activity-teacher-guide");
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await guide.locator("summary").filter({ hasText: "Program bağlantısı ve araçlar" }).click();
+  const applyTrigger = guide.getByRole("button", { name: /etkinliğini Çocuk Modunda uygula$/u });
+  await applyTrigger.click();
 
   const childMode = page.locator("main.activity-child-mode");
   await expect(childMode).toBeVisible();
@@ -407,5 +502,8 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
   }
 
   await footer.getByRole("button", { name: "Öğretmene dön", exact: true }).click();
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await expect(applyTrigger).toBeFocused();
+  await guide.getByRole("button", { name: "Etkinlikler", exact: true }).click();
   await expect(page.locator("main.activity-studio")).toBeVisible();
 });

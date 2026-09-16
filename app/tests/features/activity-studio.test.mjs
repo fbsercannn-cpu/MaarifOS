@@ -255,28 +255,40 @@ test("telefon CSS'i 320 pikselde sayfa taşmasını önler ve dokunma hedeflerin
     /\n\s+min-width:\s*(?:3[2-9]\d|[4-9]\d\d|\d{4,})px/u,
   );
 
+  const guide = await readFile(
+    new URL("../../src/features/activity-studio/ActivityTeacherGuide.tsx", import.meta.url),
+    "utf8",
+  );
+  const guideCopy = await readFile(
+    new URL("../../src/features/activity-studio/activity-teacher-guide.copy.ts", import.meta.url),
+    "utf8",
+  );
   for (const label of [
     "Planıma ekle",
-    "Uygula",
+    "Çocuk Modunda uygula",
     "Yazdır",
     "Pas geç",
     "Öğretmene dön",
     "Bu etkinlik için gözlem yaz",
   ]) {
-    assert.match(component, new RegExp(label, "u"));
+    assert.match(`${component}\n${guideCopy}`, new RegExp(label, "u"));
   }
   assert.match(component, /onWriteObservation\?\(/u);
   assert.match(component, /Etkinlik, malzeme veya TYMM alanı ara/u);
-  assert.match(component, /Ayrıntıları ve öğretmen rehberini aç/u);
+  assert.match(guideCopy, /Rehberi aç/u);
+  assert.match(guide, /ACTIVITY_TEACHER_GUIDE_COPY as copy/u);
+  assert.match(guideCopy, /Program bağlantısı ve araçlar/u);
   assert.match(component, /visibleCount, setVisibleCount/u);
   assert.match(component, /6 öneri daha göster/u);
+  assert.match(component, /öneri gösteriliyor/u);
+  assert.doesNotMatch(component, /<strong>\{activities\.length\}<\/strong> uygun etkinlik/u);
   assert.match(component, /Tüm filtreler/u);
-  assert.match(component, /Katılım uyarlaması/u);
-  assert.match(component, /Aileye uzatma/u);
+  assert.match(guideCopy, /Katılımı kolaylaştır/u);
+  assert.match(guideCopy, /Aileye uzatma/u);
   assert.match(component, /leaveChildMode\(true\)/u);
   assert.match(component, /initialCollection = "tumu"/u);
   assert.match(component, /useState<ActivityStudioCollectionFilter>\(initialCollection\)/u);
-  assert.match(component, /aria-label=\{`\$\{activity\.title\}/u);
+  assert.match(component, /ACTIVITY_TEACHER_GUIDE_COPY\.openGuideLabel\(activity\.title\)/u);
   assert.doesNotMatch(component, /<img|<svg|emoji|https?:\/\//iu);
 });
 

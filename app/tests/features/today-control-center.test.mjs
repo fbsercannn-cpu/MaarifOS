@@ -57,8 +57,8 @@ test("öğretmen kontrolü mevcut, beklenen, yok ve işaretlenmeyen devam durumu
     detailLabel: "2 yok · 1 geç · 1 işaretlenmedi",
   });
   assert.equal(summary.priority.count, 3);
-  assert.equal(summary.priority.title, "3 gözlem program bağlantısı bekliyor");
-  assert.match(summary.priority.detail, /belge zinciri/);
+  assert.equal(summary.priority.title, "3 gözlem için hedef seç ve bağla");
+  assert.match(summary.priority.detail, /bağlantıyı kaydedin/);
 });
 
 test("öğretmen kontrolü sıradaki gerçek plan kaydını ve açıklanabilir zamanını gösterir", () => {
@@ -90,7 +90,7 @@ test("öğretmen kontrolü sıradaki gerçek plan kaydını ve açıklanabilir z
   assert.equal(summary.plan.title, plannedItem.title);
   assert.equal(summary.plan.detail, "09:30–10:00 · Sıradaki");
   assert.equal(summary.attendance.stateLabel, "Yoklama tamam");
-  assert.equal(summary.priority.title, "Bağlantı bekleyen gözlem yok");
+  assert.equal(summary.priority.title, "Gözlemlerin program bağlantıları tamam");
 });
 
 test("plan yoksa yeni alan uydurmak yerine mevcut sınıf bağlamından doğru sonraki işi üretir", () => {

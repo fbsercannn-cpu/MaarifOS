@@ -44,6 +44,126 @@ function teacherCycle(overrides = {}) {
   };
 }
 
+function record(id, fields = {}) {
+  return {
+    id,
+    createdAt: "2026-08-20T08:00:00.000Z",
+    updatedAt: "2026-08-20T08:00:00.000Z",
+    civilDate: "2026-08-22",
+    deletedAt: null,
+    schemaVersion: 1,
+    ...fields,
+  };
+}
+
+function exactLineageFixture(overrides = {}) {
+  const evaluation = {
+    id: "evaluation-1",
+    reflection: "Çocukların seçtiği stratejiler ve ortam koşulları birlikte değerlendirildi.",
+    evidenceSummary: "Günlük planın tamamlanan etkinliğindeki doğrulanmış gözlem kullanıldı.",
+    observationIds: ["observation-1"],
+    nextPlanDecision: "adapt",
+    nextPlanTargetPlanId: "weekly-2",
+    sourcePlanRevisionNumber: 2,
+    targetPlanRevisionNumberAtSuggestion: 4,
+    teacherAuthored: true,
+    createdAt: "2026-08-23T09:00:00.000Z",
+    ...overrides.evaluation,
+  };
+  const sourceWeekly = record("weekly-1", {
+    planType: "weekly",
+    monthlyPlanId: "monthly-1",
+    periodStart: "2026-08-17",
+    periodEnd: "2026-08-23",
+    revisionNumber: 2,
+    weeklyEvaluations: [evaluation],
+    ...overrides.sourceWeekly,
+  });
+  const targetWeekly = record("weekly-2", {
+    planType: "weekly",
+    monthlyPlanId: "monthly-1",
+    periodStart: "2026-08-24",
+    periodEnd: "2026-08-30",
+    revisionNumber: 5,
+    previousWeekEvaluationId: evaluation.id,
+    nextPlanDecisionContext: {
+      sourceWeeklyPlanId: sourceWeekly.id,
+      evaluationId: evaluation.id,
+      decision: evaluation.nextPlanDecision,
+      evidenceSummary: evaluation.evidenceSummary,
+      teacherReflection: evaluation.reflection,
+      sourcePlanRevisionNumber: evaluation.sourcePlanRevisionNumber,
+      targetPlanRevisionNumberAtSuggestion: evaluation.targetPlanRevisionNumberAtSuggestion,
+      createdAt: evaluation.createdAt,
+      applicationStatus: "accepted",
+      reviewHistory: [{
+        id: "review-1",
+        action: "accepted",
+        teacherNote: "Gözleme dayanarak küçük grup süresini artıracağım.",
+        createdAt: "2026-08-23T10:00:00.000Z",
+        targetPlanRevisionNumberBefore: 4,
+        targetPlanRevisionNumberAfter: 5,
+      }],
+    },
+    ...overrides.targetWeekly,
+  });
+  const daily = record("daily-1", {
+    planType: "daily",
+    sourceWeeklyPlanId: sourceWeekly.id,
+    ...overrides.daily,
+  });
+  const activity = record("activity-1", {
+    planId: daily.id,
+    status: "completed",
+    ...overrides.activity,
+  });
+  const observation = record("observation-1", {
+    planId: daily.id,
+    activityId: activity.id,
+    studentIds: ["student-1"],
+    observedAt: "2026-08-22T12:00:00.000Z",
+    updatedAt: "2026-08-22T12:00:00.000Z",
+    ...overrides.observation,
+  });
+  const snapshot = {
+    plans: [sourceWeekly, targetWeekly, daily, ...(overrides.extraPlans ?? [])],
+    activities: [activity, ...(overrides.extraActivities ?? [])],
+    observations: [observation, ...(overrides.extraObservations ?? [])],
+  };
+  const workspace = teacherCycle({
+    weekly: {
+      id: sourceWeekly.id,
+      title: "Kaynak hafta",
+      periodStart: sourceWeekly.periodStart,
+      periodEnd: sourceWeekly.periodEnd,
+      relation: "current",
+      dailyPlanCount: 1,
+      observationCount: 1,
+      linkedObservationCount: 1,
+      evaluationCount: 1,
+      ...overrides.weeklyWorkspace,
+    },
+    daily: {
+      status: "ready",
+      planId: daily.id,
+      conflictingPlanIds: [],
+      title: "Günlük plan",
+      activityCount: 1,
+      completedActivityCount: 1,
+      observationCount: 1,
+      ...overrides.dailyWorkspace,
+    },
+    documents: {
+      anecdoteIncompleteCount: 0,
+      anecdoteReviewRequiredCount: 0,
+      anecdoteReadyCount: 1,
+      monthlyEvaluationCount: 0,
+      planDocumentReady: true,
+    },
+  });
+  return { workspace, snapshot, evaluation, sourceWeekly, targetWeekly, daily, activity, observation };
+}
+
 test("pedagojik orkestra statik kart sayısını dürüst bağlamsal uygulama uzayına dönüştürür", () => {
   const supportedAgePairs = ACTIVITY_STUDIO_ITEMS.reduce(
     (total, item) => total + item.ageBands.length,
@@ -189,7 +309,7 @@ test("öğrenme döngüsü ilk eksik aşamayı tek geçerli sıradaki iş yapar"
   assert.equal(loop.filter((stage) => stage.state === "current").length, 1);
 });
 
-test("öğrenme döngüsü gözlem veya genel plan belgesini uyarlama ve aile kanıtı saymaz", () => {
+test("öğrenme döngüsü ilgisiz genel değerlendirme sayaçlarını yansıtma veya uyarlama kanıtı saymaz", () => {
   const workspace = teacherCycle({
     daily: {
       status: "ready",
@@ -221,9 +341,90 @@ test("öğrenme döngüsü gözlem veya genel plan belgesini uyarlama ve aile ka
     },
   });
   const loop = createPedagogicalLoop(workspace);
+  assert.equal(loop.find((stage) => stage.id === "reflect").state, "current");
+  assert.match(loop.find((stage) => stage.id === "reflect").reason, /genel değerlendirme sayısı yeterli değil/iu);
+  assert.equal(loop.find((stage) => stage.id === "adapt").state, "waiting");
+  assert.equal(loop.find((stage) => stage.id === "family").state, "waiting");
+  assert.equal(loop.find((stage) => stage.id === "next-plan").state, "waiting");
+});
+
+test("öğrenme döngüsü yalnız exact plan→uygulama→gözlem→değerlendirme→karar→hedef plan zincirini tamamlar", () => {
+  const fixture = exactLineageFixture();
+  const loop = createPedagogicalLoop(fixture.workspace, {
+    snapshot: fixture.snapshot,
+    focusStudentId: "student-1",
+  });
+  assert.deepEqual(loop.map((stage) => stage.state), [
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+  ]);
+  assert.match(loop.find((stage) => stage.id === "reflect").reason, /gözlem kimliğini kullanıyor/iu);
+  assert.match(loop.find((stage) => stage.id === "next-plan").reason, /kabul olayıyla doğrulandı/iu);
+});
+
+test("ilgilisiz eski değerlendirme bugünkü planın yansıtma aşamasını tamamlamaz", () => {
+  const oldObservation = record("observation-old", {
+    planId: "daily-old",
+    activityId: "activity-old",
+    studentIds: ["student-1"],
+    observedAt: "2026-08-15T12:00:00.000Z",
+  });
+  const fixture = exactLineageFixture({
+    evaluation: {
+      id: "evaluation-old",
+      observationIds: [oldObservation.id],
+      createdAt: "2026-08-16T09:00:00.000Z",
+    },
+    extraObservations: [oldObservation],
+  });
+  const loop = createPedagogicalLoop(fixture.workspace, {
+    snapshot: fixture.snapshot,
+    focusStudentId: "student-1",
+  });
+  assert.equal(loop.find((stage) => stage.id === "observe").state, "done");
+  assert.equal(loop.find((stage) => stage.id === "reflect").state, "current");
+  assert.match(loop.find((stage) => stage.id === "reflect").reason, /bu planın gözlem kimliğine bağlı/iu);
+  assert.equal(loop.find((stage) => stage.id === "adapt").state, "waiting");
+});
+
+test("aynı haftadaki ikinci günlük plan sonraki plan bağlantısı yerine geçmez", () => {
+  const secondDaily = record("daily-2", {
+    planType: "daily",
+    sourceWeeklyPlanId: "weekly-1",
+    civilDate: "2026-08-23",
+  });
+  const fixture = exactLineageFixture({
+    evaluation: { nextPlanTargetPlanId: secondDaily.id },
+    extraPlans: [secondDaily],
+    weeklyWorkspace: { dailyPlanCount: 2 },
+  });
+  const loop = createPedagogicalLoop(fixture.workspace, {
+    snapshot: fixture.snapshot,
+    focusStudentId: "student-1",
+  });
   assert.equal(loop.find((stage) => stage.id === "reflect").state, "done");
   assert.equal(loop.find((stage) => stage.id === "adapt").state, "current");
-  assert.equal(loop.find((stage) => stage.id === "family").state, "waiting");
+  assert.equal(loop.find((stage) => stage.id === "next-plan").state, "waiting");
+  assert.match(loop.find((stage) => stage.id === "next-plan").reason, /aynı haftadaki plan sayısı kanıt değildir/iu);
+});
+
+test("başka çocuğun gözlemi odaktaki çocuğun exact kanıt zincirini tamamlamaz", () => {
+  const fixture = exactLineageFixture({
+    observation: { studentIds: ["student-2"] },
+  });
+  const loop = createPedagogicalLoop(fixture.workspace, {
+    snapshot: fixture.snapshot,
+    focusStudentId: "student-1",
+  });
+  assert.equal(loop.find((stage) => stage.id === "observe").state, "current");
+  assert.match(loop.find((stage) => stage.id === "observe").reason, /odaktaki çocuğa bağlı/iu);
+  assert.equal(loop.find((stage) => stage.id === "reflect").state, "waiting");
+  assert.equal(loop.find((stage) => stage.id === "adapt").state, "waiting");
   assert.equal(loop.find((stage) => stage.id === "next-plan").state, "waiting");
 });
 

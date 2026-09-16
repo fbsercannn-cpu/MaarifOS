@@ -16,8 +16,8 @@ async function configureClassroom(page: Page) {
     .filter({ hasText: "Takvim ayrıntıları" })
     .locator("summary")
     .click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
   await setup
     .locator("details")
     .filter({ hasText: "İleri ayarlar" })
@@ -36,11 +36,12 @@ test("yeni sınıf üyeliği işaretlenene kadar günlük devam sayısına girme
   await configureClassroom(page);
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill(childName);
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
 
+  await page.getByText("Sınıf işlemleri", { exact: true }).click();
   const attendanceSummary = page.getByRole("button", { name: "Bugünün yoklaması" });
   await expect(attendanceSummary).toBeVisible();
   await attendanceSummary.click();

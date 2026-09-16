@@ -13,17 +13,17 @@ export async function configureAccessibilityClassroom(page: Page) {
     .getByLabel("Maarif Modeli yaş grubu", { exact: true })
     .selectOption({ label: "60–72 ay" });
   await setup.locator("details.classroom-calendar-details > summary").click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-08-31");
   await setup.locator("details.classroom-advanced-settings > summary").click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
 }
 
-export async function addAccessibilityStudent(page: Page) {
+export async function addAccessibilityChild(page: Page) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Çocuk ekle" });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Çocuğun adı").fill("Kurgu Erişilebilirlik Çocuğu");

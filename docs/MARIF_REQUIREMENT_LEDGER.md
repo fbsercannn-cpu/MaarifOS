@@ -104,6 +104,43 @@ tamamlamalıdır.
 | MR-058 | Kullanıcının “tamam, sırasıyla yap” fermanı A→B→C→D→E bağımlılık zinciridir. Önceki aşamanın bütün `MUST` kabul kanıtı geçmeden sonraki aşamaya kabul verilemez; hiçbir ara sürüm bütün ürün için `10/10` diye etiketlenmez. | `IN_PROGRESS` | Aşama A `0.19.1` olarak doğrulanıp yayımlandı. Aşama B otomatik mühendislik dilimi `8b87d81` üzerinde geçti fakat 774 insan uzman onayı `0`; Aşama C ortak semantik PDF motoru ile mühendislik olarak uygulandı fakat PDF/UA ve yardımcı teknoloji kabulü açık; Aşama D öğrenci koleksiyonu pilotu `fe81249`, `1289759`, `756cd4b` üzerinde geçti fakat bütün koleksiyonlar tamamlanmadı. | MR-050–MR-057 `VERIFIED`, toplam 774 uzman onayı ve fiziksel/yardımcı-teknoloji saha kapıları geçmeden bütünsel `10/10` etiketi `BLOCKED` kalır. Her aşama kanıtı exact kaynak, sürüm, hash ve canlı yayın kimliğiyle kaydedilmelidir. |
 | MR-059 | **2026–2027 ortak erişim ve hazır Maarif kütüphanesi:** `438579` ortak erişim anahtarını doğrulayan her kullanıcı aynı öğretmen işlevlerini cihaz kotası, premium/demo/deneme/satın alma kapısı olmadan açar. Hazır `60–72 ay` v3 içerik exact kaynak+manifest+değer dosyası SHA zinciriyle yüklenir; geçmiş v2 plan exact snapshot'ıyla açılır; bilinmeyen/karışık kimlik fail-closed kalır. Plan/etkinlik/PDF/Word/Ek 18 çalışır. `36–48` ve `48–60` için yayımlanmamış tam paket varmış gibi davranılmaz; aynı ana kart yaşa uygun etkinlik bankasına ve öğretmenin açık plan omurgasına gider. | `IMPLEMENTED_UNVERIFIED` | Ortak kod doğrulayıcı kodun kendisini saklamaz; sürüm+doğrulayıcı+UTC makbuzu saklar. Build-time v2/v3 ve iki değer kaynağı public asset olarak hazırlanır; runtime exact id/version/digest ve bütün kaynak zincirini yeniden doğrular. Sentetik uyumluluk erişimi yalnız allowlist v2/v3 paket için üretilir, ticari entitlement oluşturmaz. Öğretmene ait Ek 18 son/geçmiş değerlendirmeyi exact kimlikle PDF/DOCX üretir; exact tarihsel plan revizyonu korunur, yıllık→aylık→haftalık→günlük→etkinlik zinciri doğrulanır, değerlendirme sonrası kanıt değişimi ve iki doğrulama okuması arasındaki snapshot yarışı fail-closed kapanır. Kaynak revizyonu/kanıt politikası DOCX custom XML ile PDF XMP'de taşınır; resmî bileşen kanıtı yoksa `verified-no-components` ve boş matris kullanılır. 60–72 hazır pakete giderken diğer iki yaş bandı ve eksik yaş bandı devre dışı CTA üretmez. Birleşik ortak erişim/plan/yaş-bandı/Ek 18 odak matrisi `73/73`, runtime kilidi `3/3`, typecheck/lint geçti. | Tam kalite kapısı, temiz build+paket, Sites production yayını ve 320/390/430 px canlı ortak kod → hazır içerik/yaşa uygun fallback → plan/etkinlik → çıktı/Ek 18 kabulü geçmeden `VERIFIED` değildir. |
 
+### 31 Ağustos 2026 öğretmen geri bildirimi ve devam paketi
+
+| Kimlik | Sonuç ve kabul ölçütü | Durum | Mevcut kanıt | Açık iş / yayın kapısı |
+|---|---|---|---|---|
+| MR-060 | Sınıf hazırlanmışken eğitim yılı Bugün ekranından tek açık eylemle başlar; resmî tarihler korunur. Çocuk satırından yaşa uygun Maarif davranışı seçilir; seçim taslaktır, yalnız açık kaydetme ham gözlem ve kaynaklı program bağını oluşturur. | `IMPLEMENTED_UNVERIFIED` | Yerel `0.20.1` sürümünde yıl başlangıcı 2/2, gelişim kaydı dev 4/4 ve production 4/4, legacy/toplu/20 döngü 4/4, son PWA üretim/offline/güncelleme 3/3 geçti. Yeni gözlem şeması V7 yedek/restore kapsamında; 870/870 Node testi, typecheck, build ve bundle kapısı geçti. Kanıt `docs/YIL_BASLANGICI_GELISIM_2026_08_31.md` ve `app/output/playwright/pwa-final-release-2026-08-31/` içindedir. | Yayın yapılmadı; fiziksel telefon, yardımcı teknoloji ve gerçek öğretmen kullanılabilirlik ölçümü ayrı kabul kapılarıdır. Bütün ürün için 10/10 veya resmî gelişim kontrol listesi iddiası yoktur. |
+| MR-061 | Çocuk gelişim kartı yalnız seçili çocuk, sınıf, eğitim yılı ve dönem gözlemlerinden türetilir; tarih, alan, destek ve kaynak kimliği izlenebilir. Ham gözlem ile öğretmen yorumu ayrılır; eksik kayıt gelişim eksikliği, gözlem sayısı başarı puanı gibi sunulmaz. | `IMPLEMENTED_UNVERIFIED` | `0.21.0` içinde dönem seçili gelişim kartı mevcut ham gözlemleri, destek ve onaylı kaynak bağlantılarını yeniden giriş olmadan gösterir. Yeni çalışma alanının 4/4 dev E2E testi ve 320 px dahil dar profil/44 px hedef matrisinin 4/4 testi geçti. Kaynak ve dönem bilgisi rapora taşınır; gözlem yeniden üretilmez. Son production çalışma alanı/kurtarma 7/7; 320 px soğuk çevrimdışı PDF ve hızlı geri geçişi dahil geçti. | Yayın, fiziksel telefon, yardımcı teknoloji ve gerçek öğretmen kabulü ayrıca açık kalır. |
+| MR-062 | Sınıf görünümü dönem içindeki gözlem kapsamını öğretmenin bir sonraki gözlem kararına yardımcı olacak biçimde gösterir; çocukları sıralamaz, kayıt kotası veya gelişim düzeyi üretmez. Alan/çocuk boşluğu yalnız henüz kayıt bulunmadığı anlamına gelir. | `IMPLEMENTED_UNVERIFIED` | Mevcut kayıt sayısı, gözlem yapılan çocuklar ve alan kapsamı dönem/sınıf/yıl bağlamında türetilir. Gözlem kaydı sonrası kapsam yenilenir; boşluklar kayıt yokluğu olarak gösterilir. Kart→çocuk kapsamı→seçili dönem raporu dev ve son production 7/7 E2E paketi içinde doğrulandı; puan, sıralama veya otomatik gözlem yazımı eklenmedi. | Yayın, fiziksel cihaz ve gerçek öğretmen kabulü açık kalır. |
+| MR-063 | Öğretmen dönem, çocuk ve ham gözlemleri seçer; değerlendirmesini ve sonraki destek adımlarını ayrı yazar, açıkça onaylar. `Öğretmen gözlem özeti` PDF'si güncel kaynak doğrulamasından sonra exact ham metin, tarih/alan/destek/kaynak kimliği ve onay zamanı ile üretilir. Taslak, değişmiş kaynak ve kapsam uyuşmazlığı dışa aktarılamaz. Resmî MEB formu, e-Okul raporu, otomatik tanı veya gelişim puanı iddiası yoktur. | `IMPLEMENTED_UNVERIFIED` | Onaylı revizyon ve exact kaynak snapshot sözleşmesi, ayrı yorum/destek katmanları, ortak etiketli PDF motoru ve yerel önizleme uygulandı. Domain 10/10 ve PDF 6/6 test; 10.158 karakter ham metin + 3.592 karakter öğretmen yorumu içeren 5 sayfalık A4 örnekte tam Türkçe metin çıkarımı, gömülü font/ToUnicode, Tagged=yes/Suspects=no ve 5/5 sayfa görsel inceleme geçti. Örnek ve SHA-256 manifesti `app/output/pdf/teacher-observation-summary-0.21.0.pdf` ve `app/output/document-qa/development-report-0.21.0/manifest.json` altındadır. V8 rapor yedek/restore 2/2 testlidir; PDF yalnız açık indirme eylemiyle cihazdan çıkar. Dev ana akış 4/4 ve recovery 3/3; son production ana akış/kurtarma 7/7 (gerçek iki sekme, kota sonrası özel metin, kaynak yenileme, 320 px soğuk çevrimdışı PDF ve hızlı geri geçişi) geçti. Kanıt `app/output/playwright/development-workspace-production-2026-08-31/` altındadır. | Onaylı kayıt değişmez; düzenleme yeni, yeniden onay isteyen taslaktır. PDF/UA, fiziksel yazdırma, yayın ve gerçek öğretmen/uzman saha kabulü ayrıca açık kalır. |
+
+Yerel 0.21.0 sürüm kapısı: package/lock, uygulama notları ve service-worker eşzamanlıdır; runtime kilidinde yalnız iki sürüm dosyasının hash'i değişti. Runtime 36, özellik testleri 899/899, veri/yedek/restore 36/36, release/PWA sözleşmeleri 23/23, release UI 5/5, typecheck, politika lint, build ve 63 JS parçası için gzip bütçesi geçti. Aynı son derlemede önceki gelişim akışı production 4/4, ana PWA production 3/3 ve yeni gelişim çalışma alanı/kurtarma production 7/7 doğrulandı. Kanıt `app/output/playwright/development-production-0.21.0-transition-final-2026-08-31/` ve `app/output/playwright/pwa-0.21.0-transition-final-2026-08-31/` altındadır. Paketin kanonik açıklaması ve test matrisi `docs/GELISIM_KARTI_RAPOR_2026_08_31.md` içindedir. Yayın, commit, tag veya push yapılmadı; bu yerel kabul bütün ürünün 10/10 olduğu iddiası değildir.
+
+## 31 Ağustos 2026 — görsel yönün HALİS'e bırakılması
+
+| Kimlik | Sonuç ve kabul ölçütü | Durum | Mevcut kanıt | Açık iş / yayın kapısı |
+|---|---|---|---|---|
+| MR-064 | Kullanıcının seçimi tekrar sorulmadan günlük akış, uygulama rehberi ve çocuk gözlemi tek tasarım yönünde uygulanır. Bugün gerçek planı öneriden ayırır; yıl başlangıcı/çakışma/eksik kayıt görünür kalır. | `IMPLEMENTED_UNVERIFIED` | `0.22.0` TodayTeachingCard/today-teaching-focus ve SimpleTodayScreen entegrasyonu; 10 odak domain testi. Bağımsız incelemede bulunan çakışan/kopuk planın örtülmesi giderildi; boş kayıtlı plan yeni öneri sayılmıyor. | 320/390/430 px canlı görsel ve gerçek öğretmen görev kabulü tarayıcı güvenlik engeli nedeniyle açık. |
+| MR-065 | Etkinlikte gerçek malzeme, üç uygulama adımı, katılım desteği ve gözlem odağı tek rehberde açılır; çocuğa gözlem aynı exact uygulama kimliğiyle, Çocuk Modunu zorunlu kılmadan geçer. | `IMPLEMENTED_UNVERIFIED` | ActivityTeacherGuide ve rehber domain/guard testleri; choice/drawing yokken ham not boş, context/category korunur. Stüdyo/uygulama/orkestra/rehber odak testi 36/36. | Rehber→çocuk→açık Kaydet→reload, kesinti ve 320 px erişim testi yazıldı/uyarlandı fakat tarayıcı politikası nedeniyle çalıştırılmadı. |
+| MR-066 | Gelişim seçicisinde yalnız exact resmî hedef eşleşmesi olan etkinlik için en fazla üç örnek öne çıkar; eşleşme yoksa genel yaş/alan örnekleri görünürdür. Seçim taslaktır, açık Kaydet gerekir. | `IMPLEMENTED_UNVERIFIED` | `activityContext={activity}`; canonical target/profile eşitliği ve source graph denetimi, 6 yeni+11 preset testi. Bütün özellik kümesi 922/922; şema V8 değişmedi. | Tarayıcıda kaynak seçimi/destek/draft/restore kabulü bu sürüm için henüz yok. Hedefsiz stüdyo kaydı resmî hedefi varmış gibi sunulmaz; insan uzman doğrulaması ayrıca açıktır. |
+
+0.22.0 kanıt sınırı: Node alan/sözleşme testleri, typecheck, lint, build, bundle ve statik asset önbellek manifesti doğrulaması geçmiştir. Canlı browser, gerçek IndexedDB reload/restore ve PWA offline senaryoları bu turda güvenlik politikası engeli nedeniyle yürütülmemiştir; alternatif browser/CLI ile engel aşılmamıştır. `design-qa.md` sonucu `blocked`; yayın/commit/push yoktur. Bütünsel 10/10 iddiası yoktur.
+
+## 31 Ağustos 2026 — açık yayın talimatı
+
+MR-067: Kullanıcı 0.22.0 için “Tamam yayınla” dedi. Mevcut herkese açık Sites hedefi ve erişim politikası korundu; kaynak snapshot'ı, exact build ve arşiv doğrulandı. Sites sürüm 32, deployment `appgdep_6a95c60b9418819190345cc64abe0050`, 18:21:14 UTC'de `succeeded`. **Yayın işlemi tamamlandı.** MR-064–066'nın canlı UI kabulü, design-qa `blocked` ve MR-056 gerçek çocuk pilotu `NO-GO` durumları değişmedi. Ayrıntı: `docs/YAYIN_0.22.0_2026_08_31.md`.
+
+## 1 Eylül 2026 — geniş TYMM kaynak kütüphanesi
+
+| Kimlik | Sonuç ve kabul ölçütü | Durum | Mevcut kanıt | Açık iş / yayın kapısı |
+|---|---|---|---|---|
+| MR-068 | TYMM'nin okul öncesine doğrudan ait belgeleri ile okul öncesi programında kullanılan ortak çerçeve kaynakları aynı katalogda bulunur; kapsamlar birbirine karıştırılmaz ve MEB'de olmayan kayıt uydurulmaz. | `IMPLEMENTED_UNVERIFIED` | 38 PDF, 17 okul öncesi kitap/kılavuz, üç yaş sayfası, 12 plan örneği, 15 doğrudan okul öncesi video, 21 ortak çerçeve sayfası ve 11 ortak eğitim videosu ayrı tür/kapsam metadata'sıyla modellendi. Üç yaşta farklılaştırma ve öğretim materyali uçlarının boş olduğu dışlama kaydına alındı. Planlar ana yüzeyinde tek `Resmî TYMM kaynakları` girişi bulunur; öneriler ve MEB plan örnekleri aynı diyaloğun kapalı bölümlerindedir. | Production sürümü ve canlı 320/390/430 px kütüphane gezinmesi tamamlanmadan görünür kullanıcı kabulü verilmez. |
+| MR-069 | Erişilebilir resmî PDF uygulama içinde okunur; kaynak yetkisi ve indir/aç yedeği korunur. Erişilemeyen PDF kullanılabilir belge gibi gösterilmez. | `IMPLEMENTED_UNVERIFIED` | 35 PDF yalnız seçimde kurulan, kapanınca kaldırılan MEB `iframe` okuyucusuna bağlandı; `no-referrer`, dar `/assets/pdf/` ve `/upload/brosur/` `frame-src` izni, açık/indir ve resmî sayfa yedeği uygulandı. Okuyucu yalnız `verified-available` exact MEB PDF yolunda kurulur. Üç `expected-unavailable` kaynakta `iframe`/indir bağlantısı üretilmez. Program sayfa URL'si exact kaynak URL'si + PDF digest + güvenli `1..353` sayfa koşuluyla fail-closed; geçersiz dışa aktarım ham URL yerine `Güncel erişim: doğrulanamadı.` yazar. 923.871.742 baytlık belge kümesi uygulama/PWA paketine alınmadı. | Production CSP başlığı, gerçek MEB PDF görüntüleyicisi, indirme yedeği ve erişilemez durum canlı tarayıcıda doğrulanmalıdır. Çevrim dışı belge içeriği vaat edilmez. |
+| MR-070 | Resmî MEB başlığı/kaynağı ile MaarifOS sınıflandırma, özet ve öneri metadata'sı ayrı tutulur; yaş ve alan bağlamı yalnız açıklanabilir öneri sırası üretir, planı sessizce değiştirmez. | `IMPLEMENTED_UNVERIFIED` | Arama, yaş, tür ve alan filtreleri; plan yaşı ve ilk öğrenme alanına dayalı öneri sırası eklendi. 60 resmî başlık kaydında açık provenans incelemesi `0`; MEB başlığı/bağlantısı ile MaarifOS özet, kapsam, alan ve öneri alanları ayrı köken etiketleri taşır. Beş erişilebilir öğretmen kılavuzunda PDF içinden doğrulanan üç yaş bandı ile MEB kartındaki `36–48 ay` etiketi ayrı alanlarda. Okul öncesi uygulanırlığı doğrulanmayan temel eğitim veli kılavuzu öneriler dışında. | Gerçek öğretmenle bulma süresi, öneri gerekçesinin anlaşılması ve yanlış kapsam algısı saha testinde ölçülmelidir; pedagojik eşleme iki bağımsız uzman onayı bekler. |
+| MR-071 | Resmî kaynak kapsamı yeniden üretilebilir ve değişiklik farkına uygun makine-okunur makbuzla kanıtlanır; tekil URL, HTTP durumu, içerik türü ve beklenen PDF boyutu denetlenir. | `VERIFIED` | 140 kaynak izi 137 tekil kanonik URL'de birleştirildi; 134 HTTP 200 ve üç beklenen HTTP 500 sonucu `PASS`. 1 Eylül menü/API envanterindeki 36 GET yüzeyi ve 13 katalog karşılaştırması eksiksiz eşleşti. Kütüphane makbuzu SHA-256 `73e6aa2b6debcbeda17cbf09fb32e11acd1854fdb57a9481429d2f94552f495f`; beş kılavuzun yaş-bandı metin makbuzu SHA-256 `213066e4b8c8bab5ea08fbdd9e999750ef121ab13ed1f1a55c190fb2ffae573f`, exact kaynak kümesi SHA-256 `ff0873d1f2a700bb71908c8b493f46673a32a114c55f34843ac3fbacdc576eb2`. APP_ROOT sınırı, başarısız üretimde önceki makbuzu koruma, fsync+atomik yayın ve katalog–CSP sözleşmesi testlidir. | Bu kapalı evren yalnız 1 Eylül 2026 menü/API/katalog kapsamıdır; sonraki sürümlerde aynı denetim onaylı önceki gövde/evren hashleriyle karşılaştırılmalı, kaynak ekleme/kaldırma ve PDF boyut değişimi açık katalog revizyonu gerektirmelidir. |
+| MR-072 | `0.23.0` ancak tam kalite kapısı, kurucu Sites build'i, exact kaynak/arşiv kimliği ve yayımdan sonra mobil kütüphane+öğretmen zinciri kabulüyle yayımlanmış sayılır. | `IN_PROGRESS` | Sürüm metadata'sı ve kütüphane kodu `0.23.0` adayı olarak hazır; iki kaynak makbuzu `PASS`. Gelişim seçicisi `React.lazy` ile ayrıldı; ana JavaScript parçası yaklaşık 157,9 KiB gzip düzeyine inerek 180 KiB bütçesini yükseltmeden hedefli build/bundle kapısını geçti. | Tam temiz kalite kapısı, kurucu build, Sites sürüm/deployment kimliği, production CSP, service worker `0.23.0`, 320/390/430 px yayın sonrası kabul, PDF aç/kapat/yedek, gözlem→tamamlama→reload ve offline derin rota kanıtı bekleniyor. Gerçek çocuk verili pilot MR-014 kapanmadan `NO-GO`. |
+| MR-073 | **İlk görevlerin sadeleştirilmesi:** Sınıfı hazır öğretmen yeni dönemi tek ana eylemle başlatır; çocuk adı tek ilk alanla kaydedilir; çocuk satırında gelişim eylemi görünür; Planlar ana yüzeyinde resmî kaynaklar için tek CTA bulunur. İkincil ayrıntılar öğretmenin açık seçimiyle açılır. | `IMPLEMENTED_UNVERIFIED` | Yeni dönem ilk görünümü resmî dönem özeti + `Yeni eğitim yılına geç`; çocuk ekleme adı + `Kaydet ve kapat`, isteğe bağlı ayrıntılar kapalı; çocuk adına bağlı erişilebilir `Gelişim`; Planlar'da tek `Resmî TYMM kaynakları`, öneri/örnekler diyalogda ve ileri plan araçları kapalı destek alanında uygulandı. Üç yaş bandı × yedi alan × üç örnek = 63 puansız gelişim davranışı modelde eksiksizdir. Hedefli yıl geçişi, hızlı çocuk girişi, gelişim ve 320/390/430 px kaynak senaryoları geçti. | Tam temiz sürüm kapısı, 63 seçeneğin tamamı için ayrı UI tıklama matrisi ve gerçek öğretmende yıl başlatma/çocuk ekleme/gözlem süre ölçümü bekleniyor. |
+| MR-074 | **Kütüphane mobil etkileşim ve odak sözleşmesi:** Dar ekranda iç içe kaydırma kilidi oluşmaz; görünür kontroller en az 44 px'dir; belge seçimi görünür başlığa, kapanış açan düğmeye odak döndürür. | `IMPLEMENTED_UNVERIFIED` | 320/390/430 px düzeninde `.tymm-library-dialog__body` tek dikey kaydırıcıdır; filtre, sonuç ve belge bölgeleri ayrı `overflow` oluşturmaz. Belge başlığı `preventScroll` odağı + görünür konuma taşıma, kapanışta exact açıcı düğmeye odak dönüşü testlidir; bu düzen WebKit iç içe kaydırma riskini azaltır. | Fiziksel Safari/VoiceOver, iOS dinamik viewport/safe-area ve yüzde 200 büyütme kabulü yapılmadan `VERIFIED` değildir; production tekrar ölçümü beklenir. |
+
 ## Yorumlama kuralları
 
 1. Sadeleştirme hedef değil, olası müdahalelerden biridir. Eksik yetenek eklenir,
@@ -113,3 +150,236 @@ tamamlamalıdır.
    değerlendirme → belge → kalıcılık zincirini yanıtla.
 4. Her yeni bulguda bu defterin durumu ve açık işi güncellenir.
 5. `VERIFIED` olmayan satırlar final teslimde açıkça kalan iş olarak raporlanır.
+
+
+## 7 Eylül 2026 — kapsamlı öğrenci ve belge yeniden tasarımı (0.24.0)
+
+| Kimlik | Kullanıcı gereksinimi ve uygulama | Durum | Kabul kanıtı |
+|---|---|---|---|
+| MR-075 | Profesyonel A4 sınıf listesi; anne/baba ad, telefon, meslek ayrı; üçüncü kişi, ünvan, adres eksiksiz; öğretmen ünvanı düzeltilmiş. | `VERIFIED_LOCAL` | 33 alan/çıktı testi, Chromium/WebKit 8/8, 19 uygulama PDF sayfası görsel denetimi; toplam 42 render sayfasında taşma yok. `SINIF_LISTESI_MIZANPAJ_2026_09_07.md`. |
+| MR-076 | Öğrenci dosyasında ebeveyn meslekleri, özel çocuk/aile notu ve isteğe bağlı aile durumları. | `VERIFIED_LOCAL` | Profil v9; 320 px gerçek form, yeniden açma; şifreli IndexedDB ve başka depoya yedek geri yükleme. `STUDENT_FAMILY_PROFILE_V9.md`. |
+| MR-077 | Görünür, onaylı öğrenci silme ve geri alma; geçmiş ve başka sekmenin son profil bilgisi korunur. | `VERIFIED_LOCAL` | İptal/onay/geri al, sınıf üyeliği geçmişi ve stale-profile koruma testleri. |
+| MR-078 | Sağlanan XLS biçiminde öğrenci ve veli bilgilerini otomatik ekleme, önizleme/düzeltme/mükerrer/atomiklik. | `VERIFIED_LOCAL` | Gerçek kaynak salt okunur: 21 öğrenci, 13 eşleşen sütun; kurgu XLS/XLSX/CSV birim ve 320/390 px uçtan uca testleri. Ham kullanıcı verisi testlere alınmadı. |
+| MR-079 | Doğum günü üç gün önceden Bugün ekranında bildirim. | `VERIFIED_LOCAL` | 0–3 gün, yıl geçişi, 29 Şubat, geçersiz/eksik tarih, silinen öğrenci testleri ve gerçek ana sayfa. |
+| MR-080 | Kullanıcının 2026–2027 Uyum Rehberinin eksiksiz ek bilgi olarak erişimi. | `VERIFIED_LOCAL` | 35 sayfa, özgün PDF SHA-256, her sayfa görsel/metin hash'i, tam metin arama, 320/390/430 px okuyucu, ilk offline açılış. `ORIENTATION_GUIDE_INTEGRATION_2026_09_07.md`. |
+
+Bu durumlar mevcut görevin yerel kabulünü belirtir; önceki açık yayın ve fiziksel cihaz/pilot kabul kalemlerini kapatmaz. 0.24.0 henüz uzaktaki uygulamaya yayımlanmadı. Ayrıntılı son test matrisi `OGRENCI_YENIDEN_TASARIM_2026_09_07.md` içindedir.
+
+## 7 Eylül 2026 - 0.25.0 master denetim dilimi
+
+| Kimlik | Gereksinim | Durum | Kanıt / açık sınır |
+|---|---|---|---|
+| MR-081 | Çocuk soyadından açık anne/baba önerisi; yeni kayıt/profil/Excel aynı adres | VERIFIED_LOCAL | 320/390 dört uçtan uca yeni akış, hızlı kayıt3; farklı soyadı/üçüncü kişi korunur. student-profile-audit.md |
+| MR-082 | Üçüncü kişi adı/ünvanı/telefonu anne-babayla aynı ana tablo | VERIFIED_LOCAL | Sınıf çizelgesi3.1, 80 belge testi,10 Chromium/WebKit,12 PDF/62sayfa taşmasız;28 etiketli sayfa görsel. Önceki MR-075 yerleşimini günceller. |
+| MR-083 | Mükerrer sayım, gün üyeliği, çoğul gözlem, yeniden kayıt ve takvim adı matematiği | VERIFIED_LOCAL | 64 hesap testi +27 üyelik/yıl geçişi,1 şifreli karşı-depo restore; tam ortak takvim/üyelik servisi master planda açık. |
+| MR-084 | Bütün ürün boyutlarında kanıta dayalı master öneri ve uygulama planı | VERIFIED_LOCAL | MAARIFOS_MASTER_RAPOR_2026_09_07.md, PDF/HTML, öncelik/efor/bağımlılık/kabul. Yol haritasındaki öneriler tamamlanmış sayılmaz. |
+
+Yerel sürüm0.25.0; nihai kanıt MASTER_UYGULAMA_KABUL_2026_09_07.md. Uzak yayın yapılmadı; MR-056/057 fiziksel güvenlik/pilot kapıları bu satırlarla kapanmaz.
+
+## 7 Eylül 2026 — dört alanlı adres (0.26.0)
+
+| Kimlik | Gereksinim | Durum | Kanıt |
+|---|---|---|---|
+| MR-085 | İlçe Acıpayam, il Denizli değiştirilebilir varsayılan; üçüncü satır mahalle, dördüncü cadde/sokak–no; cadde → mahalle → ilçe → il tam adresi | VERIFIED_LOCAL | Profil v10, aynı alanlar yeni kayıt/profil/Excel'de; 8 adres birim testi, 2 gerçek şifreli kasa/yedek testi, genişletilmiş negatif test, 11 üretim/çevrim dışı UI senaryosu, 3 PWA testi. STUDENT_ADDRESS_V10.md. |
+
+MR-085, MR-081 adres girişini ayrıntılandırır. 0.26.0 yerel doğrulanmıştır; önceki master planındaki açık gelecek işler ve uzak yayın durumu korunur.
+
+## 7 Eylül 2026 — yayın talimatı
+
+| Kimlik | Gereksinim | Durum | Kanıt |
+|---|---|---|---|
+| MR-086 | Doğrulanmış son uygulamayı mevcut adresinde yayımla | VERIFIED_LIVE | 0.26.0 / Sites 34; dağıtım succeeded; canlı manifest ve worker 0.26.0, HTML sınıf rotası 200. YAYIN_0.26.0_2026_09_07.md ve app/output/publish-0.26.0-receipt.json. |
+
+Bu kayıt MR-085'in yerel yayın sınırını günceller; mevcut erişim politikası korunmuştur.
+
+## 7 Eylül 2026 — dokuz önerinin tamamı
+
+MR-087–MR-096: VERIFIED_LIVE. Kullanıcının dokuz ek önerisi uygulandı ve 0.27.0 / Sites 35 mevcut adreste yayımlandı. Atomik gereksinimler ve kabul ölçütleri `DOKUZ_GELISTIRME_KABUL_2026_09_07.md`; on zorunlu gereksinimin hash doğrulamalı son dosyası `app/output/completion-2026-09-07/acceptance-live/` içinde READY. 1075 özellik testi, 48 sözleşme, 51 şifreli veri tarayıcı testi, 6 öğretmen takibi, 11 adres/Excel üretim senaryosu, 3 PWA, üretim PDF/devam ve yedek kabulü geçti. Satırlar örtüşen test tekrarları içerir ve bağımsız toplam diye toplanmaz. Canlı manifest ve çalıştırılabilir dosya hashleri doğrulandı. Önceki fiziksel pilot ve haricî sertifikasyon kapıları bu teslim tarafından kapatılmış sayılmaz.
+
+## 8 Eylül 2026 — boy–kilo ve dört sınıf yönetimi önerisi
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-097 | Eylül, aralık, mart, haziran boy–kilo ölçümü; çizelge, grafik ve istatistik | VERIFIED_LOCAL | Eğitim yılı ve tarihli üyelik; ayrı gerçek ölçüm tarihleri/kaynakları; tam sayı mm/g; değişmez ölçüm ve seçim geçmişi; eksik null; ayrı n/ortalama/medyan ve eşleşmiş çocuk değişimi; mobil seri giriş; PDF/XLSX ve önizlemeli içe aktarma. |
+| MR-098 | Belge, amaç, sürüm, süre ve geri çekmeye bağlı veli izni | VERIFIED_LOCAL | Eski profil bayrakları korunur; sürüm ve karar geçmişi; kesin belgeye bağlı gezi izni; fotoğraf/portfolyo kullanımında güncel kararın etkisi. |
+| MR-099 | Gezi çıkış, ara kontrol ve dönüş sayımı | VERIFIED_LOCAL | Başlangıçta tarihli üyelik ve izin doğrulaması; kilitli kadro; çocuk bazlı gerçek sayım; gerekçeli düzeltme; eksik dönüşte kapanış engeli; kayıt ve PDF. |
+| MR-100 | Malzeme ve emanet defteri | VERIFIED_LOCAL | Toplam=kullanılabilir+emanet+hasarlı; birim bazlı tam sayı; kısmi iade; negatif stok/çift iade/yitik kaynak engeli; hareket geçmişi; haftalık hazırlık bağlantısı; gerçek PDF. |
+| MR-101 | Dönem sonu devir listesi ve tutanak | VERIFIED_LOCAL | Açık takip+emanet kaynakları, elle maddeler, sorumlu ve vade; kontrol geçmişi; yeni kaynakta güncelleme zorunluluğu; eksikte kapanış engeli; gerekçeli yeniden açma; PDF. |
+| MR-102 | Beş modülün sistem, yedek ve silme bütünlüğü; yeni öneriler | VERIFIED_LOCAL | Şema 10; v1–9 göçleri; şifreli tüm veri; öğrenci silmede diğer katılımcı/stok/devir korunumu; mobil/çevrim dışı testler; somut kapsamı tekrarlamayan öneri raporu. |
+
+Bu turdaki uygulama talimatı yerel geliştirme ve doğrulamadır. Önceki 0.27.0 / Sites 35 canlı yayın kaydı korunur; yeni beş modülün yayınlandığı iddia edilmez.
+
+## 8 Eylül 2026 — ek önerilerin uygulaması ve Excel örnekli sınıf listesi
+
+Kullanıcı "bunları yap" diyerek master ek rapordaki beş öneriyi uygulama kapsamına aldı. Aynı talimat sınıf listesinin masaüstündeki `VELİ İLETİŞİM BİLGİLERİ 2025.xls` yapısını örnek almasını, ad ve soyadların ilk harflerinin büyük olmasını ve Türkçe yazım/mizanpaj kontrolünü istedi. Kaynak Excel yerinde korunur; gerçek öğrenci satırları test verisine veya yayımlanan uygulama varlıklarına eklenmez.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-103 | Veli görüşme randevu planlayıcısı | VERIFIED_LOCAL | Açık uygun saatler, bütün sınıflarda öğretmen çakışma engeli, tarih/saat, iptal/değişiklik geçmişi, gerçek veli görüşmesine bağ, kişiye özel davet, çevrim dışı kullanım. |
+| MR-104 | Öğrenme merkezi ve materyal rotasyonu | VERIFIED_LOCAL | Tarihli merkez düzeni ve geçmişten taslak; gerçek stoktan atomik malzeme ayırma, aynı miktarın çift kullanımını engelleme, gözlem/sonraki düzenleme, kısmi iade sonrası doğru kapanış, PDF. |
+| MR-105 | Düzenlenebilir görsel günlük rutin kartları | VERIFIED_LOCAL | Gerçek günlük akıştan kaynaklı sıra; elle kart düzenleme; kısa/tam gün; büyük simge ve okunur metin; A4/A5, kesim payı ve gerçek PDF; çevrim dışı açılış. |
+| MR-106 | Aile iletişim ve erişim tercihleri | VERIFIED_LOCAL | Anne/baba/üçüncü kişi ayrı kimlik; açık bildirim/kaynak, kanal/saat/dil/format, değişiklik ve geri çekme geçmişi; profil değişince eski tercih güncel sayılmaz; şifreli yedek ve kalıcı silme. |
+| MR-107 | Okula özgü belge şablonları | VERIFIED_LOCAL | Yerel logo, üst başlık, imza ve kâğıt yönü hazır düzenlerle seçilir; sınıf/ölçüm/devir belgelerinde uygulanır; uzun metin taşma kontrolü; öğrenci verisi değişmez. |
+| MR-108 | Örnek XLS ile uyumlu profesyonel sınıf listesi ve Türkçe yazım | VERIFIED_LOCAL | Örnek sütun/iletişim grupları, anne/baba ayrı telefon ve meslek, üçüncü kişi/ünvan/telefon ve tam adres; Türkçe kişi adı gösterimi; numara/kısaltma korunumu; gerçek çok sayfalı PDF, mobil önizleme ve çıktı eşliği. |
+
+MR-097–108 son yerel kabul: [0.28.0 kabul raporu](SINIF_YONETIMI_KABUL_2026_09_08.md). Kaynak, son dist, test ve kanıtlar `app/output/new-workflows-2026-09-08/final/acceptance-receipt.json` ile `sha256-manifest.json` dosyalarında eşleştirilir. Canlı sürüm 0.27.0 / Sites 35; bu tur uzak yayın yapılmadı.
+## 8 Eylül 2026 — seçilebilir çıktı ve belge dili
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-109 | Okul numarası ve ayrıntılı çıktı alanı seçimi | VERIFIED_LIVE | Okul no ayrı sütun; yirmi standart alan başlangıçta seçili; tek tek ve toplu seçim; seçilmemiş bilgi başlık/bant/başka hücreden sızmaz; boş seçimde çıktı durur. |
+| MR-110 | Aynı kapsamla yazdırma ve Excel dışa aktarımı | VERIFIED_LIVE | PDF–yazdır–Excel aynı öğrenci/dönem/alanı kullanır; gerçek PDF sayfaları baskıya girer; XLSX yeniden okumasında telefon/TCKN/okul no sıfırları korunur; kaynak değişimi ve pencere kapanışında eski çıktı verilmez; çevrim dışı çalışır. |
+| MR-111 | Türkçe başlık, etiket ve öğretmen belgesi mizanpajı | VERIFIED_LIVE | Kurum ve kişi adları, yaş birimi, başlık/etiket yazımı bağlama göre; tekrarsız bilgi hiyerarşisi, uzun içerik ve seçilen az/çok sütun için gerçek PDF sayfa kontrolü; yazım kaynakları ve görsel kararlar ayrı açıklanır. |
+
+Son işlevsel kabul: [0.29 raporu](SINIF_LISTESI_V5_KABUL_2026_09_08.md). Yeni canlı renk/font isteği bu kapıdan sonra ayrı uygulanacak; kullanıcı sonunda mevcut siteye yayın yapılmasını açıkça istedi. Bu kayıt tek başına canlı yayın iddiası değildir.
+
+## 8 Eylül 2026 — canlı öğretmen belgesi ve sıralı yayın
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-112 | Okul öncesine uygun canlı PDF/Excel renkleri ve güçlü tipografi | VERIFIED_LIVE | Koyu metin, gerçek kalın font, ortak rol paleti; küçük yazı kontrastı; grup adları metinle de açık; örnek kuruma ait logo alınmaz; gerçek PDF/Excel baskısında taşma/kesilme ve kayıp yok. |
+| MR-113 | Önce mevcut işi bitir, sonra görsel yenile, derin denetimden sonra yayımla | VERIFIED_LIVE | 0.29 işlevsel makbuz/manifestosu görsel koddan önce tamamlandı; yeni kaynaklara bağımsız mantık/font/legacy kabulü; son üretim/offline doğrulaması; mevcut Sites hedefi ve erişimi korunarak yayın; canlı varlıkların test edilen pakete eşliği. |
+
+0.30 yayın kapanışı: MR-109–113 mevcut sitede Sites36/succeeded ile yayımlandı. 0.29 önce kapandı, görsel aşama sonra uygulandı. Nihai test/gerçek eski sürüm yükseltmesi/229 varlık eşliği [yayın raporunda](YAYIN_0.30.0_2026_09_08.md); önceki canlı sürüm ifadeleri tarihsel aşama kaydıdır.
+
+## 9 Eylül 2026 — PDF, Word ve Excel odaklı yeni eleştiri denetimi
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-114 | Uygulamayı yeniden test et; özellikle üretilen PDF, Word ve Excel dosyaları için yeni eleştiri ve öneriler getir | VERIFIED_LOCAL | 1.214 özellik ve 18 Chromium testi; 28 uygulama PDF'i/72 sayfa, üç ayrı sayfalama deneyi, 2 DOCX ve 3 XLSX; bağımsız içerik/tür kontrolleri, gerçek Excel baskıları ve Word Ek-18 açma/sayfalama. Bulgular ve düzeltme kabul ölçütleri kanıt dosyalarıyla kaydedildi. |
+
+[Yeni denetim raporu](../app/output/export-audit-2026-09-09/DENETIM_RAPORU.md) boy-kilo XLSX baskısındaki kimliksiz devam sayfalarını P1 olarak doğrular; diğer belge alanı, tür ve sayfa düzeni bulguları raporda ayrıdır. Word'den PDF aktarımı zaman aşımına uğradığından Word görsel baskı kabulü tamamlanmış sayılmaz. Bu kayıt denetim teslimini kapatır; önerilen düzeltmelerin yapıldığı veya yeni sürümün yayımlandığı anlamına gelmez. Önceki yayın kayıtları tarihsel olarak korunur.
+
+## 9 Eylül 2026 — denetimdeki bütün düzeltmelerin uygulanması
+
+Kullanıcı “hepsini yap ve sonra test edip yeni eleştiri öneriler ile gel” emriyle MR-114 raporundaki düzeltmeleri ve beş geliştirme önerisini uygulama kapsamına aldı.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-115 | Excel baskı, veri türü ve kapsam düzeltmeleri | VERIFIED_LOCAL | 4 gerçek XLSX/20 Excel PDF sayfası; yerel tarih/sayı ve baştaki sıfır kontrolü; 15+3+40+1 tam ad korunumu; bireysel kapsam ve çevrim dışı içe aktarma geçti. |
+| MR-116 | Word sayfalama, tablo devamı ve tutarlı belge tasarımı | VERIFIED_LOCAL | 2 DOCX gerçek Word motorunda 6+8 sayfa/14 PNG, keepNext ve sayfa kırığı işaretleri, PAGE/NUMPAGES, tekrar başlıklar ve satır bütünlüğü geçti; Word→PDF dönüşümü ayrı açık ortam sınırıdır. |
+| MR-117 | PDF alan, imza, sayfalama, bağlam, metin ve kaynak bağlantıları | VERIFIED_LOCAL | 28 uygulama PDF/72 sayfa; 15-ad tek sayfa, üç form/üç imza/kayıt yılı; devam bağlamı, Unicode metin, genel metadata ve URI anotasyonları geçti. |
+| MR-118 | Ortak belge alanları/tema, hazır seçimler ve tekrarlanabilir dosya kabulü | VERIFIED_LOCAL | Ortak alan projeksiyonu/renk teması, üç hazır alan seçimi, ayrı XLSX veri/baskı sayfaları, npm run test:documents; altı Office dosyasında yeniden üretim SHA eşliği. |
+| MR-119 | Düzeltmelerden sonra yeniden test ve yeni eleştiri | VERIFIED_LOCAL | 1.221 özellik; 52 veri/mobil+21 belge+4 üretim+1 gerçek 0.30→0.31 yükseltme koşumu; tür/lint/derleme/bütçe geçti. 692 kaynak dosyası değişmedi; dört yeni P2/P2-düşük öneri kanıtlı raporlandı. |
+
+Bu turun yeni kanıt kökü `app/output/export-fixes-2026-09-09/` dizinidir; önceki denetim paketinin üzerine yazılmaz.
+
+
+MR-115–119 son yerel kabul: [0.31.0 düzeltme ve yeniden denetim raporu](../app/output/export-fixes-2026-09-09/DENETIM_RAPORU.md). Yetkili dosya kabulü `acceptance-verified/acceptance.json`: beş aşama PASS; 33 PDF/95 sayfa sayımı 28 uygulama PDF/72 sayfa + 4 Excel baskısı/20 sayfa + 1 görüntü tabanlı yazdırma izi/3 sayfa olarak ayrılır. 78 tarayıcı koşumu farklı ortamlardaki tekrarları içerir; 23 sürüm sözleşmesi 1.221 özellik testinin alt kümesidir. Yerel sürüm 0.31.0; bu tur uzak yayın yapılmadı. Yeni dört öneri bu kapanışla uygulanmış sayılmaz.
+
+## 9 Eylül 2026 — ikinci belge iyileştirme döngüsü
+
+Kullanıcı dört yeni önerinin tamamını uygulama ve ardından yeniden test/eleştiri emri verdi. Önceki 0.31.0 kabulü ve dosyaları korunur; yeni kanıt kökü `app/output/export-next-2026-09-09/` dizinidir.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-120 | Yazdır → PDF'ye kaydet yolunda gerçek Türkçe metin | VERIFIED_LOCAL | Aynı kaynak metni, doğru sayfa ve A4/A5/yatay ölçüleri; tek print çağrısı; kaynak değişimi/kapanışta iptal ve URL temizliği; gerçek tarayıcı PDF yazıcısı ve çevrim dışı üretim kabulü. |
+| MR-121 | PDF önizlemede arama ve metin seçme | VERIFIED_LOCAL | Türkçe arama, sayfalar arası eşleşmeler, klavye ile ileri/geri, gerçek kaynak metni kopyalama, 320 px kullanılabilirlik; kaynak değişiminde eski eşleşme kalmaması. |
+| MR-122 | Excel boş ölçüm hücrelerinde kesintisiz çizelge | VERIFIED_LOCAL | Boy-kilo D:G boş alanları da çerçeveli; değerler boş kalır; gerçek Excel baskısı ve içe aktarmada yeni ölçüm oluşmaması. |
+| MR-123 | Kompakt sınıf ve dönem seçilebilir boy-kilo baskısı | VERIFIED_LOCAL | Kompakt baskının yanında seçilmiş alan/çocuk kapsamının tam veri sayfası; tipik 15–25 çocuk için en çok iki okunaklı A4; görünür boy-kilo dönem seçimi, dosya adı/başlık eşliği ve dönem dışı ölçüm yokluğu; tam yıl varsayılanı korunur. |
+| MR-124 | İkinci döngü son kabul ve yeni eleştiri | VERIFIED_LOCAL | Tüm özellik ve ilgili mobil/çevrim dışı testler; gerçek PDF/Word/Excel; 0.31.0 gerçek paketinden yükseltme; kaynak/çıktı hashleri ve kanıtlı yeni P0/P1/P2 değerlendirmesi. |
+
+
+MR-120–124 son yerel kabul: [0.32.0 raporu](<C:/Users/Asus/Desktop/Maarif/MaarifOS_Codex_Baslangic_Paketi/app/output/export-next-2026-09-09/DENETIM_RAPORU.md>). 1231 özellik testi; 86 tarayıcı senaryo koşumu; 50 PDF/142 sayfa; 6 gerçek Excel dosyası ve 2 Word dosyası/14 sayfa. Kaynak dosyası 697 adet ve değişmedi; 0.31→0.32 gerçek yükseltme geçti. Dört yeni P2 kanıtlı raporlandı; uzak yayın yapılmadı.
+
+## 9 Eylül 2026 — araştırmalı belge iyileştirme döngüsü
+
+Kullanıcı 0.32.0 raporundaki dört P2 önerinin tamamının uygulanmasını, Türkiye'deki rakipler ve TYMM resmî/web kaynaklarıyla araştırmalı eleştiriyi, gerçek dosya ve yükseltme kabulünü emretti. Önceki kanıtlar korunur; bu turun yeni kökü `app/output/research-improve-2026-09-09/` dizinidir.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-125 | Yazdır → PDF yolunda HTTP(S) bağlantı anotasyonlarını koru | VERIFIED_LOCAL | Kaynak ve gerçek Chromium PDF yazıcısı çıktısında URI sayısı, hedefi ve sayfası birebir; bağlantı dikdörtgeni sapması ≤0,75 pt; karışık A4/A5/yatay sayfalar, Türkçe metin, tek baskı ve kaynak temizliği geçer. |
+| MR-126 | Kompakt sınıf XLSX baskısını seçilmiş tam veri sayfasına canlı bağla | VERIFIED_LOCAL | Formüller yalnız seçilmiş kaynak hücrelerini adresler; gerçek Excel'de düzenleme → `CalculateFullRebuild` → baskı güncellenir. Boş, sayısal `0`, formül benzeri metin, çoklu yakın, kapalı alan ve uzun kaynak kayıpsız; formül enjeksiyonu ve beklenmeyen bağlantı `0`; 25 çocuk ≤2 okunaklı A4, yükseklik otomatik. |
+| MR-127 | Dar telefonda PDF okuma alanını büyüt; arama ve ikincil işlemleri aşamalı göster | VERIFIED_LOCAL | 320/390 px'de arama ve ikincil menü başlangıçta kapalı; üç birincil kontrol görünür; belge görünür yüksekliği ≥280 px. Arama açıldığında klavye odağı, giriş görünürlüğü, Türkçe eşleşme ve ileri/geri gezinme korunur. |
+| MR-128 | Windows atomik makbuz yenilemesindeki geçici `EPERM` yarışını güvenle gider | VERIFIED_LOCAL | Yalnız Windows `EPERM` ve iki normal dosyanın varlığı durumunda toplam 8 atomik yeniden adlandırma denemesi/630 ms uyku bütçesi; geçici kilit çözülür, kalıcı kilit özgün hatayla görünür kalır ve eski makbuz korunur. Silme, atomik olmayan yedek yol, karantina veya sınırsız yeniden deneme yoktur. |
+| MR-129 | 0.33.0 yerel sürümü, 0.32.0 gerçek paket yükseltmesi ve araştırmalı yeni eleştiri | VERIFIED_LOCAL | Tek kanonik kabul kökünde derleme, tüm özellikler, lint, bütçe/runtime, belge+Office, üretim/çevrim dışı ve gerçek 0.32→0.33 yükseltme geçer; kaynak parmak izleri sabit kalır. Araştırma iddiaları birincil kaynaklarla eşlenir, stratejik öneriler uygulanmış özellik diye sunulmaz. |
+
+MR-125–129 yerel kabulü `app/output/research-improve-2026-09-09/accepted/` kökünde tamamlandı: 12/12 ana aşama, 1.238/1.238 özellik, 15/15 runtime sözleşmesi, 27/27 belge tarayıcı senaryosu, 57/57 veri–mobil–sürüm senaryosu, 6/6 üretim senaryosu ve gerçek 0.32.0→0.33.0 yükseltme geçti. 52 PDF/147 sayfa otomatik yeniden açıldı; altı XLSX ile iki DOCX gerçek Microsoft Office'te doğrulandı. 700 kaynak dosyasının önce/sonra parmak izi aynı kaldı. Uygulama kabulü [MARİF makbuzunda](../app/output/research-improve-2026-09-09/accepted/marif/MARIF_UYGULAMA_KABUL.md), Türkiye rakipleri ve TYMM araştırması [PDF](../app/output/research-improve-2026-09-09/report/MaarifOS_TYMM_Elestiri_Oneri_Raporu.pdf), [DOCX](../app/output/research-improve-2026-09-09/report/MaarifOS_TYMM_Elestiri_Oneri_Raporu.docx) ve [XLSX](../app/output/research-improve-2026-09-09/report/MaarifOS_Karsilastirma_Oneri_Takibi.xlsx) olarak kaydedildi. Yerel sürüm 0.33.0'dır; uzak yayın yapılmadı ve canlı sürüm 0.30.0 / Sites 36 olarak kaldı.
+
+
+## 10 Eylül 2026 — seçerek iş tamamlama ve kalıcı öğrenci silme
+
+Öğretmenin işi: Kaydettiği gözlemi yeniden yazmadan kategorisine ve sonraki eğitim planına yerleştirmek; yanlış eklenmiş öğrenciyi açık kapsam onayıyla tamamen silebilmek.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-129 | Yanlış öğrenciyi tamamen silme | VERIFIED_LOCAL | Aktif ve arşiv listesinden erişim; görünür öğrenci/kayıt kapsamı, seçilebilir açık onay, atomik silme, ortak kayıt ve diğer çocukların korunması; güncel olmayan önizlemenin reddi ve yenilenerek tamamlanması. Kanıt: `student-permanent-deletion` 5/5, `action-center-deletion`, `student-followup-deletion` ile son çekirdek paket 7/7; gerçek uygulama ve çevrimdışı üretim akışları. |
+| MR-130 | Gözlem → kategori → planı seçerek tamamla | VERIFIED_LOCAL | Ham gözlemi değiştirmeden kanonik kategori seçimi; hazır başlık/adım/tarih; seçimin aynı gözlem ve çocukla plan oluşturması veya mevcut plana eklenmesi; tekrar işlemde mükerrer yazılmaması. Kanıt: `action-completion-ui`, `action-center-component`, `action-center-backup` ve üretim `action-completion-offline` testleri. |
+| MR-131 | Uygulama genelinde yapılabilir iş önerileri | VERIFIED_LOCAL | Bugün, Sınıfım, öğrenci profili, Planlar ve gözlem sonrası erişim; hazırlık işlerinin seçilip kaydedilmesi; durum ve tamamlanma sonucu. Kanıt: 320 px bileşen akışları, seçili hazırlık kaynakları ve gerçek tamamlanma; bileşen paketi üç tekrarda 12/12 geçti. Çevrimdışı/yedek testleri geçti. |
+
+Kullanıcının bu turdaki açık kararı, arşivlemeyi zorunlu tutan eski silme varsayılanına ek olarak doğrudan kalıcı silme seçeneğini yetkilendirir. Hiçbir gerçek öğrenci bu geliştirme sırasında silinmez. Uzak yayın istenmedi.
+
+## 10 Eylül 2026 — gözlem tarihi ve kesintisiz seçerek ilerleme
+
+Öğretmenin işi: Dün yaşanmış ve bugün yazılmış gözlemi doğru tarihe taşıyıp uygun gerçek kayda bağlamak; planlamada metni/başlığı tekrar kurmadan hazırlanmış seçeneklerle yıl–ay–hafta–gün zincirini tamamlamak.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-132 | Kaydedilmiş gözlemin olay tarihini düzeltme | VERIFIED_LOCAL | Bugün/Dün/tarih seç; ham metin ve createdAt korunur; observedAt/civilDate tutarlı; mevcut bağlar, kayıt sonrası yenileme ve şifreli yedek doğrulanır. |
+| MR-133 | Gözleme gerçek bağlama seçenekleri | VERIFIED_LOCAL | Uygun mevcut etkinlik/plan/program kaynakları görünür; açık seçimin kanonik bağları yazması; başka çocuk/yıl, eski seçim ve tekrar tıklama güvenliği; destek planı bağı asıl gözlem bağından ayrılır. |
+| MR-134 | Günlük/aylık plan ve omurgada seçerek ilerleme | VERIFIED_LOCAL | Eksik sıradaki basamak için hazır seçim; gerçek kayıt ve yeni sonraki adım; mevcut kayıtları ezmeden tarih/scope/üst plan ilişkisinin korunması. |
+| MR-135 | Ortak girişlerde çıkmazı kaldırma | VERIFIED_LOCAL | Öğrenci kartındaki gözlem doğrudan işlem seçeneklerini açar; arşivde her gözlem düzenlenebilir; boş gözlem filtresi eylem sunar; Planlar ve günlük plan girişleri aynı hazırlanan akışa bağlanır. |
+
+## 10 Eylül 2026 — hazır iş paketleri
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-136 | Hazırlanmış sonucu tek seçimle tamamla | VERIFIED_LOCAL | Bir paketin kategori, uygun gerçek kaynak, destek planı ve takip adımları birlikte kaydolur; ikinci onay yoktur, sonuç kapsamı görünürdür. |
+| MR-137 | Var olan kaydı kullan, plan eksiğini tamamla | VERIFIED_LOCAL | Uygun plan yeniden kullanılır; eksik bağlantılar eklenir; tekrar tıklama mükerrer kayıt üretmez. |
+| MR-138 | Gözlemleri toplu yerleştir | VERIFIED_LOCAL | En az iki gözlem ayrı hazırlanmış seçimleriyle birlikte kaydedilir; eski seçim veya hata tüm paketi durdurur. |
+| MR-139 | Önceki açık tercihler ve güvenli geri alma | VERIFIED_LOCAL | Önceki tercihler sonraki önerileri düzenler; geri alma paketin yazmalarını geri çevirir, sonraki bağımsız düzenlemeleri korur. |
+
+
+## 10 Eylül 2026 — masa belgeleri, öğrenci özeti ve etkileşimli aylık takvim
+
+Kullanıcı önceki dört somut önerinin uygulanmasını ve yeni önerilerle dönülmesini istedi. Önceki tamamlanan kapsam korunur.
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-140 | Haftalık masa planı | VERIFIED_LOCAL | Yatay A4 beş gün; gerçek etkinlik, gözlem odağı ve malzemeler; kaynak dönem/alan seçimi, normal tek sayfa ve gerçek PDF/Word. |
+| MR-141 | Öğrencinin tek sayfalık özeti | VERIFIED_LOCAL | Dikey A4 kimlik/iletişim, son gerçek gözlemler, destek ve sonraki adım; tek çocuk kapsamı, özel alanların seçimi, gerçek PDF/Word. |
+| MR-142 | Veli görüşme formu | VERIFIED_LOCAL | Gerçek randevu ve kaynak gündem, öğretmen sonuçları, aile/öğretmen görevleri ve takip; atomik kayıt, yedek, silme ve çıktı. |
+| MR-143 | Aylık duvar takvimi ve yerleştirme | VERIFIED_LOCAL | Kaydedilmiş planlarla dolan gerçek ay takvimi; boş uygun günden hazır etkinlik seçerek kanonik plan zincirini tamamlama; gerçek yatay çıktı. |
+| MR-144 | Yeni somut geliştirme önerileri | VERIFIED_LOCAL | Bu dört teslimattan farklı, uygulamanın mevcut kaynaklarına uygun ve ekran/çıktı düzeni tarifli yeni öneriler. |
+
+MR-140–144 kabulü: 1.349 özellik, 29 tarayıcı senaryosu ve gerçek derlemede çevrimdışı 3 PDF/2 Word + profil özeti geçti. Native Word ve PDF mizanpaj kanıtları: `docs/MASA_BELGELERI_VE_TAKVIM_2026_09_10.md`. Yalnız yerel uygulama güncellendi.
+
+## 12 Eylül 2026 — sınıf belgeleri, kaynak seçimi ve hız
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-145 | Günlük teslim çizelgesi | VERIFIED_LOCAL | Yatay A4; gerçek yetkili, telefon, düzeltilmiş teslim saati, okunur imza alanı; 20/30 çocuk kaynaksız kesilmeden 2/3 sayfa. |
+| MR-146 | Küçük grup kartları ve gerçek plana atama | VERIFIED_LOCAL | Altı normal kart bir A4; seçilen 2–8 çocuk aynı günlük plan/etkinliğe atomik atanır; eski kaynak/ikinci yazım hatası, yedek ve PDF geçmişinde çocuk silme sınanır. |
+| MR-147 | Aileye ev oyunu ve gerçek yanıt | VERIFIED_LOCAL | İki A5 kart/A4, gerçek etkinlikten hazırlık; çocuk/kart/etkinliğe gerçek geri bildirim; çevrimdışı kalıcılık, uzun metin, yedek ve silme doğrulanır. |
+| MR-148 | Klasör kapağı, ayraç ve sırt etiketi | VERIFIED_LOCAL | Seçilen ayın gerçek belgelerinden içindekiler; dört A4 ve seçilen dosyalarla ZIP; belge geçmişinin kendi yazımı çıktıyı bozmaz. |
+| MR-149 | Uygulamayı hafifletme | VERIFIED_LOCAL | Gerçek eski/yeni manifesto hacmi %68,9 azalır; 37 ağır rehber varlığı dağıtılmaz, 35 metin hash eşliği çevrimdışı korunur; lazy paneller ve tek ilk okuma. |
+| MR-150 | Bağlanmayan işleri seçerek tamamlama | VERIFIED_LOCAL | Sözcük eşleşmesi olmayan gözleme kanonik kaynak seçimi; mevcut günlük planın haftaya gerçek bağlantısı; kendi değerlendirmesini tek kayıtla tamamlama ve eski kayıtların seçilmesi. |
+| MR-151 | Yeni somut geliştirme önerileri | VERIFIED_LOCAL | Günün çıkış paketi, A4 malzeme kutusu etiketleri ve gerçek aile dönüşünden takip panosu; mevcut dört teslimattan farklı ve kaynaklı eylemler. |
+
+MR-145–151 kabulü ve ürün sınırları: `docs/SINIF_BELGELERI_VE_HIZ_2026_09_12.md`. Yerel 0.42.0; canlı 0.41.0 / Sites 37 korunur.
+
+## 12 Eylül 2026 — çıkış, kutu ve aile dönüşü
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-152 | Günün çıkış paketi | VERIFIED_LOCAL | Gerçek yoklama/düzeltilmiş teslim ve takvimdeki sonraki öğretim günü; gerçek hazırlık kaydı, eksik planı oluşturma, yatay A4, çevrimdışı çift indirme. |
+| MR-153 | Malzeme kutusu etiketleri | VERIFIED_LOCAL | Gerçek merkez/stoklardan 3×4 A4; uzun içerik devam etiketinde; hazır durumu ve eksik malzemeyi aynı hazırlık kaydında çoğaltmadan tamamlama; çocuk kapsamı korunur. |
+| MR-154 | Aile dönüş panosu | VERIFIED_LOCAL | Gerçek yanıtı ilgili çocuk için ilk boş öğretim gününe planlama veya gerçek görüşme gündemine ekleme; tek tıklamalı boş tarihler, atomik kayıt, yedek/çocuk silme; uzun yanıt korunur. |
+| MR-155 | TYMM idare raporları için yeni öneriler | VERIFIED_LOCAL | Günlük/haftalık/aylık/dönemlik/yıllık içerik ve A4 düzenleri; resmî Ek 4/Ek 18 ayrımı; mevcut kayıtlardan seçimle dosyalama tasarımı. Rapor merkezi henüz uygulanmadı. |
+
+MR-152–155 kanıtı: `docs/OGRETMEN_IS_AKISLARI_2026_09_12.md`; öneri kaynağı: `docs/TYMM_IDARE_RAPOR_ONERILERI_2026_09_12.md`. Yerel 0.43.0; canlı 0.41.0 / Sites 37 değişmedi.
+
+
+## 12 Eylül 2026 — kümülatif uygulama 0.44.0
+
+| Kimlik | Gereksinim | Durum | Kabul ölçütü |
+|---|---|---|---|
+| MR-156 | Bugün / Sınıfım / hızlı gözlem | LOCAL_IMPLEMENTED | Kayıtlı çocuk ve yoklama ayrı; tek görev kuyruğu; ders modu ve iki kısayol; açık çocuk seçimi ve gerçek tarihli kayıt. |
+| MR-157 | Meyve ve haftanın çocuğu | VERIFIED_LOCAL | Tatil/üyelik/adil dağıtım, kilit, değişim, erteleme, yeni ay, revizyon ve takvim ilişkisi; gerçek Excel geri aktarımı. |
+| MR-158 | İdare ve öğretmen dosyası | VERIFIED_LOCAL | Beş dönem, PDF/Word/Excel/ZIP, gerçek kaynak kapsamı, Ek 4/Ek 18 ayrı; native Word ve Excel kontrolü. |
+| MR-159 | Google ve ayrı Drive yedeği | CONFIGURATION_REQUIRED | Gerçek adaptör ve güvenli oturum uygulanmış; gerçek hesaplı aktivasyon için OAuth projesi ve sunucu yapılandırması eksik. |
+| MR-160 | Şifreli dosya ve seçmeli cihaz eşitleme | VERIFIED_LOCAL | Gerçek AES/IndexedDB, çakışan tam değerleri seçme, aynı hesap, silmenin önceliği, eski yedek ve atomik kayıt; canlı Drive uçtan uca kabulü MR-159'a bağlı. |
+| MR-161 | Yarın hazırlığı, pano, yeni ay ve tarih kaydırma | VERIFIED_LOCAL | Gerçek kaynaklardan hazır eylem; aynı malzeme tekrarlanmaz; çizelge seçimleri ve ay/sürüm bağlamlı çıktı. |
+| MR-162 | Hız ve yeni öneriler | LOCAL_IMPLEMENTED | Yalnız açık belge paneli çalışır; dosyalar istekte yüklenir; ölçülen paket ve gerçek üretim kabulü teslim belgesinde. |
+
+Son durum ve kanıtlar: [Kümülatif uygulama kabulü](KUMULATIF_UYGULAMA_KABULU_2026_09_12.md). Önceki öneri belgesi tarihsel tasarım kaydıdır.

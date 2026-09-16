@@ -1,6 +1,11 @@
 export const PREMIUM_LICENSE_API_ORIGIN =
   /* @maarifos-sites-build:premium-license-api-origin */ null;
 
+export const TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES = Object.freeze([
+  "https://tymm.meb.gov.tr/assets/pdf/",
+  "https://tymm.meb.gov.tr/upload/brosur/",
+]);
+
 export const SITES_APP_SHELL_PATH =
   /* @maarifos-sites-package:app-shell-path */ null;
 export const SITES_APP_SHELL_SHA256 =
@@ -22,6 +27,7 @@ export function createContentSecurityPolicy(licenseApiOrigin = null) {
     "font-src 'self'",
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
+    `frame-src 'self' ${TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES.join(" ")}`,
     `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self'",
     "manifest-src 'self'",

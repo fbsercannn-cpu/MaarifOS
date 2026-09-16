@@ -137,10 +137,10 @@ export function DeskDocumentCenter({
       >
         <div>
           <strong style={{ display: "block", color: "#9a3412", fontSize: "0.95rem" }}>
-            T.C. MEB TTKB Resmî Matbu Formlar (2026 Müfredatı)
+            T.C. MEB TTKB Resmî Matbu Formlar (26 Enstrümanlı Külliyat)
           </strong>
           <small style={{ color: "#c2410c" }}>
-            EK-6 Günlük Plan · EK-5 Aylık Plan · EK-2 Anekdot · EK-4 Okul Dışı Plan · A4 &amp; Word
+            EK-1..EK-15, Beceri Edinim, Karne, Portfolyo, Veli Toplantısı, Dijital Taahhütname · A4 &amp; Word (.doc)
           </small>
         </div>
         <button

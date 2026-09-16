@@ -273,7 +273,7 @@ test("bugün tarihli fakat etkin haftaya bağlı olmayan planı yok saymak yerin
   assert.equal(workspace.daily.referenceTitle, "Korunan eski günlük plan");
 
   const daily = createTeacherCyclePresentation(workspace).stages[0];
-  assert.equal(daily.title, "Bugün tarihli plan bağlantı bekliyor");
+  assert.equal(daily.title, "Bugünün planını haftasına bağla");
   assert.equal(daily.actionLabel, "Bağı takvimde incele");
   assert.match(daily.detail, /Kayıt korundu/);
 });

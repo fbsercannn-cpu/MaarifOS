@@ -478,7 +478,7 @@ test("öğretmene ait yıllık → aylık → haftalık planı yedekler, geri y�
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(6);
+  expect(result.dataSchemaVersion).toBe(11);
   expect(result.teacherPlanCount).toBe(6);
   expect(result.restoreReport.inserted).toBeGreaterThanOrEqual(7);
   expect(result.restoredGraph?.annual.id).toBe(result.originalGraph.annual.id);

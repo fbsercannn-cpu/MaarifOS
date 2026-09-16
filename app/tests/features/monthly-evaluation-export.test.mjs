@@ -225,6 +225,15 @@ function readStoredZipEntry(bytes, expectedName) {
   throw new Error(`${expectedName} ZIP içinde bulunamadı.`);
 }
 
+function docxCellContaining(xml, text) {
+  const textIndex = xml.indexOf(`>${text}</w:t>`);
+  assert.notEqual(textIndex, -1, `${text} DOCX görünür XML'inde bulunmalı`);
+  const cellStart = xml.lastIndexOf("<w:tc>", textIndex);
+  const cellEnd = xml.indexOf("</w:tc>", textIndex);
+  assert.ok(cellStart >= 0 && cellEnd > textIndex, `${text} bir tablo hücresinde olmalı`);
+  return xml.slice(cellStart, cellEnd + "</w:tc>".length);
+}
+
 test("değerlendirme yoksa ve legacy aylık değerlendirme alanı eksikse Ek 18 fail-closed kalır", async () => {
   const content = await pack();
   const store = activeStore();
@@ -397,13 +406,68 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
   const bytes = createMonthlyEvaluationDocx(document);
   const visibleXml = readStoredZipEntry(bytes, "word/document.xml");
   const manifestXml = readStoredZipEntry(bytes, "customXml/item1.xml");
+  const stylesXml = readStoredZipEntry(bytes, "word/styles.xml");
+  const settingsXml = readStoredZipEntry(bytes, "word/settings.xml");
+  const headerXml = readStoredZipEntry(bytes, "word/header1.xml");
+  const footerXml = readStoredZipEntry(bytes, "word/footer1.xml");
+  const coreXml = readStoredZipEntry(bytes, "docProps/core.xml");
   assert.match(visibleXml, /EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ/);
+  assert.match(visibleXml, /birebir resmî form değildir/);
+  assert.match(visibleXml, /Eşlemeler öğretmenin çalışma kaydıdır; uzman doğrulaması içermez/);
+  assert.ok(visibleXml.indexOf("birebir resmî form değildir") < visibleXml.indexOf("KAVRAMSAL BECERİLER"));
+  assert.match(readStoredZipEntry(bytes, "word/_rels/document.xml.rels"), /2024programokuloncesiOnayli\.pdf#page=343" TargetMode="External"/);
+  assert.doesNotMatch(visibleXml, /344-349/);
   assert.match(visibleXml, /KAVRAMSAL BECERİLER/);
   assert.match(visibleXml, /EĞİLİMLER/);
   assert.match(visibleXml, /ALAN BECERİLERİ/);
   assert.match(visibleXml, /SOSYAL - DUYGUSAL ÖĞRENME BECERİLERİ/);
   assert.match(visibleXml, /DEĞERLER/);
   assert.match(visibleXml, /OKURYAZARLIK BECERİLERİ/);
+  assert.match(
+    visibleXml,
+    /<w:tcW w:w="680" w:type="dxa"\/>[\s\S]*?<w:t xml:space="preserve">Haziran<\/w:t>/,
+    "Haziran başlığı LibreOffice'ta tek satır kalacak geniş sütunu taşımalı",
+  );
+  const horizontalShortGroups = [
+    ["ÜST DÜZEY DÜŞÜNME BECERİLERİ", 2],
+    ["HAREKET VE SAĞLIK", 3],
+    ["BENLİK BECERİLERİ", 3],
+    ["SOSYAL YAŞAM BECERİLERİ", 3],
+    ["ORTAK / BİRLEŞİK BECERİLER", 3],
+    ["ADALET", 2],
+    ["AİLE BÜTÜNLÜĞÜ", 3],
+    ["DUYARLILIK", 3],
+    ["DÜRÜSTLÜK", 2],
+    ["ESTETİK", 2],
+    ["MAHREMİYET", 2],
+    ["MERHAMET", 3],
+    ["MÜTEVAZILIK", 1],
+    ["BİLGİ OKURYAZARLIĞI", 3],
+    ["DİJİTAL OKURYAZARLIK", 3],
+    ["KÜLTÜR OKURYAZARLIĞI", 3],
+    ["VATANDAŞLIK OKURYAZARLIĞI", 2],
+    ["SÜRDÜRÜLEBİLİRLİK OKURYAZARLIĞI", 2],
+  ];
+  for (const [label] of horizontalShortGroups) {
+    const cell = docxCellContaining(visibleXml, label);
+    assert.match(cell, /<w:tcW w:w="1840" w:type="dxa"\/>/);
+    assert.match(cell, /<w:jc w:val="center"\/>/);
+    assert.doesNotMatch(
+      cell,
+      /<w:textDirection\b/,
+      `${label} az satırlı birleşik hücrede yatay kalmalı`,
+    );
+  }
+  assert.equal(
+    (visibleXml.match(/<w:trHeight w:val="360" w:hRule="atLeast"\/>/g) ?? []).length,
+    horizontalShortGroups.reduce((total, [, rowCount]) => total + rowCount, 0),
+    "1–3 satırlı grupların her satırı genişleyebilen asgari yüksekliği taşımalı",
+  );
+  assert.match(
+    docxCellContaining(visibleXml, "TEMEL BECERİLER"),
+    /<w:textDirection w:val="btLr"\/>/,
+    "dört veya daha çok satırlı grup etiketlerinin mevcut dikey düzeni korunmalı",
+  );
   assert.match(visibleXml, /GENEL DEĞERLENDİRME/);
   assert.match(visibleXml, /ÖĞRETMEN DEĞERLENDİRME EKİ/);
   assert.match(visibleXml, /resmî Ek 18 formunun parçası değildir/);
@@ -420,13 +484,17 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
   assert.match(manifestXml, /source-structured-word-reproduction/);
   assert.doesNotMatch(manifestXml, /accessible-reproduction/);
   assert.match(manifestXml, /persistedProgramComponents/);
-  assert.match(manifestXml, /annexPages="344-349"/);
+  assert.match(manifestXml, /annexPages="343-348"/);
   const visibleMarks = visibleXml.match(/<w:t xml:space="preserve">X<\/w:t>/g) ?? [];
   assert.equal(visibleMarks.length, document.mappedOfficialRowIds.length);
+  const tableCount = (visibleXml.match(/<w:tbl>/g) ?? []).length;
+  const tableRowCount = (visibleXml.match(/<w:tr>/g) ?? []).length;
+  assert.equal((visibleXml.match(/<w:tblHeader\/>/g) ?? []).length, tableCount);
+  assert.equal((visibleXml.match(/<w:cantSplit\/>/g) ?? []).length, tableRowCount);
   assert.equal(
     (visibleXml.match(/<w:br w:type="page"\/>/g) ?? []).length,
     6,
-    "Altı resmî sayfa ve bir ayrı öğretmen eki tam yedi sayfa için altı açık sayfa sonu taşımalı.",
+    "Beş resmî bölüm geçişi ile öğretmen eki başlangıcı altı açık sayfa sonu taşımalı; gerçek sayfa sayısı içeriğe bağlıdır.",
   );
   assert.equal(document.manifest.schemaVersion, 2);
   assert.equal(document.manifest.officialSourceFormPageCount, 6);
@@ -436,9 +504,23 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
     "Ek 18 s. 348'de Değerler üstte, Okuryazarlık Becerileri altta kalmalı.",
   );
   assert.doesNotMatch(visibleXml, /documentProtection/);
+  assert.match(visibleXml, /w:headerReference w:type="default" r:id="rIdHeader"/);
+  assert.match(settingsXml, /<w:updateFields w:val="true"\/>/);
+  assert.match(headerXml, /MaarifOS · Ek 18 · Eylül/);
+  assert.match(footerXml, /> PAGE </);
+  assert.match(footerXml, /> NUMPAGES </);
+  assert.match(stylesXml, /w:color w:val="17324D"/);
+  assert.match(stylesXml, /w:fill="CFEFEB"/);
+  assert.match(coreXml, /<dc:language>tr-TR<\/dc:language>/);
 
   const longDocument = structuredClone(document);
+  longDocument.evaluation.children.narrative =
+    `${"Çocukların farklı günlerdeki katılım kanıtları kaynak sırasıyla korundu. ".repeat(24)} COCUK_METNI_SONU`;
   longDocument.evaluation.program.narrative = programNarrativeAtLimit();
+  longDocument.evaluation.teacher.narrative =
+    `${"Öğretmen düzenleme kararını ve gözlem gerekçesini ayrıntılı biçimde kaydetti. ".repeat(24)}\n OGRETMEN_METNI_SONU`;
+  longDocument.evaluation.nextMonthRecommendation =
+    `${"Sonraki ay için gün, ortam ve katılım çeşitliliğini artıran destek adımları planlandı. ".repeat(24)} ONERI_METNI_SONU`;
   const longVisibleXml = readStoredZipEntry(
     createMonthlyEvaluationDocx(longDocument),
     "word/document.xml",
@@ -447,11 +529,23 @@ test("DOCX altı resmî Ek 18 sayfasını, ayrı öğretmen ekini ve görünmez 
     longVisibleXml,
     /\[Metnin devamı ayrı Öğretmen Değerlendirme Eki&apos;ndedir\.\]/,
   );
-  assert.match(longVisibleXml, /PROGRAM_METNI_SONU/);
+  for (const sentinel of [
+    "COCUK_METNI_SONU",
+    "PROGRAM_METNI_SONU",
+    "OGRETMEN_METNI_SONU",
+    "ONERI_METNI_SONU",
+  ]) {
+    assert.equal(
+      (longVisibleXml.match(new RegExp(sentinel, "g")) ?? []).length,
+      1,
+      `${sentinel} kaynak metinde tam ve tek kez korunmalı`,
+    );
+  }
+  assert.match(longVisibleXml, /<w:br\/>/);
   assert.equal(
     (longVisibleXml.match(/<w:br w:type="page"\/>/g) ?? []).length,
     6,
-    "Uzun anlatı resmî altı sayfanın açık sayfa sonlarını değiştirmemeli; tam metin öğretmen ekinde kalmalı.",
+    "Uzun anlatı resmî bölüm başlangıçlarını değiştirmemeli; tam metin sayfa 7..N aralığında akabilen öğretmen ekinde kalmalı.",
   );
 });
 
@@ -577,6 +671,10 @@ test("Ek 18 PDF çok sayfalı semantik tabloları, güvenli manifesti ve kayıps
     const extracted = extractPdfText(pdf);
     const normalized = extracted.replace(/\s+/gu, " ");
     assert.match(extracted, /EK 18 : AYLIK PLAN KONTROL ÇİZELGESİ/u);
+    assert.match(normalized, /birebir resmî form değildir/u);
+    assert.match(normalized, /Eşlemeler öğretmenin çalışma kaydıdır; uzman doğrulaması içermez/u);
+    assert.match(normalized, /Resmî kaynak sayfası 343/u);
+    assert.doesNotMatch(normalized, /344-349/u);
     assert.match(extracted, /GENEL DEĞERLENDİRME/u);
     assert.match(extracted, /ÖĞRETMEN DEĞERLENDİRME EKİ/u);
     assert.match(normalized, /Sürdürülebilir ve sürdürülebilir olmayan sistemleri anlama/u);

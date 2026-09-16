@@ -11,3 +11,7 @@ test-results/
 *.local
 *.log
 *.tsbuildinfo
+output/
+app/output/
+tmp/
+app/tmp/

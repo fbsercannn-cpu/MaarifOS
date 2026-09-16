@@ -15,6 +15,7 @@ import {
   simpleClassRosterPdfDocumentOutputContract,
 } from "../../src/features/students/simple-class-roster-document.ts";
 
+const boldFontBytes = new Uint8Array(readFileSync(new URL("../../public/assets/fonts/MaarifOSSans-Bold.ttf", import.meta.url)));
 const yearId = "00000000-0000-4000-8000-000000009101";
 const classroomId = "00000000-0000-4000-8000-000000009102";
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -84,19 +85,19 @@ function create() {
 }
 
 function pdfRuntime() {
-  return { fontBytes: pdfFontBytes };
+  return { fontBytes: pdfFontBytes, boldFontBytes };
 }
 
-test("sınıf listesi şablon 2.0 üstverisi ve görünür sürüm izi taşır", () => {
+test("sınıf listesi şablon 6.0 üstverisi ve görünür sürüm izi taşır", () => {
   const file = create();
   const output = simpleClassRosterDocumentOutputContract(file);
 
   assert.equal(file.templateVersion, SIMPLE_CLASS_ROSTER_TEMPLATE_VERSION);
   assert.match(file.html, /name="maarifos-document-kind" content="class-roster"/u);
-  assert.match(file.html, /name="maarifos-template-version" content="2\.0"/u);
-  assert.match(file.html, /Şablon 2\.0/u);
+  assert.match(file.html, /name="maarifos-template-version" content="6\.0"/u);
+  assert.match(file.html, /Şablon 6\.0/u);
   assert.match(file.html, /class="template-version"/u);
-  assert.equal(output.metadata.templateVersion, "2.0");
+  assert.equal(output.metadata.templateVersion, "6.0");
   assert.equal(output.metadata.documentKind, "class-roster");
   assert.equal(output.preview.html, file.html);
   assert.deepEqual(output.download.bytes, file.bytes);
@@ -114,8 +115,8 @@ test("Android eski indirmeleriyle karışmayan sürümlü dosya adı üretir", (
     file.fileName,
     new RegExp(`^MaarifOS_Sinif_Listesi_${SIMPLE_CLASS_ROSTER_FILE_VERSION_SEGMENT}_`, "u"),
   );
-  assert.match(file.fileName, /Çiçekler_60-72_Ay_Tam_Gün_Sınıfı/u);
-  assert.match(file.fileName, /2026-2027_Eğitim_Öğretim_Yılı\.html$/u);
+  assert.match(file.fileName, /Çiçekler_60-72_ay_Tam_Gün_Sınıfı/u);
+  assert.match(file.fileName, /2026–2027\.html$/u);
   assert.doesNotMatch(file.fileName, /^MaarifOS_Sinif_Listesi_Çiçekler/u);
 });
 
@@ -137,7 +138,7 @@ test("tek öğrenci ve uzun Türkçe alanları kayıpsız, mobil kart uyumlu ta�
 test("A4 baskı, tekrar eden başlık, sayfa numarası ve imza sözleşmesini korur", () => {
   const file = create();
 
-  assert.match(file.html, /@page \{ size: A4 portrait; margin: 12mm; \}/u);
+  assert.match(file.html, /@page \{ size: A4 landscape; margin: 10mm; \}/u);
   assert.match(file.html, /counter\(page\)/u);
   assert.match(file.html, /counter\(pages\)/u);
   assert.match(file.html, /class="document-heading-row"/u);
@@ -164,14 +165,14 @@ test("basit deneyimin resmî çıktısı sürümlü gerçek PDF ve aynı HTML ö
 
   assert.equal(Buffer.from(file.bytes.subarray(0, 5)).toString("ascii"), "%PDF-");
   assert.equal(file.mimeType, "application/pdf");
-  assert.equal(file.templateVersion, "2.0");
+  assert.equal(file.templateVersion, "6.0");
   assert.match(
     file.fileName,
     new RegExp(`^MaarifOS_Sinif_Listesi_${SIMPLE_CLASS_ROSTER_FILE_VERSION_SEGMENT}_.*\\.pdf$`, "u"),
   );
-  assert.match(file.htmlFileName, /v2_0_.*\.html$/u);
-  assert.match(file.html, /name="maarifos-template-version" content="2\.0"/u);
-  assert.equal(output.metadata.templateVersion, "2.0");
+  assert.match(file.htmlFileName, /v6_0_.*\.html$/u);
+  assert.match(file.html, /name="maarifos-template-version" content="6\.0"/u);
+  assert.equal(output.metadata.templateVersion, "6.0");
   assert.equal(output.download.fileName, file.fileName);
   assert.equal(output.download.mimeType, "application/pdf");
   assert.equal(output.preview.html, file.html);

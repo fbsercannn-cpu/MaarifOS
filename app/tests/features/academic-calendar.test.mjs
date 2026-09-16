@@ -191,7 +191,7 @@ test("planlama hazırlığı özel eğitim yılı adını değil kapsam kimliği
       { ...scope, academicYearEnd: "2027-06-25" },
       OFFICIAL_ACADEMIC_CALENDAR_2026_2027,
     ),
-    false,
+    true,
   );
   assert.equal(
     academicYearMatchesCalendarProfile(

@@ -15,8 +15,8 @@ async function configureClassroom(page: Page) {
     .filter({ hasText: "Takvim ayrıntıları" })
     .locator("summary")
     .click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
   await setup
     .locator("details")
     .filter({ hasText: "İleri ayarlar" })
@@ -55,7 +55,7 @@ test("Sınıfım lazy route yüklenir; geri/ileri URL ve odağı korur", async (
 
   await page.goBack();
   await expect(page).toHaveURL(/\/(?:\?native=1)?$/);
-  const todayHeading = page.getByRole("heading", { name: "Bugün", level: 1 });
+  const todayHeading = page.getByTestId("today-screen").getByRole("heading", { level: 1 });
   await expect(todayHeading).toBeVisible();
   await expect(todayHeading).toBeFocused();
 
@@ -71,7 +71,7 @@ test("/classroom reload sonrasında route ve yerel sınıf listesi korunur", asy
   await configureClassroom(page);
 
   await expect(page.getByRole("heading", { name: "Sınıfım", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addSheet.getByLabel("Çocuğun adı").fill("Route Kalıcılık Çocuğu");
   await addSheet.getByRole("button", { name: "Kaydet ve kapat" }).click();

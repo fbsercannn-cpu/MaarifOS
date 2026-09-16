@@ -14,7 +14,7 @@ async function configureClassroomWithStudent(page: Page) {
   await expect(setup).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addSheet.getByLabel("Çocuğun adı").fill("Aylık Plan Kurgu Çocuk");
   await addSheet.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
@@ -48,7 +48,7 @@ test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır"
   await expect(planDialog).toContainText("tek işlemde bu cihaza kaydedildi");
   await planDialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
 
-  await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
+  await page.getByRole("button", { name: "Belgeler", exact: true }).click();
   let monthlyOutput = page.getByRole("button", {
     name: /^Aylık eğitim planı\. Durum: Hazır\. Görsel PDF\./,
   });

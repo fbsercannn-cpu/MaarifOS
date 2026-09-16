@@ -177,6 +177,7 @@ test("tablo satırını taze sayfaya sığıyorsa bölmez; zorunlu bölmede deva
     assert.equal(tailPage, namePage, "taze sayfaya sığan satır hücreler arasında bölünmemeli");
     assert.doesNotMatch(keepPages.join("\n"), /Devam —/u);
 
+    const fullContinuationName = `İpek Öztürk ${"Uzunoğulları".repeat(9)}`;
     const forcedSplit = await createSemanticTaggedPdf({
       title: "Zorunlu satır devamı",
       nodes: [{
@@ -184,7 +185,8 @@ test("tablo satırını taze sayfaya sığıyorsa bölmez; zorunlu bölmede deva
         headers: ["Adı Soyadı", "Ayrıntı"],
         rowHeaderColumn: 0,
         continuationContextColumns: [0],
-        rows: [["İpek Öztürk", "Uzun kayıt ayrıntısı ".repeat(900)]],
+        preserveContinuationContext: true,
+        rows: [[fullContinuationName, "Uzun kayıt ayrıntısı ".repeat(900)]],
       }],
     }, { fontBytes });
     const forcedPath = path.join(directory, "forced.pdf");
@@ -193,6 +195,8 @@ test("tablo satırını taze sayfaya sığıyorsa bölmez; zorunlu bölmede deva
     execFileSync("pdftotext", ["-raw", "-enc", "UTF-8", forcedPath, forcedTextPath]);
     const forcedText = readFileSync(forcedTextPath, "utf8").replaceAll("\r", "");
     assert.match(forcedText, /Devam — Adı Soyadı: İpek Öztürk/u);
+    assert.ok(forcedText.replace(/\s+/gu, "").includes(`Devam—AdıSoyadı:${fullContinuationName.replace(/\s+/gu, "")}`));
+    assert.doesNotMatch(forcedText, /…/u, "devam bağlamı da eksiksiz korunmalı");
     assert.ok(forcedText.split("\f").filter((page) => page.trim()).length > 1);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -242,4 +246,23 @@ test("font kapsamı dışındaki karakteri bozuk metne dönüştürmez", async (
     ),
     /U\+1F600/u,
   );
+});
+
+test("yatay çizelge opsiyonları yerel kalır; varsayılan dikey belgelerin sözleşmesi değişmez", async () => {
+  const portrait = await createSemanticTaggedPdf(fixture, { fontBytes });
+  assert.match(Buffer.from(portrait).toString("latin1"), /\/MediaBox \[0 0 595\.28 841\.89\]/u);
+  const document = {
+    title: "Sınıf iletişim çizelgesi", orientation: "landscape", pageMargin: 28.35,
+    artifactHeaderText: "Kurgu Anaokulu · Çiçekler Sınıfı",
+    nodes: [{ kind: "table", headers: ["Sıra", "Öğrenci", "Yakını"], columnWeights: [1, 4, 5], fontSize: 8.5,
+      balancePages: true, reserveAfter: 50, rows: Array.from({ length: 40 }, (_, index) => [String(index + 1), `Kurgu Öğrenci ${index + 1}`, "Kurgu veli iletişim bilgisi\nTeslim yetkili"]) }],
+  };
+  const landscape = await createSemanticTaggedPdf(document, { fontBytes });
+  assert.match(Buffer.from(landscape).toString("latin1"), /\/MediaBox \[0 0 841\.89 595\.28\]/u);
+  for (const update of [{ orientation: "diagonal" }, { pageMargin: 0 }, { pageMargin: Number.NaN }]) {
+    await assert.rejects(createSemanticTaggedPdf({ ...document, ...update }, { fontBytes }), /PDF/u);
+  }
+  for (const update of [{ fontSize: 6 }, { fontSize: Number.NaN }, { reserveAfter: -1 }, { rowGroupColumn: -1 }, { rowGroupColumn: 3 }, { rowGroupColumn: 0.5 }]) {
+    await assert.rejects(createSemanticTaggedPdf({ ...document, nodes: [{ ...document.nodes[0], ...update }] }, { fontBytes }), /PDF/u);
+  }
 });

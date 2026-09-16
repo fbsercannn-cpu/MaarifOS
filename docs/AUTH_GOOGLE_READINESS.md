@@ -1,6 +1,10 @@
 # Google Hesabı Bağlantısına Hazırlık
 
-## Karar özeti
+## 12 Eylül 2026 — 0.44.0 güncel durum
+
+Gerçek OAuth/Drive sunucu adaptörü, hesap paneli, istemcide şifreleme ve seçmeli cihaz eşitlemesi uygulanmıştır. Canlı OAuth proje bilgileri yapılandırılmadığı için gerçek Google hesabıyla etkinleştirme henüz doğrulanmamıştır. Panel bunu açıkça gösterir; hesapsız kullanım ve şifreli dosya yedeği çalışır. Kurulum ve kanıt sınırı: [Hesap servisi](../account-api/README.md). Aşağıdaki bölümler önceki hazırlık kararının tarihsel kaydıdır; güncel davranış yukarıdaki durumdur.
+
+## Tarihsel karar özeti
 
 MaarifOS’un ana çalışma biçimi **hesapsız, yerel ve çevrim dışı** kullanımdır. “İnternetsiz devam et” seçeneği her zaman kullanılabilir kalır. Google hesabı bağlantısı isteğe bağlıdır; bugün gerçek OAuth istemci kimliği, oturum veya token üretilmez.
 

@@ -19,7 +19,7 @@ async function configureClassroom(page: Page): Promise<void> {
 
 async function addStudentsSerially(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   const nameInput = sheet.getByLabel("Çocuğun adı");
 

@@ -1,0 +1,47 @@
+import {test,expect} from "@playwright/test";
+import {readFile} from "node:fs/promises";
+
+for (const action of ["unmount", "disable"] as const) test(`ZIP waits for real PDF generation and does not download after ${action}`,async({page})=>{
+  await page.clock.setFixedTime(new Date("2026-09-10T09:00:00Z"));
+  await page.setViewportSize({width:320,height:844});
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  let entered!:()=>void;
+  const fontRequested=new Promise<void>(resolve=>{entered=resolve;});
+  await page.route("**/assets/fonts/**",async route=>{entered();await gate;await route.continue();});
+  const downloads:string[]=[];
+  page.on("download",download=>downloads.push(download.suggestedFilename()));
+  await page.goto("/tests/month-package-fixture.html");
+  const panel=page.getByRole("region",{name:"Ay sonu dosyası"});
+  const button=panel.getByRole("button",{name:"Seçilenleri tek dosyada indir"});
+  await expect(button).toBeEnabled();
+  await button.click();
+  await fontRequested;
+  await expect(panel.getByRole("button",{name:"Hazırlanıyor…"})).toBeDisabled();
+  const reads=await page.evaluate(()=>(window as any).monthPackageTest.sourceReads);
+  await page.getByRole("button",{name:action==="unmount"?"Kurgu paneli kapat":"Kurgu çıktıyı engelle",exact:true}).click();
+  if(action==="unmount")await expect(panel).toHaveCount(0);
+  release();
+  await page.waitForFunction(previous=>(window as any).monthPackageTest.sourceReads>previous,reads);
+  if(action==="disable")await expect(panel.getByRole("status")).toContainText("indirmesi durduruldu");
+  else await page.waitForLoadState("networkidle");
+  expect(downloads).toEqual([]);
+});
+test("320px ay sonu seçimi tek gerçek ZIP indirir ve eksik adıma götürür",async({page})=>{
+  await page.clock.setFixedTime(new Date("2026-09-10T09:00:00Z"));
+  await page.setViewportSize({width:320,height:844});
+  await page.goto("/tests/month-package-fixture.html");
+  const panel=page.getByRole("region",{name:"Ay sonu dosyası"});
+  await expect(panel.getByRole("checkbox")).toBeChecked();
+  await panel.getByRole("checkbox").uncheck();
+  await expect(panel.getByRole("button",{name:"Seçilenleri tek dosyada indir"})).toBeDisabled();
+  await panel.getByRole("checkbox").check();
+  const pending=page.waitForEvent("download");await panel.getByRole("button",{name:"Seçilenleri tek dosyada indir"}).click();
+  const download=await pending;expect(download.suggestedFilename()).toBe("MaarifOS_Ay_Sonu_2026-09.zip");
+  const bytes=await readFile((await download.path())!);expect(bytes.subarray(0,4).toString("hex")).toBe("504b0304");
+  await expect(panel.getByRole("status")).toContainText("indirme başlatıldı");
+  await panel.getByLabel("Dosya ayı").fill("2026-11");
+  await panel.getByRole("button",{name:"Bu ayın planını hazırla"}).click();
+  await expect(page.getByRole("status",{name:"Açılan bölüm"})).toHaveText("monthly:2026-11");
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});

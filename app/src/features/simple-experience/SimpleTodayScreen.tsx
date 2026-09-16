@@ -62,6 +62,7 @@ import {
 import { QuickStatsBar, type QuickStat } from "./QuickStatsBar.tsx";
 import { OfflineStatusBadge } from "./OfflineStatusBadge.tsx";
 import { WeeklyFocusCard } from "./WeeklyFocusCard.tsx";
+import { OfficialDailyRoutinesTracker } from "./OfficialDailyRoutinesTracker.tsx";
 import "./simple-experience.css";
 import "./today-teaching.css";
 
@@ -521,6 +522,15 @@ export function SimpleTodayScreen({
           ))}
         </ul> : null}
       </section>
+
+      {classroom?.operationalStatus === "active" ? (
+        <OfficialDailyRoutinesTracker
+          onOpenAttendance={actions.onOpenAttendance}
+          onOpenQuickObservation={actions.onOpenQuickObservation}
+          onOpenPlanFlow={actions.onOpenPlanFlow}
+          onOpenDayClosure={actions.onOpenDayClosure}
+        />
+      ) : null}
 
       {classroom?.operationalStatus === "active" ? (
         <section className="simple-today__lesson-tools" aria-labelledby="simple-today-lesson-tools-title">

@@ -199,9 +199,9 @@ test("değer kanıt bağı guard'ı kimlik, rol, hedef, onay ve provenance alanl
   );
 });
 
-test("IndexedDB v7 öğrenci kasası ve değer kanıtı indekslerini tanımlar", () => {
-  assert.equal(MAARIFOS_DATABASE_VERSION, 7);
-  assert.equal(INDEXED_DB_MIGRATIONS.at(-1)?.toVersion, 7);
+test("IndexedDB v8 tam veri kasası ve değer kanıtı indekslerini tanımlar", () => {
+  assert.equal(MAARIFOS_DATABASE_VERSION, 8);
+  assert.equal(INDEXED_DB_MIGRATIONS.at(-1)?.toVersion, 8);
   assert.deepEqual(
     VALUE_EVIDENCE_LINK_INDEX_DEFINITIONS.map((definition) => ({
       name: definition.name,

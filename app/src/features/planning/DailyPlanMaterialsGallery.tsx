@@ -202,9 +202,12 @@ export function DailyPlanMaterialsGallery({
                 ) : null}
               </div>
 
-              <div
+              <iframe
+                title={previewItem.title}
+                srcDoc={previewItem.printBodyHtml}
                 className="daily-material-modal__html-view"
-                dangerouslySetInnerHTML={{ __html: previewItem.printBodyHtml }}
+                sandbox="allow-same-origin"
+                style={{ width: "100%", minHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px", background: "#ffffff" }}
               />
             </div>
           </div>

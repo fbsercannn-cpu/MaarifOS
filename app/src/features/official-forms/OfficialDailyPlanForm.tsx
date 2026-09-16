@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { OfficialConceptsAndDaysPalette } from "./OfficialConceptsAndDaysPalette.tsx";
+import { OFFICIAL_MEB_DAILY_SAMPLE_PLANS } from "./officialSamplePlansService.ts";
 import "./official-forms.css";
 
 export interface DailyPlanFormData {
@@ -137,6 +139,44 @@ export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
             <small>Resmî Format · A4 Çıktı ve Word Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <select
+              className="of-btn"
+              style={{ background: "#fff7ed", color: "#c2410c", border: "1.5px solid #ea580c", fontWeight: 700, padding: "6px 10px", cursor: "pointer" }}
+              onChange={(e) => {
+                const plan = OFFICIAL_MEB_DAILY_SAMPLE_PLANS.find(p => p.id === e.target.value);
+                if (plan) {
+                  setFormData(prev => ({
+                    ...prev,
+                    ageGroup: plan.ageGroup,
+                    domainSkills: plan.domainSkills,
+                    tendencies: plan.tendencies,
+                    socialEmotional: plan.socialEmotional,
+                    values: plan.values,
+                    literacy: plan.literacy,
+                    concepts: plan.concepts,
+                    words: plan.words,
+                    materials: plan.materials,
+                    learningEnvironments: plan.learningEnvironments,
+                    startingDay: plan.startingDay,
+                    centersPlay: plan.centersPlay,
+                    nutritionCleanup: plan.nutritionCleanup,
+                    activities: plan.activities,
+                    enrichment: plan.enrichment,
+                    support: plan.support,
+                    dayEvaluation: plan.dayEvaluation,
+                    familyEngagement: plan.familyEngagement,
+                    communityEngagement: plan.communityEngagement,
+                  }));
+                }
+              }}
+              defaultValue=""
+              aria-label="MEB Resmî Örnek Planı Yükle"
+            >
+              <option value="" disabled>⚡ MEB Resmî Örnek Planını Yükle...</option>
+              {OFFICIAL_MEB_DAILY_SAMPLE_PLANS.map(p => (
+                <option key={p.id} value={p.id}>{p.ageGroup} ({p.pageRef}): {p.planTitle}</option>
+              ))}
+            </select>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
@@ -240,6 +280,11 @@ export function OfficialDailyPlanForm({ initialData, onClose }: Props) {
                   <strong>Kavramlar:</strong>
                   <input type="text" className="of-input" value={formData.concepts} onChange={e => setFormData({ ...formData, concepts: e.target.value })} />
                   <span className="print-only-text">{formData.concepts}</span>
+                  <OfficialConceptsAndDaysPalette
+                    currentValue={formData.concepts}
+                    onSelect={(val) => setFormData({ ...formData, concepts: val })}
+                    mode="concepts"
+                  />
                 </td>
               </tr>
               <tr>

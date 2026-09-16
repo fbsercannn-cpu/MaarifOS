@@ -273,10 +273,10 @@ test("Sınıfım yoklama CTA'sı gerçek attendance sheet handler'ına ve erişi
   assert.match(simpleScreenSource, /Veli \/ yakınlar/);
   assert.match(
     simpleScreenSource,
-    /onOpenProfile\(student\.id, "details"\)/,
+    /onOpenProfile\([\s\S]{0,80}student\.id,[\s\S]{0,40}"details",[\s\S]{0,80}event\.currentTarget/,
   );
   assert.match(
     simpleScreenSource,
-    /onOpenProfile\(student\.id, "contacts"\)/,
+    /onOpenProfile\([\s\S]{0,80}student\.id,[\s\S]{0,40}"contacts",[\s\S]{0,80}event\.currentTarget/,
   );
 });

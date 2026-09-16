@@ -1,4 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { installCivilClock } from "../helpers/development-workspace-ui";
+
+test.beforeEach(async ({ page }) => {
+  await installCivilClock(page);
+});
 
 async function configureClassroomAndStudent(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
@@ -10,19 +15,28 @@ async function configureClassroomAndStudent(page: Page) {
     .getByLabel("Maarif Modeli yaş grubu", { exact: true })
     .selectOption({ label: "48–60 ay" });
   await setup.locator("details.classroom-calendar-details > summary").click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-08-31");
   await setup.locator("details.classroom-advanced-settings > summary").click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
   await expect(setup).toBeHidden();
+  await expect(page.getByRole("button", { name: "Eğitim yılını başlat", exact: true })).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill("Etkinlik Kanıt Çocuğu");
   await addStudent.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
   await expect(addStudent).toBeHidden();
+}
+
+async function openActivityCatalogue(page: Page) {
+  await page.getByRole("navigation", { name: "Ana menü", exact: true })
+    .getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
+  await page.getByRole("button", { name: /^Oyun ve materyaller/u }).click();
+  await expect(page.locator("main.activity-studio")).toBeVisible();
 }
 
 test("Bugün önerisine dokununca genel listenin başı değil exact etkinlik açılır", async ({
@@ -31,7 +45,7 @@ test("Bugün önerisine dokununca genel listenin başı değil exact etkinlik a�
   await page.goto("/?native=1");
   await configureClassroomAndStudent(page);
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
-  await page.getByRole("button", { name: /Bugünün akışını ve haftayı aç/ }).click();
+  await page.getByRole("button", { name: "Günün ayrıntıları", exact: true }).click();
   const suggestion = page
     .locator(".simple-today__suggestion-list > button")
     .first();
@@ -39,14 +53,12 @@ test("Bugün önerisine dokununca genel listenin başı değil exact etkinlik a�
   expect(suggestedTitle).toBeTruthy();
   await suggestion.click();
 
-  const cards = page.locator("article.activity-card");
-  await expect(cards).toHaveCount(1);
-  await expect(cards.getByRole("heading", { level: 2 })).toHaveText(
-    suggestedTitle!,
-  );
-  await expect(page.locator(".activity-studio__search input")).toHaveValue(
-    suggestedTitle!,
-  );
+  const guide = page.locator("main.activity-teacher-guide");
+  await expect(guide).toHaveCount(1);
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(suggestedTitle!);
+  await expect(guide.getByText("Uygulama rehberi", { exact: true })).toBeVisible();
+  await expect(page.locator("article.activity-card")).toHaveCount(0);
+  await expect(page.locator(".activity-studio__search input")).toHaveCount(0);
 });
 
 test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe bağlanır", async ({
@@ -55,10 +67,16 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
   test.slow();
   await page.goto("/?native=1");
   await configureClassroomAndStudent(page);
-  await page.getByRole("button", { name: "Etkinlikler", exact: true }).click();
+  await openActivityCatalogue(page);
 
   const activity = page.locator("article.activity-card").first();
-  await activity.getByRole("button", { name: /etkinliğini planıma ekle$/u }).click();
+  const activityTitle = (await activity.getByRole("heading").textContent())?.trim() ?? "";
+  expect(activityTitle).not.toBe("");
+  await activity.getByRole("button", { name: /rehberini aç$/u }).click();
+  const guide = page.locator("main.activity-teacher-guide");
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await guide.locator("summary").filter({ hasText: "Program bağlantısı ve araçlar" }).click();
+  await guide.getByRole("button", { name: "Planıma ekle", exact: true }).click();
 
   const planDialog = page.getByRole("dialog", { name: "Günlük plan oluşturma" });
   await expect(planDialog).toBeVisible();
@@ -72,14 +90,14 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
   // Native kaydırma yüzeyindeki momentum tıklamasını yutmasın; gerçek parmak
   // kullanımındaki kısa duraklamayı iki telefon motorunda da taklit et.
   await page.waitForTimeout(250);
-  await target.tap();
+  await target.click();
   await expect(
     planDialog
       .getByRole("navigation", { name: "Günlük plan oluşturma adımları" })
       .getByRole("button", { name: /Kontrol/u }),
   ).toHaveAttribute("aria-current", "step");
   await planDialog.getByText("Başlık ve saati değiştir", { exact: true }).click();
-  await planDialog.getByLabel("Plan tarihi").fill("2026-08-28");
+  await planDialog.getByLabel("Plan tarihi").fill("2026-09-11");
   await planDialog.getByRole("button", { name: "Planı kaydet" }).click();
 
   await expect(planDialog).toBeHidden();
@@ -101,7 +119,7 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
     store.close();
     const plan = snapshot.plans.find(
       (record) =>
-        record.planType === "daily" && record.civilDate === "2026-08-28",
+        record.planType === "daily" && record.civilDate === "2026-09-11",
     );
     const activityRecord = snapshot.activities.find(
       (record) => record.planId === plan?.id,
@@ -116,10 +134,10 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
   });
 
   expect(saved).toEqual({
-    planDate: "2026-08-28",
-    planSourceDate: "2026-08-28",
-    activityDate: "2026-08-28",
-    activitySourceDate: "2026-08-28",
+    planDate: "2026-09-11",
+    planSourceDate: "2026-09-11",
+    activityDate: "2026-09-11",
+    activitySourceDate: "2026-09-11",
   });
 });
 
@@ -131,7 +149,7 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
   test.slow();
   await page.goto("/?native=1");
   await configureClassroomAndStudent(page);
-  await page.getByRole("button", { name: "Etkinlikler", exact: true }).click();
+  await openActivityCatalogue(page);
   await expect(
     page.getByRole("heading", { name: "Etkinlik ve Materyal Stüdyosu" }),
   ).toBeVisible();
@@ -145,7 +163,10 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
   const activityTitle = (await activity.getByRole("heading").textContent())?.trim() ?? "";
   expect(activityTitle).not.toBe("");
 
-  const unrelatedActivityId = await page.evaluate(async () => {
+  const sourceActivityId = await activity.getAttribute("data-activity-id");
+  expect(sourceActivityId).toBeTruthy();
+
+  const unrelated = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
     const attendance = await import("/src/core/domain/attendance.ts");
     const store = new core.IndexedDbDataStore();
@@ -183,7 +204,7 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
           planId,
           title: "İlişkisiz canlı etkinlik A",
           startTime: "09:00",
-          status: "in_progress",
+          status: "planned",
           assignmentMode: "whole-class",
           studentIds: [],
           curriculumProfileSnapshot: classroom.curriculumProfileSnapshot,
@@ -199,18 +220,23 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
       },
     );
     store.close();
-    return activityId;
+    return { activityId, planId };
   });
 
+  await activity.getByRole("button", { name: /rehberini aç$/u }).click();
+  const guide = page.locator("main.activity-teacher-guide");
+  await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
+  await guide.locator("summary").filter({ hasText: "Program bağlantısı ve araçlar" }).click();
+
   const popupPromise = page.waitForEvent("popup");
-  await activity.getByRole("button", { name: /materyalini yazdır$/u }).click();
+  await guide.getByRole("button", { name: "Yazdır", exact: true }).click();
   const popup = await popupPromise;
   await popup.waitForLoadState("load");
   expect(popup.url()).toMatch(/^blob:/u);
   await expect(popup).toHaveTitle(new RegExp(activityTitle, "u"));
   await popup.close();
 
-  await activity.getByRole("button", { name: /Çocuk Modunda uygula$/u }).click();
+  await guide.getByRole("button", { name: /Çocuk Modunda uygula$/u }).click();
   const childMode = page.locator("main.activity-child-mode");
   await expect(childMode).toBeVisible();
   await childMode.getByRole("button", { name: "Nokta ekle", exact: true }).click();
@@ -238,6 +264,8 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
     await page.locator(".quick-observation-page").getAttribute("data-initial-draft-length"),
   );
   expect(seedLength).toBeGreaterThan(0);
+  await expect(page.locator(".quick-selected-child strong")).toHaveText("Etkinlik Kanıt Çocuğu");
+  await page.locator(".quick-selected-child").getByRole("button", { name: "Çocuğu değiştir", exact: true }).click();
   const selectedStudent = page
     .getByRole("region", { name: "Gözlem yapılacak çocuk" })
     .getByRole("button", { name: "Etkinlik Kanıt Çocuğu", exact: true });
@@ -270,10 +298,11 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
     };
   });
   expect(savedLineage.observationCount).toBe(1);
-  expect(savedLineage.applicationActivityId).not.toBe(unrelatedActivityId);
+  expect(savedLineage.applicationActivityId).not.toBe(unrelated.activityId);
+  expect(savedLineage.applicationPlanId).not.toBe(unrelated.planId);
   expect(savedLineage.observationActivityId).toBe(
     savedLineage.applicationActivityId,
   );
   expect(savedLineage.observationPlanId).toBe(savedLineage.applicationPlanId);
-  expect(savedLineage.sourceActivityId).toBeTruthy();
+  expect(savedLineage.sourceActivityId).toBe(sourceActivityId);
 });

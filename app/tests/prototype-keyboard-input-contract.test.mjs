@@ -6,6 +6,13 @@ const prototypeSource = await readFile(
   new URL("../src/Prototype.tsx", import.meta.url),
   "utf8",
 );
+const officialLibrarySource = await readFile(
+  new URL(
+    "../src/features/curriculum/TymmOfficialLibraryPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function jsxTags(componentName) {
   return [...prototypeSource.matchAll(
@@ -64,4 +71,13 @@ test("Prototype metin girişlerini mobil klavye bileşenlerinden geçirir", () =
     assert.ok(tag, `${id} KeyboardInput ile sunulmalıdır.`);
     assert.equal(attribute(tag, "type"), expectedType);
   }
+});
+
+test("TYMM kaynak araması mobil klavye ve güvenli inset sözleşmesini kullanır", () => {
+  assert.equal(
+    /<(?:input|textarea)\b/u.test(officialLibrarySource),
+    false,
+    "TYMM kütüphanesinde ham metin girişi kullanılamaz.",
+  );
+  assert.match(officialLibrarySource, /<KeyboardInput\s+[\s\S]*?type="search"/u);
 });

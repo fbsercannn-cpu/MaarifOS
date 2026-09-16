@@ -12,15 +12,19 @@ test("route sözleşmesi Hediye Alpha navigasyonundan yalnız ekranları üretir
   assert.deepEqual(APP_ROUTES, [
     { id: "today", path: "/", label: "Bugün" },
     { id: "classroom", path: "/classroom", label: "Sınıfım" },
-    { id: "activities", path: "/activities", label: "Etkinlikler" },
+    { id: "activities", path: "/activities", label: "Gözlem" },
     { id: "plans", path: "/plans", label: "Planlar" },
-    { id: "documents", path: "/documents", label: "Çıktılar" },
+    { id: "documents", path: "/documents", label: "Belgeler" },
   ]);
   assert.deepEqual(
-    APP_ROUTES.map(({ id }) => id),
-    visiblePrimaryNavigation().map(({ id }) =>
-      id === "capture" ? "activities" : id,
-    ),
+    visiblePrimaryNavigation().map(({ id, label }) => ({ id, label })),
+    [
+      { id: "today", label: "Bugün" },
+      { id: "classroom", label: "Sınıfım" },
+      { id: "capture", label: "Gözlem" },
+      { id: "plans", label: "Planlar" },
+      { id: "documents", label: "Belgeler" },
+    ],
   );
   assert.ok(Object.isFrozen(APP_ROUTES));
   assert.ok(APP_ROUTES.every(Object.isFrozen));

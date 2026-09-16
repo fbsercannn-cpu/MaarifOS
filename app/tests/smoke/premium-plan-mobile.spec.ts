@@ -33,11 +33,69 @@ test("premiumPilot sorgusu dar telefonda sade TYMM plan ekranını değiştirmez
     "built-in-maarif-library-entry",
   );
   await expect(builtInMaarifLibrary).toContainText(
-    "60–72 AY · HAZIR MAARİF İÇERİĞİ",
+    "60–72 AY · DÜZENLENEBİLİR İÇERİK",
   );
   await expect(builtInMaarifLibrary).toContainText(
-    "Kaynak bütünlüğü doğrulanmış içerikler",
+    "MaarifOS’un özgün içeriği · TYMM’ye dayalı",
   );
+
+  const officialResources = plans.getByTestId("tymm-official-library-panel");
+  await expect(officialResources.getByRole("button")).toHaveCount(1);
+  await expect(officialResources).toContainText(
+    "erişilemeyen üç resmî PDF bağlantısı",
+  );
+  await expect(
+    plans.getByRole("heading", { name: "Etkinlik ve okul ekleri" }),
+  ).toHaveCount(0);
+  const advancedSupport = plans.getByRole("button", {
+    name: /Gelişmiş plan desteğini aç/u,
+  });
+  await advancedSupport.click();
+  const quickTools = plans.getByRole("region", { name: "Etkinlik ve okul ekleri" });
+  await expect(quickTools).toBeVisible();
+  await expect(quickTools.getByRole("button")).toHaveCount(3);
+  await plans
+    .getByRole("button", { name: /Gelişmiş plan desteğini kapat/u })
+    .click();
+  await expect(
+    plans.getByRole("heading", { name: "Etkinlik ve okul ekleri" }),
+  ).toHaveCount(0);
+  const officialOpen = officialResources.getByTestId("tymm-official-library-open");
+  await officialOpen.click();
+  const officialDialog = page.getByRole("dialog", {
+    name: "Resmî TYMM okul öncesi kütüphanesi",
+  });
+  const officialFeatured = officialDialog.getByTestId("tymm-library-featured");
+  await officialFeatured
+    .getByText("Bu plan için öne çıkan kaynaklar", { exact: true })
+    .click();
+  const officialDetails = officialFeatured.locator(".tymm-library-plan-examples");
+  await officialDetails
+    .getByText("MEB’de yayımlanmış plan örnekleri", { exact: true })
+    .click();
+  await expect(officialDetails.getByRole("link")).toHaveCount(5);
+  await expect(officialDetails).toContainText("planınıza otomatik aktarılmaz");
+
+  const officialMetrics = await officialDetails.evaluate((element) => {
+    const summary = element.querySelector("summary");
+    const links = [...element.querySelectorAll("a")];
+    const textNodes = [...element.querySelectorAll("small, p")];
+    return {
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      summaryHeight: summary?.getBoundingClientRect().height ?? 0,
+      linkHeights: links.map((link) => link.getBoundingClientRect().height),
+      textSizes: textNodes.map((node) => Number.parseFloat(getComputedStyle(node).fontSize)),
+    };
+  });
+  expect(officialMetrics.scrollWidth).toBeLessThanOrEqual(officialMetrics.clientWidth);
+  expect(officialMetrics.summaryHeight).toBeGreaterThanOrEqual(44);
+  expect(officialMetrics.linkHeights.every((height) => height >= 44)).toBe(true);
+  expect(officialMetrics.textSizes.every((size) => size >= 12)).toBe(true);
+  await officialDialog
+    .getByRole("button", { name: "Resmî kaynak kütüphanesini kapat" })
+    .click();
+  await expect(officialOpen).toBeFocused();
 
   const layout = await plans.evaluate((element) => ({
     scrollWidth: element.scrollWidth,
@@ -48,6 +106,50 @@ test("premiumPilot sorgusu dar telefonda sade TYMM plan ekranını değiştirmez
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
   expect(layout.clippedTitles).toEqual([]);
+
+  const guideEntry = page.getByTestId("tymm-age-guide-entry");
+  await expect(guideEntry).toContainText("Resmî program ve plan kaynağı");
+  await expect(guideEntry).toContainText("Yaş bandına göre öğrenme çıktıları");
+  await expect(guideEntry.getByTestId("tymm-guide-open")).toHaveText(/Yaş rehberini aç/u);
+  await guideEntry.getByTestId("tymm-guide-open").click();
+  const guide = page.getByRole("dialog", { name: "TYMM 2024 Yaş Rehberi" });
+  await expect(guide.getByRole("tab")).toHaveCount(0);
+  const ageGroup = guide.getByRole("group", { name: "TYMM yaş bandı" });
+  await expect(ageGroup.getByRole("button", { pressed: true })).toHaveCount(1);
+  const guideExamples = guide.getByTestId("tymm-official-examples");
+  await expect(guideExamples).not.toHaveAttribute("open", "");
+  await guideExamples.getByText("Resmî örnek planlar", { exact: true }).click();
+  await expect(guideExamples.getByRole("link")).toHaveCount(5);
+  await expect(
+    guideExamples.getByRole("link").first(),
+  ).toHaveAccessibleName(/yeni sekmede/u);
+  const programDetails = guide.getByTestId("tymm-program-details");
+  await expect(programDetails).not.toHaveAttribute("open", "");
+  await programDetails.getByText("Program ayrıntıları", { exact: true }).click();
+  await expect(programDetails).toHaveAttribute("open", "");
+  const domainGroup = programDetails.getByRole("group", { name: "Öğrenme alanları" });
+  await expect(domainGroup.getByRole("button", { pressed: true })).toHaveCount(1);
+  await expect(
+    guide.getByRole("link", { name: /Resmî program PDF’sini yeni sekmede aç/u }),
+  ).toHaveAttribute(
+    "href",
+    "https://tymm.meb.gov.tr/assets/pdf/2024programokuloncesiOnayli.pdf",
+  );
+  const guideMetrics = await guide.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+    linkHeights: [...element.querySelectorAll("a")].map(
+      (link) => link.getBoundingClientRect().height,
+    ),
+    textSizes: [...element.querySelectorAll("small, p, .d1-kicker, .tymm-age-tabs strong, .tymm-domain-tabs span, .tymm-domain-tabs strong, .tymm-outcome-list li > span")].map((node) =>
+      Number.parseFloat(getComputedStyle(node).fontSize),
+    ),
+  }));
+  expect(guideMetrics.scrollWidth).toBeLessThanOrEqual(guideMetrics.clientWidth);
+  expect(guideMetrics.linkHeights.every((height) => height >= 44)).toBe(true);
+  expect(guideMetrics.textSizes.every((size) => size >= 12)).toBe(true);
+  await guide.getByRole("button", { name: "TYMM 2024 Yaş Rehberi ekranını kapat" }).click();
+  await expect(guide).toBeHidden();
 
   await builtInMaarifLibrary.click();
   const builtInMaarifPlans = page.getByTestId("premium-plan-center");

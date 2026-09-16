@@ -29,6 +29,17 @@ function weekly(periodStart, periodEnd) {
   };
 }
 
+test("resmî tarih aralığının öğretmen tarafından yeniden adlandırılması ara tatili değiştirmez", () => {
+  for (const name of ["2026-2027", "Güneş Sınıfı Eğitim Yılı", ""]) {
+    const result = resolveTeacherWeekTeachingDays({
+      academicYear: { ...officialYear, name, startDate: "2026-09-01", endDate: "2027-08-31" },
+      weekly: weekly("2026-11-16", "2026-11-22"), classroomSchedule: schedule,
+    });
+    assert.deepEqual(result.expectedCivilDates, []);
+    assert.equal(result.provenance.mode, "official-meb-2026-2027");
+  }
+});
+
 test("2026–2027 MEB profilinde uyum ve normal dönem haftalarını ayrı provenance ile exact çözer", () => {
   const adaptation = resolveTeacherWeekTeachingDays({
     academicYear: officialYear,

@@ -15,8 +15,8 @@ async function configureClassroom(page: Page) {
     .filter({ hasText: "Takvim ayrıntıları" })
     .locator("summary")
     .click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
   await setup
     .locator("details")
     .filter({ hasText: "İleri ayarlar" })
@@ -29,16 +29,30 @@ async function configureClassroom(page: Page) {
 
 async function addChild(page: Page, name: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "İlk öğrenciyi ekle", exact: true }).click();
+  await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
   await addStudent.getByLabel("Çocuğun adı").fill(name);
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 }
 
+async function openClassroomAttendance(page: Page) {
+  const classroom = page.getByRole("main", { name: "Sınıfım", exact: true });
+  await expect(classroom).toBeVisible();
+  const operations = classroom.locator("details.simple-classroom__operations");
+  if ((await operations.getAttribute("open")) === null) {
+    await operations.locator(":scope > summary").click();
+  }
+  await operations
+    .getByRole("button", {
+      name: /^Bugünün yoklaması (?:Çocuklara dokunarak işaretleyin|Tamamlandı)$/u,
+    })
+    .click();
+}
+
 async function openAttendanceDetail(page: Page, childName: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-  await page.getByRole("button", { name: "Bugünün yoklaması" }).click();
+  await openClassroomAttendance(page);
   const attendance = page.getByRole("dialog", { name: "Bugünün devam durumu" });
   const detailTrigger = attendance.getByRole("button", {
     name: `${childName} için yoklama ayrıntısını aç`,
@@ -101,7 +115,15 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
     .locator("button.simple-student-list__profile")
     .filter({ hasText: childName })
     .click();
-  const history = page.getByRole("region", { name: "Yoklama geçmişi" });
+  const profile = page.getByRole("dialog", {
+    name: `${childName} profili`,
+    exact: true,
+  });
+  const archive = profile.locator("details.student-profile-context-details");
+  if ((await archive.getAttribute("open")) === null) {
+    await archive.locator(":scope > summary").click();
+  }
+  const history = profile.getByRole("region", { name: "Yoklama geçmişi" });
   await expect(history).toContainText("Geldi · Giriş");
   await expect(history).not.toContainText("Erken ayrıldı");
 });

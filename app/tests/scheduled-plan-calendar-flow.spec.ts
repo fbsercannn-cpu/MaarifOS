@@ -224,6 +224,7 @@ test("mobil Planlar → okul etkinliği → tarih → akış → düzenle → re
   await expect(page.getByText("Kurgu dostluk çemberi", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
   await page.getByRole("button", { name: /Okul etkinliği ekle/ }).click();
   const calendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await calendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();
@@ -264,6 +265,7 @@ test("mobil Planlar → okul etkinliği → tarih → akış → düzenle → re
 
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
   await page.getByRole("button", { name: /Okul etkinliği ekle/ }).click();
   const reloadedCalendar = page.getByRole("dialog", { name: "Eğitim takvimi" });
   await reloadedCalendar.getByRole("gridcell", { name: /^8 Eylül 2026/ }).click();

@@ -136,3 +136,42 @@ test("arayüz dört temel bilgiyi tek formda toplar ve tehlikeli işlemleri baş
   assert.match(globalCss, /body\s*\{[\s\S]*?min-width:\s*0;/u);
   assert.doesNotMatch(globalCss, /body\s*\{[\s\S]*?min-width:\s*320px;/u);
 });
+
+test("sona ermiş yıl geçişi zorunlu kararı ayrıntılardan önce sunar", async () => {
+  const [prototypeSource, prototypeCss] = await Promise.all([
+    readFile(new URL("../../src/Prototype.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../src/prototype.css", import.meta.url), "utf8"),
+  ]);
+
+  const compactIndex = prototypeSource.indexOf(
+    'className="academic-year-transition-compact"',
+  );
+  const actionIndex = prototypeSource.indexOf(
+    "{renderClassroomFormFeedback()}",
+    compactIndex,
+  );
+  const detailsIndex = prototypeSource.indexOf(
+    'className="classroom-setup-edit-details"',
+    compactIndex,
+  );
+
+  assert.ok(compactIndex >= 0);
+  assert.ok(actionIndex > compactIndex);
+  assert.ok(detailsIndex > actionIndex);
+  assert.match(prototypeSource, /Eski dönemden yeni döneme geçiş/u);
+  assert.match(prototypeSource, /\? "Yeni eğitim yılına geç"/u);
+  assert.match(prototypeSource, /Çocukları yeni sınıfa taşımayı ve eski kayıtları arşivlemeyi onayla/u);
+  assert.match(prototypeSource, /Ayrıntıları değiştir/u);
+  assert.match(prototypeSource, /Okul, öğretmen, takvim ve çalışma saatleri/u);
+  assert.match(prototypeSource, /renderClassroomSetupFields\(\)/u);
+  assert.doesNotMatch(
+    prototypeSource,
+    /className="classroom-advanced-settings"\s+open=\{academicYearTransitionRequired/u,
+  );
+  assert.match(
+    prototypeSource,
+    /configuredClassroom\?\.operationalStatus !== "ended"[\s\S]*?OFFICIAL_ACADEMIC_CALENDAR_2026_2027\.dataStartDate/u,
+  );
+  assert.match(prototypeCss, /\.academic-year-transition-compact\s*\{/u);
+  assert.match(prototypeCss, /\.classroom-setup-edit-details\s*\{/u);
+});

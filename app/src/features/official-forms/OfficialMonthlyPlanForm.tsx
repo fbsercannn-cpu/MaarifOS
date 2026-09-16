@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { OfficialConceptsAndDaysPalette } from "./OfficialConceptsAndDaysPalette.tsx";
+import { OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS } from "./officialSamplePlansService.ts";
 import "./official-forms.css";
 
 export interface MonthlyPlanFormData {
@@ -210,6 +212,42 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
             <small>Resmî Format · A4 Çıktı ve Word (.doc) Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
+            <select
+              className="of-btn"
+              style={{ background: "#f0f9ff", color: "#0369a1", border: "1.5px solid #0284c7", fontWeight: 700, padding: "6px 10px", cursor: "pointer" }}
+              onChange={(e) => {
+                const plan = OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS.find(p => p.id === e.target.value);
+                if (plan) {
+                  setFormData(prev => ({
+                    ...prev,
+                    month: plan.monthName,
+                    ageGroup: plan.ageGroup,
+                    domainSkills: plan.domainSkills,
+                    tendencies: plan.tendencies,
+                    socialEmotional: plan.socialEmotional,
+                    values: plan.values,
+                    literacy: plan.literacy,
+                    concepts: plan.concepts,
+                    specialDays: plan.specialDays,
+                    learningExperiences: plan.learningExperiences,
+                    enrichment: plan.enrichment,
+                    support: plan.support,
+                    familyCommunityEngagement: plan.familyCommunityEngagement,
+                    childEvaluation: plan.childEvaluation,
+                    programEvaluation: plan.programEvaluation,
+                    teacherEvaluation: plan.teacherEvaluation,
+                    teacherReflections: plan.teacherReflections,
+                  }));
+                }
+              }}
+              defaultValue=""
+              aria-label="MEB Resmî Örnek Aylık Planı Yükle"
+            >
+              <option value="" disabled>⚡ MEB Resmî Örnek Planı Yükle...</option>
+              {OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS.map(p => (
+                <option key={p.id} value={p.id}>{p.ageGroup} ({p.pageRef}): {p.planTitle}</option>
+              ))}
+            </select>
             <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
@@ -393,6 +431,11 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                     onChange={e => updateField("concepts", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.concepts}</div>
+                  <OfficialConceptsAndDaysPalette
+                    currentValue={formData.concepts}
+                    onSelect={(val) => updateField("concepts", val)}
+                    mode="concepts"
+                  />
                 </td>
               </tr>
               <tr>
@@ -405,6 +448,11 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                     onChange={e => updateField("specialDays", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.specialDays}</div>
+                  <OfficialConceptsAndDaysPalette
+                    currentValue={formData.specialDays}
+                    onSelect={(val) => updateField("specialDays", val)}
+                    mode="specialDays"
+                  />
                 </td>
               </tr>
             </tbody>

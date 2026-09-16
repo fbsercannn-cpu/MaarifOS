@@ -1185,6 +1185,7 @@ test("öğretmen yaklaşım tercihini plan katmanlarına kaydeder; etkinlik snap
     pack: content,
     curriculumProfile: profile,
     teacherPreferredLensId: "guided-play",
+    now: new Date("2026-09-07T07:00:00.000Z"),
   });
   const before = await store.readSnapshot();
   const templatesBefore = new Map(

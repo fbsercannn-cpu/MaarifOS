@@ -117,21 +117,21 @@ test("sürümlü yedek üretir ve değiştirilmiş içeriği reddeder", async ({
 
   expect(result.manifest.format).toBe("maarifos-json");
   expect(result.manifest.backupVersion).toBe(1);
-  expect(result.manifest.dataSchemaVersion).toBe(6);
+  expect(result.manifest.dataSchemaVersion).toBe(11);
   expect(result.manifest.createdAt).toBe("2026-07-22T09:30:00.000Z");
   expect(result.manifest.civilDate).toBe("2026-07-22");
   expect(result.manifest.payloadChecksum).toMatch(/^[0-9a-f]{64}$/);
   expect(result.manifest.entityCounts.students).toBe(1);
   expect(result.studentCount).toBe(1);
-  expect(result.upgradedLegacyVersion).toBe(6);
+  expect(result.upgradedLegacyVersion).toBe(11);
   expect(result.upgradedLegacyLinkCount).toBe(0);
-  expect(result.upgradedV2Version).toBe(6);
+  expect(result.upgradedV2Version).toBe(11);
   expect(result.upgradedV2FirstName).toBe("Test Kaydı");
   expect(result.upgradedV2LastName).toBe("A");
-  expect(result.upgradedV3Version).toBe(6);
+  expect(result.upgradedV3Version).toBe(11);
   expect(result.upgradedV3CalendarCount).toBe(0);
   expect(result.upgradedV3FeedbackCount).toBe(0);
-  expect(result.upgradedV4Version).toBe(6);
+  expect(result.upgradedV4Version).toBe(11);
   expect(result.upgradedV4ValueLinkCount).toBe(0);
   expect(result.corruptionError).toContain("bütünlük kontrolünü geçemedi");
 });
@@ -288,7 +288,7 @@ test("takvim ve haricî AI geri bildirimi güncel yedekte kayıpsız döner", as
     };
   });
 
-  expect(result.version).toBe(6);
+  expect(result.version).toBe(11);
   expect(result.calendarTitle).toBe("Yerel kurum kapanışı");
   expect(result.calendarNote).toBe("Öğretmen tarafından okul takvimine işlendi.");
   expect(result.calendarType).toBe("no_school");
@@ -649,6 +649,8 @@ test("yoklama olaylarını kayıpsız yedekler, N-1 kaydı okur ve bozuk olayı 
 });
 
 test("gün sonu kapanışını yedekler, geri okur ve kanıt-kod tahrifini reddeder", async ({ page }) => {
+  // This fixture deliberately carries a missing daily plan; weekends do not require one.
+  await page.clock.setFixedTime(new Date("2026-09-10T09:00:00.000Z"));
   await page.goto("/tests/runtime-fixture.html");
   const result = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
@@ -2616,7 +2618,7 @@ test("V5 öğretmen onaylı değer kanıtını kayıpsız taşır; tamper, merge
     return response;
   }, premiumPlanSource);
 
-  expect(result.version).toBe(6);
+  expect(result.version).toBe(11);
   expect(result.roundTripLinks).toEqual(result.expectedLinks);
   expect(result.roundTripLinks).toHaveLength(2);
   expect(result.predecessorDeletedAt).toBe(result.replacementConfirmedAt);
@@ -3630,7 +3632,7 @@ test("D1 plan-etkinlik-ham gözlem-onay-taslak grafını V3 yedekle birebir geri
     };
   });
 
-  expect(result.dataSchemaVersion).toBe(6);
+  expect(result.dataSchemaVersion).toBe(11);
   expect(result.rawText).toBe("  Boşluklarıyla aynen korunacak kurgu ham gözlem.  ");
   expect(result.observationId).toBe("00000000-0000-4000-8000-000000000176");
   expect(result.link.id).toBe(result.expectedLinkId);
@@ -4383,7 +4385,7 @@ test("app-lock yalnız türetilmiş doğrulayıcı saklar ve deneme gecikmesini 
   expect(result.backedUpSettingType).toBe("app-lock-config-v1");
 });
 
-test("IndexedDB v2, v3 ve v4 verisini v7'ye kayıpsız taşır; öğrenci kasası, kanıt store ve ilişki indekslerini açar", async ({
+test("IndexedDB v2, v3 ve v4 verisini v8'e kayıpsız taşır; öğrenci kasası, kanıt store ve ilişki indekslerini açar", async ({
   page,
 }) => {
   await page.goto("/tests/runtime-fixture.html");
@@ -4534,7 +4536,7 @@ test("IndexedDB v2, v3 ve v4 verisini v7'ye kayıpsız taşır; öğrenci kasas�
   expect(result.every((item) => item.valueEvidenceCount === 0)).toBe(true);
   expect(
     result.every(
-      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 7,
+      (item) => item.valueEvidenceStoreMetadata.databaseVersion === 8,
     ),
   ).toBe(true);
   expect(result[0].valueEvidenceStoreMetadata.indexes).toEqual([

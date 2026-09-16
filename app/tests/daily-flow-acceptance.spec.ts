@@ -24,7 +24,7 @@ async function configureClassroomWithStudent(page: Page) {
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page
-    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/u })
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
     .last()
     .click();
   const addStudent = page.getByRole("dialog", { name: "Çocuk ekle" });
@@ -72,7 +72,7 @@ test("eksik belge içeriği indirme hatası vermeden doğru hazırlama yüzeyini
 }) => {
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   await configureClassroomWithStudent(page);
-  await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
+  await page.getByRole("button", { name: "Belgeler", exact: true }).click();
 
   const monthlyOutput = page
     .locator(".simple-action-list > button")
@@ -88,7 +88,7 @@ test("eksik belge içeriği indirme hatası vermeden doğru hazırlama yüzeyini
   await expect(
     page.getByRole("dialog", { name: "Kayıtlı öğretmen planı" }),
   ).toBeHidden();
-  await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
+  await page.getByRole("button", { name: "Belgeler", exact: true }).click();
   const observationOutput = page
     .locator(".simple-action-list > button")
     .filter({ hasText: "Veli veya idare özeti" });
@@ -155,7 +155,7 @@ test("zincirsiz günlük kayıt hazır görünmez ve çıktı eylemi plan omurga
     store.close();
   });
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Çıktılar", exact: true }).click();
+  await page.getByRole("button", { name: "Belgeler", exact: true }).click();
 
   const dailyOutput = page
     .locator(".simple-action-list > button")

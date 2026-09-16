@@ -7,6 +7,7 @@ import {
   composeStudentDisplayName,
   formatStudentPhone,
   isStudentProfilePhotoDataUrl,
+  isStudentSpreadsheetImportReview,
   isValidStudentNationalIdentityNumber,
   normalizeStudentContacts,
   normalizeStudentCareDetails,
@@ -70,6 +71,61 @@ import {
 } from "../../src/core/domain/classroom.ts";
 import { createEmptySnapshot } from "../../src/core/domain/model.ts";
 import { persistStudentRosterChange } from "../../src/features/dashboard/dashboard-data.ts";
+import { isEntityRecord } from "../../src/core/repository/entities.ts";
+
+test("anne ve baba mesleği telefonsuz kayıtta korunur; acil iletişim telefon gerektirir", () => {
+  const contacts = normalizeStudentContacts([
+    { id: "00000000-0000-4000-8000-000000000981", kind: "mother", relationship: "Anne", name: "Kurgu Anne", occupation: " Mimar ", phone: "" },
+    { id: "00000000-0000-4000-8000-000000000982", kind: "father", relationship: "Baba", name: "Kurgu Baba", occupation: "Teknisyen", phone: "0555 123 45 67" },
+    { id: "00000000-0000-4000-8000-000000000983", kind: "other", relationship: "Teyze", name: "Kurgu Yakın", phone: "0555 123 45 68", isEmergencyContact: true },
+  ]);
+  assert.equal(contacts[0].occupation, "Mimar");
+  assert.equal(contacts[0].phone, "");
+  const record = {
+    id: "00000000-0000-4000-8000-000000000984", displayName: "Kurgu Çocuk", contacts,
+    createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T06:00:00.000Z", civilDate: "2026-09-07", schemaVersion: 9,
+  };
+  assert.deepEqual(studentProfileFromRecord(record)?.contacts, contacts);
+  assert.equal(isEntityRecord("students", record), true);
+  assert.throws(() => normalizeStudentContacts([{ ...contacts[0], isEmergencyContact: true }]), /telefon/);
+  assert.throws(() => normalizeStudentContacts([{ ...contacts[0], occupation: "x".repeat(121) }]), /120/);
+});
+
+test("özel çocuk notu ve isteğe bağlı aile durumları ayrı korunur", () => {
+  const careDetails = normalizeStudentCareDetails({
+    childPrivateNotes: " Geçişlerde önceden haber verilmesi yardımcı oluyor. ",
+    familySituationNotes: " Ailenin bildirdiği okul iletişim düzeni. ",
+    parentsSeparated: true, motherDeceased: false, fatherDeceased: true, martyrChild: true, veteranChild: true,
+  });
+  assert.deepEqual(careDetails, {
+    childPrivateNotes: "Geçişlerde önceden haber verilmesi yardımcı oluyor.",
+    familySituationNotes: "Ailenin bildirdiği okul iletişim düzeni.",
+    parentsSeparated: true, fatherDeceased: true, martyrChild: true, veteranChild: true,
+  });
+  assert.throws(() => normalizeStudentCareDetails({ childPrivateNotes: "x".repeat(2001) }), /2000/);
+  assert.equal(normalizeStudentCareDetails({ motherDeceased: false, parentsSeparated: false }), undefined);
+  const migrated = studentProfileFromRecord({ id: crypto.randomUUID(), displayName: "Kurgu Çocuk", careDetails,
+    schemaVersion: 8, profileSchemaVersion: 8, createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T06:00:00.000Z" });
+  assert.deepEqual(migrated.careDetails, careDetails);
+  assert.equal(migrated.profileSchemaVersion, STUDENT_PROFILE_SCHEMA_VERSION);
+});
+
+test("Excel mükerrer inceleme kanıtı yalnız açık karar, UUID ve UTC zaman çizgisi kabul eder", () => {
+  const record = { id: "00000000-0000-4000-8000-000000000985", createdAt: "2026-09-07T06:00:00.000Z", updatedAt: "2026-09-07T08:00:00.000Z" };
+  const review = { sourceRow: 7, reviewedAtUtc: "2026-09-07T07:00:00.000Z", duplicateCandidateIds: ["00000000-0000-4000-8000-000000000986"], _MUKERRER_INCELE: true, decision: "distinct-student-confirmed" };
+  assert.equal(isStudentSpreadsheetImportReview(review, record), true);
+  for (const invalid of [
+    { ...review, sourceRow: 0 }, { ...review, sourceRow: 1.5 }, { ...review, sourceRow: 1_048_577 },
+    { ...review, reviewedAtUtc: "2026-09-07T05:59:59.000Z" },
+    { ...review, reviewedAtUtc: "2026-09-07T08:00:01.000Z" },
+    { ...review, reviewedAtUtc: "2026-09-07T10:00:00.000+03:00" },
+    { ...review, duplicateCandidateIds: [] },
+    { ...review, duplicateCandidateIds: [record.id] },
+    { ...review, duplicateCandidateIds: [review.duplicateCandidateIds[0], review.duplicateCandidateIds[0]] },
+    { ...review, _MUKERRER_INCELE: false }, { ...review, decision: "automatic" },
+    { ...review, sourceName: "unaccepted extra field" },
+  ]) assert.equal(isStudentSpreadsheetImportReview(invalid, record), false);
+});
 
 class MemoryStore {
   snapshot;
@@ -499,6 +555,7 @@ test("profil güncellemesinde boşaltılan bütün isteğe bağlı alanları kal
       supportPreferences: "\t",
     },
     archived: false,
+    now: new Date("2026-06-01T09:00:00.000Z"),
   });
 
   const record = (await store.readSnapshot()).students[0];

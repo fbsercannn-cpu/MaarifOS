@@ -18,7 +18,10 @@ for (const file of javascript) {
 const unusedLargeAssets = [];
 for (const file of files) {
   const size = (await stat(path.join(assetsDirectory, file))).size;
-  if (!file.endsWith(".js") && size > 1024 * 1024) unusedLargeAssets.push({ file, size });
+  // PDF.js 6.3.289: official minified worker, lazy loaded and fully precached.
+  // Keep the application JS budget unchanged and allow only this named worker.
+  const assetBudget = /^pdf\.worker\.min-[A-Za-z0-9_-]+\.mjs$/u.test(file) ? 1_300_000 : 1024 * 1024;
+  if (!file.endsWith(".js") && size > assetBudget) unusedLargeAssets.push({ file, size });
 }
 
 if (oversized.length || unusedLargeAssets.length) {

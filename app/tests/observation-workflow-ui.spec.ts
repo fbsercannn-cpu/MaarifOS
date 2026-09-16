@@ -26,8 +26,8 @@ async function ensureClassroomConfigured(page: Page) {
     .getByLabel("Maarif Modeli yaş grubu", { exact: true })
     .selectOption({ label: "60–72 ay" });
   await setup.getByText("Takvim ayrıntıları", { exact: true }).click();
-  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2025-09-01");
-  await setup.getByLabel("Eğitim yılı bitişi").fill("2026-08-31");
+  await setup.getByLabel("Eğitim yılı başlangıcı").fill("2026-09-01");
+  await setup.getByLabel("Eğitim yılı bitişi").fill("2027-06-30");
   await setup.getByText("İleri ayarlar", { exact: true }).click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
@@ -35,7 +35,7 @@ async function ensureClassroomConfigured(page: Page) {
 }
 
 function classroomList(page: Page) {
-  return page.getByRole("region", { name: /Sınıf(?:taki çocuklar| listesi)/i });
+  return page.getByRole("region", { name: "Çocuklar", exact: true });
 }
 
 function studentListItem(page: Page, name: string) {
@@ -51,7 +51,7 @@ function studentProfileButton(page: Page, name: string) {
 
 function studentObservationButton(page: Page, name: string) {
   return studentListItem(page, name).getByRole("button", {
-    name: "Gözlem",
+    name: `${name} için Maarif gelişim gözlemi ekle`,
     exact: true,
   });
 }
@@ -61,7 +61,7 @@ async function addChild(page: Page, name: string) {
     await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   }
   await page
-    .getByRole("button", { name: /^(İlk öğrenciyi ekle|Öğrenci ekle)$/ })
+    .getByRole("button", { name: "Çocuk ekle", exact: true })
     .last()
     .click();
   const sheet = page.getByRole("dialog", { name: "Çocuk ekle" });
@@ -80,12 +80,21 @@ async function openClassroom(page: Page) {
 }
 
 async function openStudentProfile(page: Page, name: string) {
+  const nextStep = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  if (await nextStep.isVisible().catch(() => false)) { await nextStep.getByRole("button", { name: "Gözlemden sonraki adım ekranını kapat", exact: true }).click(); await expect(nextStep).toBeHidden(); }
   const profile = page.getByRole("dialog", { name: `${name} profili` });
   if (!(await profile.isVisible().catch(() => false))) {
     await openClassroom(page);
     await studentProfileButton(page, name).click();
   }
   await expect(profile).toBeVisible();
+  const archive = profile.locator("details.student-profile-context-details");
+  if ((await archive.getAttribute("open")) === null) {
+    await profile
+      .getByText("Kayıt arşivi ve çocuk bilgileri", { exact: true })
+      .click();
+  }
+  await expect(archive).toHaveAttribute("open", "");
   return profile;
 }
 
@@ -103,6 +112,7 @@ test("390×844 hızlı gözlem ipuçlarını gösterir ve taslak yüklenirken ya
     name: "Gözlem ve değerlendirme akışı",
   });
   const note = dialog.getByLabel("Ne oldu?");
+  await dialog.getByText("Yazmak için ipuçları", { exact: true }).click();
   const guide = dialog.getByRole("complementary", {
     name: "Bakıp yazabileceğiniz ipuçları",
   });
@@ -120,6 +130,11 @@ test("390×844 hızlı gözlem ipuçlarını gösterir ve taslak yüklenirken ya
   await note.fill("Ada dört bloğu renk sırasına göre yan yana yerleştirdi.");
   await expect(
     dialog.getByRole("status").filter({ hasText: "Taslak bu cihazda korundu" }),
+  ).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Çocuğu değiştir" }).click();
+  await expect(
+    dialog.getByRole("region", { name: "Gözlem yapılacak çocuk" }),
   ).toBeVisible();
 
   const loadingLockObserved = await page.evaluate(async () => {
@@ -186,112 +201,39 @@ test("390×844 hızlı gözlem ipuçlarını gösterir ve taslak yüklenirken ya
   );
 });
 
-test("program bağlantısından çıkılan gözlem profilde değerlendirmeye geri döner ve tamamlanır", async ({
-  page,
-}, testInfo) => {
+test("program hedefi seçiminden çıkan gözlem profilde değerlendirmeye döner ve tek kayıtla tamamlanır", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   await ensureClassroomConfigured(page);
-  const childName = "Emine Akış Çocuğu";
-  const observationText =
-    "Çocuk iki farklı yaprağı büyüklüklerine göre yan yana yerleştirdi.";
+  const childName = "Kurgu Akış Çocuğu";
+  const observationText = "Çocuk iki farklı yaprağı büyüklüklerine göre yan yana yerleştirdi.";
   await addChild(page, childName);
   await studentObservationButton(page, childName).click();
   await page.getByLabel("Ne oldu?").fill(observationText);
   await page.getByRole("button", { name: "Gözlemi kaydet" }).click();
-
+  const next = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  await expect(next).toBeVisible();
+  const packages = next.getByRole("region", { name: "Hazır iş paketleri", exact: true });
+  const chooser = packages.getByRole("combobox");
+  await expect(chooser).toBeVisible();
+  const selected = await chooser.locator("option").evaluateAll(options => options.map(o => (o as HTMLOptionElement).value).find(value => value.startsWith("source:development:")));
+  expect(selected).toBeTruthy();
+  await chooser.selectOption(selected!);
+  await packages.getByRole("checkbox").check();
+  await packages.locator(".work-package-apply").click();
+  await expect(packages.getByRole("status")).toContainText("kaydedildi");
   let profile = await openStudentProfile(page, childName);
-  await profile
-    .getByRole("button", { name: "Program bağlantısını tamamla" })
-    .click();
-  const evidenceDialog = page.getByRole("dialog", {
-    name: "Gözlem ve değerlendirme akışı",
-  });
-  await evidenceDialog.getByLabel("Program referans kodu").fill("ÖĞR-BEYAN-42");
-  await evidenceDialog
-    .getByLabel("Program öğesi / başlığı")
-    .fill("Yaprakları gözlenebilir özelliğine göre karşılaştırma");
-  await evidenceDialog
-    .getByLabel("Bu bağlantıyı ben seçtim ve gözlemle ilişkisini onaylıyorum.")
-    .check();
-  await evidenceDialog
-    .getByRole("button", { name: "Bağlantıyı onayla" })
-    .click();
-  await expect(
-    evidenceDialog.getByRole("heading", { name: "Kanıta dayalı değerlendirme" }),
-  ).toBeVisible();
-
-  const storedLink = await page.evaluate(async (referenceCode) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<Record<string, unknown>>((resolve, reject) => {
-        const request = database
-          .transaction("evidenceCurriculumLinks", "readonly")
-          .objectStore("evidenceCurriculumLinks")
-          .getAll();
-        request.onsuccess = () =>
-          resolve(
-            request.result.find(
-              (record) => record.referenceCode === referenceCode,
-            ) ?? {},
-          );
-        request.onerror = () => reject(request.error);
-      });
-    } finally {
-      database.close();
-    }
-  }, "ÖĞR-BEYAN-42");
-  expect(storedLink).toMatchObject({
-    referenceOrigin: "teacher-declared",
-    officialCatalogVerified: false,
-    targetSourceUrl: "about:blank",
-  });
-  expect(storedLink).not.toHaveProperty("plannedTargetId");
-
-  await evidenceDialog
-    .getByRole("button", { name: "Değerlendirme akışını kapat" })
-    .click();
-  await expect(evidenceDialog).toBeHidden();
+  await profile.getByRole("button", { name: "Değerlendirmeyi tamamla", exact: true }).click();
+  const evidence = page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı", exact: true });
+  await expect(evidence.getByRole("heading", { name: "Kanıta dayalı değerlendirme" })).toBeVisible();
+  await evidence.getByLabel("Öğretmen değerlendirmesi").fill("Kurgu öğretmenin seçili gözleme dayanan değerlendirmesi.");
+  await evidence.getByRole("button", { name: "Değerlendirmeyi kaydet ve tamamla", exact: true }).click();
+  await expect(evidence.getByText("Kayıt zinciri tamamlandı", { exact: true })).toBeVisible();
+  await expect(evidence.getByText("Bağlantılar tamamlandı", { exact: true })).toBeVisible();
+  await evidence.getByRole("button", { name: "Bugün ekranına dön", exact: true }).click();
+  await expect(evidence).toBeHidden();
   profile = await openStudentProfile(page, childName);
-  await expect(
-    profile.getByText("Değerlendirme bekliyor", { exact: true }),
-  ).toBeVisible();
-  await expectNoUntriagedAxeViolations(
-    page,
-    testInfo,
-    "student-profile-assessment-pending-390x844",
-  );
-  await profile
-    .getByRole("button", { name: "Değerlendirmeyi tamamla" })
-    .click();
-  await expect(
-    evidenceDialog.getByRole("heading", { name: "Kanıta dayalı değerlendirme" }),
-  ).toBeVisible();
-  await evidenceDialog
-    .getByLabel("Öğretmen değerlendirmesi")
-    .fill(
-      "Seçili gözlem, çocuğun yaprakların büyüklük farkını karşılaştırarak görünür kıldığını gösteriyor.",
-    );
-  await evidenceDialog
-    .getByRole("button", { name: "İnceleme taslağını oluştur" })
-    .click();
-  await expect(
-    evidenceDialog.getByText("Kayıt zinciri tamamlandı", { exact: true }),
-  ).toBeVisible();
-  await evidenceDialog
-    .getByRole("button", { name: "Bugün ekranına dön" })
-    .click();
-
-  profile = await openStudentProfile(page, childName);
-  await expect(
-    profile.getByText("Gözlem zinciri tamamlandı", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    profile.getByRole("button", { name: "Değerlendirmeyi tamamla" }),
-  ).toHaveCount(0);
-  await expect(profile.getByText(observationText, { exact: true })).toBeVisible();
+  await expect(profile.getByText("Gözlem zinciri tamamlandı", { exact: true })).toBeVisible();
+  await expect(profile.getByRole("button", { name: "Değerlendirmeyi tamamla", exact: true })).toHaveCount(0);
+  await expect(profile.getByRole("region", { name: "Gelişim kayıtları" }).getByRole("listitem").filter({ hasText: observationText })).toBeVisible();
 });

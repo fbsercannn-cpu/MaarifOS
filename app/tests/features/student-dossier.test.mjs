@@ -312,6 +312,37 @@ const baseOptions = {
   includeExternalFeedback: true,
 };
 
+test("devam özeti aynı günün mükerrerini bir kez sayar ve bütün kaynak izlerini korur", () => {
+  const store = dossierStore();
+  const original = store.snapshot.attendanceRecords[0];
+  const newer = { ...original, id: crypto.randomUUID(), status: "absent", updatedAt: "2026-09-15T09:00:00.000Z" };
+  const invalid = { ...original, id: crypto.randomUUID(), status: "invalid", civilDate: "2026-09-16" };
+  store.snapshot.attendanceRecords.push(newer, invalid);
+  original._MUKERRER_INCELE = true;
+  original.duplicateOf = newer.id;
+  const before = structuredClone(store.snapshot);
+  const dossier = buildStudentDossier(archiveFromSnapshot(store.snapshot), baseOptions, new Date("2027-01-20T10:00:00.000Z"));
+  assert.match(dossier.text, /Gelmedi: 1/);
+  assert.doesNotMatch(dossier.text, /Geldi: 1/);
+  assert.match(dossier.text, /Mükerrer incelemesi: 1 ek kayıt/);
+  assert.match(dossier.text, /1 geçersiz kayıt sayıma alınmadı/);
+  assert.deepEqual(new Set(dossier.includedEntityIds.attendanceRecords), new Set([original.id, newer.id, invalid.id]));
+  assert.deepEqual(dossier.manifest.attendanceResolution, {
+    rule: "latest-valid-per-student-civil-date", sourceCount: 3, countedDayCount: 1,
+    duplicateReviewIds: [original.id], invalidRecordIds: [invalid.id],
+  });
+  assert.deepEqual(store.snapshot, before);
+});
+
+test("devam kanonikleştirmesi önce sınıf ve yıl kapsamını süzer", () => {
+  const store = dossierStore();
+  store.snapshot.attendanceRecords.push({ ...store.snapshot.attendanceRecords[0], id: crypto.randomUUID(), classroomId: crypto.randomUUID(), status: "absent", updatedAt: "2026-09-15T11:00:00.000Z" });
+  const dossier = buildStudentDossier(archiveFromSnapshot(store.snapshot), baseOptions, new Date("2027-01-20T10:00:00.000Z"));
+  assert.match(dossier.text, /Geldi: 1/);
+  assert.doesNotMatch(dossier.text, /Gelmedi: 1/);
+  assert.equal(dossier.manifest.attendanceResolution.sourceCount, 1);
+});
+
 test("paylaşım hedefi gizlilik varsayılanları AI için kimlik ve yakınları kapatır", () => {
   assert.deepEqual(dossierPrivacyDefaults("chatgpt"), {
     identityMode: "alias",

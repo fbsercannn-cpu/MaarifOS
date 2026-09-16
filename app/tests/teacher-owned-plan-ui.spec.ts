@@ -31,7 +31,7 @@ async function openTeacherPlanWorkspace(page: import("@playwright/test").Page) {
   return dialog;
 }
 
-test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, revize eder, Word alır ve reload sonrası aynı kimliklerle açar", async ({
+test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, revize eder, Word ve gerçek PDF alır ve reload sonrası aynı kimliklerle açar", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
@@ -104,8 +104,12 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   const bytes = await readFile(downloadPath!);
   expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
 
-  const pdfDownloadPromise = page.waitForEvent("download");
   await documentCenter.getByRole("button", { name: "Görsel PDF hazırla" }).click();
+  const pdfPreview = page.getByRole("dialog", { name: "PDF önizlemesi", exact: true });
+  await expect(pdfPreview).toBeVisible();
+  await expect(pdfPreview.locator("canvas").first()).toBeVisible();
+  const pdfDownloadPromise = page.waitForEvent("download");
+  await pdfPreview.getByRole("button", { name: "Bu PDF'yi indir", exact: true }).click();
   const pdfDownload = await pdfDownloadPromise;
   expect(pdfDownload.suggestedFilename()).toBe(
     "MaarifOS_Ogretmen_Plani_Birlesik.pdf",
@@ -114,6 +118,8 @@ test("öğretmen premium olmadan yıl → ay → hafta planını oluşturur, rev
   expect(pdfPath).not.toBeNull();
   const pdfBytes = await readFile(pdfPath!);
   expect(pdfBytes.subarray(0, 4).toString("ascii")).toBe("%PDF");
+  await pdfPreview.getByRole("button", { name: "PDF önizlemesini kapat", exact: true }).click();
+  await expect(pdfPreview).toBeHidden();
 
   await dialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
   await page.reload({ waitUntil: "networkidle" });
@@ -268,7 +274,9 @@ test("öğretmen eksik gün kapanışı ve program bağıyla haftalık karar yaz
   await expect(review).toContainText("Kurgu Ada");
   await expect(review).toContainText("Ortak oyun sırası");
   await expect(review).toContainText("Haftalık değerlendirme henüz hazır değil");
-  await expect(review).toContainText("Bu hafta öğretim günü yok");
+  await expect(review).toContainText("0/5 öğretim günü kapandı");
+  await expect(review).toContainText("Beklenen öğretim günlerinde günlük plan eksik: 2026-08-10, 2026-08-11, 2026-08-12, 2026-08-13, 2026-08-14.");
+  await expect(review).toContainText("Öğretim günü olmayan tarihe bağlı günlük plan var: 2026-08-15.");
   await expect(review).toContainText("Program bağı tamamlanmadan seçilemez");
   const formFeedback = review.getByTestId("teacher-feedback");
   await expect(formFeedback).toHaveAttribute("role", "status");

@@ -17,6 +17,7 @@ const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
@@ -174,6 +175,25 @@ async function completeSimpleClassroomSetup(
   await expect(setup).toBeHidden();
 }
 
+async function storedStudents(page: import("@playwright/test").Page) {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolveDatabase, rejectDatabase) => {
+      const request = indexedDB.open("maarifos-local");
+      request.onsuccess = () => resolveDatabase(request.result);
+      request.onerror = () => rejectDatabase(request.error);
+    });
+    try {
+      return await new Promise<Array<Record<string, unknown>>>((resolveStudents, rejectStudents) => {
+        const request = database.transaction("students", "readonly").objectStore("students").getAll();
+        request.onsuccess = () => resolveStudents(request.result);
+        request.onerror = () => rejectStudents(request.error);
+      });
+    } finally {
+      database.close();
+    }
+  });
+}
+
 test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar", async ({ context, page }) => {
   await page.goto("/");
 
@@ -265,9 +285,11 @@ test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar",
 
   // Bu lazy ekran çevrim içiyken hiç açılmadı; ilk kez tamamen ağsız yüklenebilmelidir.
   await page
-    .getByRole("region", { name: "Bugünün işi tek yerde" })
-    .getByRole("button", { name: /Etkinlik bankası/ })
+    .getByRole("navigation", { name: "Ana menü" })
+    .getByRole("button", { name: "Planlar", exact: true })
     .click();
+  await page.getByRole("button", { name: /Gelişmiş plan desteğini aç/u }).click();
+  await page.getByRole("button", { name: /Oyun ve materyaller/ }).click();
   await expect(
     page.getByRole("heading", { name: "Etkinlik ve Materyal Stüdyosu", exact: true }),
   ).toBeVisible();
@@ -300,12 +322,14 @@ test(`${previousRelease} etkin worker ${currentRelease} sürümünü doğrular, 
 
     await completeSimpleClassroomSetup(page, "Sürüm Koruma Sınıfı");
     await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
-    await page.getByRole("button", { name: "Öğrenci ekle", exact: true }).click();
+    await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
     await page.getByLabel("Çocuğun adı").fill("Sürüm Koruma Çocuğu");
     await page.getByRole("button", { name: "Kaydet ve kapat", exact: true }).click();
     await expect(
       page.getByRole("button", { name: /Sürüm Koruma Çocuğu/ }).first(),
     ).toBeVisible();
+    const studentsBeforeUpdate = await storedStudents(page);
+    expect(studentsBeforeUpdate).toHaveLength(1);
     await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
     server.enableCurrentWorker();
@@ -362,30 +386,13 @@ test(`${previousRelease} etkin worker ${currentRelease} sürümünü doğrular, 
       ),
     ).toBe("reload");
 
-    const studentNames = await page.evaluate(
-      () =>
-        new Promise<string[]>((resolveStudents, rejectStudents) => {
-          const open = indexedDB.open("maarifos-local");
-          open.onerror = () => rejectStudents(open.error);
-          open.onsuccess = () => {
-            const database = open.result;
-            const read = database
-              .transaction("students", "readonly")
-              .objectStore("students")
-              .getAll();
-            read.onerror = () => rejectStudents(read.error);
-            read.onsuccess = () => {
-              resolveStudents(
-                (read.result as Array<{ displayName?: string }>).flatMap((student) =>
-                  typeof student.displayName === "string" ? [student.displayName] : [],
-                ),
-              );
-              database.close();
-            };
-          };
-        }),
-    );
-    expect(studentNames).toContain("Sürüm Koruma Çocuğu");
+    // Şifreli öğrenci zarfı ve kimliği değişmeden kalmalı; uygulama aynı
+    // kaydı çözerek sınıf listesinde gerçek kurgu adını yeniden göstermeli.
+    expect(await storedStudents(page)).toEqual(studentsBeforeUpdate);
+    await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
+    await expect(
+      page.locator(".simple-student-list__profile").filter({ hasText: "Sürüm Koruma Çocuğu" }),
+    ).toBeVisible();
   } finally {
     await context.close();
     await server.close();
@@ -461,6 +468,10 @@ test("kalıcı tarayıcı profili ağsız yeni süreçte app-shell ile soğuk ba
   } finally {
     await offlineContext?.close();
     await onlineContext?.close();
-    await rm(profileDirectory, { recursive: true, force: true });
+    const resolvedProfileDirectory = resolve(profileDirectory);
+    if (!resolvedProfileDirectory.startsWith(`${resolve(tmpdir())}${sep}maarifos-pwa-profile-`)) {
+      throw new Error("Kurgu PWA profilinin geçici klasör sınırı doğrulanamadı.");
+    }
+    await rm(resolvedProfileDirectory, { recursive: true, force: true });
   }
 });

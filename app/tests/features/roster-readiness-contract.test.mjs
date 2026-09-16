@@ -57,6 +57,6 @@ test("Belgeler yüzeyi doğum tarihini sınıf listesi zorunluluğu diye sunmaz 
     /öğrenci no, T\.C\. kimlik veya veli iletişimi tamamlanmalı/u,
   );
   assert.match(source, /return "Görsel PDF indir"/u);
-  assert.match(source, /Görsel A4 PDF bu cihazda indirildi/u);
+  assert.match(source, /Sınıf listesi önizlemede hazır/u);
   assert.match(source, /Sınıf listesini görsel PDF olarak paylaş/u);
 });

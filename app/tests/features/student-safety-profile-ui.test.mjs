@@ -6,6 +6,8 @@ const safetyPanelSource = await readFile(
   new URL("../../src/features/students/StudentProfileSafetyPanels.tsx", import.meta.url),
   "utf8",
 );
+const addressFieldSource = await readFile(new URL("../../src/features/students/StudentAddressField.tsx", import.meta.url), "utf8");
+const profileCopySource = await readFile(new URL("../../src/features/students/student-profile-copy.ts", import.meta.url), "utf8");
 const simpleClassroomSource = await readFile(
   new URL("../../src/features/simple-experience/SimpleClassroomScreen.tsx", import.meta.url),
   "utf8",
@@ -38,7 +40,7 @@ test("öğrenci profilinde sağlık, acil iletişim ve teslim yetkisi alanları 
     "Dijital iletişim formu",
     "Formların son kontrol tarihi",
   ]) {
-    assert.match(safetyPanelSource, new RegExp(label));
+    assert.match(safetyPanelSource + addressFieldSource + profileCopySource, new RegExp(label));
   }
   assert.match(safetyPanelSource, /cihazda şifreli saklanır/);
   assert.match(safetyPanelSource, /standart gözlem çıktısına eklenmez/);
@@ -46,7 +48,10 @@ test("öğrenci profilinde sağlık, acil iletişim ve teslim yetkisi alanları 
 
 test("basit sınıf akışı güvenlik profiline tek dokunuşla gider ve alerji uyarısını gösterir", () => {
   assert.match(simpleClassroomSource, /Sağlık \/ teslim/);
-  assert.match(simpleClassroomSource, /onOpenProfile\(student\.id, "care"\)/);
+  assert.match(
+    simpleClassroomSource,
+    /onOpenProfile\(\s*student\.id,\s*"care",\s*event\.currentTarget,?\s*\)/s,
+  );
   assert.match(simpleClassroomSource, /Alerji notu var/);
   assert.match(prototypeSource, /studentProfileTab === "care"/);
   assert.match(overviewSource, />\s*Güvenlik\s*</);

@@ -37,9 +37,14 @@ import {
   assertNoDeploymentSecrets,
   stageSitesPackage,
 } from "../scripts/prepare-sites-package.mjs";
+import {
+  TYMM_OFFICIAL_LIBRARY,
+  canEmbedTymmOfficialLibraryResource,
+} from "../src/features/curriculum/tymm-official-library.ts";
 import worker, {
   CONTENT_SECURITY_POLICY,
   SECURITY_HEADERS,
+  TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES,
   createSitesWorker,
   createSecurityHeaders,
 } from "../worker/index.js";
@@ -55,6 +60,14 @@ const assertSecurityHeaders = (response, licenseApiOrigin = null) => {
   assert.match(contentSecurityPolicy, /script-src 'self'/);
   assert.match(contentSecurityPolicy, /object-src 'none'/);
   assert.match(contentSecurityPolicy, /frame-ancestors 'none'/);
+  const frameDirective = contentSecurityPolicy
+    .split(";")
+    .map((directive) => directive.trim())
+    .find((directive) => directive.startsWith("frame-src "));
+  assert.equal(
+    frameDirective,
+    `frame-src 'self' ${TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES.join(" ")}`,
+  );
   const connectDirective = contentSecurityPolicy
     .split(";")
     .map((directive) => directive.trim())
@@ -211,9 +224,14 @@ const assertStaticHeadersFile = (source, licenseApiOrigin = null) => {
   }
 
   if (licenseApiOrigin === null) {
-    assert.equal(source.includes("https://"), false);
+    for (const frameSource of TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES) {
+      assert.equal(countOccurrences(source, frameSource), 1);
+    }
   } else {
     assert.equal(countOccurrences(source, licenseApiOrigin), 1);
+    for (const frameSource of TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES) {
+      assert.equal(countOccurrences(source, frameSource), 1);
+    }
   }
 };
 
@@ -269,6 +287,34 @@ test("exports one canonical security policy for Worker and static assets", () =>
   assert.deepEqual(SECURITY_HEADERS, createSecurityHeaders());
   assert.equal(Object.isFrozen(SECURITY_HEADERS), true);
   assertStaticHeadersFile(renderStaticAssetHeadersFile(SECURITY_HEADERS));
+});
+
+test("gömülebilir TYMM katalog PDF'lerinin tamamı Worker frame-src yollarıyla uyumludur", () => {
+  const frameSources = TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES.map((source) => new URL(source));
+  assert.ok(frameSources.length > 0);
+  assert.ok(
+    frameSources.every(
+      (source) =>
+        source.protocol === "https:" &&
+        source.hostname === "tymm.meb.gov.tr" &&
+        source.pathname.endsWith("/"),
+    ),
+  );
+
+  const embeddableResources = TYMM_OFFICIAL_LIBRARY.filter(
+    canEmbedTymmOfficialLibraryResource,
+  );
+  assert.equal(embeddableResources.length, 35);
+  for (const resource of embeddableResources) {
+    const pdfUrl = new URL(resource.pdfUrl);
+    assert.ok(
+      frameSources.some(
+        (source) =>
+          pdfUrl.origin === source.origin && pdfUrl.pathname.startsWith(source.pathname),
+      ),
+      `${resource.id} PDF yolu Worker frame-src allowlist dışında: ${pdfUrl.href}`,
+    );
+  }
 });
 
 test("fails closed when a physical _headers line exceeds Cloudflare's limit", () => {
@@ -656,7 +702,7 @@ test("injects one exact canonical HTTPS license origin into the production CSP",
   }
 });
 
-test("keeps production CSP self-only when the license origin is absent", async () => {
+test("keeps production CSP limited to self and the official TYMM PDF paths without licensing", async () => {
   const root = await createSitesFixture();
   try {
     const result = prepareSitesBuild({ root, environment: {} });

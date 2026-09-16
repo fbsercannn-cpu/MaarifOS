@@ -1,54 +1,108 @@
-# Design QA — MaarifOS Kişisel Öğretmen Asistanı 0.15.0
+# Design QA — Maarif günlük öğretmen deneyimi 0.22.0
 
-- Source visual truth: `artifacts/product-design-audit-2026-08-22-personal-assistant/05-concept-quiet-assistant-selected.png`
-- Final implementation: `C:/Users/Asus/Desktop/Maarif/artifacts/design-qa-comparison-0.15.0/12-implementation-0.15.0-final-390x844.png`
-- Combined comparison: `C:/Users/Asus/Desktop/Maarif/artifacts/design-qa-comparison-0.15.0/13-source-vs-implementation-final.png`
-- Comparison state: Emine Akın, Deneme Sınıfı, 60–72 ay TYMM, 22 Ağustos 2026
-- Viewport: implementation 390 × 844 CSS px at DPR 1; source 853 × 1844 px scaled to the same visible phone frame
+## Source visual truth
 
-## Result
+User delegated the visual choice to HALİS. Selected content targets are:
 
-The final implementation preserves the selected quiet-assistant direction: warm ivory canvas, navy display type, teal action hierarchy, restrained borders, rounded cards, line icons and a persistent five-item phone navigation. The first screen answers one question — “What should I do next?” — and keeps only two prepared shortcuts below it.
+- app/output/design-audit-2026-08-31/concept-1.png — daily activity hierarchy.
+- app/output/design-audit-2026-08-31/concept-2.png — practical teaching guide.
+- app/output/design-audit-2026-08-31/concept-3.png — child-linked observation.
 
-The live product is not a literal poster clone. Its primary action is derived from stored classroom readiness, and the globally available `Hızlı gözlem` action is intentionally added because one-tap observation is a core teacher requirement. The source image has a prepared child and therefore proposes attendance; the implementation capture has zero children and truthfully proposes adding the first child. This is valid dynamic-state variation, not visual drift.
+Each source is 853 × 1844 pixels, intended for a 390 × 844 CSS-pixel mobile viewport. Sources were inspected in the ideation turn; the new independently generated teaching-table image was inspected in this implementation turn. The user authorized choosing and improving the direction; a smaller image, real record-driven content, five existing navigation targets, and unchanged mobile runtime are intentional product constraints.
 
-## Visual checks
+## Implementation capture
 
-- Typography: the final 390 px greeting is 26 px and remains on one line; Turkish glyphs are not clipped.
-- Layout: 20 px phone margins, card padding, dividers, fixed navigation and vertical rhythm align with the selected source. No card, button or footer item is cropped.
-- Touch targets: `Hızlı gözlem` is 44 px high; primary cards and bottom navigation exceed the same minimum.
-- Colors and elevation: ivory, navy, teal, pale-teal and violet support accents remain within the existing MaarifOS token system.
-- Assets: the existing brand mark, bundled Roboto family and Radix line icons are used; there are no emoji, placeholder images, CSS drawings or ad-hoc SVG substitutes.
-- Content: the screen is action-led and contains no demo, premium, activation, device-slot or EÇE copy.
+- URL context: localhost:4175, native mode.
+- Implementation screenshot: unavailable for 0.22.0.
+- CSS viewport target: 390 × 844; additional 320 and 430 px checks pending.
+- Implementation pixel dimensions / device density: not measured.
+- Density normalization: not performed because capture is blocked.
+- State: synthetic active class, actual plan / no-plan suggestion / preparation, selected activity guide, single-child observation.
+- Browser block: Browser URL security policy rejected access to the existing tab. No alternative browser, port, raw command or CLI bypass was attempted.
 
-## Interaction and browser checks
+The old passing 0.15.0 QA report is preserved at app/output/design-audit-2026-08-31/design-qa-before-0.22.0.md. It is not evidence for this release.
 
-- The final founder-production build was opened in the selected in-app browser at 320 × 568, 390 × 844 and 430 × 932.
-- At 390 × 844 the final screenshot shows the complete greeting, quick observation control, contextual next task, two prepared shortcuts and all five navigation items.
-- At 320 px, `Etkinlikler`, `Planlar` and `Çıktılar` were tapped in sequence and each real route opened.
-- A realistic school, teacher, class and 60–72 month profile was saved; a test student was added through the phone form.
-- The quick-observation action correctly enforced the academic-year readiness rule on the actual date. Its full student flow is also covered in the passing Chromium/WebKit smoke and 20-cycle persistence tests.
-- The browser error log was empty after setup, student entry and route traversal.
-- Automated responsive tests separately assert no horizontal overflow, visible 320 px assistant cards, stable bottom navigation and reachable final actions.
+## Required fidelity surfaces
 
-## Iteration history
-
-1. The first implementation truncated the class context and lacked a global one-tap observation action.
-2. The second implementation wrapped class metadata, added global `Hızlı gözlem`, carried child choice/drawing into an editable teacher draft and changed misleading download-as-print actions into real print flows.
-3. The final comparison found only a two-line greeting mismatch. The 390 px heading was reduced to 26 px, re-built and re-captured; it now matches the single-line source hierarchy without reducing touch geometry.
+1. Fonts/typography: local Roboto regular/medium/bold and Latin Extended glyphs implemented. Actual wrapping, fallback and weight still need browser inspection.
+2. Spacing/layout: smaller header/context, small decorative photograph, single primary action and two follow-ups implemented. Long real titles/material lists may push the primary action below the initial phone viewport; this is unmeasured and must be checked.
+3. Colors/tokens: existing ivory/navy/teal tokens retained. Rendered contrast/focus/disabled states not checked in this run.
+4. Image quality: new 1280 × 512 WebP inspected, 57,034 bytes, no people or user data. Decorative only. Rendered crop and density remain unverified.
+5. Copy/content: recommendation versus persisted plan and teacher-authored example versus official target are separated in code. Current rendered reading order/density remain unverified.
 
 ## Findings
 
-No actionable P0, P1 or P2 issue remains. The central activity icon's pale-teal emphasis and the global observation button are intentional product affordances, not selected-route indicators.
+- [P1] Visual acceptance cannot be established without a current implementation capture. Fix: restore authorized browser access, capture each target state, compare source and implementation together.
+- [P2, unconfirmed risk] Long actual activity titles and material lists could place Today’s primary action too low. Teacher-prompt duplication was removed from Today and remains in the guide; still measure CTA position at 320/390/430 px.
+- Independent code review found a plan-integrity priority bug. It was fixed by blocking the new teaching focus for conflicting or mismatched plans, pending observations and day-review priority, and by keeping empty saved plans distinct from no plan. Domain tests passed; this is code evidence, not a visual QA pass.
 
-## Checklist
+## Comparison history
 
-- [x] Reference and implementation inspected in one combined comparison input
-- [x] Same phone viewport and comparable teacher/class/age state
-- [x] Typography, spacing, colors, borders, radii and icon family reviewed
-- [x] Primary CTA and all five navigation routes are functional
-- [x] 320, 390 and 430 px phone checks completed
-- [x] Browser console checked after interaction
-- [x] Final screenshot re-captured after the last CSS change
+- No source/implementation full-view pair could be produced for 0.22.0.
+- Focused-region comparison is pending for typography, Today CTA, guide footer and observation selection.
+- No visual pass or post-fix screenshot is claimed.
 
-final result: passed
+## Verification boundary
+
+922 feature tests, 14 PWA/runtime/keyboard contracts, strict typecheck, lint, build and bundle budget passed. Public asset hashes/lengths in the generated precache manifest match. These do not replace live UI, IndexedDB/reload, offline, assistive-technology or teacher acceptance tests.
+
+## Implementation checklist
+
+- [x] Selected source direction resolved without another design-choice question.
+- [x] Existing app and protected mobile runtime retained.
+- [x] Real activity/plan identity, draft and explicit-save contracts preserved in code.
+- [x] Generated decorative asset and Turkish fonts included in static precache manifest.
+- [ ] Capture and jointly compare current implementation and source.
+- [ ] Verify responsive layout and primary controls.
+- [ ] Verify guide → child → observation → reload and offline persistence.
+- [ ] Check browser errors and focus/back/keyboard behavior.
+
+final result: blocked
+
+## 0.23.0 aday eki — resmî TYMM kaynak kütüphanesi
+
+Önceki `0.22.0` görsel kabul engeli tarihsel kayıt olarak yukarıda korunur.
+`0.23.0` adayı Planlar yüzeyine tek bir “Resmî TYMM kaynakları” giriş noktası
+ekler; bütün kaynakları ana akışa kart olarak yaymaz. Program ayrıntıları kapalı
+başlar, filtreler ikincil yüzeyde kalır ve öğretmenin yaş/alan bağlamı öneri
+sırasını açıklar.
+
+### Tasarım kapsamı
+
+- Özet sayaçlar 38 PDF'nin 35'inin erişilebilir, üçünün MEB'de erişilemez
+  olduğunu saklamadan gösterir.
+- Arama, yaş, belge türü ve alan filtreleri aynı modal içinde kalır.
+- Belge seçilmeden `iframe` kurulmaz; kapatılınca kaldırılır. Gömülü okuyucunun
+  yanında PDF aç/indir ve resmî sayfa yedeği her zaman görünürdür.
+- 21 ortak çerçeve sayfası, 15 doğrudan okul öncesi videosu ve 11 ortak eğitim
+  videosu PDF listesinden ayrı, isteğe bağlı bölümlerde sunulur.
+- MEB başlığı ile MaarifOS özeti görsel ve anlamsal olarak ayrı tutulur.
+- Üç erişilemeyen PDF devre dışı bırakılmış sahte belge gibi görünmez; erişim
+  sorunu ve resmî ayrıntı sayfası birlikte gösterilir.
+- Mobil dialog 760 px altında ekranı kullanır; 320 px yatay taşma koruması ve
+  en az 44 px eylem hedefleri CSS sözleşmesine dahildir.
+
+### Kaynak yoğunluğu kararı
+
+Erişilebilir PDF kümesi 923.871.742 bayttır. Dosyaları yerel pakete gömmek ilk
+yükü ve PWA kotasını bozacağı için içerik MEB'den uzaktan okunur. Uygulamaya
+gömülen parça kaynak metadata'sı ve okuyucu yüzeyidir; resmî dosyanın kopyası
+değildir. Çevrim dışıyken kütüphane listesi görülebilir, PDF gövdesi için ağ
+gerekir.
+
+### Aday doğrulama durumu
+
+- [x] 140 kaynak izi / 137 tekil URL makbuzu `PASS`.
+- [x] 134 HTTP 200 ile üç beklenen HTTP 500 ayrıştırıldı.
+- [x] Erişilebilir ve erişilemez belge durumları için bileşen sözleşmeleri var.
+- [x] `iframe` sandbox kullanmama, `no-referrer`, açık/indir yedeği ve dar CSP
+  kaynak yolları kod sözleşmesinde korunuyor.
+- [ ] Yerel uygulamada 320/390/430 px ekran görüntüleri birlikte incelenecek.
+- [ ] Gerçek MEB PDF'si açma, kapatma, tekrar açma ve HTTP 500 yedeği görünür
+  tarayıcı akışında doğrulanacak.
+- [ ] Production yayını sonrasında aynı tur, konsol hatası ve yatay taşma
+  ölçümüyle tekrarlanacak.
+- [ ] Fiziksel iOS/Android ile VoiceOver/TalkBack ve yüzde 200 büyütme kabulü
+  ayrı kalacak.
+
+final result: pending live QA

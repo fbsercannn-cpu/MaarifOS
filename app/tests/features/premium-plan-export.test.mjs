@@ -96,6 +96,24 @@ async function valuesPack() {
   return parsePremiumContentPack(raw);
 }
 
+function readStoredZipEntry(bytes, expectedName) {
+  const buffer = Buffer.from(bytes);
+  let offset = 0;
+  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const nameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = buffer.subarray(nameStart, nameStart + nameLength).toString("utf8");
+    if (name === expectedName) {
+      return buffer.subarray(dataStart, dataStart + compressedSize).toString("utf8");
+    }
+    offset = dataStart + compressedSize;
+  }
+  throw new Error(`${expectedName} ZIP içinde bulunamadı.`);
+}
+
 const BUILT_IN_SOURCE_BY_PATH = new Map([
   [
     "/assets/maarif-content/tymm-6072-2026-09-v2.json",
@@ -285,7 +303,7 @@ test("v3 çıktısı değer tasarımını kaynak ve ihtiyat diliyle gösterir; v
   assert.match(text, /D4\.1\.1.*İyi ve kötü zamanlarında arkadaşlarına destek olur/);
   assert.match(text, /Yaşantı\/ikilem:/);
   assert.match(text, /Karşı kanıt sorusu:/);
-  assert.match(text, /altı rollü insan uzman incelemesi bekliyor/);
+  assert.match(text, /uzman doğrulaması bulunmayan düzenlenebilir içerik/);
   assert.doesNotMatch(text, /değeri kazandı|değer puanı|liderlik tablosu/i);
 
   const legacy = await pack();
@@ -381,13 +399,62 @@ test("Word çıktısı geçerli DOCX kabını ve Türkçe plan metnini üretir",
     access,
     "word",
   );
-  const bytes = createPremiumPlanDocx(buildPremiumPlanExportParagraphs(document));
+  const paragraphs = buildPremiumPlanExportParagraphs(document);
+  const bytes = createPremiumPlanDocx(paragraphs);
   assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
-  const decoded = new TextDecoder().decode(bytes);
-  assert.match(decoded, /\[Content_Types\]\.xml/);
-  assert.match(decoded, /word\/document\.xml/);
-  assert.match(decoded, /öğretmenin sınıf bağlamına göre/);
-  assert.match(decoded, /TYMM 2024/);
+  const documentXml = readStoredZipEntry(bytes, "word/document.xml");
+  const relationshipsXml = readStoredZipEntry(bytes, "word/_rels/document.xml.rels");
+  const numberingXml = readStoredZipEntry(bytes, "word/numbering.xml");
+  const settingsXml = readStoredZipEntry(bytes, "word/settings.xml");
+  const headerXml = readStoredZipEntry(bytes, "word/header1.xml");
+  const footerXml = readStoredZipEntry(bytes, "word/footer1.xml");
+  const stylesXml = readStoredZipEntry(bytes, "word/styles.xml");
+  const coreXml = readStoredZipEntry(bytes, "docProps/core.xml");
+
+  assert.match(documentXml, /öğretmenin sınıf bağlamına göre/);
+  assert.match(documentXml, /TYMM 2024/);
+  assert.equal(
+    (documentXml.match(/<w:keepNext\/>/g) ?? []).length,
+    paragraphs.filter((paragraph) => paragraph.keepWithNext).length,
+  );
+  assert.equal(
+    (documentXml.match(/<w:pageBreakBefore\/>/g) ?? []).length,
+    paragraphs.filter((paragraph) => (
+      paragraph.pageBreakBefore || paragraph.forcePageBreakBefore
+    )).length,
+  );
+  assert.equal(
+    (documentXml.match(/<w:numPr>/g) ?? []).length,
+    paragraphs.filter((paragraph) => paragraph.style === "bullet").length,
+  );
+  assert.match(numberingXml, /<w:numFmt w:val="bullet"\/>/);
+  assert.match(numberingXml, /<w:lvlText w:val="•"\/>/);
+  assert.doesNotMatch(documentXml, /<w:t xml:space="preserve">• /);
+  assert.match(documentXml, /w:headerReference w:type="default" r:id="rIdHeader"/);
+  assert.match(documentXml, /w:footerReference w:type="default" r:id="rIdFooter"/);
+  assert.match(relationshipsXml, /relationships\/numbering/);
+  assert.match(settingsXml, /<w:updateFields w:val="true"\/>/);
+  assert.match(headerXml, /MaarifOS · Öğretmen planı/);
+  assert.match(footerXml, /> PAGE </);
+  assert.match(footerXml, /> NUMPAGES </);
+  assert.match(stylesXml, /w:color w:val="17324D"/);
+  assert.match(stylesXml, /w:fill="CFEFEB"/);
+  assert.match(coreXml, /<dc:title>MaarifOS öğretmen planı<\/dc:title>/);
+  assert.match(coreXml, /<dc:language>tr-TR<\/dc:language>/);
+});
+
+test("Word yalnız forcePageBreakBefore verilen kırığı ve metin içi satır sonunu kaybetmez", () => {
+  const bytes = createPremiumPlanDocx([
+    { text: "İlk bölüm", style: "heading1" },
+    { text: "Zorunlu bölüm", style: "heading1", forcePageBreakBefore: true },
+    { text: "Birinci satır\nİkinci satır", style: "body", keepWithNext: true },
+  ]);
+  const documentXml = readStoredZipEntry(bytes, "word/document.xml");
+  assert.equal((documentXml.match(/<w:pageBreakBefore\/>/g) ?? []).length, 1);
+  assert.equal((documentXml.match(/<w:keepNext\/>/g) ?? []).length, 1);
+  assert.equal((documentXml.match(/<w:br\/>/g) ?? []).length, 1);
+  assert.match(documentXml, /Birinci satır/);
+  assert.match(documentXml, /İkinci satır/);
 });
 
 test("PDF sayfalama başlığı izleyen içerikten koparmaz ve seyrek bölüm sonu sayfası üretmez", async () => {

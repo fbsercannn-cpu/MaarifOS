@@ -52,9 +52,9 @@ test("Alpha ana navigasyonu öğretmenin beş kalıcı iş alanını gösterir",
   expect(navigation).toEqual([
     { id: "today", label: "Bugün", capability: "today" },
     { id: "classroom", label: "Sınıfım", capability: "classroom" },
-    { id: "capture", label: "Etkinlikler", capability: "capture" },
+    { id: "capture", label: "Gözlem", capability: "capture" },
     { id: "plans", label: "Planlar", capability: "planningHub" },
-    { id: "documents", label: "Çıktılar", capability: "recordsHub" },
+    { id: "documents", label: "Belgeler", capability: "recordsHub" },
   ]);
   expect(navigation.every(({ capability }) => isCapabilityEnabled(capability))).toBe(
     true,
