@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface Props {
   onClose?: () => void;
@@ -15,7 +16,7 @@ export function OfficialTymmReferenceTablesModal({ onClose }: Props) {
     setTimeout(() => setCopiedKey(null), 1500);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => printOfficialFormA4(`TYMM_Referans_Tablolari`);
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");

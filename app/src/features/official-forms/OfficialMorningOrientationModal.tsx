@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface MoodCount {
   happy: number;
@@ -43,7 +44,7 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Gune_Baslama_ve_Duygu_Panosu_${date}`);
   };
 
   const handleExportWord = () => {

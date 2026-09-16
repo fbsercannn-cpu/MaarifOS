@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface RubricCriterion {
   id: string;
@@ -100,7 +101,7 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Gelisimsel_Rubrik_${studentName.replace(/\s+/g, "_")}`);
   };
 
   const handleExportWord = () => {

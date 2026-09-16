@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface AuditItem {
   id: string;
@@ -139,7 +140,7 @@ export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () =>
   const complianceScore = Math.round(((uygunCount + kismenCount * 0.5) / totalItems) * 100);
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Ogrenme_Merkezleri_Denetim_Tutanagi_${auditDate}`);
   };
 
   const handleExportWord = () => {

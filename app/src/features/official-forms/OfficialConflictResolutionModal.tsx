@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => void }) {
   const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
@@ -37,7 +38,7 @@ export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => v
   );
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Baris_Masasi_Cozum_Protokolu_${date}`);
   };
 
   const handleExportWord = () => {

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface GameItem {
   id: string;
@@ -123,7 +124,7 @@ export function OfficialGamesLibraryModal({ onClose }: Props) {
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`TYMM_Oyun_Kartlari_Kutuphanesi`);
   };
 
   const handleDownloadDoc = () => {

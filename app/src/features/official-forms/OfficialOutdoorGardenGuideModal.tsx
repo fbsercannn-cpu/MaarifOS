@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface OutdoorInspectionItem {
   id: string;
@@ -114,7 +115,7 @@ export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => v
   const isAllReady = checkedCount === items.length;
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Acik_Hava_ve_Doga_Guvenlik_Rehberi_${date}`);
   };
 
   const handleExportWord = () => {

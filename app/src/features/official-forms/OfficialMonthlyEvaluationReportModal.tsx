@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 const CHILD_CRITERIA = [
   "Çocuklar bireysel etkinliklere aktif katılım göstermiştir.",
@@ -87,7 +88,9 @@ export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
     }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`Aylik_Plan_3B_Degerlendirme_${selectedMonth}`);
+  };
 
   const handleDownloadDoc = () => {
     const html = `

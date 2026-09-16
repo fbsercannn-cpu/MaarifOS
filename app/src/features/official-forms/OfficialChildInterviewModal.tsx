@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface QuestionAnswer {
   id: string;
@@ -104,7 +105,7 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Cocukla_Gorusme_Formu_${studentName.replace(/\s+/g, "_")}`);
   };
 
   const handleExportWord = () => {

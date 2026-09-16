@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface SkillItem {
   id: string;
@@ -312,7 +313,7 @@ export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`EK-1_Alan_Becerileri_Matrisi_${selectedAge}`);
   };
 
   const handleDownloadDoc = () => {

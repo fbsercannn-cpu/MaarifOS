@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface WasteMaterialCategory {
   id: string;
@@ -98,7 +99,7 @@ Destekleriniz için teşekkür eder, doğaya duyarlı nesiller yetiştirmeyi dil
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Sifir_Atik_Materyal_Pusulasi`);
   };
 
   const handleDownloadDoc = () => {

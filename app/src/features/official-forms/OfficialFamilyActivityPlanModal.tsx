@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => void }) {
   const [parentName, setParentName] = useState("Ayşe Yılmaz (Veli)");
@@ -32,7 +33,7 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
   );
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Sinif_Ici_Aile_Katilim_Plani_${date}`);
   };
 
   const handleExportWord = () => {

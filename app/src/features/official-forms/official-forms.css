@@ -135,19 +135,28 @@
 .official-workspace-body {
   flex: 1;
   background: #0f172a;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px 16px 60px 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .official-workspace-body .official-form-modal {
   position: static;
   background: transparent;
   backdrop-filter: none;
-  padding: 20px 16px 40px 16px;
+  padding: 0;
+  width: 100%;
+  max-width: 900px;
 }
 
 .official-form-container {
   background: #ffffff;
   width: 100%;
-  max-width: 850px;
+  max-width: 900px;
+  margin: 0 auto;
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: flex;
@@ -399,8 +408,223 @@
   color: #ea580c;
 }
 
-/* ───── PRINT MEDIA RULES (A4 Physical Distortion) ───── */
+/* ───── PRINT MEDIA RULES & DEDICATED CONTAINER (A4 Physical Distortion) ───── */
+#maarif-print-container {
+  display: none !important;
+}
+
 @media print {
+  /* Dedicated container mode: body.is-printing-official-a4 aktif olduğunda başka HİÇBİR ŞEY yazdırılamaz! */
+  body.is-printing-official-a4 > *:not(#maarif-print-container) {
+    display: none !important;
+  }
+
+  body.is-printing-official-a4 {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.is-printing-official-a4 #maarif-print-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  #maarif-print-container .official-form-container,
+  #maarif-print-container .official-sheet,
+  #maarif-print-container .official-a4-sheet,
+  #maarif-print-container .official-print-document {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  #maarif-print-container .of-sheet-header,
+  #maarif-print-container .official-sheet__header,
+  #maarif-print-container .official-form-header {
+    text-align: center !important;
+    margin-bottom: 8pt !important;
+    display: block !important;
+  }
+
+  #maarif-print-container .of-sheet-header__emblem {
+    font-size: 8.5pt !important;
+    font-weight: 700 !important;
+    color: #173862 !important;
+    text-align: center !important;
+  }
+
+  #maarif-print-container .of-sheet-header__title {
+    font-size: 11pt !important;
+    font-weight: 800 !important;
+    color: #173862 !important;
+    text-align: center !important;
+    margin: 2pt 0 !important;
+  }
+
+  #maarif-print-container .of-sheet-header__subtitle {
+    font-size: 12pt !important;
+    font-weight: 800 !important;
+    color: #b91c1c !important;
+    text-align: center !important;
+    margin: 2pt 0 !important;
+  }
+
+  #maarif-print-container .of-sheet-header__ref {
+    font-size: 8pt !important;
+    color: #64748b !important;
+    font-style: italic !important;
+    text-align: center !important;
+    margin-bottom: 6pt !important;
+  }
+
+  #maarif-print-container .official-sheet__title {
+    font-size: 13pt !important;
+    font-weight: 800 !important;
+    color: #173862 !important;
+    text-align: center !important;
+    margin: 0 0 6pt 0 !important;
+  }
+
+  #maarif-print-container table,
+  #maarif-print-container table.official-table,
+  #maarif-print-container table.of-meta-table,
+  #maarif-print-container table.of-data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 6pt !important;
+    border: 1.5pt solid #173862 !important;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  #maarif-print-container thead {
+    display: table-header-group !important;
+  }
+
+  #maarif-print-container tfoot {
+    display: table-footer-group !important;
+  }
+
+  #maarif-print-container tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #maarif-print-container th,
+  #maarif-print-container td {
+    border: 1pt solid #475569 !important;
+    padding: 4pt 6pt !important;
+    font-size: 8.5pt !important;
+    line-height: 1.25 !important;
+    vertical-align: top !important;
+    color: #000000 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #maarif-print-container .official-table__section-header,
+  #maarif-print-container .of-data-table th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: 9pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #maarif-print-container .official-table__label {
+    background-color: #f8fafc !important;
+    font-weight: 600 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #maarif-print-container .print-only-text {
+    display: block !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    color: #000000 !important;
+    font-size: 8.5pt !important;
+  }
+
+  #maarif-print-container .no-print,
+  #maarif-print-container .official-form-actions,
+  #maarif-print-container .of-actions-bar,
+  #maarif-print-container button {
+    display: none !important;
+  }
+
+  #maarif-print-container .of-signatures-grid {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    margin-top: 14pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #maarif-print-container .of-signature-block {
+    text-align: center !important;
+    width: 45% !important;
+  }
+
+  #maarif-print-container .of-signature-block__title {
+    font-weight: 700 !important;
+    font-size: 8.5pt !important;
+    display: block !important;
+  }
+
+  #maarif-print-container .of-signature-block__name {
+    font-size: 8.5pt !important;
+    display: block !important;
+    margin-top: 4pt !important;
+  }
+
+  #maarif-print-container .of-signature-block__sign {
+    font-size: 8pt !important;
+    color: #475569 !important;
+    display: block !important;
+    margin-top: 10pt !important;
+  }
+
+  #maarif-print-container .official-sheet__footer,
+  #maarif-print-container .official-form-footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+    margin-top: 8pt !important;
+    padding-top: 4pt !important;
+    border-top: 1pt solid #cbd5e1 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Fallback: Doğrudan Ctrl+P basılırsa arka plan sızmasını önle */
+  body:has(.official-workspace-overlay) .simple-workspace > *:not(.official-workspace-overlay),
+  body:has(.official-workspace-overlay) .desk-document-center > *:not(.official-workspace-overlay),
+  body:has(.official-form-modal) .simple-workspace > *:not(.official-form-modal):not(.official-workspace-overlay),
+  body:has(.official-form-modal) .desk-document-center > *:not(.official-form-modal):not(.official-workspace-overlay) {
+    display: none !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 8mm 10mm 10mm 10mm;
@@ -485,7 +709,8 @@
     overflow: visible !important;
   }
 
-  .official-sheet {
+  .official-sheet,
+  .official-a4-sheet {
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;

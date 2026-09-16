@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface PortfolioItem {
   id: string;
@@ -119,7 +120,7 @@ export function StudentPortfolioGalleryModal({ onClose }: Props) {
     setShowAddForm(false);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => printOfficialFormA4(`Gelisim_Portfolyosu_${selectedStudent !== "all" ? selectedStudent.replace(/\s+/g, "_") : "Tum_Sinif"}`);
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface EvaluationItem {
   id: string;
@@ -60,7 +61,7 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Oz_ve_Akran_Degerlendirme_${studentName.replace(/\s+/g, '_')}`);
   };
 
   const handleExportWord = () => {

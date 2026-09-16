@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface DifferentiationStrategy {
   id: string;
@@ -162,7 +163,7 @@ export function DifferentiationGuideModal({ onClose }: Props) {
   const activeStrategy = OFFICIAL_DIFFERENTIATION_MATRIX.find((s) => s.id === selectedDomainId) || OFFICIAL_DIFFERENTIATION_MATRIX[0];
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Bireysel_Farklilastirma_Tutanagi_${targetStudentName.replace(/\s+/g, "_")}`);
   };
 
   const handleDownloadDoc = () => {

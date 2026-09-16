@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface MeetingDecision {
   id: string;
@@ -61,7 +62,7 @@ export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () =>
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`MEB_Veli_Toplantisi_Tutanagi_${meetingDate}`);
   };
 
   const handleExportWord = () => {

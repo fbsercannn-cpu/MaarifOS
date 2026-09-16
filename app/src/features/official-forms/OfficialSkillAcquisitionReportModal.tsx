@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface StudentReportData {
   id: string;
@@ -77,7 +78,7 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Beceri_Edinim_Raporu_${activeStudent.name.replace(/\s+/g, "_")}`);
   };
 
   const handleExportWord = () => {

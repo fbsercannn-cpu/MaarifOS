@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface DossierDocument {
   id: string;
@@ -73,7 +74,7 @@ export function OfficialInspectionDossierModal({ onClose }: Props) {
     );
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => printOfficialFormA4(`Maarif_Mufettisligi_Teftis_Dosyasi`);
 
   const handleDownloadDoc = () => {
     const html = `

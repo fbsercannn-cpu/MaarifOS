@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => void }) {
   const [studentName, setStudentName] = useState("Demir Korkmaz");
@@ -21,7 +22,7 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
   const [specialInterests, setSpecialInterests] = useState("Dinozorlar, taşıtlar, ahşap bloklarla köprü yapma ve parmak boyası.");
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Ogrenci_Tanima_ve_Aile_Bilgi_Formu_${studentName.replace(/\s+/g, '_')}`);
   };
 
   const handleExportWord = () => {

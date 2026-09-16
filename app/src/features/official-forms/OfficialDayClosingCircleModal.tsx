@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface ClosingDimension {
   id: string;
@@ -66,7 +67,7 @@ export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => voi
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Gunu_Degerlendirme_Cemberi_${date}`);
   };
 
   const handleExportWord = () => {

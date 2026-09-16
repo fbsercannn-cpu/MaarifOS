@@ -909,6 +909,33 @@ p {
     break-inside: avoid !important;
   }
 
+  /* Dedicated Container Mode: body.is-printing-official-a4 aktifse #root dahil diğer tüm DOM ağacını gizle */
+  body.is-printing-official-a4 > *:not(#maarif-print-container) {
+    display: none !important;
+  }
+
+  body.is-printing-official-a4 #maarif-print-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  /* Fallback: Eğer kullanıcı Ctrl+P ile yazdırırsa arka plan ekranlarını gizle */
+  body:has(.official-workspace-overlay) .simple-workspace > *:not(.official-workspace-overlay),
+  body:has(.official-workspace-overlay) .desk-document-center > *:not(.official-workspace-overlay),
+  body:has(.official-form-modal) .simple-workspace > *:not(.official-form-modal):not(.official-workspace-overlay),
+  body:has(.official-form-modal) .desk-document-center > *:not(.official-form-modal):not(.official-workspace-overlay) {
+    display: none !important;
+  }
+
   .maarif-app-shell,
   .maarif-app-content,
   .maarif-scroll,
@@ -929,4 +956,8 @@ p {
     padding: 0 !important;
     transform: none !important;
   }
+}
+
+#maarif-print-container {
+  display: none !important;
 }

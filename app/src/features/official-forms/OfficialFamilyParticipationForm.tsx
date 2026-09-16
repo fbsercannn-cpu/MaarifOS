@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface FamilyParticipationFormData {
   parentName: string;
@@ -84,7 +85,9 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
     otherNotes: initialData?.otherNotes || "Sınıf kitaplığına kitap bağışı ve meslek tanıtımı yapabilirim.",
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-10_Aile_Katilimi_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
+  };
 
   const handleDownloadWord = () => {
     const htmlContent = `<!DOCTYPE html>

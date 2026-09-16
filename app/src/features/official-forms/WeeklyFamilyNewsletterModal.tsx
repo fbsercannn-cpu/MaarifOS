@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface WeeklyNewsletterData {
   id: string;
@@ -119,7 +120,7 @@ export function WeeklyFamilyNewsletterModal({ onClose }: Props) {
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Haftalik_Veli_Bulteni_${current.weekNumber}_Hafta`);
   };
 
   const handleCopyWhatsApp = () => {

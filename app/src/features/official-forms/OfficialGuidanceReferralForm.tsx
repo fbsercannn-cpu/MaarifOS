@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void }) {
   const [studentName, setStudentName] = useState("Kerem Aydın");
@@ -38,7 +39,7 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Rehberlik_Yonlendirme_Formu_${studentName.replace(/\s+/g, '_')}`);
   };
 
   const handleExportWord = () => {

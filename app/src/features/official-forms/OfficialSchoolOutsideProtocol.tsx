@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface ProtocolCheckItem {
   id: string;
@@ -134,7 +135,7 @@ export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
   };
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`EK-3_Guvenlik_Protokolu_${destination.replace(/\s+/g, "_")}_${activityDate}`);
   };
 
   const handleDownloadDoc = () => {

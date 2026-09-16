@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface StudentProfileItem {
   id: string;
@@ -131,7 +132,7 @@ export function OfficialTermDevelopmentReport({
     }));
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => printOfficialFormA4(`Donem_Sonu_Gelisim_Raporu_${currentStudent.name.replace(/\s+/g, "_")}`);
 
   const handleDownloadWord = () => {
     const ratings = allRatings[currentStudent.id] || {};

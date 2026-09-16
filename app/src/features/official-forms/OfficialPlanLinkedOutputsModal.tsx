@@ -1,3 +1,4 @@
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 /**
  * T.C. Hazine ve Maliye Bakanlığı & Gelir İdaresi Başkanlığı Standartları
  * Plana Bağlı Resmî Örnek Çıktılar Sandığı (Linked Plan Sample Outputs Modal)
@@ -406,7 +407,7 @@ Sevgi ve saygılarımızla,
                   </p>
                   <button
                     type="button"
-                    onClick={() => window.print()}
+                    onClick={() => printOfficialFormA4("Plana_Bagli_Resmi_Ciktilar")}
                     style={{
                       marginTop: "8px",
                       background: "#059669",
@@ -493,7 +494,7 @@ Sevgi ve saygılarımızla,
         >
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => printOfficialFormA4("Plana_Bagli_Resmi_Ciktilar")}
             style={{
               padding: "6px 14px",
               borderRadius: "6px",

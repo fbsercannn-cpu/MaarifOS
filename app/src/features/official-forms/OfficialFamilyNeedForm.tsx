@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface FamilyNeedFormData {
   parentName: string;
@@ -67,7 +68,9 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
     specialSituation: initialData?.specialSituation || "Bilinen bir alerji veya kronik rahatsızlık bulunmamaktadır.",
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
+  };
 
   const handleDownloadWord = () => {
     const htmlContent = `<!DOCTYPE html>

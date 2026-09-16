@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export interface SchoolOutsidePlanData {
   place: string;
@@ -74,7 +75,7 @@ export function OfficialSchoolOutsidePlan({ initialData, onClose }: Props) {
   });
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`EK-4_Okul_Disi_Plan_${formData.place.replace(/\s+/g, "_")}_${formData.date}`);
   };
 
   const handleDownloadWord = () => {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 interface DigitalRuleItem {
   id: string;
@@ -49,7 +50,7 @@ export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () =>
   const [date, setDate] = useState("2026-09-15");
 
   const handlePrint = () => {
-    window.print();
+    printOfficialFormA4(`Dijital_Ogrenme_Taahhutnamesi_${date}`);
   };
 
   const handleExportWord = () => {
