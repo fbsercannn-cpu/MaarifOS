@@ -4661,22 +4661,61 @@ export default function Prototype() {
           }
         }),
       ),
-      runHydrationStep("today", loadTodayWorkspace(store)),
-      runHydrationStep("evidence", loadEvidenceWorkspace(store)),
-      runHydrationStep("calendar", loadAcademicCalendar(store)),
+      runHydrationStep(
+        "today",
+        loadTodayWorkspace(store).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Today workspace hydration fallback:", error);
+          return emptyTodayWorkspace;
+        }),
+      ),
+      runHydrationStep(
+        "evidence",
+        loadEvidenceWorkspace(store).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Evidence workspace hydration fallback:", error);
+          return emptyEvidenceWorkspace;
+        }),
+      ),
+      runHydrationStep(
+        "calendar",
+        loadAcademicCalendar(store).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Calendar workspace hydration fallback:", error);
+          return emptyAcademicCalendar;
+        }),
+      ),
       runHydrationStep(
         "scheduled-plans",
-        loadScheduledPlanWorkspace(store),
+        loadScheduledPlanWorkspace(store).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Scheduled plans hydration fallback:", error);
+          return emptyScheduledPlanWorkspace;
+        }),
       ),
-      runHydrationStep("teacher-cycle", loadTeacherWorkCycle(store, {
-        civilDate: fallbackDashboardState.attendanceCivilDate,
-      })),
-      runHydrationStep("teacher-week", loadTeacherWeekWorkspaceLazy(store, {
-        civilDate: fallbackDashboardState.attendanceCivilDate,
-      })),
-      runHydrationStep("day-closure", loadTeacherDayClosureWorkspace(store, {
-        civilDate: fallbackDashboardState.attendanceCivilDate,
-      })),
+      runHydrationStep(
+        "teacher-cycle",
+        loadTeacherWorkCycle(store, {
+          civilDate: fallbackDashboardState.attendanceCivilDate,
+        }).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Teacher cycle hydration fallback:", error);
+          return emptyTeacherWorkCycle(fallbackDashboardState.attendanceCivilDate);
+        }),
+      ),
+      runHydrationStep(
+        "teacher-week",
+        loadTeacherWeekWorkspaceLazy(store, {
+          civilDate: fallbackDashboardState.attendanceCivilDate,
+        }).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Teacher week hydration fallback:", error);
+          return emptyTeacherWeekState(fallbackDashboardState.attendanceCivilDate);
+        }),
+      ),
+      runHydrationStep(
+        "day-closure",
+        loadTeacherDayClosureWorkspace(store, {
+          civilDate: fallbackDashboardState.attendanceCivilDate,
+        }).catch((error) => {
+          console.warn("[MaarifOS Self-Healing] Day closure hydration fallback:", error);
+          return emptyTeacherDayClosureWorkspace(fallbackDashboardState.attendanceCivilDate);
+        }),
+      ),
       runHydrationStep("app-lock", loadAppLockSetting(store)),
       getBackupService()
         .then((service) => service.listRecoverySnapshots())
@@ -4819,11 +4858,11 @@ export default function Prototype() {
             const snapshot = await store.readSnapshot();
             return dashboardStateFromSnapshot(snapshot, currentCivilDate);
           }),
-          loadTodayWorkspace(store, { now: new Date() }),
-          loadEvidenceWorkspace(store, { now: new Date() }),
-          loadTeacherWorkCycle(store, { civilDate: currentCivilDate }),
-          loadTeacherWeekWorkspaceLazy(store, { civilDate: currentCivilDate }),
-          loadTeacherDayClosureWorkspace(store, { civilDate: currentCivilDate }),
+          loadTodayWorkspace(store, { now: new Date() }).catch(() => emptyTodayWorkspace),
+          loadEvidenceWorkspace(store, { now: new Date() }).catch(() => emptyEvidenceWorkspace),
+          loadTeacherWorkCycle(store, { civilDate: currentCivilDate }).catch(() => emptyTeacherWorkCycle(currentCivilDate)),
+          loadTeacherWeekWorkspaceLazy(store, { civilDate: currentCivilDate }).catch(() => emptyTeacherWeekState(currentCivilDate)),
+          loadTeacherDayClosureWorkspace(store, { civilDate: currentCivilDate }).catch(() => emptyTeacherDayClosureWorkspace(currentCivilDate)),
         ]);
         if (cancelled) return;
         setStudents(refreshed.students);

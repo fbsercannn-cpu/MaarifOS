@@ -724,9 +724,30 @@ export async function loadTodayWorkspace(
   store: LocalDataStore,
   options: { now?: Date } = {},
 ): Promise<TodayWorkspace> {
-  await migrateLegacyClassroomScopes(store, { now: options.now });
-  await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
-  return resolveTodayWorkspace(await store.readSnapshot(), options.now ?? new Date());
+  try {
+    await migrateLegacyClassroomScopes(store, { now: options.now });
+  } catch (err) {
+    console.warn("[MaarifOS] migrateLegacyClassroomScopes in today safely skipped:", err);
+  }
+  try {
+    await migrateLegacyAcademicYearOperationalStart(store, { now: options.now });
+  } catch (err) {
+    console.warn("[MaarifOS] migrateLegacyAcademicYearOperationalStart in today safely skipped:", err);
+  }
+  try {
+    return resolveTodayWorkspace(await store.readSnapshot(), options.now ?? new Date());
+  } catch (err) {
+    console.warn("[MaarifOS] resolveTodayWorkspace error, returning empty workspace:", err);
+    return {
+      civilDate: civilDateInIstanbul(options.now ?? new Date()),
+      classroom: { status: "not_configured" },
+      currentActivity: null,
+      planItems: [],
+      pendingEvidenceLinks: 0,
+      linkedLearningGoalCount: 0,
+      datedEvidenceCount: 0,
+    };
+  }
 }
 
 export async function saveClassroomConfiguration(

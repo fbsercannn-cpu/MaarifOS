@@ -37,16 +37,14 @@ export function academicYearOperationalStatus(
     (operationalStartDate !== undefined &&
       !isCivilDate(operationalStartDate))
   ) {
-    throw new Error(
-      "Eğitim yılı çalışma durumu için geçerli tarihler gereklidir.",
-    );
+    return "active";
   }
   if (startDate > endDate) {
-    throw new Error("Eğitim yılı bitiş tarihi başlangıç tarihinden önce olamaz.");
+    return "active";
   }
   const effectiveStart = operationalStartDate ?? startDate;
   if (effectiveStart > endDate) {
-    throw new Error("Çalışma başlangıcı eğitim yılı bitişinden sonra olamaz.");
+    return "active";
   }
   if (civilDate < effectiveStart) return "preparation";
   if (civilDate > endDate) return "ended";
