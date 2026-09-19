@@ -20,8 +20,14 @@
   z-index: 9999;
   background: #0f172a;
   overflow-y: auto;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  overscroll-behavior-x: none !important;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .official-workspace-header {
@@ -140,6 +146,9 @@
   align-items: flex-start;
   padding: 24px 16px 60px 16px;
   overflow-y: auto;
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100vw !important;
   box-sizing: border-box;
 }
 
@@ -406,6 +415,197 @@
   font-size: 1.1rem;
   font-weight: 800;
   color: #ea580c;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   OFFICIAL FORMS SCREEN MOBIL ZERO-OVERFLOW (RULE 3 & 5)
+   Mobil Cihazlarda Resmî Formların Taşmasını Önleyen Kurşungeçirmez Blok
+   ══════════════════════════════════════════════════════════════════ */
+@media screen and (max-width: 768px) {
+  .official-workspace-header {
+    padding: 8px 12px 0 12px !important;
+  }
+
+  .official-workspace-header__main {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .official-workspace-header__brand {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .official-workspace-header__tools {
+    width: 100% !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+  }
+
+  .official-workspace-tabs {
+    padding-bottom: 4px !important;
+  }
+
+  .official-workspace-body {
+    padding: 10px 6px 60px 6px !important;
+    overflow-x: hidden !important;
+  }
+
+  .official-form-modal {
+    padding: 6px 4px !important;
+    overflow-x: hidden !important;
+  }
+
+  .official-form-container {
+    border-radius: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .official-form-actions {
+    padding: 10px 12px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .official-form-actions__buttons {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .official-form-actions__buttons .of-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 8px 10px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .of-actions-bar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+  }
+
+  .of-actions-bar__left,
+  .of-actions-bar__right {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .of-actions-bar__right button {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+
+  .official-sheet,
+  .official-a4-sheet {
+    padding: 14px 10px !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .official-sheet__title {
+    font-size: 1.05rem !important;
+    line-height: 1.3 !important;
+  }
+
+  .official-sheet__guidance {
+    padding: 8px 10px !important;
+    font-size: 0.8rem !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Form girdileri mobilde taşamaz */
+  .of-input-inline {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-top: 4px !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    font-size: 16px !important;
+  }
+
+  .of-input,
+  .of-textarea {
+    box-sizing: border-box !important;
+    font-size: 16px !important;
+  }
+
+  .of-row-inputs {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .of-input-short {
+    width: 90px !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-top: 4px !important;
+    font-size: 16px !important;
+  }
+
+  /* Resmî Tabloların mobilde taşmasını önleyen sabit layout */
+  .official-table,
+  .of-meta-table,
+  .of-data-table,
+  .of-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    box-sizing: border-box !important;
+  }
+
+  .official-table th,
+  .official-table td,
+  .of-meta-table th,
+  .of-meta-table td,
+  .of-data-table th,
+  .of-data-table td,
+  .of-table th,
+  .of-table td {
+    padding: 6px 8px !important;
+    font-size: 0.82rem !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .official-table__label {
+    width: 38% !important;
+  }
+
+  .of-signatures-grid {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .of-signature-block {
+    width: 100% !important;
+    text-align: left !important;
+  }
+
+  .official-sheet__footer {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: flex-start !important;
+  }
 }
 
 /* ───── PRINT MEDIA RULES & DEDICATED CONTAINER (A4 Physical Distortion) ───── */

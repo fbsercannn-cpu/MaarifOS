@@ -197,3 +197,21 @@
   background: #f1f5f9;
   color: #1e293b;
 }
+
+@media (max-width: 420px) {
+  .qag-student-card {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .qag-student-name {
+    font-size: 0.84rem;
+  }
+  .qag-touch-btn {
+    min-width: 44px;
+    padding: 3px 6px;
+    font-size: 0.78rem;
+  }
+  .qag-detail-trigger {
+    width: 30px;
+  }
+}

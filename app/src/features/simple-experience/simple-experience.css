@@ -2046,3 +2046,38 @@ button.quick-stats-bar__item:hover { background: #f0f9f7; border-color: #00897b;
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   SIMPLE EXPERIENCE MOBILE SINGLE-PAGE STABILIZATION
+   Ekranın tek sayfa kararlılığı ve 0 horizontal scroll garantisi
+   ══════════════════════════════════════════════════════════════════ */
+@media screen and (max-width: 768px) {
+  .simple-today,
+  .simple-plan-workspace,
+  .simple-workspace {
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .simple-today__header {
+    gap: 8px;
+  }
+
+  .simple-today__brand {
+    min-width: 0;
+  }
+
+  .simple-today__brand strong {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
+
+  .simple-today__brand small {
+    font-size: 13px;
+  }
+}
+
