@@ -14,18 +14,20 @@
 ---
 
 ## 2. MEVCUT TELEMETRİ VE SÜRÜM DURUMU
-- **Yerel Sürüm:** `0.63.0` (19 Eylül 2026 — Mobil Tek Sayfa Kararlılığı & Sıfır Sağa-Sola Kayma Reformu: Single-Page Zero Horizontal Overflow Engine, Viewport Scale Kilidi, Dokunmatik Pan-Y İzolasyonu, Tüm Form ve Tablolarda Mobil Büküm — `VERIFIED_LIVE`).
-- **GitHub Depo Gizliliği:** `PUBLIC` (`fbsercannn-cpu/MaarifOS` & `fbsercannn-cpu.github.io` açık).
-- **Mega Eleştiri Raporu:** `docs/MAARIFOS_MEGA_ELESTIRI_RAPORU_2026_09_16.md` & `MAARIFOS_MEGA_ELESTIRI_v11_2026_09_16.md` (Öğretmen bilişsel ergonomisi, tık-tık sürtünmesiz akış, native Excel formül enjeksiyonu ve sıfır manuel bağlantı reformu).
+- **Yerel Sürüm:** `0.64.0` (19 Eylül 2026 — Mobil Tek Sayfa Kararlılığı & 4 Mega Reformun Eksiksiz İcrası: 1. Linear View Transitions API rotalar arası donanım hızlandırmalı geçiş; 2. Notion standardı EK-15 Mobil Dikey Kart Modu ve A4 Landscape matris koruması; 3. Apple HIG Web Vibration API yoklama ve buton dokunsal geri bildirimi; 4. Torvalds disiplini kalıcı `test:viewport` CI/CD bekçisi — `VERIFIED_LIVE`).
+- **GitHub Depo Gizliliği:** `PUBLIC` (`fbsercannn-cpu/MaarifOS` & `fbsercannn-cpu.github.io` açık ve canlı).
+- **Canlı URL:** `https://fbsercannn-cpu.github.io/` (Status: `built`).
+- **Mega Eleştiri Raporu:** `docs/MAARIFOS_MOBIL_TEK_SAYFA_MEGA_ELESTIRI_VE_ONERI_RAPORU_2026_09_19.md`
 - **Doğrulama / Test Metriği:**
   * `tsc --noEmit` 0 Hata
   * 4 Enforced Lint Policy kuralı PASS
-  * 48/48 Çekirdek, Ajan Sözleşmesi, Auth ve PWA Testi PASS (1551 ms)
-  * Vite production build: PASS (`OfficialFormsWorkspace` 581.2 kB / gzip: 127.3 kB)
-  * Git commit: `5465611` (`MaarifOS` origin/main) & `70b8388` (`fbsercannn-cpu.github.io`).
-  * Mobil Tek Sayfa Kararlılığı (Mobile Single-Page Stability): `html, body, #root, .native-app-runtime, .mobile-page, .mobile-scroll, .mobile-scroll-content` tüm konteynerler `overflow-x: hidden !important; max-width: 100vw !important; overscroll-behavior-x: none !important; touch-action: pan-y !important;` ile kilitlendi. `index.html` içinde `viewport` meta etiketi `maximum-scale=1.0, user-scalable=no` ile donanım seviyesinde zoom ve yatay drift'e karşı mühürlendi. Resmî formlar (`official-forms.css`) ve yoklama gridleri mobilde taşma yapmayacak şekilde esnek/blok düzenine büküldü.
-  * A4 Physical Print Engine (Rule 5): Dedicated Body Container `#maarif-print-container` ve `body.is-printing-official-a4` mimarisi devrede.
-  * Mobil sunucu `serve-phone.mjs` gzip ve $O(1)$ mtime-RAM önbellek motoru devrede.
+  * 54/54 Çekirdek, Ajan Sözleşmesi, Auth, PWA ve Viewport Testi PASS (851 ms)
+  * Canlı Playwright 5 Ekran Denetimi (360px, 375px, 390px, 412px, 430px): %100 KUSURSUZ (0 Yatay Kayma / ScrollX = 0)
+  * Vite production build: PASS (`OfficialFormsWorkspace` 583.3 kB / gzip: 127.8 kB)
+  * Git commit: `27057ff` (`MaarifOS` origin/main) & `f9587de` (`fbsercannn-cpu.github.io` origin/main).
+  * Mobil Tek Sayfa Kararlılığı: `overflow-x: hidden !important; max-width: 100vw !important; overscroll-behavior-x: none !important; touch-action: pan-y !important;` ve `maximum-scale=1.0, user-scalable=no, viewport-fit=cover`.
+  * Haptik Dokunuş Motoru: `src/core/haptics.ts` (`navigator.vibrate(10)`).
+  * A4 Physical Print Engine (Rule 5): Dedicated Body Container `#maarif-print-container` ve `body.is-printing-official-a4` mimarisi devrede; kart modunda dahi A4 çıktısı 10 aylık tam resmi tablo olarak üretilir.
 
 ---
 
