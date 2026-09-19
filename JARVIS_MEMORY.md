@@ -14,16 +14,17 @@
 ---
 
 ## 2. MEVCUT TELEMETRİ VE SÜRÜM DURUMU
-- **Yerel Sürüm:** `0.62.1` (16 Eylül 2026 — Mega Eleştiri Raporu v11 & A4 Baskı İzolasyonu Reformu: Bulletproof DOM Isolation Container, Sıfır Beyaz/Boş Sayfa Hatası, Sıfır Arka Plan Sızması, 34/34 Resmî MEB TTKB Formu Kusursuz A4 Baskı Entegrasyonu — `VERIFIED_LIVE`).
+- **Yerel Sürüm:** `0.63.0` (19 Eylül 2026 — Mobil Tek Sayfa Kararlılığı & Sıfır Sağa-Sola Kayma Reformu: Single-Page Zero Horizontal Overflow Engine, Viewport Scale Kilidi, Dokunmatik Pan-Y İzolasyonu, Tüm Form ve Tablolarda Mobil Büküm — `VERIFIED_LIVE`).
 - **GitHub Depo Gizliliği:** `PUBLIC` (`fbsercannn-cpu/MaarifOS` & `fbsercannn-cpu.github.io` açık).
 - **Mega Eleştiri Raporu:** `docs/MAARIFOS_MEGA_ELESTIRI_RAPORU_2026_09_16.md` & `MAARIFOS_MEGA_ELESTIRI_v11_2026_09_16.md` (Öğretmen bilişsel ergonomisi, tık-tık sürtünmesiz akış, native Excel formül enjeksiyonu ve sıfır manuel bağlantı reformu).
 - **Doğrulama / Test Metriği:**
   * `tsc --noEmit` 0 Hata
   * 4 Enforced Lint Policy kuralı PASS
-  * 48/48 Çekirdek, Ajan Sözleşmesi, Auth ve PWA Testi PASS (485 ms)
-  * Vite production build: 631 ms PASS (`OfficialFormsWorkspace` 581.2 kB / gzip: 127.3 kB)
-  * Git commit: `b7dc848` (`MaarifOS` origin/main) & `c8c18ce` (`fbsercannn-cpu.github.io` — `status: built`).
-  * A4 Physical Print Engine (Rule 5): Dedicated Body Container `#maarif-print-container` ve `body.is-printing-official-a4` mimarisi devrede. Chromium iframe opacity/clipping beyaz sayfa anomalisi %100 yok edildi; `#root` dahil tüm dış DOM ağacı `@media print` anında cerrahi olarak izole edilir. Form input/textarea değerleri klonda salt metne dönüştürülüp butonlar kaldırıldı. Alt navigasyon çubuğu (`.bottom-nav`) ve SPA kabuğu %100 izole edildi.
+  * 48/48 Çekirdek, Ajan Sözleşmesi, Auth ve PWA Testi PASS (1551 ms)
+  * Vite production build: PASS (`OfficialFormsWorkspace` 581.2 kB / gzip: 127.3 kB)
+  * Git commit: `5465611` (`MaarifOS` origin/main) & `70b8388` (`fbsercannn-cpu.github.io`).
+  * Mobil Tek Sayfa Kararlılığı (Mobile Single-Page Stability): `html, body, #root, .native-app-runtime, .mobile-page, .mobile-scroll, .mobile-scroll-content` tüm konteynerler `overflow-x: hidden !important; max-width: 100vw !important; overscroll-behavior-x: none !important; touch-action: pan-y !important;` ile kilitlendi. `index.html` içinde `viewport` meta etiketi `maximum-scale=1.0, user-scalable=no` ile donanım seviyesinde zoom ve yatay drift'e karşı mühürlendi. Resmî formlar (`official-forms.css`) ve yoklama gridleri mobilde taşma yapmayacak şekilde esnek/blok düzenine büküldü.
+  * A4 Physical Print Engine (Rule 5): Dedicated Body Container `#maarif-print-container` ve `body.is-printing-official-a4` mimarisi devrede.
   * Mobil sunucu `serve-phone.mjs` gzip ve $O(1)$ mtime-RAM önbellek motoru devrede.
 
 ---
