@@ -9233,18 +9233,28 @@ export default function Prototype() {
   };
 
   const navigatePrimaryRoute = (routeId: Parameters<typeof navigate>[0]) => {
-    const replacesOpenSurface = native && activeSurfaceRef.current !== null;
-    if (replacesOpenSurface) {
-      historyRestoringRef.current = true;
-      historySurfaceRef.current = null;
-      surfaceTransitionRef.current = null;
-      window.history.replaceState(
-        appHistoryState(null),
-        "",
-        window.location.href,
-      );
+    const performTransition = () => {
+      const replacesOpenSurface = native && activeSurfaceRef.current !== null;
+      if (replacesOpenSurface) {
+        historyRestoringRef.current = true;
+        historySurfaceRef.current = null;
+        surfaceTransitionRef.current = null;
+        window.history.replaceState(
+          appHistoryState(null),
+          "",
+          window.location.href,
+        );
+      }
+      navigate(routeId, replacesOpenSurface ? { replace: true } : undefined);
+    };
+
+    if (typeof document !== "undefined" && "startViewTransition" in document) {
+      (document as unknown as { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
+        performTransition();
+      });
+    } else {
+      performTransition();
     }
-    navigate(routeId, replacesOpenSurface ? { replace: true } : undefined);
   };
 
   const handleNav = (id: AlphaPrimaryNavigationId, label: string) => {

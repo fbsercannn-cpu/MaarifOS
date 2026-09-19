@@ -1074,3 +1074,12 @@ p {
     overflow-wrap: anywhere !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   VIEW TRANSITIONS API (RULE 1 & LINEAR NATIVE-FEEL STANDARD)
+   ══════════════════════════════════════════════════════════════════ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 160ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}

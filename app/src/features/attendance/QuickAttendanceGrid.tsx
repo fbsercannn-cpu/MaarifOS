@@ -7,6 +7,8 @@
  * Veri: parent'tan gelir; bu bilesen sadece goruntuler ve callback yapar.
  */
 
+import { triggerHaptic } from "../../core/haptics";
+
 export type AttendanceStatus = "present" | "absent" | "late";
 
 export interface QuickAttendanceStudent {
@@ -71,7 +73,10 @@ export function QuickAttendanceGrid({
                   className="qag__btn"
                   aria-pressed={student.currentStatus === status}
                   aria-label={`${student.displayName} ${STATUS_LABELS[status]}`}
-                  onClick={() => onMark(student.id, status)}
+                  onClick={() => {
+                    triggerHaptic(10);
+                    onMark(student.id, status);
+                  }}
                   disabled={disabled}
                 >
                   <span aria-hidden="true">{STATUS_ICONS[status]}</span>

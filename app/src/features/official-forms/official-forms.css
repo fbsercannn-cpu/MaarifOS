@@ -608,6 +608,92 @@
   }
 }
 
+/* ───── EK-15 MOBİL DİKEY KART MODU (Notion Standardı) ───── */
+.of-checklist-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.of-checklist-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  touch-action: pan-y;
+}
+
+.of-checklist-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.of-checklist-card__code {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.of-checklist-card__subcat {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.of-checklist-card__desc {
+  font-size: 0.85rem;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.of-checklist-card__months {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.of-checklist-month-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  min-height: 36px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.15s ease;
+}
+
+.of-checklist-month-chip.is-checked {
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #047857;
+  font-weight: 700;
+}
+
+.of-checklist-table-wrapper.no-screen {
+  display: none !important;
+}
+
 /* ───── PRINT MEDIA RULES & DEDICATED CONTAINER (A4 Physical Distortion) ───── */
 #maarif-print-container {
   display: none !important;
@@ -837,6 +923,7 @@
   }
 
   .no-print,
+  .of-checklist-cards,
   .official-form-actions,
   .official-workspace-header,
   .official-workspace-tabs,
@@ -846,6 +933,10 @@
   .of-input-inline,
   .of-input-short {
     display: none !important;
+  }
+
+  .of-checklist-table-wrapper.no-screen {
+    display: block !important;
   }
 
   .print-only-text {

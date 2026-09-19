@@ -5,6 +5,7 @@ import {
   printOfficialFormA4,
   type ExcelColumnDefinition,
 } from "./official-form-export-service.ts";
+import { triggerHaptic } from "../../core/haptics.ts";
 import "./official-forms.css";
 
 export const MONTHS = [
@@ -149,6 +150,12 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
   const [ageBand, setAgeBand] = useState<"36-48" | "48-60" | "60-72">("60-72");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      return "cards";
+    }
+    return "table";
+  });
 
   const [matrix, setMatrix] = useState<Record<string, Record<string, boolean>>>(() => {
     try {
@@ -178,6 +185,7 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
   }, [matrix]);
 
   const toggleCell = (itemId: string, month: MonthKey) => {
+    triggerHaptic(10);
     setMatrix((prev) => {
       const itemRow = prev[itemId] || {};
       return {
@@ -489,25 +497,70 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
             ))}
           </div>
 
-          <div style={{ minWidth: "180px" }}>
-            <input
-              type="text"
-              placeholder="🔍 Ara (Kod veya açıklama)..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "4px 8px",
-                fontSize: "0.8rem",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-              }}
-            />
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(10);
+                  setViewMode("cards");
+                }}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "0.78rem",
+                  borderRadius: "6px",
+                  border: viewMode === "cards" ? "1px solid #0284c7" : "1px solid #cbd5e1",
+                  background: viewMode === "cards" ? "#0284c7" : "#ffffff",
+                  color: viewMode === "cards" ? "#ffffff" : "#334155",
+                  fontWeight: viewMode === "cards" ? 700 : 500,
+                  cursor: "pointer",
+                }}
+                title="Dikey Mobil Kart Modu (Tek sayfa, yatay kaydırmasız)"
+              >
+                📱 Mobil Kart
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(10);
+                  setViewMode("table");
+                }}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "0.78rem",
+                  borderRadius: "6px",
+                  border: viewMode === "table" ? "1px solid #0284c7" : "1px solid #cbd5e1",
+                  background: viewMode === "table" ? "#0284c7" : "#ffffff",
+                  color: viewMode === "table" ? "#ffffff" : "#334155",
+                  fontWeight: viewMode === "table" ? 700 : 500,
+                  cursor: "pointer",
+                }}
+                title="10 Aylık Matris Tablosu"
+              >
+                📊 Tablo
+              </button>
+            </div>
+
+            <div style={{ minWidth: "180px" }}>
+              <input
+                type="text"
+                placeholder="🔍 Ara (Kod veya açıklama)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "4px 8px",
+                  fontSize: "0.8rem",
+                  borderRadius: "6px",
+                  border: "1px solid #cbd5e1",
+                }}
+              />
+            </div>
           </div>
         </div>
 
         {/* Matrix Table */}
-        <div style={{ overflowX: "auto" }}>
+        <div className={`of-checklist-table-wrapper ${viewMode === "cards" ? "no-screen" : ""}`} style={{ overflowX: "auto" }}>
           <table className="of-table" style={{ fontSize: "0.78rem", width: "100%", minWidth: "850px" }}>
             <thead>
               <tr style={{ background: "#e0f2fe", color: "#0369a1" }}>
@@ -567,6 +620,38 @@ export function OfficialMonthlyPlanChecklistForm({ onClose }: Props) {
             </tbody>
           </table>
         </div>
+
+        {/* Mobil Dikey Kart Modu */}
+        {viewMode === "cards" && (
+          <div className="of-checklist-cards no-print" role="region" aria-label="Aylık plan kontrol kartları">
+            {filteredItems.map((item) => (
+              <div key={item.id} className="of-checklist-card">
+                <div className="of-checklist-card__header">
+                  <span className="of-checklist-card__code">{item.code}</span>
+                  <span className="of-checklist-card__subcat">{item.subCategory}</span>
+                </div>
+                <div className="of-checklist-card__desc">{item.description}</div>
+                <div className="of-checklist-card__months" role="group" aria-label={`${item.code} ayları`}>
+                  {MONTHS.map((m) => {
+                    const isChecked = Boolean(matrix[item.id]?.[m]);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`of-checklist-month-chip ${isChecked ? "is-checked" : ""}`}
+                        onClick={() => toggleCell(item.id, m)}
+                        aria-pressed={isChecked}
+                        aria-label={`${item.code} ${m}`}
+                      >
+                        {isChecked ? "✓ " : ""}{m.slice(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Footer Note */}
         <div style={{ marginTop: "12px", fontSize: "0.72rem", color: "#64748b" }}>

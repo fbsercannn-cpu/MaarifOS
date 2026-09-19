@@ -25,6 +25,7 @@ import {
   type AttendanceEventDraft,
 } from "./attendance-panel-model";
 import "./quick-attendance.css";
+import { triggerHaptic } from "../../core/haptics";
 
 export interface AttendancePanelsProps {
   store?: LocalDataStore;
@@ -73,6 +74,7 @@ export function AttendancePanels(props: AttendancePanelsProps) {
   const lateCount = props.students.filter((s) => s.status === "late" && s.attendanceMarked !== false).length;
 
   const handleMarkAllUnmarkedPresent = () => {
+    triggerHaptic(15);
     props.students
       .filter((s) => s.attendanceMarked === false)
       .forEach((s) => props.onToggleStatus(s.id, "present"));
@@ -285,7 +287,10 @@ export function AttendancePanels(props: AttendancePanelsProps) {
                   <button
                     type="button"
                     className={`qag-touch-btn qag-touch-btn--present ${currentStatus === "present" ? "is-active" : ""}`}
-                    onClick={() => props.onToggleStatus(student.id, "present")}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      props.onToggleStatus(student.id, "present");
+                    }}
                     disabled={disabled}
                     aria-label={`${student.name} Geldi`}
                     aria-pressed={currentStatus === "present"}
@@ -296,7 +301,10 @@ export function AttendancePanels(props: AttendancePanelsProps) {
                   <button
                     type="button"
                     className={`qag-touch-btn qag-touch-btn--absent ${currentStatus === "absent" ? "is-active" : ""}`}
-                    onClick={() => props.onToggleStatus(student.id, "absent")}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      props.onToggleStatus(student.id, "absent");
+                    }}
                     disabled={disabled}
                     aria-label={`${student.name} Gelmedi`}
                     aria-pressed={currentStatus === "absent"}
@@ -307,7 +315,10 @@ export function AttendancePanels(props: AttendancePanelsProps) {
                   <button
                     type="button"
                     className={`qag-touch-btn qag-touch-btn--late ${currentStatus === "late" ? "is-active" : ""}`}
-                    onClick={() => props.onToggleStatus(student.id, "late")}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      props.onToggleStatus(student.id, "late");
+                    }}
                     disabled={disabled}
                     aria-label={`${student.name} Geç Geldi`}
                     aria-pressed={currentStatus === "late"}

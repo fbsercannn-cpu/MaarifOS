@@ -6,6 +6,7 @@
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",
     "test:ui-contracts": "node --test tests/prototype-keyboard-input-contract.test.mjs",
+    "test:viewport": "node --test tests/mobile-viewport-stability.test.mjs",
     "test:license-api": "npm --prefix ../license-api test",
     "check:runtime": "node scripts/check-mobile-runtime.mjs",
     "update:runtime-lock": "node scripts/update-mobile-runtime-lock.mjs",
