@@ -1,0 +1,804 @@
+{
+  "schemaVersion": 1,
+  "constitutionId": "maarifos-values-pedagogy-constitution",
+  "version": "1.1.0",
+  "title": "MaarifOS Değerler Pedagojisi Anayasası",
+  "governance": {
+    "publicationStatus": "draft-pending-human-review",
+    "effectiveOn": null,
+    "collectiveAuthor": "MaarifOS Değerler Pedagojisi Çalışma Paketi",
+    "changeSummary": "TYMM D1–D20 değerleri, Türk-İslam kültürel köprüleri, çocuk hakkı sınırları ve değerler-first plan sözleşmelerinin kanonik adayı; erişilebilirlikte D5–D1 ve izinli/doğru kanıt paylaşımında D6–D14 pedagojik çatı bağları açıklaştırıldı, yayın kurulu uygulayıcı öğretmen ile içerik/dil editörünü ayrı sorumluluklar olarak içerecek biçimde genişletildi.",
+    "requiredReviewRoles": [
+      "early-childhood-education",
+      "practicing-preschool-teacher",
+      "child-rights-and-safeguarding",
+      "tymm-curriculum",
+      "content-and-language-editor",
+      "turkish-islamic-culture-and-theology"
+    ],
+    "approvals": [
+      {
+        "role": "early-childhood-education",
+        "status": "pending"
+      },
+      {
+        "role": "practicing-preschool-teacher",
+        "status": "pending"
+      },
+      {
+        "role": "child-rights-and-safeguarding",
+        "status": "pending"
+      },
+      {
+        "role": "tymm-curriculum",
+        "status": "pending"
+      },
+      {
+        "role": "content-and-language-editor",
+        "status": "pending"
+      },
+      {
+        "role": "turkish-islamic-culture-and-theology",
+        "status": "pending"
+      }
+    ]
+  },
+  "canonicalSource": {
+    "framework": "Türkiye Yüzyılı Maarif Modeli Erdem-Değer-Eylem Çerçevesi",
+    "publisher": "T.C. Millî Eğitim Bakanlığı",
+    "sourceUrl": "https://tymm.meb.gov.tr/beceriler/erdem-deger-eylem-cercevesi",
+    "sourceCheckedOn": "2026-08-07",
+    "preschoolActionSource": {
+      "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+      "sourceVersion": "2024.09.02",
+      "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+      "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+      "pageNumbering": "pdf-page-label-and-viewer-1-based",
+      "sourcePageRange": [
+        324,
+        332
+      ]
+    },
+    "officialFields": [
+      "values[].code",
+      "values[].officialName",
+      "values[].domain",
+      "values[].roofValue"
+    ],
+    "pedagogicalAdaptationFields": [
+      "values[].pedagogicalPurpose",
+      "values[].observableActionsStatus",
+      "values[].observablePreschoolActions",
+      "values[].guardrails",
+      "values[].roofLinks",
+      "culturalBridges",
+      "safetyRules",
+      "activityPlanningContract"
+    ]
+  },
+  "centerPillars": [
+    "D14",
+    "D16",
+    "D1"
+  ],
+  "domains": [
+    {
+      "id": "roof",
+      "officialLabel": "Çatı değerler",
+      "expectedValueCount": 3
+    },
+    {
+      "id": "human",
+      "officialLabel": "İnsan",
+      "expectedValueCount": 6
+    },
+    {
+      "id": "family-and-social-environment",
+      "officialLabel": "Aile ve sosyal çevre",
+      "expectedValueCount": 7
+    },
+    {
+      "id": "physical-environment",
+      "officialLabel": "Fiziksel çevre",
+      "expectedValueCount": 4
+    }
+  ],
+  "values": [
+    {
+      "code": "D1",
+      "officialName": "Adalet",
+      "domain": "roof",
+      "roofValue": true,
+      "pedagogicalPurpose": "Çocuğun hak, ihtiyaç, sıra ve paylaşım durumlarında hakkaniyeti gözeterek çözüm aramasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Oyunda sıra ve ortak malzemeleri konuşulan adil kurala göre paylaşır.",
+        "Bir arkadaşının hakkı göz ardı edildiğinde durumu söyler ve güvenilir bir yetişkinden destek ister.",
+        "Farklı ihtiyacı olan bir arkadaş için uygunlaştırılmış desteği kabul eder.",
+        "Bir anlaşmazlıkta her çocuğun sözünü dinledikten sonra çözüm önerir."
+      ],
+      "guardrails": [
+        "Adalet herkese mekanik olarak aynısını vermek değildir; farklı ihtiyaçları ve hakları gözeten hakkaniyettir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D2",
+      "officialName": "Aile Bütünlüğü",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun ailesindeki güven, dayanışma, iletişim ve sorumluluk bağlarını farklı aile yapılarına saygıyla anlamlandırmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Ailesiyle yaptığı bir dayanışma veya birlikte zaman geçirme örneğini paylaşır.",
+        "Evde yaşına uygun bir sorumluluğu seçer ve yaptığını anlatır.",
+        "Arkadaşlarının farklı aile yapılarını ve aile adlandırmalarını saygıyla karşılar."
+      ],
+      "guardrails": [
+        "Aile bütünlüğü ailedeki zararı, ihmali, istismarı veya çocuğun yardım istemesini gizleme gerekçesi yapılamaz."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D3",
+      "officialName": "Çalışkanlık",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun merakla başlamasını, yaşına uygun emek vermesini, denemesini ve işi anlamlı bir sonuca ulaştırmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Seçtiği yaşına uygun göreve başlar ve tamamlamak için çaba gösterir.",
+        "İlk denemesi sonuç vermediğinde başka bir yol dener veya yardım ister.",
+        "Merak ettiği bir konu hakkında soru sorar ve bulduğu bilgiyi paylaşır."
+      ],
+      "guardrails": [
+        "Çalışkanlık kesintisiz performans, yetişkin iş yükünü üstlenme veya dinlenme hakkından vazgeçme değildir."
+      ],
+      "roofLinks": [
+        "D16"
+      ]
+    },
+    {
+      "code": "D4",
+      "officialName": "Dostluk",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun karşılıklılık, güven, paylaşım ve barışçıl onarım içeren akran ilişkileri kurmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Oyuna katılmak isteyen bir arkadaşına yer açar veya uygun bir rol önerir.",
+        "Arkadaşı konuşurken dinler ve kendi duygu ya da düşüncesini açıkça paylaşır.",
+        "Bir kırgınlıktan sonra özür, telafi veya yeniden oyun kurma yollarından birini önerir."
+      ],
+      "guardrails": [
+        "Dostluk, istemediği teması kabul etmek, sırrı zorla saklamak veya her davranışa katlanmak değildir."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D5",
+      "officialName": "Duyarlılık",
+      "domain": "physical-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun insan, canlı ve çevredeki ihtiyaç ya da değişimleri fark edip güvenli ve ölçülü bir katkı sunmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Üzgün veya desteğe ihtiyaç duyan birini fark ettiğinde neye ihtiyacı olduğunu sorar.",
+        "Sınıfta ya da bahçede zarar riski gördüğünde güvenilir bir yetişkine haber verir.",
+        "Bir canlıya veya ortak çevreye yararlı, yaşına uygun bir bakım eylemi seçer."
+      ],
+      "guardrails": [
+        "Duyarlılık çocuğu her sorundan sorumlu tutmak, kaygılandırmak veya güvenliğini riske atarak müdahaleye zorlamak değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D6",
+      "officialName": "Dürüstlük",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun gerçeği güvenli biçimde ifade etmesini, hatasını kabul etmesini ve güvenilir davranış geliştirmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Bir olayda gördüğü ile tahmin ettiğini birbirinden ayırarak anlatır.",
+        "Yaptığı bir hatayı korkutulmadan söyler ve onarma seçeneği belirler.",
+        "Bulduğu veya ödünç aldığı eşyayı sahibine ya da sorumlu yetişkine teslim eder."
+      ],
+      "guardrails": [
+        "Dürüstlük çocuğun mahrem bilgisini açıklamaya zorlanması değildir; çocuk güvenli sınırlar içinde konuşur ve yardım isteyebilir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D7",
+      "officialName": "Estetik",
+      "domain": "physical-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun doğada, sanatta ve gündelik çevrede güzellik, uyum ve özgün ifade olanaklarını fark etmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Bir doğa, sanat veya mimari örneğinde dikkatini çeken renk, ses, biçim ya da düzeni anlatır.",
+        "Malzeme, renk ve biçim seçimlerini kendisi yaparak özgün bir ürün oluşturur.",
+        "Kendi ve arkadaşlarının farklı estetik seçimlerine zarar vermeden özen gösterir."
+      ],
+      "guardrails": [
+        "Estetik tek tip beğeni, kusursuz ürün, dış görünüş yargısı veya kültürel üstünlük ölçütü değildir."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D8",
+      "officialName": "Mahremiyet",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun bedensel, duygusal ve bilgisel sınırlarını tanımasını; başkalarının sınırları için izin istemesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "İstemediği dokunma, görüntüleme veya paylaşıma açıkça hayır der ve uzaklaşır.",
+        "Bir başkasının bedenine, eşyasına veya özel alanına yaklaşmadan önce izin ister.",
+        "Kendisini rahatsız eden bir durum olduğunda seçtiği güvenilir yetişkinden yardım ister."
+      ],
+      "guardrails": [
+        "Mahremiyet zarar, tehdit veya istismarı sır olarak saklamak değildir; çocuğun güvenilir bir yetişkine anlatma ve yardım isteme hakkı korunur."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14"
+      ]
+    },
+    {
+      "code": "D9",
+      "officialName": "Merhamet",
+      "domain": "physical-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun insanlara, canlılara ve doğaya acıyı büyütmeden şefkatli, koruyucu ve ihtiyaca uygun davranmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Üzülen bir arkadaşına yaklaşmadan önce destek isteyip istemediğini sorar.",
+        "Hayvanlara ve bitkilere zarar vermeden, gelişimine uygun bakım davranışı gösterir.",
+        "Bir canlının ihtiyacını fark ettiğinde güvenli bir yardım seçer veya yetişkine haber verir."
+      ],
+      "guardrails": [
+        "Merhamet sınırları kaldırmak, haksızlığı sürdürmek veya çocuğu kurtarıcı rolüne zorlamak değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D10",
+      "officialName": "Mütevazılık",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun kendi değerini küçültmeden başkalarının emeğini ve katkısını fark etmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Başardığı bir işi anlatırken kendisine yardım eden kişilerin katkısını da söyler.",
+        "Bir arkadaşının fikrini dinler ve işe yarayan bölümünü takdir eder.",
+        "Bilmediği veya yapamadığı bir durumda yardım kabul eder ve teşekkür eder."
+      ],
+      "guardrails": [
+        "Mütevazılık kendini değersizleştirmek, başarısını inkâr etmek, susmak veya hakkından vazgeçmek değildir."
+      ],
+      "roofLinks": [
+        "D14"
+      ]
+    },
+    {
+      "code": "D11",
+      "officialName": "Özgürlük",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun güvenli seçenekler arasında karar vermesini, düşüncesini ifade etmesini ve başkalarının özgürlüğünü gözetmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Sunulan güvenli seçenekler arasından etkinlik, malzeme veya rol seçer.",
+        "İstemediği bir duruma hayır der ve mümkünse kabul edebileceği alternatifi söyler.",
+        "Kendisinden farklı bir seçime müdahale etmeden kendi gerekçesini ifade eder."
+      ],
+      "guardrails": [
+        "Özgürlük başkasının hakkına zarar verme serbestliği değildir; seçimler bilgi, güvenlik ve karşılıklı haklarla birlikte ele alınır."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D12",
+      "officialName": "Sabır",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun bekleme, denemeyi sürdürme ve yoğun duyguda kendini düzenleme becerilerini güvenli destekle geliştirmek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Sırasını beklerken kendisine uygun bir bekleme stratejisi kullanır.",
+        "Zorlandığı bir işi küçük adımlara bölerek yeniden dener.",
+        "Yoğun duyguda mola, nefes, sakin köşe veya yetişkin desteği seçeneklerinden birini seçer."
+      ],
+      "guardrails": [
+        "Sabır zarar, zorbalık, acı veya ihmal karşısında sessiz kalmak değildir; çocuk durdurma ve yardım isteme hakkına sahiptir."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D13",
+      "officialName": "Sağlıklı Yaşam",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun beden sinyallerini fark etmesini ve beslenme, hareket, dinlenme, hijyen ile güvenlikte yaşına uygun öz bakım geliştirmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Açlık, susuzluk, yorgunluk veya tuvalet ihtiyacını uygun biçimde ifade eder.",
+        "El yıkama, su içme, dinlenme ve hareket rutinlerine gelişimine uygun biçimde katılır.",
+        "Riskli bir durumda durur, güvenlik kuralını uygular veya yetişkinden yardım ister."
+      ],
+      "guardrails": [
+        "Sağlıklı yaşam beden, kilo, engel veya yiyecek üzerinden utandırma ve tek tip beden ya da beslenme dayatması değildir."
+      ],
+      "roofLinks": [
+        "D16"
+      ]
+    },
+    {
+      "code": "D14",
+      "officialName": "Saygı",
+      "domain": "roof",
+      "roofValue": true,
+      "pedagogicalPurpose": "Çocuğun kendisinin, diğer insanların, farklılıkların, emeğin, canlıların ve ortak yaşamın değerini karşılıklı sınırlarla gözetmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Konuşan kişiyi dinler, söz sırası ister ve söz kesildiğinde uygun biçimde hatırlatır.",
+        "Farklı dil, inanç, kültür, aile, görünüş ve yeterlik özellikleriyle alay etmez; dışlamaya katılmaz.",
+        "Kendi sınırı ihlal edildiğinde hayır der, uzaklaşır ve güvenilir yetişkinden yardım ister.",
+        "Ortak eşyaya, emeğe, canlılara ve kültürel mirasa özen gösterir."
+      ],
+      "guardrails": [
+        "Saygı kör itaat değildir; çocuk güvenli olmayan, haksız veya sınır ihlali içeren bir isteğe hayır diyebilir ve yardım isteyebilir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D15",
+      "officialName": "Sevgi",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun sevgi, vefa, barışçıllık ve özeni gönüllü, güvenli ve karşılıklı yollarla ifade etmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Sevgi ve ilgisini söz, resim, yardım veya birlikte zaman geçirme gibi seçtiği güvenli bir yolla gösterir.",
+        "Bir arkadaşını farklılığıyla kabul eder ve dışlayıcı davranışa katılmaz.",
+        "İnsanlara, hayvanlara, bitkilere ve ortak çevreye nazik davranır."
+      ],
+      "guardrails": [
+        "Sevgi fiziksel temasa, sır paylaşmaya, yakınlık göstermeye veya affetmeye zorlama değildir."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D16",
+      "officialName": "Sorumluluk",
+      "domain": "roof",
+      "roofValue": true,
+      "pedagogicalPurpose": "Çocuğun yaşına ve gücüne uygun görevleri sahiplenmesini, etkisini fark etmesini ve gerektiğinde onarım yapmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Seçtiği veya paylaşımla aldığı sınıf görevini zamanında tamamlar ya da desteğe ihtiyacını söyler.",
+        "Kullandığı ortak malzemeyi yerine koyar ve ödünç aldığı eşyaya özen gösterir.",
+        "Davranışının bir kişiye, canlıya veya çevreye etkisini fark ettiğinde uygun bir onarım önerir.",
+        "Yapamayacağı bir görev için yetişkinden yardım veya yeniden görev paylaşımı ister."
+      ],
+      "guardrails": [
+        "Sorumluluk çocuğa yetişkin yükü vermek, yaşadığı zarardan onu sorumlu tutmak veya yardım istemesini engellemek değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D17",
+      "officialName": "Tasarruf",
+      "domain": "human",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun suyu, enerjiyi, zamanı, yiyeceği ve malzemeyi ihtiyaca uygun, ölçülü ve israfı azaltan biçimde kullanmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Su ve malzemeyi ihtiyacı kadar kullanır, işi bitince akışı veya cihazı kapatır.",
+        "Artan temiz malzemeyi yeniden kullanım için ayırır.",
+        "Bir etkinlikte yeni malzeme istemeden önce eldeki güvenli seçenekleri değerlendirir."
+      ],
+      "guardrails": [
+        "Tasarruf temel ihtiyaçlardan mahrum bırakma, yoksullukla utandırma veya çocukta kıtlık korkusu oluşturma değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D16"
+      ]
+    },
+    {
+      "code": "D18",
+      "officialName": "Temizlik",
+      "domain": "physical-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun öz bakımını ve ortak çevre bakımını sağlığı, güvenliği ve onuru koruyan rutinlerle geliştirmesini desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Gelişimine uygun el yıkama ve kişisel bakım adımlarını uygular.",
+        "Döktüğü güvenli bir malzemeyi uygun araç ve yetişkin desteğiyle temizler.",
+        "Atıkları sınıfın belirlediği geri dönüşüm veya çöp düzenine göre ayırır."
+      ],
+      "guardrails": [
+        "Temizlik kirlenmeyi, bedeni, hastalığı, engeli, işi veya aile koşullarını utandırma ve takıntılı tekrar gerekçesi değildir."
+      ],
+      "roofLinks": [
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D19",
+      "officialName": "Vatanseverlik",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun ülkesine, ortak iyiliğe, millî-kültürel mirasa ve yaşadığı çevreye aidiyetini insanlık onuruyla birlikte geliştirmek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Bayrak, İstiklâl Marşı ve ortak kültürel mirasla ilgili sınıf materyallerine özen gösterir.",
+        "Yaşadığı yerin bir kültür, emek, doğa veya dayanışma hikâyesini dinler ve kendi sözüyle anlatır.",
+        "Okuluna, mahallesine veya ortak çevreye yararlı yaşına uygun bir çalışmaya katılır."
+      ],
+      "guardrails": [
+        "Vatanseverlik başka halkları, dilleri, kültürleri veya ülkeleri küçültmek ve çocukları düşmanlık diliyle yönlendirmek değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "code": "D20",
+      "officialName": "Yardımseverlik",
+      "domain": "family-and-social-environment",
+      "roofValue": false,
+      "pedagogicalPurpose": "Çocuğun ihtiyacı fark edip izin, karşılıklılık, güvenlik ve onuru gözeterek yardımlaşmasını desteklemek.",
+      "observableActionsStatus": "maarifos_preschool_adaptation",
+      "observablePreschoolActions": [
+        "Yardım etmeden önce arkadaşına neye ihtiyacı olduğunu sorar.",
+        "Ortak bir işi akranlarıyla görev paylaşarak tamamlar.",
+        "Paylaşabileceği zaman, emek veya malzemeden yaşına uygun bir katkıyı gönüllü olarak seçer."
+      ],
+      "guardrails": [
+        "Yardımseverlik zorunlu bağış, kendini feda etme, izinsiz müdahale veya yardım alanı küçük düşürme değildir."
+      ],
+      "roofLinks": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    }
+  ],
+  "culturalBridges": [
+    {
+      "id": "emanet",
+      "name": "Emanet",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Kendisine bırakılan eşya, görev, sır, canlı ve ortak çevreye güvenilir biçimde özen gösterme.",
+      "valueCodes": [
+        "D6",
+        "D8",
+        "D16",
+        "D17"
+      ]
+    },
+    {
+      "id": "kul-hakki",
+      "name": "Kul hakkı",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Başkasının hakkını gözetme, haksız alınanı geri verme ve zararı onarma bilinci.",
+      "valueCodes": [
+        "D1",
+        "D6",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "id": "merhamet",
+      "name": "Merhamet",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "İnsana ve canlıya şefkatle yaklaşma, ihtiyacı sorarak ölçülü yardım sunma.",
+      "valueCodes": [
+        "D9",
+        "D15",
+        "D20"
+      ]
+    },
+    {
+      "id": "edep-nezaket",
+      "name": "Edep ve nezaket",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Kendinin ve başkasının onurunu koruyan nazik, ölçülü ve sınırları gözeten iletişim.",
+      "valueCodes": [
+        "D10",
+        "D14"
+      ]
+    },
+    {
+      "id": "helal-emek-caliskanlik",
+      "name": "Helal emek ve çalışkanlık",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Emeğe saygı, dürüst üretim, görevi hakkıyla yapma ve başkasının emeğini gözetme.",
+      "valueCodes": [
+        "D3",
+        "D6",
+        "D14",
+        "D16"
+      ]
+    },
+    {
+      "id": "sukur-kanaat-israf-etmeme",
+      "name": "Şükür, kanaat ve israf etmeme",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Sahip olunanı fark etme, ihtiyacı kadar kullanma ve nimeti hor görmeden israfı azaltma.",
+      "valueCodes": [
+        "D10",
+        "D17"
+      ]
+    },
+    {
+      "id": "aile-sila-i-rahim-komsuluk",
+      "name": "Aile, sıla-i rahim ve komşuluk",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Aile ve akrabalık bağlarını, komşuluk hukukunu, güvenli iletişimi ve dayanışmayı yaşatma.",
+      "valueCodes": [
+        "D2",
+        "D4",
+        "D14",
+        "D15",
+        "D20"
+      ]
+    },
+    {
+      "id": "imece-yardimlasma",
+      "name": "İmece ve yardımlaşma",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Ortak iyilik için gönüllü katkı, görev paylaşımı ve birlikte üretme kültürü.",
+      "valueCodes": [
+        "D4",
+        "D16",
+        "D20"
+      ]
+    },
+    {
+      "id": "temizlik",
+      "name": "Temizlik",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Bedenin, eşyanın ve ortak çevrenin bakımını sağlık, ölçülülük ve onurla ilişkilendirme.",
+      "valueCodes": [
+        "D13",
+        "D16",
+        "D18"
+      ]
+    },
+    {
+      "id": "vatan-kulturel-miras",
+      "name": "Vatan ve kültürel miras",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "Vatana, ortak iyiliğe ve millî-kültürel mirasa özen gösterirken insanlığın ortak onurunu koruma.",
+      "valueCodes": [
+        "D14",
+        "D15",
+        "D19"
+      ]
+    },
+    {
+      "id": "yaratilmislara-dogaya-merhamet",
+      "name": "Yaratılmışlara ve doğaya merhamet",
+      "officialTymmValue": false,
+      "status": "Turkish-Islamic-cultural-pedagogical-bridge",
+      "pedagogicalBridge": "İnsana, hayvana, bitkiye, suya ve toprağa zarar vermeme; güvenli ve sürdürülebilir bakım gösterme.",
+      "valueCodes": [
+        "D5",
+        "D9",
+        "D14",
+        "D15",
+        "D16"
+      ]
+    }
+  ],
+  "safetyRules": [
+    {
+      "id": "belief-is-not-assessed",
+      "rule": "Çocuğun veya ailesinin inancı, ibadeti, mezhebi ya da inançsızlığı ölçülmez, puanlanmaz, profillenmez ve bunlardan gelişim hükmü çıkarılmaz.",
+      "enforcement": "hard-stop"
+    },
+    {
+      "id": "no-coercion-fear-shame-or-sectarian-superiority",
+      "rule": "Değer öğretiminde zorlama, korkutma, tehdit, utandırma, günahkâr ilan etme veya mezhep ve inanç üstünlüğü dili kullanılmaz.",
+      "enforcement": "hard-stop"
+    },
+    {
+      "id": "privacy-and-help-seeking-are-protected",
+      "rule": "Çocuğun bedensel ve bilgisel mahremiyeti ile hayır deme, uzaklaşma, güvenilir yetişkine anlatma ve yardım isteme hakkı korunur.",
+      "enforcement": "hard-stop"
+    },
+    {
+      "id": "respect-is-not-blind-obedience",
+      "rule": "Saygı kör itaat değildir; çocuk haksız, güvenli olmayan veya sınır ihlali içeren talebi reddedebilir ve yardım isteyebilir.",
+      "enforcement": "hard-stop"
+    },
+    {
+      "id": "family-unity-never-conceals-harm",
+      "rule": "Aile bütünlüğü; şiddet, ihmal, istismar, tehdit veya başka bir zararı gizleme ve çocuğu sessizliğe zorlama gerekçesi yapılamaz.",
+      "enforcement": "hard-stop"
+    },
+    {
+      "id": "patriotism-never-demeans-other-peoples",
+      "rule": "Vatanseverlik başka halkları, ülkeleri, dilleri, kültürleri veya inançları küçültmez; düşmanlaştırma ve üstünlük üretmez.",
+      "enforcement": "hard-stop"
+    }
+  ],
+  "activityPlanningContract": {
+    "schemaVersion": 1,
+    "primaryValue": {
+      "exactly": 1
+    },
+    "roofAnchor": {
+      "exactly": 1,
+      "allowedCodes": [
+        "D1",
+        "D14",
+        "D16"
+      ]
+    },
+    "roofValueChecks": {
+      "required": true,
+      "requiredFields": [
+        "respect",
+        "responsibility",
+        "justice"
+      ]
+    },
+    "supportingValues": {
+      "minimum": 0,
+      "maximum": 2,
+      "mustBeDistinct": true,
+      "mustExcludePrimary": true
+    },
+    "officialActionSnapshot": {
+      "required": true,
+      "immutable": true,
+      "requiredFields": [
+        "valueCode",
+        "actionCode",
+        "actionName",
+        "indicatorCode",
+        "indicatorText",
+        "catalogId",
+        "sourceVersion",
+        "sourceUrl",
+        "sourceSha256",
+        "sourcePage"
+      ]
+    },
+    "pedagogicalFields": [
+      {
+        "id": "dilemma",
+        "label": "Ahlaki ikilem veya gerçek yaşam sorusu",
+        "required": true
+      },
+      {
+        "id": "observableAction",
+        "label": "Çocuğun gözlenebilir eylemi",
+        "required": true
+      },
+      {
+        "id": "adultModel",
+        "label": "Yetişkin modeli",
+        "required": true
+      },
+      {
+        "id": "childAgency",
+        "label": "Çocuğun seçimi, sözü ve katılımı",
+        "required": true
+      },
+      {
+        "id": "repair",
+        "label": "Hata veya zarar sonrası onarma yolu",
+        "required": true
+      },
+      {
+        "id": "familyConnection",
+        "label": "Aile ve yakın çevre bağlantısı",
+        "required": false
+      },
+      {
+        "id": "natureConnection",
+        "label": "Canlılar ve doğa bağlantısı",
+        "required": false
+      },
+      {
+        "id": "evidence",
+        "label": "Puanlamadan kaydedilecek gözlenebilir kanıt",
+        "required": true
+      },
+      {
+        "id": "reflection",
+        "label": "Çocuk ve öğretmen yansıtması",
+        "required": true
+      }
+    ],
+    "coverage": {
+      "minimumDistinctValuesPerMonth": 4,
+      "requiredValueCodesPerTerm": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "D7",
+        "D8",
+        "D9",
+        "D10",
+        "D11",
+        "D12",
+        "D13",
+        "D14",
+        "D15",
+        "D16",
+        "D17",
+        "D18",
+        "D19",
+        "D20"
+      ]
+    }
+  }
+}

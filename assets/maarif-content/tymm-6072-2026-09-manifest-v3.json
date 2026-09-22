@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "tymm-6072-2026-09-v3-manifest",
+  "contentReleaseId": "tymm-6072-2026-09-v3",
+  "contentFile": "content.v3.json",
+  "digestAlgorithm": "sha256",
+  "digestScope": "canonical_content_payload_without_manifestDigest",
+  "canonicalization": "recursive_key_sort_array_order_preserved_json_stringify_utf8_nfc",
+  "contentPayloadSha256": "sha256:3cae6337359334d12ead18dc1956f875af4fc92bb8c6f550b302eafd64dda85f",
+  "contentPayloadByteLength": 115671,
+  "contentManifestDigestBinding": "content.manifestDigest equals the SHA-256 of this manifest file's raw UTF-8 bytes",
+  "predecessor": {
+    "contentFile": "content.v2.json",
+    "contentReleaseId": "tymm-6072-2026-09-v2",
+    "rawFileSha256": "sha256:f096c3d98990796c11e4b72747458248e2fd7a530dd54102acba9ddea996d8e5"
+  },
+  "valuesSourceChain": {
+    "constitution": {
+      "file": "app/src/features/values/values-pedagogy-constitution.v1.json",
+      "constitutionId": "maarifos-values-pedagogy-constitution",
+      "version": "1.1.0",
+      "schemaVersion": 1,
+      "rawFileSha256": "sha256:726219fca13672d5093bc1d58f8010e410d573dcfd3b163c2bf7daaf997c2643"
+    },
+    "officialActionCatalog": {
+      "file": "app/src/features/values/official-preschool-value-actions.v1.json",
+      "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+      "sourceVersion": "2024.09.02",
+      "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+      "rawFileSha256": "sha256:e748242d3534193907228c8e590d074a45d81d9a6a6adc2e08aba279dc6dac46"
+    }
+  },
+  "status": "machine_validated_pending_human_review",
+  "requiredHumanReviewRoles": [
+    "early-childhood-education",
+    "practicing-preschool-teacher",
+    "child-rights-and-safeguarding",
+    "tymm-curriculum",
+    "content-and-language-editor",
+    "turkish-islamic-culture-and-theology"
+  ],
+  "createdAtUtc": "2026-08-08T09:00:00.000Z"
+}
