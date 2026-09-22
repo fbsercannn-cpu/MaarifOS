@@ -1,1 +1,0 @@
-import{C as e}from"./teacher-feedback-CUy1RkNN.js";function t(t){return e(t.operationalStartDate)?t.operationalStartDate:t.startDate}function n(t,n,r,i){if(!e(t)||!e(n)||!e(r)||i!==void 0&&!e(i)||t>n)return`active`;let a=i??t;return a>n?`active`:r<a?`preparation`:r>n?`ended`:`active`}export{n,t};
