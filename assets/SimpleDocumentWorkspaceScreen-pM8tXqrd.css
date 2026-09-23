@@ -1,0 +1,1 @@
+.simple-document-purposes{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;display:grid}.simple-document-purposes button{color:#142e47;min-height:48px;font:inherit;background:#fff;border:1px solid #8cabb3;border-radius:10px;padding:10px;font-weight:650}.simple-document-purposes button[aria-pressed=true]{color:#fff;background:#126c75;border-color:#126c75}
