@@ -1,39 +1,41 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => void }) {
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [date, setDate] = useState("2026-09-15");
-  const [childA, setChildA] = useState("Demir Korkmaz");
-  const [childB, setChildB] = useState("Caner Yıldız");
-  const [location, setLocation] = useState("Blok ve İnşa Merkezi");
-  const [incidentDescription, setIncidentDescription] = useState(
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [childA, setChildA] = useOfficialFormState("childA", "Demir Korkmaz");
+  const [childB, setChildB] = useOfficialFormState("childB", "Caner Yıldız");
+  const [location, setLocation] = useOfficialFormState("location", "Blok ve İnşa Merkezi");
+  const [incidentDescription, setIncidentDescription] = useOfficialFormState("incidentDescription",
     "Aynı renkli büyük ahşap bloğu her iki öğrenci de aynı anda kulesinde kullanmak istedi; aralarında çekişme ve ses yükselmesi yaşandı."
   );
 
-  const [step1CoolDown, setStep1CoolDown] = useState(
+  const [step1CoolDown, setStep1CoolDown] = useOfficialFormState("step1CoolDown",
     "Öğrenciler 'Barış Masası'na davet edildi. 3 kez derin çiçek koklama ve mum üfleme nefesi alındı; duygular yatıştırıldı."
   );
 
-  const [step2ListeningA, setStep2ListeningA] = useState(
+  const [step2ListeningA, setStep2ListeningA] = useOfficialFormState("step2ListeningA",
     "Demir: 'Ben o bloğu şato çatısı için en baştan planlamıştım, Caner elimden çekince çok kızdım.'"
   );
 
-  const [step2ListeningB, setStep2ListeningB] = useState(
+  const [step2ListeningB, setStep2ListeningB] = useOfficialFormState("step2ListeningB",
     "Caner: 'Ben de köprü yapıyordum, uzun blok sadece o kalmıştı, vermeyince üzüldüm.'"
   );
 
-  const [step3Empathy, setStep3Empathy] = useState(
+  const [step3Empathy, setStep3Empathy] = useOfficialFormState("step3Empathy",
     "Her iki öğrenciye de 'Arkadaşın böyle hissedince sen ne hissettin?' sorusu yöneltildi. Birbirlerinin hayal kırıklığını fark ettiler."
   );
 
-  const [step4Solution, setStep4Solution] = useState(
+  const [step4Solution, setStep4Solution] = useOfficialFormState("step4Solution",
     "Ortak Çözüm: Bloğun önce köprüde 10 dakika kullanılması, ardından şato çatısına aktarılması kararlaştırıldı. Kum saati ters çevrildi ve el sıkışıldı."
   );
 
-  const [teacherFollowup, setTeacherFollowup] = useState(
+  const [teacherFollowup, setTeacherFollowup] = useOfficialFormState("teacherFollowup",
     "Öğrenciler süre sonunda bloğu nezaketle birbirine devretti. Gün sonu çemberinde adalet ve sabır örneği olarak takdir edildiler."
   );
 
@@ -41,70 +43,7 @@ export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => v
     printOfficialFormA4(`Baris_Masasi_Cozum_Protokolu_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Baris_Masasi_ve_Catishma_Cozme_Tutanagi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          BARIŞ MASASI VE AKRAN ÇATIŞMASI BARIŞÇIL ÇÖZÜM PROTOKOLÜ
-        </div>
-        <table>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih / Saat:</b> ${date}</td></tr>
-          <tr><td><b>1. Öğrenci:</b> ${childA}</td><td><b>2. Öğrenci:</b> ${childB}</td></tr>
-          <tr><td><b>Olay Yeri / Merkez:</b> ${location}</td><td><b>Gözlemci / Arabulucu Öğretmen:</b> ${teacherName}</td></tr>
-        </table>
-        <h4>Olayın Özeti ve Çatışma Nedeni</h4>
-        <p>${incidentDescription}</p>
-        <h4>4 Adımlı Onarıcı Barış Masası Süreci (TTKB Sayfa 84, 108)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 30%'>Arabuluculuk Adımı</th>
-              <th style='width: 70%'>Uygulama ve Çocuk İfadeleri</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td><b>1. Adım: Sakinleşme & Duygu Tanıma</b></td><td>${step1CoolDown}</td></tr>
-            <tr><td><b>2. Adım: Sırayla Dinleme & İfade</b></td><td>${step2ListeningA}<br/><br/>${step2ListeningB}</td></tr>
-            <tr><td><b>3. Adım: Empati ve Duygu Yansıtması</b></td><td>${step3Empathy}</td></tr>
-            <tr><td><b>4. Adım: Ortak Çözüm ve Anlaşma</b></td><td>${step4Solution}</td></tr>
-          </tbody>
-        </table>
-        <h4>Öğretmenin İzleme ve Pekiştirme Notu</h4>
-        <p>${teacherFollowup}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 33%;'><b>1. Öğrencinin Sembolü</b><br/><br/>(${childA})</td>
-            <td style='border: none; text-align: center; width: 33%;'><b>2. Öğrencinin Sembolü</b><br/><br/>(${childB})</td>
-            <td style='border: none; text-align: center; width: 34%;'><b>Arabulucu Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Baris_Masasi_ve_Catishma_Cozme_Tutanagi.doc";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialConflictResolutionModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -158,7 +97,7 @@ export function OfficialConflictResolutionModal({ onClose }: { onClose?: () => v
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -44,13 +46,13 @@ const PRESET_QUESTIONS: Omit<QuestionAnswer, "childResponse" | "teacherNote">[] 
 ];
 
 export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Demir Korkmaz");
-  const [studentAge, setStudentAge] = useState("62 Ay");
-  const [interviewDate, setInterviewDate] = useState("2026-09-15");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [interviewTopic, setInterviewTopic] = useState("Doğa Olayları, Akran İletişimi ve Merkez Tercihleri");
-  
-  const [qaList, setQaList] = useState<QuestionAnswer[]>([
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Demir Korkmaz");
+  const [studentAge, setStudentAge] = useOfficialFormState("studentAge", "62 Ay");
+  const [interviewDate, setInterviewDate] = useOfficialFormState("interviewDate", "2026-09-15");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [interviewTopic, setInterviewTopic] = useOfficialFormState("interviewTopic", "Doğa Olayları, Akran İletişimi ve Merkez Tercihleri");
+
+  const [qaList, setQaList] = useOfficialFormState<QuestionAnswer[]>("qaList", [
     {
       id: "q1",
       category: "bilişsel",
@@ -74,11 +76,11 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
     },
   ]);
 
-  const [generalEvaluation, setGeneralEvaluation] = useState(
+  const [generalEvaluation, setGeneralEvaluation] = useOfficialFormState("generalEvaluation",
     "Öğrenci düşüncelerini açık, net ve özgün cümlelerle ifade etmektedir. Akran iletişiminde barışçıl ve uzlaşmacı stratejiler benimsediği, doğa olaylarına yönelik gözlem ve merak düzeyinin yüksek olduğu gözlenmiştir."
   );
 
-  const [followupPlan, setFollowupPlan] = useState(
+  const [followupPlan, setFollowupPlan] = useOfficialFormState("followupPlan",
     "Fen merkezinde su döngüsü ve hava durumu deneyleriyle bilişsel merakı desteklenecek. Blok merkezinde küçük grup iş birliği projelerine liderlik etmesi teşvik edilecek."
   );
 
@@ -108,67 +110,7 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
     printOfficialFormA4(`Cocukla_Gorusme_Formu_${studentName.replace(/\s+/g, "_")}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Cocukla_Gorusme_Formu_${studentName}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 10pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          ÇOCUKLA BİREYSEL GÖRÜŞME (MÜLAKAT) VE DÜŞÜNCE KAYIT FORMU
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${studentName}</td><td><b>Yaş / Ay:</b> ${studentAge}</td></tr>
-          <tr><td><b>Görüşme Tarihi:</b> ${interviewDate}</td><td><b>Uygulayıcı Öğretmen:</b> ${teacherName}</td></tr>
-          <tr><td colspan='2'><b>Görüşme Konusu / Amacı:</b> ${interviewTopic}</td></tr>
-        </table>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 30%'>Sorulan Soru</th>
-              <th style='width: 40%'>Çocuğun İfadesi (Birebir Alıntı)</th>
-              <th style='width: 30%'>Öğretmen Gözlem ve Değerlendirmesi</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${qaList.map(q => `
-              <tr>
-                <td><b>${q.question}</b><br/><small>[${q.category.toLocaleUpperCase('tr-TR')}]</small></td>
-                <td>"${q.childResponse || '-'}"</td>
-                <td>${q.teacherNote || '-'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <p><b>Genel Pedagojik Değerlendirme:</b><br/>${generalEvaluation}</p>
-        <p><b>İzleme ve Destekleme Planı:</b><br/>${followupPlan}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Uygulayıcı Öğretmen</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü / Rehberlik</b><br/><br/>Onay<br/>İmza / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Cocukla_Gorusme_${studentName.replace(/\s+/g, '_')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialChildInterviewModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -227,7 +169,7 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -282,7 +224,7 @@ export function OfficialChildInterviewModal({ onClose }: { onClose?: () => void 
             <tr>
               <td style={{ width: "20%" }}><strong>Öğrencinin Adı Soyadı:</strong></td>
               <td style={{ width: "30%" }}>
-                <input
+                <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                   type="text"
                   className="of-input"
                   value={studentName}

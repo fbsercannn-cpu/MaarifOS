@@ -24,13 +24,19 @@ export interface QuickStatsBarProps {
   readonly stats: readonly QuickStat[];
 }
 
+const STAT_ICONS: Record<string, string> = {
+  "Sınıfta": "👥",
+  "Haftalık Plan": "📅",
+  "Gözlem Kapsamı": "👁️",
+};
+
 export function QuickStatsBar({ stats }: QuickStatsBarProps) {
   if (stats.length === 0) return null;
   return (
     <div
       className="quick-stats-bar"
       role="list"
-      aria-label="Sinif ozet istatistikleri"
+      aria-label="Sınıf özet istatistikleri"
     >
       {stats.map((stat) =>
         stat.onClick ? (
@@ -42,9 +48,13 @@ export function QuickStatsBar({ stats }: QuickStatsBarProps) {
             aria-label={stat.detail}
             onClick={stat.onClick}
             role="listitem"
+            title={stat.detail}
           >
+            <div className="quick-stats-bar__top">
+              <small>{stat.label}</small>
+              <span className="quick-stats-bar__icon">{STAT_ICONS[stat.label] || "📊"}</span>
+            </div>
             <strong>{stat.value}</strong>
-            <small>{stat.label}</small>
           </button>
         ) : (
           <span
@@ -53,9 +63,13 @@ export function QuickStatsBar({ stats }: QuickStatsBarProps) {
             data-tone={stat.tone ?? "ok"}
             aria-label={stat.detail}
             role="listitem"
+            title={stat.detail}
           >
+            <div className="quick-stats-bar__top">
+              <small>{stat.label}</small>
+              <span className="quick-stats-bar__icon">{STAT_ICONS[stat.label] || "📊"}</span>
+            </div>
             <strong>{stat.value}</strong>
-            <small>{stat.label}</small>
           </span>
         ),
       )}

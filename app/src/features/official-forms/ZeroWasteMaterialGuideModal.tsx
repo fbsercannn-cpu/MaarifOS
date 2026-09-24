@@ -1,3 +1,4 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -102,55 +103,7 @@ Destekleriniz için teşekkür eder, doğaya duyarlı nesiller yetiştirmeyi dil
     printOfficialFormA4(`Sifir_Atik_Materyal_Pusulasi`);
   };
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Sıfır Atık ve Doğal Materyal Pusulası</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; line-height: 1.4; color: #1e293b; }
-        h1 { font-size: 16pt; color: #15803d; text-align: center; }
-        h2 { font-size: 12pt; color: #166534; border-bottom: 2px solid #86efac; padding-bottom: 4px; margin-top: 16px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 12px; }
-        th, td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 9.5pt; text-align: left; }
-        th { background: #f0fdf4; color: #166534; font-weight: bold; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI · TTKB OKUL ÖNCESİ EĞİTİMİ</h1>
-        <p style="text-align: center; color: #475569;"><strong>SIFIR ATIK & DOĞAL MATERYAL DÖNÜŞÜM REHBERİ (TTKB s. 97, 206 - OB8)</strong></p>
-
-        ${ZERO_WASTE_DATA.map(c => `
-          <h2>${c.centerName}</h2>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 30%;">Atık / Doğal Malzeme</th>
-                <th style="width: 50%;">Pedagojik Kullanım & Etkinlik Amacı</th>
-                <th style="width: 20%;">Temin Kaynağı</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${c.materials.map(m => `
-                <tr>
-                  <td><strong>${m.name}</strong></td>
-                  <td>${m.pedagogicalUsage}</td>
-                  <td>${m.source}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        `).join("")}
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Sifir_Atik_Dogal_Materyal_Rehberi.doc";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("ZeroWasteMaterialGuideModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -253,7 +206,7 @@ Destekleriniz için teşekkür eder, doğaya duyarlı nesiller yetiştirmeyi dil
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

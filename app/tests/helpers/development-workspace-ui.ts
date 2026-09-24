@@ -1,3 +1,4 @@
+import {readRepositorySnapshot} from './production-repository';
 import { expect, type Page } from "@playwright/test";
 
 export const childName = "Gelişim Deneme Çocuğu";
@@ -7,8 +8,8 @@ export const evaluation = "Seçilen gözlem sırasında öykünün olay sırası
 
 const civilClockOffsets = new WeakMap<Page, number>();
 
-export async function installCivilClock(page: Page, sameClockAs?: Page) {
-  const offset = sameClockAs ? civilClockOffsets.get(sameClockAs) : Date.parse("2026-09-10T06:00:00.000Z") - Date.now();
+export async function installCivilClock(page: Page, sameClockAs?: Page, civilTime = "2026-09-10T06:00:00.000Z") {
+  const offset = sameClockAs ? civilClockOffsets.get(sameClockAs) : Date.parse(civilTime) - Date.now();
   if (offset === undefined) throw new Error("Paylaşılan kurgu saat önce ana sekmede kurulmalı.");
   civilClockOffsets.set(page, offset);
   // Leave the browser animation clock intact across reloads; shift civil time only.
@@ -57,6 +58,11 @@ export async function setup(page: Page) {
   await page.getByRole("textbox", { name: "Ne oldu?", exact: true }).fill(observation);
   await page.getByRole("button", { name: "Gözlemi kaydet", exact: true }).click();
   await expect(picker).toBeHidden();
+  const nextStep = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  if (await nextStep.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(nextStep).toBeHidden();
+  }
   await expect(coverage).toContainText("1 çocukta kayıt var · 1 çocukta henüz yok");
 }
 
@@ -77,20 +83,6 @@ export async function openReport(page: Page, period = "Bu ay") {
 }
 
 export async function readRecords(page: Page) {
-  return page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const read = (name: string) => new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-      const request = db.transaction(name, "readonly").objectStore(name).getAll();
-      request.onsuccess = () => resolve(request.result.filter((item: Record<string, unknown>) => !item.deletedAt));
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      const [settings, observations] = await Promise.all([read("settings"), read("observations")]);
-      return { reports: settings.filter((item) => item.settingType === "development-report"), observations };
-    } finally { db.close(); }
-  });
+ const snapshot=await readRepositorySnapshot(page);
+ return {reports:snapshot.settings.filter((x:any)=>!x.deletedAt&&x.settingType==='development-report'),observations:snapshot.observations.filter((x:any)=>!x.deletedAt)};
 }

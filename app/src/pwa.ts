@@ -361,7 +361,7 @@ async function performServiceWorkerUpdateCheck(force: boolean): Promise<boolean>
 
   const registration =
     currentRegistration ??
-    (await navigator.serviceWorker.getRegistration("/"));
+    (await navigator.serviceWorker.getRegistration());
   if (!registration) {
     if (force) {
       publishStatus({
@@ -444,7 +444,7 @@ export function checkForServiceWorkerUpdate(
 export async function activateWaitingServiceWorker(): Promise<boolean> {
   const registration =
     currentRegistration ??
-    (await navigator.serviceWorker.getRegistration("/"));
+    (await navigator.serviceWorker.getRegistration());
   const waitingWorker = registration?.waiting;
   if (!registration || !waitingWorker) {
     publishStatus({
@@ -546,7 +546,6 @@ async function installServiceWorker(): Promise<void> {
 
   try {
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
-      scope: "/",
       updateViaCache: "none",
     });
     currentRegistration = registration;

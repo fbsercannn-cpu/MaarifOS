@@ -1,3 +1,4 @@
+import {readRepositorySnapshot} from './helpers/production-repository';
 import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 90_000 });
@@ -40,29 +41,15 @@ async function setupClass(page: Page, ageBand: string) {
       name: "Gelişim Kurgu Çocuğu için Maarif gelişim gözlemi ekle",
       exact: true,
     }).click();
-  await expect(page.getByRole("heading", { name: "Ne gözlemlediniz?", exact: true })).toBeVisible();
-  await expect(page.getByText("TYMM · yaşa uygun gelişim bilgisi", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı", exact: true })).toBeVisible();
+  await page.locator(".quick-details > summary").click();
+  await expect(page.getByRole("region", { name: "Gelişim bilgisi seç" })).toBeVisible();
 }
 
 async function records(page: Page) {
-  return page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      const read = (collection: string) => new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-        const request = db.transaction(collection, "readonly").objectStore(collection).getAll();
-        request.onsuccess = () => resolve(request.result.filter((item: Record<string, unknown>) => !item.deletedAt));
-        request.onerror = () => reject(request.error);
-      });
-      const [observations, links, drafts] = await Promise.all([read("observations"), read("evidenceCurriculumLinks"), read("settings")]);
-      return { observations, links, drafts: drafts.filter((item) => item.settingType === "quick-observation-draft") };
-    } finally { db.close(); }
-  });
+ const snapshot=await readRepositorySnapshot(page);
+ return {observations:snapshot.observations.filter((x:any)=>!x.deletedAt),links:snapshot.evidenceCurriculumLinks.filter((x:any)=>!x.deletedAt),drafts:snapshot.settings.filter((x:any)=>!x.deletedAt&&x.settingType==='quick-observation-draft')};
 }
-
 for (const ageBand of ["36–48", "48–60", "60–72"]) {
   test(`${ageBand} ay: davranış seçimi notu doldurur, açık kayıttan önce kanıt üretmez`, async ({ page }) => {
     await setupClass(page, ageBand);
@@ -78,15 +65,16 @@ for (const ageBand of ["36–48", "48–60", "60–72"]) {
     expect((await records(page)).observations).toHaveLength(0);
     expect((await records(page)).links).toHaveLength(0);
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("heading", { name: "Ne gözlemlediniz?", exact: true })).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı", exact: true })).toBeHidden();
     await page.locator(".simple-student-list li").filter({ hasText: "Gelişim Kurgu Çocuğu" })
       .getByRole("button", {
         name: "Gelişim Kurgu Çocuğu için Maarif gelişim gözlemi ekle",
         exact: true,
       }).click();
+    await page.locator(".quick-details > summary").click();
     await expect(behavior).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Gözlemi kaydet", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Ne gözlemlediniz?", exact: true })).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı", exact: true })).toBeHidden();
     await expect.poll(async () => (await records(page)).links.length).toBe(1);
     const saved = await records(page);
     expect(saved.observations).toHaveLength(1);
@@ -126,7 +114,7 @@ test(`dar telefonda destek seçimi ve düzenlenen not ${production ? "çevrimdı
     await context.setOffline(true);
   }
   await save.click();
-  await expect(page.getByRole("heading", { name: "Ne gözlemlediniz?", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı", exact: true })).toBeHidden();
   const saved = await records(page);
   expect(saved.observations).toHaveLength(1);
   expect(saved.observations[0]).toMatchObject({ rawText: note, rawTextImmutable: true, developmentSelection: { ageBand: "60-72", support: "with-reminder" } });

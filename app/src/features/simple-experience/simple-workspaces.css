@@ -1685,6 +1685,23 @@
   border-radius: 12px;
 }
 
+@media (max-width: 430px) {
+  .simple-student-list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .simple-student-list__profile {
+    width: 100%;
+    min-width: 44px;
+  }
+
+  .simple-student-list__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+  }
+}
+
 .simple-student-list__action-panel .simple-student-list__archive {
   width: 100%;
   color: #8c342b;
@@ -1805,6 +1822,21 @@
 
   .simple-classroom__primary-actions {
     grid-template-columns: 1fr;
+  }
+
+  .simple-student-list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .simple-student-list__profile {
+    width: 100%;
+    min-width: 44px;
+  }
+
+  .simple-student-list__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
   }
 
   .simple-student-list__action-panel {

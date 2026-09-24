@@ -71,7 +71,12 @@ function scopeFields(
 export async function loadAcademicCalendar(
   store: LocalDataStore,
 ): Promise<AcademicCalendarWorkspace> {
-  const snapshot = await store.readSnapshot();
+  return resolveAcademicCalendar(await store.readSnapshot());
+}
+
+export function resolveAcademicCalendar(
+  snapshot: DataSnapshot,
+): AcademicCalendarWorkspace {
   let scope;
   try {
     scope = requireScope(snapshot);

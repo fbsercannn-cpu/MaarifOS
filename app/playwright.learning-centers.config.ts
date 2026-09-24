@@ -1,0 +1,3 @@
+import { defineConfig } from "@playwright/test";
+const port = Number(process.env.LEARNING_TEST_PORT ?? 4185), external = process.env.LEARNING_EXTERNAL_SERVER === "1";
+export default defineConfig({ testDir: "./tests", testMatch: "learning-centers-ui.spec.ts", timeout: 150000, workers: 1, use: { baseURL: process.env.LEARNING_BASE_URL ?? `http://127.0.0.1:${port}`, viewport: { width: 390, height: 844 }, actionTimeout: 15000, trace: "retain-on-failure" }, outputDir: "output/learning-centers-2026-09-08/results", webServer: external ? undefined : { command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port} --strictPort`, url: `http://127.0.0.1:${port}`, reuseExistingServer: false } });

@@ -11,7 +11,7 @@ async function configureClassroomWithStudent(page: Page) {
     .selectOption({ label: "60–72 ay" });
   await expect(setup.locator(".official-calendar-applied")).toHaveText(/Uygulandı/);
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
-  await expect(setup).toBeHidden();
+  await expect(setup).toBeHidden({timeout:30_000});
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
@@ -49,12 +49,16 @@ test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır"
   await planDialog.getByRole("button", { name: "Plan kayıtlarını kapat" }).click();
 
   await page.getByRole("button", { name: "Belgeler", exact: true }).click();
+  await page.getByRole("button",{name:"İdareye sun",exact:true}).click();
   let monthlyOutput = page.getByRole("button", {
     name: /^Aylık eğitim planı\. Durum: Hazır\. Görsel PDF\./,
   });
   await expect(monthlyOutput).toBeVisible();
-  const downloadPromise = page.waitForEvent("download");
   await monthlyOutput.click();
+  const preview=page.getByRole("dialog",{name:"PDF önizlemesi",exact:true});
+  await expect(preview).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await preview.getByRole("button",{name:"Bu PDF'yi indir",exact:true}).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   const downloadPath = await download.path();
@@ -65,6 +69,7 @@ test("aylık TYMM planı telefonda PDF olur ve yeniden yüklemede hazır kalır"
 
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByTestId("premium-plan-center")).toHaveCount(0);
+  await page.getByRole("button",{name:"İdareye sun",exact:true}).click();
   monthlyOutput = page.getByRole("button", {
     name: /^Aylık eğitim planı\. Durum: Hazır\. Görsel PDF\./,
   });

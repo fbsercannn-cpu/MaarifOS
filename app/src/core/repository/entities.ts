@@ -1,4 +1,5 @@
 import { HOME_GAME_CARD_SETTING_TYPE, isHomeGameCardRecord } from "../../features/home-game-cards/home-game-card-model.ts";
+import { OFFICIAL_FORM_SETTING_TYPE, OFFICIAL_FORM_LEGACY_TYPE, isOfficialFormRecord, isOfficialFormLegacyRecord } from "../../features/official-forms/official-form-record.ts";
 import {STUDENT_ERASURE_TYPE,isStudentErasure} from '../domain/student-erasure.ts';
 import {
   isAttendanceRecord,
@@ -773,6 +774,8 @@ export const ENTITY_RECORD_GUARDS = {
   exportPackages: isStoredRecord,
   notificationRules: isStoredRecord,
   settings: (value: unknown): value is StoredRecord => isStoredRecord(value) &&
+      (value.settingType !== OFFICIAL_FORM_SETTING_TYPE || isOfficialFormRecord(value)) &&
+      (value.settingType !== OFFICIAL_FORM_LEGACY_TYPE || isOfficialFormLegacyRecord(value)) &&
       (value.settingType !== STUDENT_ERASURE_TYPE || isStudentErasure(value)) &&
       (value.settingType !== HOME_GAME_CARD_SETTING_TYPE || isHomeGameCardRecord(value)) &&
     (value.settingType !== DEVELOPMENT_REPORT_SETTING_TYPE || isDevelopmentReportRecord(value)) &&

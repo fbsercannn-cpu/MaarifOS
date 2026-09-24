@@ -6,6 +6,7 @@ import { printOfficialFormA4 } from "./official-form-export-service.ts";
  */
 
 import { useState } from "react";
+import { FormDialog } from "./FormDialog.tsx";
 import "./official-forms.css";
 
 export interface OfficialPlanLinkedOutputsProps {
@@ -27,11 +28,11 @@ export function OfficialPlanLinkedOutputsModal({
   planTitle = "Günün Eğitim Planı",
   civilDate = new Date().toISOString().slice(0, 10),
   ageGroup = "60-72 Ay",
-  domainSkills = "Matematik: Sayma ve eşleştirme, Türkçe: Hikaye tamamlama, Sanat: Özgün ürün oluşturma",
-  concepts = "Büyük-Küçük, Daire-Kare, Renkler, Paylaşım",
-  materials = "Renkli kartonlar, pastel boyalar, tahta bloklar, masal kartları",
-  activities = "1. 'Renklerin Dansı' (Bütünleştirilmiş Sanat-Türkçe)\n2. 'Şekil Avcıları' (Matematik-Oyun)",
-  values = "D3. Çalışkanlık, D7. Estetik, D12. Sabır",
+  domainSkills = "",
+  concepts = "",
+  materials = "",
+  activities = "",
+  values = "",
 }: OfficialPlanLinkedOutputsProps) {
   const [activeTab, setActiveTab] = useState<
     "newsletter" | "shopping" | "timeline" | "materials" | "centers" | "evaluation"
@@ -75,14 +76,9 @@ Sevgi ve saygılarımızla,
     .filter(Boolean);
 
   return (
-    <div
-      className="official-form-modal"
-      role="dialog"
-      aria-modal="true"
-      style={{ zIndex: 10050 }}
-    >
+    <FormDialog open={isOpen} title="Plana bağlı örnek çıktılar" onClose={onClose}>
       <div
-        className="official-form-container"
+        className="official-form-container of-linked-output"
         style={{
           maxWidth: "850px",
           width: "95%",
@@ -95,45 +91,7 @@ Sevgi ve saygılarımızla,
           maxHeight: "90vh",
         }}
       >
-        {/* Header */}
-        <header
-          style={{
-            padding: "16px 20px",
-            background: "#0f172a",
-            color: "#ffffff",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "1.2rem" }}>📦</span>
-              <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#f8fafc" }}>
-                Plana Bağlı Resmî Örnek Çıktılar
-              </h2>
-            </div>
-            <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#94a3b8" }}>
-              {planTitle} · {civilDate} · {ageGroup}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: "rgba(255,255,255,0.1)",
-              border: "none",
-              color: "#ffffff",
-              fontSize: "1.2rem",
-              borderRadius: "6px",
-              padding: "4px 10px",
-              cursor: "pointer",
-            }}
-          >
-            ✕
-          </button>
-        </header>
-
+        <p>{planTitle} · {civilDate} · {ageGroup}</p>
         {/* Tab Selector */}
         <div
           style={{
@@ -526,6 +484,6 @@ Sevgi ve saygılarımızla,
           </button>
         </footer>
       </div>
-    </div>
+    </FormDialog>
   );
 }

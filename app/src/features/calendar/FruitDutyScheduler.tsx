@@ -1,12 +1,17 @@
 /**
- * FruitDutyScheduler.tsx � 0.46.0
+ * FruitDutyScheduler.tsx — MaarifOS 0.64.0
  *
- * Dengeli dagilim algoritmasi:
- *   1. Hic sira gelmemis cocuklar oncelikli
- *   2. En az gorev alan bir sonraki
- *   3. Esitlikte en uzun bekleyen
- * Immutable history: gecmis gorevler hic yeniden dagitilmaz.
- * IEEE 754 Yasasi: tarih hesaplamalari string slice ile (float yok).
+ * Değişiklikler (0.64.0):
+ *   1. "Planlandı" sütunu KALDIRILDI (kullanıcı talebi).
+ *   2. Tarih formatı: YYYY-MM-DD → GG.AA.YYYY (Türk formatı).
+ *   3. getWorkdaysInMonth() ile sadece iş günleri (Pzt-Cum) kullanılır.
+ *
+ * Dengeli dağılım algoritması:
+ *   1. Hiç sıra gelmemiş çocuklar öncelikli
+ *   2. En az görev alan bir sonraki
+ *   3. Eşitlikte en uzun bekleyen
+ * Immutable history: geçmiş görevler hiç yeniden dağıtılmaz.
+ * IEEE 754 Yasası: tarih hesaplamaları string slice ile (float yok).
  */
 import { useState, useMemo } from "react";
 import "./month-calendar.css";
@@ -19,9 +24,9 @@ export interface FruitDutyStudent {
 }
 
 export interface FruitDutySlot {
-  readonly civilDate: string;
+  readonly civilDate: string;    // YYYY-MM-DD (dahili)
   readonly weekdayLabel: string;
-  /** null = henuz atanmamis */
+  /** null = henüz atanmamış */
   studentIds: string[];
   locked: boolean;
 }
@@ -29,26 +34,39 @@ export interface FruitDutySlot {
 export interface FruitDutySchedulerProps {
   readonly yearMonth: string; // YYYY-MM
   readonly students: readonly FruitDutyStudent[];
-  readonly eligibleDates: readonly string[]; // YYYY-MM-DD listesi (tatil haric okul gunleri)
+  readonly eligibleDates: readonly string[]; // YYYY-MM-DD (iş günleri)
   readonly personsPerDay: number;
   readonly existingSlots: readonly FruitDutySlot[];
   readonly disabled?: boolean;
   readonly onSave: (slots: readonly FruitDutySlot[]) => void;
 }
 
-/** Ogrencileri adil siralayan karsilastirici: once az gorev, sonra en uzun bekleyen */
-function compareStudentPriority(
-  a: FruitDutyStudent,
-  b: FruitDutyStudent,
-  today: string,
-): number {
-  if (a.pastDutyCount !== b.pastDutyCount) return a.pastDutyCount - b.pastDutyCount;
-  // Hic gorev almamis = en yuksek oncelik
-  if (!a.lastDutyDate && b.lastDutyDate) return -1;
-  if (a.lastDutyDate && !b.lastDutyDate) return 1;
-  if (!a.lastDutyDate && !b.lastDutyDate) return 0;
-  // En eski tarih = en uzun bekleyen
-  return a.lastDutyDate! < b.lastDutyDate! ? -1 : 1;
+/** YYYY-MM-DD → GG.AA.YYYY (Türk formatı, float yok) */
+export function formatDateTR(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+/**
+ * Belirtilen YYYY-MM ayındaki tüm iş günlerini (Pzt-Cum) döner.
+ * @param yearMonth  "YYYY-MM" formatı
+ * @param holidays   Tatil olarak atlanacak YYYY-MM-DD listesi
+ */
+export function getWorkdaysInMonth(yearMonth: string, holidays: string[] = []): string[] {
+  const [y, m] = yearMonth.split("-").map(Number);
+  const holidaySet = new Set(holidays);
+  const result: string[] = [];
+  const daysInMonth = new Date(y, m, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const mm = String(m).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    const iso = `${y}-${mm}-${dd}`;
+    const dow = new Date(`${iso}T12:00:00Z`).getDay(); // 0=Paz, 6=Cmt
+    if (dow >= 1 && dow <= 5 && !holidaySet.has(iso)) {
+      result.push(iso);
+    }
+  }
+  return result;
 }
 
 function balancedDistribute(
@@ -56,22 +74,15 @@ function balancedDistribute(
   students: readonly FruitDutyStudent[],
   personsPerDay: number,
   lockedSlots: Map<string, FruitDutySlot>,
-  today: string,
 ): FruitDutySlot[] {
-  // Yerel kopya gorev sayaci (mutation sadece bu fonksiyon icinde)
   const dutyCounts = new Map<string, number>(students.map((s) => [s.id, s.pastDutyCount]));
   const lastDates = new Map<string, string | null>(students.map((s) => [s.id, s.lastDutyDate]));
-
   const result: FruitDutySlot[] = [];
 
   for (const date of eligibleDates) {
-    // Kilitli slot: dokunma
     const locked = lockedSlots.get(date);
-    if (locked) {
-      result.push({ ...locked });
-      continue;
-    }
-    // Siradaki en uygun ogrenciler (once az gorev alan)
+    if (locked) { result.push({ ...locked }); continue; }
+
     const sorted = [...students].sort((a, b) => {
       const ca = dutyCounts.get(a.id) ?? 0;
       const cb = dutyCounts.get(b.id) ?? 0;
@@ -83,6 +94,7 @@ function balancedDistribute(
       if (!la && !lb) return 0;
       return la! < lb! ? -1 : 1;
     });
+
     const chosen = sorted.slice(0, personsPerDay);
     const slot: FruitDutySlot = {
       civilDate: date,
@@ -90,7 +102,6 @@ function balancedDistribute(
       studentIds: chosen.map((s) => s.id),
       locked: false,
     };
-    // Gorev sayaclarini guncelle
     for (const s of chosen) {
       dutyCounts.set(s.id, (dutyCounts.get(s.id) ?? 0) + 1);
       lastDates.set(s.id, date);
@@ -109,8 +120,6 @@ export function FruitDutyScheduler({
   disabled = false,
   onSave,
 }: FruitDutySchedulerProps) {
-  const today = new Date().toISOString().slice(0, 10);
-
   const lockedSlots = useMemo(() => {
     const m = new Map<string, FruitDutySlot>();
     for (const s of existingSlots) if (s.locked) m.set(s.civilDate, s);
@@ -118,7 +127,7 @@ export function FruitDutyScheduler({
   }, [existingSlots]);
 
   const [slots, setSlots] = useState<FruitDutySlot[]>(() =>
-    balancedDistribute(eligibleDates, students, personsPerDay, lockedSlots, today),
+    balancedDistribute(eligibleDates, students, personsPerDay, lockedSlots),
   );
   const [saved, setSaved] = useState(false);
 
@@ -129,7 +138,7 @@ export function FruitDutyScheduler({
   }, [students]);
 
   function redistribute() {
-    setSlots(balancedDistribute(eligibleDates, students, personsPerDay, lockedSlots, today));
+    setSlots(balancedDistribute(eligibleDates, students, personsPerDay, lockedSlots));
     setSaved(false);
   }
 
@@ -145,15 +154,13 @@ export function FruitDutyScheduler({
   }
 
   return (
-    <section className="fruit-duty-scheduler" aria-label="Meyve Gunu Cizelgesi">
+    <section className="fruit-duty-scheduler" aria-label="Meyve Günü Çizelgesi">
       <header className="fruit-duty-scheduler__header">
-        <h2>Meyve Gunu Cizelgesi</h2>
-        <p>
-          {yearMonth} � gun basina {personsPerDay} ogrenci
-        </p>
+        <h2>🍎 Meyve Günü Çizelgesi</h2>
+        <p>{yearMonth} · Günde {personsPerDay} öğrenci · Sadece iş günleri</p>
         <div className="fruit-duty-scheduler__actions">
           <button type="button" onClick={redistribute} disabled={disabled}>
-            Dengeli Dagit
+            Dengeli Dağıt
           </button>
           <button
             type="button"
@@ -161,42 +168,50 @@ export function FruitDutyScheduler({
             onClick={handleSave}
             disabled={disabled || saved}
           >
-            {saved ? "Kaydedildi" : "Kaydet"}
+            {saved ? "✅ Kaydedildi" : "Kaydet"}
           </button>
         </div>
       </header>
 
-      <ol className="fruit-duty-scheduler__list">
-        {slots.map((slot) => (
-          <li key={slot.civilDate} className="fruit-duty-scheduler__slot" data-locked={slot.locked}>
-            <span className="fds__date">
-              <strong>{slot.weekdayLabel}</strong>
-              <small>{slot.civilDate}</small>
-            </span>
-            <span className="fds__students">
-              {slot.studentIds.length > 0
-                ? slot.studentIds
-                    .map((id) => studentMap.get(id)?.displayName ?? id)
-                    .join(", ")
-                : <em>Atanmadi</em>}
-            </span>
-            <button
-              type="button"
-              className="fds__lock"
-              aria-pressed={slot.locked}
-              aria-label={slot.locked ? "Kilidi kaldir" : "Bu atamay� sabitle"}
-              onClick={() => toggleLock(slot.civilDate)}
-              disabled={disabled}
-            >
-              {slot.locked ? "Kilitli" : "Sabitle"}
-            </button>
-          </li>
-        ))}
-      </ol>
+      <table className="fruit-duty-scheduler__table">
+        <thead>
+          <tr>
+            <th>Gün</th>
+            <th>Tarih</th>
+            <th>Öğrenci(ler)</th>
+            <th>İşlem</th>
+          </tr>
+        </thead>
+        <tbody>
+          {slots.map((slot) => (
+            <tr key={slot.civilDate} data-locked={slot.locked} style={{ breakInside: "avoid" }}>
+              <td><strong>{slot.weekdayLabel}</strong></td>
+              <td>{formatDateTR(slot.civilDate)}</td>
+              <td>
+                {slot.studentIds.length > 0
+                  ? slot.studentIds.map((id) => studentMap.get(id)?.displayName ?? id).join(", ")
+                  : <em>Atanmadı</em>}
+              </td>
+              <td>
+                <button
+                  type="button"
+                  className="fds__lock"
+                  aria-pressed={slot.locked}
+                  aria-label={slot.locked ? "Kilidi kaldır" : "Bu atamayı sabitle"}
+                  onClick={() => toggleLock(slot.civilDate)}
+                  disabled={disabled}
+                >
+                  {slot.locked ? "🔒 Kilitli" : "Sabitle"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       {students.length === 0 && (
         <p role="status" className="fruit-duty-scheduler__empty">
-          Sinifta kayitli ogrenci bulunmuyor. Once ogrenci ekleyin.
+          Sınıfta kayıtlı öğrenci bulunmuyor. Önce öğrenci ekleyin.
         </p>
       )}
     </section>

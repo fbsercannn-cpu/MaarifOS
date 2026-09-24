@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import {
   exportOfficialTableToExcel,
@@ -28,7 +30,7 @@ export function OfficialAnecdoteForm({
   onClose,
 }: Props) {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [formData, setFormData] = useState<OfficialAnecdoteFormData>({
+  const [formData, setFormData] = useOfficialFormState<OfficialAnecdoteFormData>("formData", {
     studentName: initialData?.studentName || (studentList[0]?.name ?? ""),
     date: initialData?.date || new Date().toISOString().slice(0, 10),
     observedPlace: initialData?.observedPlace || "Öğrenme Merkezi / Sınıf",
@@ -79,88 +81,7 @@ export function OfficialAnecdoteForm({
     }
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>EK-2 ANEKDOT KAYIT FORMU - ${formData.studentName}</title>
-<style>
-  body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 11pt; color: #111; line-height: 1.4; padding: 20px; }
-  h2 { text-align: center; font-size: 14pt; color: #c2410c; margin-bottom: 8px; }
-  .guidance { font-style: italic; font-size: 9.5pt; color: #444; margin-bottom: 20px; text-align: justify; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border: 1px solid #777; padding: 10px; vertical-align: top; }
-  .label-cell { width: 30%; background-color: #f8fafc; font-weight: bold; }
-  .section-header { background-color: #ffedd5; font-weight: bold; padding: 8px 10px; }
-  .footer { margin-top: 30px; text-align: right; font-weight: bold; }
-</style>
-</head>
-<body>
-  <h2>EK-2 ANEKDOT KAYIT FORMU</h2>
-  <div class="guidance">
-    Günlük plan kapsamında gerçekleştirilen etkinliklerin ardından yapılan gözlemler doğrultusunda günlük veya haftalık olarak ya da özel bir durumun ortaya çıkması hâlinde anekdot kaydı tutulması beklenmektedir. Bu form, çocuğa ilişkin olumlu veya olumsuz nitelikte dikkat çekici bir durum gözlemlendiğinde öğretmen tarafından gerektiği zaman doldurulabilir.
-  </div>
-  <table>
-    <tr>
-      <td class="label-cell">Çocuğun Adı Soyadı</td>
-      <td>${formData.studentName}</td>
-    </tr>
-    <tr>
-      <td class="label-cell">Tarih</td>
-      <td>${formData.date}</td>
-    </tr>
-    <tr>
-      <td class="label-cell">Gözlenen Mekân</td>
-      <td>${formData.observedPlace}</td>
-    </tr>
-    <tr>
-      <td colspan="2" class="section-header">
-        Gözlenen Durum<br>
-        <span style="font-size: 8.5pt; font-weight: normal; color: #555;">(Bu formu doldurmanıza neden olan durumu açıklamanız beklenmektedir.)</span>
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="min-height: 120px; height: 120px;">
-        ${formData.observedSituation.split("\n").join("<br>")}
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" class="section-header">Gözlenen Beceriler</td>
-    </tr>
-    <tr>
-      <td colspan="2" style="min-height: 80px; height: 80px;">
-        ${formData.observedSkills.split("\n").join("<br>")}
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" class="section-header">Gözlemcinin Genel Değerlendirmesi</td>
-    </tr>
-    <tr>
-      <td colspan="2" style="min-height: 100px; height: 100px;">
-        ${formData.generalEvaluation.split("\n").join("<br>")}
-      </td>
-    </tr>
-  </table>
-  <div class="footer">
-    <p>Gözlem Yapan Öğretmen: ${formData.teacherName}</p>
-    <p>İmza: .......................................</p>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob(["﻿" + htmlContent], {
-      type: "application/msword;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `EK-2_Anekdot_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialAnecdoteForm");
 
   return (
     <div className="official-form-modal">
@@ -193,7 +114,7 @@ export function OfficialAnecdoteForm({
               className="of-btn of-btn--word"
               onClick={handleDownloadWord}
             >
-              📄 Word Olarak İndir (.doc)
+              📄 Word Olarak İndir (.docx)
             </button>
             {onClose ? (
               <button
@@ -240,7 +161,7 @@ export function OfficialAnecdoteForm({
                       ))}
                     </select>
                   ) : (
-                    <input
+                    <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                       type="text"
                       className="of-input"
                       value={formData.studentName}

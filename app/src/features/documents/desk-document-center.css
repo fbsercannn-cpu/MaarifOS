@@ -3,10 +3,17 @@
 .desk-documents p { line-height: 1.5; }
 .desk-document-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 12px; margin: 16px 0; }
 .desk-document-controls > div, .desk-document-controls label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.desk-document-controls input, .desk-document-controls select { width: 100%; box-sizing: border-box; min-width: 0; padding: 10px; border: 1px solid #bacbca; border-radius: 8px; }
+.desk-document-controls input, .desk-document-controls select { min-height: 44px; width: 100%; box-sizing: border-box; min-width: 0; padding: 10px; border: 1px solid #bacbca; border-radius: 8px; }
 .desk-documents button { min-height: 44px; border: 1px solid #b9cdca; border-radius: 9px; background: #f3f8f7; color: #153d39; padding: 8px 10px; cursor: pointer; overflow-wrap: anywhere; }
 .desk-documents button:disabled { opacity: .55; cursor: default; }
 .desk-month-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 5px; }
+.desk-month-grid .desk-day-weekday { display:none; }
+@media(max-width:400px) {
+  .desk-month-grid { grid-template-columns:repeat(4,minmax(44px,1fr)); }
+  .desk-month-grid .desk-weekday { display:none; }
+  .desk-month-grid button { grid-column-start:auto !important; min-width:44px; min-height:44px; }
+  .desk-month-grid .desk-day-weekday { display:block; font-size:12px; }
+}
 .desk-weekday { text-align: center; font-size: 12px; padding: 5px 0; }
 .desk-month-grid button { padding: 8px 2px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .desk-month-grid button span { font-size: 11px; }

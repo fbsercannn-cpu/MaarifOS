@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -55,7 +57,7 @@ const FORMAT_OPTIONS = [
 ];
 
 export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
-  const [formData, setFormData] = useState<FamilyNeedFormData>({
+  const [formData, setFormData] = useOfficialFormState<FamilyNeedFormData>("formData", {
     parentName: initialData?.parentName || "Veli Adı Soyadı",
     studentName: initialData?.studentName || "Öğrenci Adı Soyadı",
     className: initialData?.className || "Papatyalar Sınıfı (5 Yaş)",
@@ -72,69 +74,7 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
     printOfficialFormA4(`EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>EK-9 AİLE EĞİTİMİ İHTİYAÇ BELİRLEME FORMU - ${formData.studentName}</title>
-<style>
-  body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 10pt; color: #111; line-height: 1.35; padding: 20px; }
-  h2 { text-align: center; font-size: 13pt; color: #0284c7; margin-bottom: 6px; }
-  .subtitle { text-align: center; font-size: 9pt; color: #64748b; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  th, td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
-  .label-cell { width: 28%; background-color: #f8fafc; font-weight: bold; }
-  .section-header { background-color: #e0f2fe; font-weight: bold; color: #0369a1; padding: 6px; font-size: 10pt; }
-</style>
-</head>
-<body>
-  <h2>EK-9 AİLE EĞİTİMİ İHTİYAÇ BELİRLEME FORMU</h2>
-  <div class="subtitle">T.C. Millî Eğitim Bakanlığı Temel Eğitim Genel Müdürlüğü - Türkiye Yüzyılı Maarif Modeli</div>
-  <table>
-    <tr><td class="label-cell">Veli Adı Soyadı:</td><td>${formData.parentName}</td><td class="label-cell">Tarih:</td><td>${formData.date}</td></tr>
-    <tr><td class="label-cell">Çocuğun Adı Soyadı:</td><td>${formData.studentName}</td><td class="label-cell">Sınıfı:</td><td>${formData.className}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">A. EĞİTİM ALMAK İSTENİLEN ÖNCELİKLİ KONULAR</th></tr>
-    <tr><td>${formData.selectedTopics.map((t, idx) => `• [${idx + 1}] ${t}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">B. TERCİH EDİLEN UYGULAMA BİÇİMİ</th></tr>
-    <tr><td>${formData.preferredFormat.join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">C. UYGUN GÖRÜLEN SIKLIK VE ZAMAN</th></tr>
-    <tr><td><b>Sıklık:</b> ${formData.frequency}<br><b>Zaman:</b> ${formData.preferredTime.join(", ")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">D. AİLE EĞİTİMLERİNDEN BEKLENTİLER</th></tr>
-    <tr><td>${formData.expectations.split("\n").join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">E. ÖĞRETMENİN BİLGİLENDİRİLMESİ İSTENEN ÖZEL DURUM</th></tr>
-    <tr><td>${formData.specialSituation.split("\n").join("<br>")}</td></tr>
-  </table>
-</body>
-</html>`;
-
-    const blob = new Blob(["\ufeff", htmlContent], {
-      type: "application/msword;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialFamilyNeedForm");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -198,7 +138,7 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-9 Aile Eğitimi İhtiyaç Belirleme Formu (TTKB Sayfa 188–189)</strong>
-            <small>Resmî Format · A4 Çıktı, Excel ve Word (.doc) Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word (.docx) Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
             <button
@@ -214,7 +154,7 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
             <button type="button" className="of-btn of-btn--word" onClick={handleDownloadWord}>
-              📄 Word Olarak İndir (.doc)
+              📄 Word Olarak İndir (.docx)
             </button>
             {onClose && (
               <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -263,7 +203,7 @@ export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
               <tr>
                 <th className="official-table__label">Çocuğun Adı Soyadı:</th>
                 <td>
-                  <input
+                  <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                     type="text"
                     className="of-input"
                     value={formData.studentName}

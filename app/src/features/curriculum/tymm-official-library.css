@@ -240,19 +240,22 @@
 }
 
 .tymm-library-review-disclosure {
-  display: grid;
+  display: block;
   min-width: 0;
-  grid-template-columns: 20px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
   padding: 8px 14px;
   color: #80501b;
   background: #fff8e8;
   border-bottom: 1px solid #ecd7ae;
 }
 
-.tymm-library-review-disclosure > svg {
-  margin-top: 1px;
+.tymm-library-review-disclosure > summary {
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 0;
+  cursor: pointer;
+  font-weight: 650;
+  line-height: 1.5;
 }
 
 .tymm-library-review-disclosure > span {

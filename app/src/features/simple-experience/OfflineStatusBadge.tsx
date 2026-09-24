@@ -1,8 +1,8 @@
 /**
- * OfflineStatusBadge.tsx � 0.45.0
+ * OfflineStatusBadge.tsx — MaarifOS 1.3.0
  *
- * Sifir sunucu: navigator.onLine + SW registration kontrolu, tum islem RAM'de.
- * Tor prensibi: hata yuttulmaz; SW yoksa "Yukluyor" durumu gosterilir.
+ * Sıfır sunucu: navigator.onLine + SW registration kontrolü, tüm işlem RAM'de.
+ * Çevrim içi iken sessiz kalır (sıfır görsel gürültü); yalnızca çevrim dışı veya güncelleme durumunda görünür.
  */
 import { useEffect, useState } from "react";
 import "./simple-experience.css";
@@ -15,9 +15,9 @@ function resolveBadgeState(): BadgeState {
 }
 
 const STATE_LABELS: Record<BadgeState, string> = {
-  online: "Cevrimici",
-  offline: "Cevrimdisi - veriler yerel",
-  installing: "Guncelleme yukleniyor",
+  online: "Çevrim içi",
+  offline: "Çevrim dışı · Veriler yerel hafızada",
+  installing: "Güncelleme yükleniyor",
 };
 
 const STATE_TONES: Record<BadgeState, string> = {
@@ -35,7 +35,7 @@ export function OfflineStatusBadge() {
     const handleOffline = () => setBadgeState("offline");
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    // SW guncelleme kontrolu
+    // SW güncelleme kontrolü
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (reg?.installing) setBadgeState("installing");
@@ -47,12 +47,17 @@ export function OfflineStatusBadge() {
     };
   }, []);
 
+  // Çevrim içi durumdayken arayüzde yüzen görsel gürültü (chartjunk) oluşturmaz
+  if (badgeState === "online") {
+    return null;
+  }
+
   return (
     <span className="offline-status-badge" data-tone={STATE_TONES[badgeState]}>
       <button
         type="button"
         className="offline-status-badge__dot"
-        aria-label={STATE_LABELS[badgeState] + " - detaylari gormek icin tiklayin"}
+        aria-label={STATE_LABELS[badgeState] + " - detayları görmek için tıklayın"}
         aria-expanded={detailOpen}
         onClick={() => setDetailOpen((v) => !v)}
       >
@@ -62,10 +67,8 @@ export function OfflineStatusBadge() {
         <span className="offline-status-badge__popup" role="status" aria-live="polite">
           {STATE_LABELS[badgeState]}
           {badgeState === "offline"
-            ? " � Tum kayitlar cihazda guvenle sakliyor."
-            : badgeState === "installing"
-              ? " � Sayfa yenilendikten sonra aktif olur."
-              : " � Son kayitlar aninda kalici hale getirildi."}
+            ? " • Tüm kayıtlarınız cihazda güvenle korunuyor."
+            : " • Sayfa yenilendiğinde yeni sürüm devreye girer."}
         </span>
       ) : null}
     </span>

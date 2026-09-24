@@ -18,6 +18,7 @@ import {
 } from "@radix-ui/react-icons";
 
 import { Carousel } from "../../mobile/Carousel.tsx";
+import { MaarifLogo } from "../../components/MaarifLogo.tsx";
 import { readBackupHealthReceipt } from "../../core/storage/backup-reminder.ts";
 import type { TeacherDayCarryForwardItem } from "../day-closure/teacher-day-closure.ts";
 import { TeacherFeedbackPanel } from "../feedback/TeacherFeedbackPanel.tsx";
@@ -450,12 +451,7 @@ export function TodayScreen({ model, actions, slots }: TodayScreenProps) {
       <header className="today-header">
         <div className="today-title-row">
           <div className="today-brand-title">
-            <img
-              className="today-brand-logo"
-              src="/assets/brand/maarifos-icon-192.png"
-              alt=""
-              aria-hidden="true"
-            />
+            <MaarifLogo size={36} variant="emblem-only" />
             <div>
               <span className="today-brand-name">MaarifOS</span>
               <h1 data-route-heading tabIndex={-1}>

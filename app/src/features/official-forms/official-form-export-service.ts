@@ -4,11 +4,15 @@
  * Mimari: %100 Client-Side, Sıfır Harici API, Native OpenXML (.xlsx), Direct PDF, A4 Paged Media & Word
  */
 
+import { prepareOfficialFormExport } from "./official-form-session.ts";
+import { canonicalJson } from "../../core/backup/canonical-json.ts";
+import { sha256Hex } from "../../core/backup/crypto.ts";
+import { createOfficialFormDocx, type OfficialWordBlock } from "./official-form-docx.ts";
 import { downloadBrowserFile } from "../documents/browser-file-download.ts";
 
 export const XLSX_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" as const;
-export const WORD_MIME_TYPE = "application/msword;charset=utf-8" as const;
+export const WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const;
 
 export interface ExcelColumnDefinition {
   header: string;
@@ -47,6 +51,7 @@ export async function exportOfficialTableToExcel({
   rows,
   includeSubtotals = false,
 }: ExportTableToExcelOptions): Promise<void> {
+  const source = await prepareOfficialFormExport();
   const x = await import("xlsx");
   const wb = x.utils.book_new();
 
@@ -126,6 +131,10 @@ export async function exportOfficialTableToExcel({
 
   x.utils.book_append_sheet(wb, ws, sheetName);
 
+  if (source) {
+    const provenance = x.utils.aoa_to_sheet([["Kaynak kayıt", source.id], ["Sürüm", source.revision], ["SHA-256", await sha256Hex(canonicalJson(source))]]);
+    x.utils.book_append_sheet(wb, provenance, "Kaynak");
+  }
   const bytes = new Uint8Array(
     x.write(wb, {
       type: "array",
@@ -153,6 +162,7 @@ export async function downloadOfficialFormPdf(
   rows: string[][],
 ): Promise<void> {
   try {
+    await prepareOfficialFormExport();
     const { createSemanticTaggedPdf } = await import("../documents/semantic-tagged-pdf.ts");
     const bytes = await createSemanticTaggedPdf({
       title,
@@ -199,8 +209,10 @@ export async function downloadOfficialFormPdf(
  * alt navigasyon çubuğu (.bottom-nav) ve tüm gereksiz DOM ağacı @media print'te display: none yapılır.
  * Chromium iframe clipping veya opacity:0 beyaz sayfa hatası %0 ihtimale indirgenir.
  */
-export function printOfficialFormA4(documentTitle: string): void {
+export async function printOfficialFormA4(documentTitle: string): Promise<void> {
   if (typeof document === "undefined") return;
+
+  try { await prepareOfficialFormExport(); } catch (error) { window.alert(error instanceof Error ? error.message : "Kayıt tamamlanmadı; çıktı hazırlanmadı."); return; }
 
   // 1. Hedef Belge Elemanını Bul (Önce aktif overlay/modal içinde ara)
   const activeWorkspace = document.querySelector<HTMLElement>(
@@ -247,6 +259,7 @@ export function printOfficialFormA4(documentTitle: string): void {
 
   // 3. Klonla ve Form Elemanlarını Salt Metne Dönüştür
   const clone = targetElement.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".print-only-text").forEach(node => node.remove());
 
   const originalControls = targetElement.querySelectorAll<
     HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -265,7 +278,7 @@ export function printOfficialFormA4(documentTitle: string): void {
     } else if (orig instanceof HTMLInputElement && orig.type === "checkbox") {
       displayVal = orig.checked ? "✓" : "";
     } else {
-      displayVal = orig.value || orig.placeholder || "";
+      displayVal = orig.value || "";
     }
 
     const span = document.createElement("span");
@@ -292,6 +305,22 @@ export function printOfficialFormA4(documentTitle: string): void {
     document.body.appendChild(printContainer);
   }
   printContainer.replaceChildren();
+  try {
+    const rawLic = localStorage.getItem("maarifos_commercial_license_v1");
+    const isPro = rawLic && JSON.parse(rawLic).tier && JSON.parse(rawLic).tier !== "trial";
+    if (!isPro) {
+      const trialNotice = document.createElement("div");
+      trialNotice.className = "maarif-print-trial-notice";
+      trialNotice.style.cssText =
+        "margin-top: 14px; padding: 6px 12px; border: 1px dashed #d97706; background: #fffbeb; color: #92400e; font-size: 7.5pt; text-align: center; border-radius: 4px; font-weight: 700;";
+      trialNotice.textContent =
+        "⚠️ MAARİF OS · ÜCRETSİZ DENEME SÜRÜMÜ — Resmî antetli, teftişe tam hazır ve filigransız MEB çıktısı için Pro Lisans edininiz: www.maarifos.com";
+      clone.appendChild(trialNotice);
+    }
+  } catch {
+    // Graceful degradation
+  }
+
   printContainer.appendChild(clone);
 
   // 5. Dinamik @page Stili Enjeksiyonu
@@ -351,101 +380,73 @@ export function printOfficialFormA4(documentTitle: string): void {
   }, 100);
 }
 
-/**
- * Microsoft Word (.doc) dışa aktarımı.
- */
-export function exportOfficialFormToWord(
-  fileName: string,
-  title: string,
-  bodyHtml: string,
-): void {
-  const fullHtml = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8">
-<title>${title}</title>
-<!--[if gte mso 9]>
-<xml>
-  <w:WordDocument>
-    <w:View>Print</w:View>
-    <w:Zoom>100</w:Zoom>
-    <w:DoNotOptimizeForBrowser/>
-  </w:WordDocument>
-</xml>
-<![endif]-->
-<style>
-  @page {
-    size: A4 portrait;
-    margin: 15mm 15mm 15mm 15mm;
-  }
-  body {
-    font-family: 'Calibri', 'Arial', sans-serif;
-    font-size: 10pt;
-    line-height: 1.35;
-    color: #17324D;
-    margin: 0;
-    padding: 0;
-  }
-  h1 {
-    font-size: 14pt;
-    color: #17324D;
-    text-align: center;
-    margin-bottom: 4px;
-    font-weight: bold;
-  }
-  h2 {
-    font-size: 12pt;
-    color: #0369a1;
-    text-align: center;
-    margin-bottom: 12px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 12px;
-    page-break-inside: avoid;
-  }
-  th, td {
-    border: 1px solid #64748b;
-    padding: 6px 8px;
-    vertical-align: top;
-  }
-  th {
-    background-color: #f1f5f9;
-    font-weight: bold;
-    color: #17324D;
-  }
-  .label-cell {
-    width: 25%;
-    background-color: #f8fafc;
-    font-weight: bold;
-  }
-  .section-header {
-    background-color: #e2e8f0;
-    font-weight: bold;
-    color: #0f172a;
-    padding: 6px 8px;
-  }
-  .text-muted {
-    color: #64748b;
-    font-size: 8.5pt;
-  }
-</style>
-</head>
-<body>
-  ${bodyHtml}
-</body>
-</html>`;
-
-  const blob = new Blob(["\ufeff" + fullHtml], { type: WORD_MIME_TYPE });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName.endsWith(".doc") ? fileName : `${fileName}.doc`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+/** Capture visible fields once after their canonical revision is durably stored. */
+export function cloneOfficialFormForOutput(target: HTMLElement): HTMLElement {
+  const clone = target.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".print-only-text").forEach(node => node.remove());
+  const copies = clone.querySelectorAll("input,textarea,select");
+  target.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input,textarea,select").forEach((control, i) => {
+    const copy = copies[i]; if (!copy) return;
+    const replacement = document.createElement("span");
+    replacement.textContent = control instanceof HTMLSelectElement ? control.selectedOptions[0]?.textContent ?? "" : control instanceof HTMLInputElement && ["checkbox", "radio"].includes(control.type) ? control.checked ? "✓" : "" : control.value;
+    replacement.style.whiteSpace = "pre-wrap";
+    copy.replaceWith(replacement);
+  });
+  clone.querySelectorAll("button, .no-print, .print-hidden, .official-form-actions, .of-actions-bar, dialog, script, style").forEach(node => node.remove());
+  return clone;
+}
+function collectWordBlocks(root: HTMLElement): OfficialWordBlock[] {
+  const blocks: OfficialWordBlock[] = [];
+  const readText = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (!(node instanceof Element)) return "";
+    if (node.tagName === "BR") return "\n";
+    const content = Array.from(node.childNodes).map(readText).join("");
+    const line = ["DIV", "P", "LABEL", "LI"].includes(node.tagName) || (node instanceof HTMLElement && node.style.whiteSpace === "pre-wrap");
+    return line ? `\n${content}\n` : content;
+  };
+  const walk = (node: Element) => {
+    if (node.tagName === "TABLE") {
+      const element = node as HTMLTableElement;
+      const domRows = Array.from(element.rows);
+      const rows = domRows.map(row => Array.from(row.cells).map(cell => ({ text: readText(cell).replace(/\n[ \t]*\n/g, "\n").trim(), colSpan: cell.colSpan, rowSpan: cell.rowSpan, header: cell.tagName === "TH" })));
+      const columns = Math.max(1, ...rows.map(row => row.reduce((sum, cell) => sum + cell.colSpan, 0)));
+      const completeRow = domRows.find(row => row.cells.length === columns && Array.from(row.cells).every(cell => cell.colSpan === 1));
+      let columnWeights: number[] | undefined;
+      if (completeRow) {
+        const logicalWidth = Math.max(850, Number.parseFloat(element.style.minWidth) || 0, Number.parseFloat(element.closest<HTMLElement>(".official-form-container")?.style.maxWidth || "") || 0);
+        const widths = Array.from(completeRow.cells).map(cell => cell.style.width.endsWith("%") ? Number.parseFloat(cell.style.width) / 100 : (Number.parseFloat(cell.style.width) || 0) / logicalWidth);
+        const specified = widths.reduce((sum, value) => sum + value, 0);
+        const missing = widths.filter(value => !value).length;
+        if (specified > 0) columnWeights = widths.map(value => value || Math.max(0.05, (1 - specified) / Math.max(1, missing)));
+        else if (columns === 4 && completeRow.cells[0].tagName === "TH" && completeRow.cells[2].tagName === "TH") columnWeights = [18, 34, 20, 28];
+        else if (columns === 2 && completeRow.cells[0].tagName === "TH") columnWeights = [32, 68];
+      }
+      if (rows.length) blocks.push({ kind: "table", rows, columnWeights, headerRows: element.tHead?.rows.length || 0 });
+    } else if (["P", "H1", "H2", "H3", "H4", "LI", "LABEL"].includes(node.tagName) || !node.children.length) {
+      const text = node.textContent?.trim(); if (text) blocks.push({ kind: "paragraph", text });
+    } else {
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) { const text = child.textContent?.trim(); if (text) blocks.push({ kind: "paragraph", text }); }
+        else if (child instanceof Element) walk(child);
+      }
+    }
+  };
+  walk(root); return blocks;
+}
+export async function downloadOfficialFormWord(fileName = "Resmi_Form"): Promise<void> {
+  try {
+    const source = await prepareOfficialFormExport();
+    const target = document.querySelector<HTMLElement>(".official-workspace-body .official-a4-sheet, .official-workspace-body .official-sheet, .official-workspace-body .official-print-document, .official-form-modal .official-a4-sheet, .official-form-modal .official-sheet, .official-form-container");
+    if (!target) throw new Error("Çıktısı hazırlanacak belge bulunamadı.");
+    const clone = cloneOfficialFormForOutput(target);
+    const title = target.querySelector("h1,h2,h3")?.textContent?.trim() || fileName;
+    const provenance = source ? `MaarifOS kayıt ${source.id}; sürüm ${source.revision}; SHA-256 ${await sha256Hex(canonicalJson(source))}` : "MaarifOS başvuru belgesi; kayıtlı çocuk değerlendirmesi içermez.";
+    const bytes = createOfficialFormDocx(title, collectWordBlocks(clone), provenance, target.classList.contains("is-landscape") || target.querySelector(".is-landscape") !== null);
+    downloadBrowserFile({bytes, mimeType: WORD_MIME_TYPE, fileName: fileName.replace(/\.docx?$/i, "") + ".docx"});
+  } catch (error) { window.alert(error instanceof Error ? error.message : "Word çıktısı hazırlanamadı."); }
+}
+/** Compatibility entry: output uses the durable active form, never interpolated HTML. */
+export async function exportOfficialFormToWord(fileName: string, _title: string, _bodyHtml: string): Promise<void> {
+  await downloadOfficialFormWord(fileName);
 }

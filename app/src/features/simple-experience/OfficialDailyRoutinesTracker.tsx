@@ -95,7 +95,9 @@ export function OfficialDailyRoutinesTracker({
       timeHint: "10:50 – 12:00",
       icon: "🎨",
       actionLabel: "Günün Planı",
-      onAction: onOpenPlanFlow,
+      onAction: () => {
+        window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub"));
+      },
     },
     {
       id: "routine-5",

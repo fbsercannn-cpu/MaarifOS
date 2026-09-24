@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import {
   exportOfficialTableToExcel,
@@ -25,11 +27,11 @@ const DEFAULT_STUDENTS: StudentMealRow[] = [
 
 export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: () => void }) {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [date, setDate] = useState("2026-09-15");
-  const [menuToday, setMenuToday] = useState("Sabah: Haşlanmış Yumurta, Peynir, Zeytin, Ihlamur · Öğle: Mercimek Çorbası, Sebzeli Bulgur, Ayran");
-  const [students, setStudents] = useState<StudentMealRow[]>(DEFAULT_STUDENTS);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [menuToday, setMenuToday] = useOfficialFormState("menuToday", "Sabah: Haşlanmış Yumurta, Peynir, Zeytin, Ihlamur · Öğle: Mercimek Çorbası, Sebzeli Bulgur, Ayran");
+  const [students, setStudents] = useOfficialFormState<StudentMealRow[]>("students", DEFAULT_STUDENTS);
 
   const handleMealChange = (id: string, field: "breakfast" | "lunch", val: "full" | "half" | "taste") => {
     setStudents((prev) =>
@@ -198,74 +200,7 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
     printOfficialFormA4(`Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          GÜNLÜK BESLENME, HİJYEN VE ÖZ BAKIM TAKİP ÇİZELGESİ
-        </div>
-        <table>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td><td><b>Günün Menüsü:</b> ${menuToday}</td></tr>
-        </table>
-        <h4>Öğrenci Bazlı Tüketim ve Hijyen Dökümü (TTKB Sayfa 92, 98)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 25%'>Öğrenci Adı Soyadı</th>
-              <th style='width: 15%'>Kahvaltı</th>
-              <th style='width: 15%'>Öğle Yemeği</th>
-              <th style='width: 12%'>Su (Bardak)</th>
-              <th style='width: 10%'>Diş/El</th>
-              <th style='width: 23%'>Öğretmen Gözlem Notu</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${students.map(s => `
-              <tr>
-                <td><b>${s.name}</b></td>
-                <td style='text-align:center;'>${s.breakfast === "full" ? "Tam Bitirdi" : s.breakfast === "half" ? "Yarısını Yedi" : "Tattı"}</td>
-                <td style='text-align:center;'>${s.lunch === "full" ? "Tam Bitirdi" : s.lunch === "half" ? "Yarısını Yedi" : "Tattı"}</td>
-                <td style='text-align:center;'>${s.waterCups} Bardak</td>
-                <td style='text-align:center;'>${s.teethBrushed ? "✓" : "-"}</td>
-                <td>${s.notes}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Görülmüştür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Beslenme_ve_Hijyen_Takip_Cizelgesi_${date}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialNutritionHygieneTrackerModal");
 
   return (
     <div className="official-form-container">
@@ -309,7 +244,7 @@ export function OfficialNutritionHygieneTrackerModal({ onClose }: { onClose?: ()
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

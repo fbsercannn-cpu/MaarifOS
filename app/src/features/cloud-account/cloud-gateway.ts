@@ -1,10 +1,19 @@
 import type {EncryptedBackupEnvelope} from '../../core/backup/encrypted-backup.ts';
+import {CloudRequestError,transientCloudStatus} from './cloud-retry.ts';
 import type {CloudBaseline} from './cloud-sync.ts';
 import {COLLECTION_NAMES} from '../../core/domain/model.ts';
 export interface CloudFile{id:string;createdAt:string;bytes:number;digest:string;}
 export type AccountStatus={available:false;status:'not_configured'}|{available:true;status:'not_connected'}|{available:true;status:'connected';user:{subject:string;displayName:string};driveConnected:boolean;};
-async function call(path:string,body?:unknown){const response=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(60000)});let result:unknown;try{result=await response.json();}catch{throw new Error('Hesap sunucusu bu adreste etkin değil. Bağlantı kurulumunu açabilirsiniz.');}if(!response.ok)throw new Error((result as {error?:string})?.error||'Hesap işlemi tamamlanamadı.');return result;}
-export async function readAccountStatus():Promise<AccountStatus>{const result=await call('/api/account/status') as AccountStatus;if(result.status==='connected'&&(!result.available||!result.user?.subject||!result.user?.displayName))throw new Error('Hesap yanıtı doğrulanamadı.');if(!['connected','not_connected','not_configured'].includes(result.status))throw new Error('Hesap yanıtı doğrulanamadı.');return result;}
+async function call(path:string,body?:unknown){
+ let response:Response;
+ try{response=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(60000)});}
+ catch{throw new CloudRequestError('Hesap sunucusuna ulaşılamadı. İnternet bağlantısını denetleyin.',0,true);}
+ let result:unknown;
+ try{result=await response.json();}catch{throw new CloudRequestError(response.status===404?'Google bağlantısı bu yayında henüz etkin değil. Şifreli dosya yedeğini kullanabilirsiniz.':'Hesap sunucusu geçerli bir yanıt vermedi.',response.status,transientCloudStatus(response.status));}
+ if(!response.ok)throw new CloudRequestError((result as {error?:string})?.error||'Hesap işlemi tamamlanamadı.',response.status,transientCloudStatus(response.status));
+ return result;
+}
+export async function readAccountStatus():Promise<AccountStatus>{let result:AccountStatus;try{result=await call('/api/account/status') as AccountStatus;}catch(error){if(error instanceof CloudRequestError&&error.status===404)return {available:false,status:'not_configured'};throw error;}if(!result||typeof result!=='object')throw new Error('Hesap yanıtı doğrulanamadı.');if(result.status==='connected'&&(result.available!==true||typeof result.user?.subject!=='string'||!result.user.subject||typeof result.user?.displayName!=='string'||typeof result.driveConnected!=='boolean'))throw new Error('Hesap yanıtı doğrulanamadı.');if(!['connected','not_connected','not_configured'].includes(result.status)||(result.status==='not_configured'&&result.available!==false)||(result.status==='not_connected'&&result.available!==true))throw new Error('Hesap yanıtı doğrulanamadı.');return result;}
 export async function beginGoogleConnection(purpose:'login'|'backup'){const result=await call('/auth/google/start',{purpose,returnPath:'/classroom?native=1'}) as {authorizationUrl:string};const url=new URL(result.authorizationUrl);if(url.origin!=='https://accounts.google.com'||url.pathname!=='/o/oauth2/v2/auth'||url.username||url.password||url.hash)throw new Error('Google giriş adresi doğrulanamadı.');window.location.assign(url.href);}
 export async function listCloudFiles(){return await call('/api/account/backups') as {files:CloudFile[];head:CloudFile|null};}
 export async function cloudHead(){return (await call('/api/account/head') as {head:CloudFile|null}).head;}

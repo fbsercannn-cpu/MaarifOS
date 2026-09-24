@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -43,16 +45,16 @@ const DEFAULT_ITEMS: EvaluationItem[] = [
 ];
 
 export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Demir Korkmaz");
-  const [peerName, setPeerName] = useState("Zeynep Aydın");
-  const [date, setDate] = useState("2026-09-15");
-  const [activityName, setActivityName] = useState("Merkezlerde Serbest Oyun ve Doğal Boyama Atölyesi");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [items, setItems] = useState<EvaluationItem[]>(DEFAULT_ITEMS);
-  const [childComment, setChildComment] = useState("Bugün kule yaparken Zeynep bana blokları getirdi, devrilince tekrar beraber yaptık.");
-  const [peerComment, setPeerComment] = useState("Arkadaşım benimle boyalarını paylaştı, resmimi çok beğendi.");
-  const [teacherNote, setTeacherNote] = useState("Öğrencinin akran iş birliği ve öz farkındalık becerileri gelişmiş düzeydedir. Süreç odaklı akran değerlendirmesi arkadaşlık bağını pekiştirmiştir.");
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Demir Korkmaz");
+  const [peerName, setPeerName] = useOfficialFormState("peerName", "Zeynep Aydın");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [activityName, setActivityName] = useOfficialFormState("activityName", "Merkezlerde Serbest Oyun ve Doğal Boyama Atölyesi");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [items, setItems] = useOfficialFormState<EvaluationItem[]>("items", DEFAULT_ITEMS);
+  const [childComment, setChildComment] = useOfficialFormState("childComment", "Bugün kule yaparken Zeynep bana blokları getirdi, devrilince tekrar beraber yaptık.");
+  const [peerComment, setPeerComment] = useOfficialFormState("peerComment", "Arkadaşım benimle boyalarını paylaştı, resmimi çok beğendi.");
+  const [teacherNote, setTeacherNote] = useOfficialFormState("teacherNote", "Öğrencinin akran iş birliği ve öz farkındalık becerileri gelişmiş düzeydedir. Süreç odaklı akran değerlendirmesi arkadaşlık bağını pekiştirmiştir.");
 
   const handleScoreChange = (id: string, score: "smile" | "neutral" | "sad") => {
     setItems((prev) =>
@@ -64,75 +66,7 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
     printOfficialFormA4(`Oz_ve_Akran_Degerlendirme_${studentName.replace(/\s+/g, '_')}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Oz_ve_Akran_Degerlendirme_${studentName.replace(/\s+/g, "_")}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          ÇOCUK ÖZ DEĞERLENDİRME VE AKRAN DEĞERLENDİRME FORMU
-        </div>
-        <table>
-          <tr><td><b>Değerlendiren Öğrenci:</b> ${studentName}</td><td><b>Birlikte Çalışılan Akran:</b> ${peerName}</td></tr>
-          <tr><td><b>Etkinlik / Bağlam:</b> ${activityName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td></tr>
-        </table>
-        <h4>1. Çocuğun Kendi Öğrenme ve Katılım Sürecini Değerlendirmesi (Öz Değerlendirme)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 70%'>Gözlem Boyutu ve İfade</th>
-              <th style='width: 30%'>Çocuğun İşareti</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map(it => `
-              <tr>
-                <td>${it.question}</td>
-                <td style='text-align: center;'>
-                  ${it.score === "smile" ? "Çok İyi (Gülen Yüz) [✓]" : it.score === "neutral" ? "Gelişmekte (Düşünen Yüz) [✓]" : "Desteğe İhtiyacım Var [✓]"}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <h4>2. Çocuğun Kendi Sözleriyle Günün Özeti</h4>
-        <p><i>"${childComment}"</i></p>
-        <h4>3. Akran Değerlendirme Görüşü (${peerName} hakkında)</h4>
-        <p><i>"${peerComment}"</i></p>
-        <h4>4. Öğretmenin Pedagojik Gözlemi</h4>
-        <p>${teacherNote}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Öğrencinin İmzası / Sembolü</b><br/><br/>(${studentName})</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Oz_ve_Akran_Degerlendirme_${studentName.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialSelfPeerEvaluationModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -198,7 +132,7 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -221,7 +155,7 @@ export function OfficialSelfPeerEvaluationModal({ onClose }: { onClose?: () => v
         <div className="of-meta-grid">
           <div className="of-meta-field">
             <label className="of-meta-label">Öğrencinin Adı Soyadı:</label>
-            <input
+            <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
               type="text"
               className="of-meta-input"
               value={studentName}

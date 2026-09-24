@@ -95,16 +95,17 @@ export function ClassroomToolsSheets({
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (addOpen && continuingSeriesRef.current) {
+      continuingSeriesRef.current = false;
+      const frame = window.requestAnimationFrame(() => nameInputRef.current?.focus());
+      wasAddOpenRef.current = addOpen;
+      return () => window.cancelAnimationFrame(frame);
+    }
     if (addOpen && !wasAddOpenRef.current) {
-      if (continuingSeriesRef.current) {
-        continuingSeriesRef.current = false;
-        nameInputRef.current?.focus();
-      } else {
-        setAddedStudentCount(0);
-      }
+      setAddedStudentCount(0);
     }
     wasAddOpenRef.current = addOpen;
-  }, [addOpen]);
+  }, [addOpen, addedStudentCount]);
 
   useEffect(() => {
     const action = pendingActionRef.current;

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 import { expectNoUntriagedAxeViolations } from "./smoke/accessibility-fixtures";
 
 const TEST_STUDENT_NAME = "Plan Akışı Çocuğu";
@@ -7,7 +8,7 @@ const EDITABLE_FUTURE_PLAN_DATE = "2027-06-08";
 const TEST_NOW_UTC = "2026-08-27T06:00:00.000Z";
 
 test.describe.configure({ timeout: 120_000 });
-test.use({ viewport: { width: 390, height: 844 } });
+test.use({ viewport: { width: 390, height: 844 }, actionTimeout: 10_000 });
 test.beforeEach(async ({ page }) => {
   const offsetMs = Date.parse(TEST_NOW_UTC) - Date.now();
   // Keep browser timers and animation clocks moving; shift only civil time so
@@ -33,6 +34,22 @@ test.beforeEach(async ({ page }) => {
   }, offsetMs);
 });
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const evidence = await page.evaluate(async () => {
+    const core = await import("/src/core/index.ts");
+    const store = new core.IndexedDbDataStore();
+    try {
+      const snapshot = await store.readSnapshot();
+      return { now: new Date().toISOString(), activeScope: snapshot.settings.filter(record => record.settingType === "active-classroom"),
+        academicYears: snapshot.academicYears, plans: snapshot.plans,
+        dialogs: [...document.querySelectorAll('[role="dialog"]')].map(dialog => dialog.outerHTML) };
+    } finally { store.close(); }
+  }).catch(error => ({ diagnosticError: String(error) }));
+  const evidencePath = testInfo.outputPath("plan-flow-state.json");
+  await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
+  await testInfo.attach("plan-flow-state", { path: evidencePath, contentType: "application/json" });
+});
 async function configureClassroomWithStudent(
   page: Page,
   options: { officialCalendar?: boolean } = {},
@@ -203,7 +220,7 @@ async function seedOfficialBreakSpanningWeek(page: Page) {
   });
 }
 
-async function openDailyPlanWizard(page: Page) {
+async function openDailyPlanWizard(page: Page, civilDate?: string) {
   await page.getByRole("button", { name: "Planlar", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Planlar", exact: true }),
@@ -212,6 +229,9 @@ async function openDailyPlanWizard(page: Page) {
     .getByRole("region", { name: "Neyi hazırlayacaksınız?" })
     .getByRole("button", { name: /Günlük eğitim planı/i })
     .click();
+  const guidance = page.getByRole("dialog", { name: "Planı adım adım tamamla", exact: true });
+  if (civilDate) await guidance.getByLabel("Plan günü").fill(civilDate);
+  await guidance.getByRole("button", { name: "Kendim planla", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Günlük plan oluşturma" });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -323,6 +343,11 @@ test("haftalık plan varken hızlı plan üç adımda kalır; semantik hedef ned
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeHidden();
+  const guidance = page.getByRole("dialog", { name: "Planı adım adım tamamla", exact: true });
+  if (await guidance.isVisible()) {
+    await guidance.getByRole("button", { name: "Planı adım adım tamamla ekranını kapat", exact: true }).click();
+    await expect(guidance).toBeHidden();
+  }
 
   const saved = await readSavedPlan(page);
   expect(saved.planId).not.toBeNull();
@@ -429,7 +454,7 @@ test("resmî tatil günü günlük planı kapatır ve en yakın öğretim günü
     "plan.calendar-day",
   );
   await expect(readiness).toContainText(
-    "resmî MEB çalışma takviminde öğretim günü değildir",
+    "sınıfın çalışma takviminde öğretim günü değildir",
   );
   await expect(dialog.getByRole("button", { name: "Planı kaydet" })).toBeDisabled();
 
@@ -449,7 +474,7 @@ test("hızlı plan kaydet → reload → düzenle zincirinde aynı plan ve etkin
   await seedCurrentTeacherWeek(page, { editableFuture: true });
   await page.reload({ waitUntil: "networkidle" });
 
-  const dialog = await openDailyPlanWizard(page);
+  const dialog = await openDailyPlanWizard(page, EDITABLE_FUTURE_PLAN_DATE);
   await dialog.getByRole("button", { name: "Başka bir alandan fikir bul" }).click();
   await dialog
     .getByRole("region", { name: "Etkinlik fikir alanları" })

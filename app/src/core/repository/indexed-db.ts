@@ -435,6 +435,7 @@ function recordsEqual(
 
 class StagedDataTransaction implements DataTransaction {
   private readonly state = new Map<CollectionName, StoredRecord[]>();
+  private readonly cleared = new Set<CollectionName>();
   private readonly allowedCollections: ReadonlySet<CollectionName>;
 
   constructor(
@@ -488,7 +489,12 @@ class StagedDataTransaction implements DataTransaction {
     collection: Collection,
   ): Promise<void> {
     this.assertWritable(collection);
+    this.cleared.add(collection);
     this.state.set(collection, []);
+  }
+
+  wasCleared(collection: CollectionName): boolean {
+    return this.cleared.has(collection);
   }
 
   snapshot(): RawCollectionState {
@@ -600,6 +606,8 @@ export class IndexedDbDataStore
             scopedCollections,
             baseline,
             finalRawState,
+            undefined,
+            new Set(scopedCollections.filter(collection => !transaction.wasCleared(collection))),
           );
         }
         return result;
@@ -1018,6 +1026,7 @@ export class IndexedDbDataStore
       baseline: readonly RecoverySnapshotRecord[];
       final: readonly RecoverySnapshotRecord[];
     },
+    deltaCollections: ReadonlySet<CollectionName> = new Set(),
   ): Promise<void> {
     const scopedCollections = uniqueCollections(collections);
     const storeNames: string[] = [...scopedCollections];
@@ -1087,8 +1096,21 @@ export class IndexedDbDataStore
       const writes: Promise<unknown>[] = [];
       for (const collection of scopedCollections) {
         const store = writeTransaction.objectStore(collection);
-        writes.push(track(requestResult(store.clear())));
-        for (const record of finalState[collection] ?? []) {
+        const before = baseline[collection] ?? [];
+        const after = finalState[collection] ?? [];
+        const beforeById = new Map(before.map(record => [record.id, record]));
+        const afterIds = new Set(after.map(record => record.id));
+        // CAS above still compares the complete encrypted preimage. Only a
+        // same-membership update without recovery work may avoid clear+rewrite.
+        // Adds, removals and recovery/restore retain the existing full-write path.
+        const sameMembership = !recovery && deltaCollections.has(collection) && before.length === after.length &&
+          beforeById.size === before.length && afterIds.size === after.length &&
+          after.every(record => beforeById.has(record.id));
+        const recordsToWrite = sameMembership
+          ? after.filter(record => canonicalJson(beforeById.get(record.id)) !== canonicalJson(record))
+          : after;
+        if (!sameMembership) writes.push(track(requestResult(store.clear())));
+        for (const record of recordsToWrite) {
           writes.push(track(requestResult(store.put(structuredClone(record)))));
         }
       }
@@ -1437,14 +1459,15 @@ export class IndexedDbDataStore
         `${collection} koleksiyonu için ${indexName} indeksi kullanılamıyor.`,
       );
     }
+    const encodedKey = canonicalJson(key);
     return this.transaction("readonly", [collection], async (transaction) =>
       (await transaction.getAll(collection)).filter((record) => {
         const value = typeof definition.keyPath === "string" ? record[definition.keyPath]
           : definition.keyPath.map((part) => record[part]);
         if (value === undefined || (Array.isArray(value) && value.some(item => item === undefined))) return false;
         return definition.options?.multiEntry && Array.isArray(value)
-          ? value.some((item) => canonicalJson(item) === canonicalJson(key))
-          : canonicalJson(value ?? null) === canonicalJson(key);
+          ? value.some((item) => canonicalJson(item) === encodedKey)
+          : canonicalJson(value ?? null) === encodedKey;
       }),
     );
   }

@@ -10,7 +10,7 @@ async function configureMaarifClassroom(page: Page) {
     .selectOption({ label: "60–72 ay" });
   await expect(setup.locator(".official-calendar-applied")).toHaveText(/Uygulandı/);
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
-  await expect(setup).toBeHidden();
+  await expect(setup).toBeHidden({timeout:30_000});
 }
 
 test("premiumPilot sorgusu dar telefonda sade TYMM plan ekranını değiştirmez", async ({

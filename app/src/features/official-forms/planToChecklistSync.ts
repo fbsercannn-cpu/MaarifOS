@@ -1,72 +1,42 @@
-import { MONTHS, type MonthKey, type ChecklistItem } from "./OfficialMonthlyPlanChecklistForm.tsx";
-
-/**
- * TTKB Okul Öncesi Eğitim Programı Yıllık Plan Dağılım Haritası.
- * Her ayın pedagojik temasına göre ele alınan resmî kazanım ve bileşen kodları.
- */
-export const OFFICIAL_TYMM_CURRICULUM_DISTRIBUTION: Record<MonthKey, string[]> = {
-  Eylül: [
-    "mab-1", "fab-1", "fab-2", "sab-1", "sab-2", "hsab-1", "hsab-5", "hsab-8",
-    "tab-1", "e1", "sdb-1", "d-1", "k-renk", "k-sekil"
-  ],
-  Ekim: [
-    "mab-1", "mab-2", "mab-3", "fab-1", "fab-3", "sab-3", "sab-4", "hsab-2",
-    "hsab-6", "snab-1", "snab-2", "e1", "e2", "sdb-1", "sdb-2", "d-1", "d-2",
-    "ob-1", "k-boyut", "k-miktar"
-  ],
-  Kasım: [
-    "mab-2", "mab-4", "fab-4", "sab-4", "sab-5", "hsab-3", "snab-3", "mab-mus-1",
-    "tab-2", "e2", "sdb-2", "d-2", "d-5", "ob-1", "ob-2", "k-mekan", "k-zaman"
-  ],
-  Aralık: [
-    "mab-3", "mab-5", "fab-7", "sab-6", "sab-7", "hsab-4", "snab-4", "mab-mus-2",
-    "e3", "sdb-2", "d-3", "d-5", "ob-3", "k-miktar", "k-sayi"
-  ],
-  Ocak: [
-    "mab-5", "mab-6", "fab-8", "sab-8", "sab-9", "hsab-8", "hsab-9", "tab-3",
-    "e1", "e3", "sdb-3", "d-4", "d-5", "ob-4", "k-duyu", "k-zit"
-  ],
-  Şubat: [
-    "mab-4", "mab-7", "fab-3", "fab-4", "sab-10", "hsab-6", "hsab-7", "mab-mus-3",
-    "e2", "sdb-1", "sdb-2", "d-4", "ob-5", "k-boyut", "k-duygu"
-  ],
-  Mart: [
-    "mab-7", "mab-8", "mab-9", "fab-7", "fab-9", "sab-11", "sab-12", "hsab-1",
-    "snab-2", "tab-2", "e3", "sdb-2", "d-2", "d-3", "ob-6", "k-mekan", "k-zit"
-  ],
-  Nisan: [
-    "mab-9", "mab-10", "fab-12", "sab-13", "sab-14", "hsab-3", "snab-4", "mab-mus-4",
-    "tab-1", "tab-3", "e1", "e2", "sdb-2", "sdb-3", "d-1", "d-4", "ob-1", "ob-4",
-    "k-sayi", "k-zaman"
-  ],
-  Mayıs: [
-    "mab-8", "mab-11", "mab-12", "fab-13", "sab-15", "hsab-2", "hsab-7", "snab-3",
-    "mab-mus-1", "mab-mus-2", "tab-2", "e2", "e3", "sdb-3", "d-5", "ob-7", "ob-8",
-    "k-duyu", "k-zit"
-  ],
-  Haziran: [
-    "mab-11", "mab-12", "mab-13", "fab-8", "fab-12", "sab-1", "sab-14", "hsab-5",
-    "hsab-8", "snab-4", "mab-mus-4", "tab-3", "e1", "e2", "e3", "sdb-1", "sdb-3",
-    "d-1", "d-4", "d-5", "ob-8", "k-renk", "k-sekil"
-  ]
-};
-
-/**
- * Verilen kontrol listesi öğeleri için tüm eğitim yılı boyunca
- * resmî müfredat dağılımını otomatik olarak işaretleyen senkronizasyon fonksiyonu.
- */
-export function generateCurriculumMatrix(
-  items: ChecklistItem[]
-): Record<string, Record<string, boolean>> {
-  const result: Record<string, Record<string, boolean>> = {};
-
-  items.forEach((item) => {
-    result[item.id] = {};
-    MONTHS.forEach((month) => {
-      const monthCodes = OFFICIAL_TYMM_CURRICULUM_DISTRIBUTION[month] || [];
-      result[item.id]![month] = monthCodes.includes(item.id);
-    });
-  });
-
-  return result;
+import type { DataSnapshot } from "../../core/domain/model.ts";
+import { isTeacherOwnedPlanRecord } from "../../core/domain/teacher-owned-plan.ts";
+import type { ChecklistItem } from "./ek15-catalog.ts";
+import { isOfficialFormRecord, type OfficialFormScope } from "./official-form-record.ts";
+const monthNames: Record<string, string> = { "09": "Eylül", "10": "Ekim", "11": "Kasım", "12": "Aralık", "01": "Ocak", "02": "Şubat", "03": "Mart", "04": "Nisan", "05": "Mayıs", "06": "Haziran" };
+const plannedFields = ["narrative", "focus", "purpose", "domainSkills", "tendencies", "socialEmotional", "values", "literacy", "learningOutcomes", "plannedCodes", "curriculumTargets"];
+export function programCodeCandidates(text: string): string[] {
+  return [...new Set(text.match(/(?<![\p{L}\p{N}.])(?:[A-ZÇ]{1,8}\d+(?:\.\d+)*|[A-ZÇ]{1,8}(?:\.\d+)+)(?![\p{L}\p{N}])/gu) ?? [])];
+}
+export interface ChecklistPlanSource { id: string; kind: "official-form" | "teacher-owned"; revision: number; month: string; codes: string[]; meaning: "planned" }
+/** A mark means planned coverage, never completion or a child's observed attainment. */
+export function generateCurriculumMatrix(items: ChecklistItem[], snapshot: DataSnapshot, scope: OfficialFormScope): { matrix: Record<string, Record<string, boolean>>; sourceCount: number; matchCount: number; sources: ChecklistPlanSource[] } {
+  const candidates: { id: string; kind: ChecklistPlanSource["kind"]; revision: number; month: string; data: Record<string, unknown> }[] = [];
+  for (const record of snapshot.settings.filter(isOfficialFormRecord)) {
+    if (record.formId !== "monthly" || record.classroomId !== scope.classroomId || record.academicYearId !== scope.academicYearId || record.ageBand !== scope.ageBand) continue;
+    const data = record.formValues.formData;
+    if (data && typeof data === "object" && !Array.isArray(data)) candidates.push({id:record.id,kind:"official-form",revision:record.revision,month:record.period.slice(0,7),data});
+  }
+  const classroom = snapshot.classrooms.find(c => c.id === scope.classroomId && c.academicYearId === scope.academicYearId);
+  const normalizeAge = (value: unknown) => typeof value === "string" ? value.replace(/[–—]/g,"-").match(/(?:36-48|48-60|60-72)/)?.[0] : undefined;
+  const graph = snapshot.plans.filter(isTeacherOwnedPlanRecord);
+  for (const plan of graph) {
+    if (plan.planType !== "monthly" || plan.classroomId !== scope.classroomId || plan.academicYearId !== scope.academicYearId) continue;
+    const annual = graph.find(p => p.planType === "annual" && p.id === plan.annualPlanId && p.classroomId === scope.classroomId && p.academicYearId === scope.academicYearId && p.monthlySectionIds.includes(plan.id));
+    if (!annual || normalizeAge(plan.teacherContent.ageBand ?? classroom?.ageGroup) !== scope.ageBand) continue;
+    candidates.push({id:plan.id,kind:"teacher-owned",revision:plan.revisionNumber,month:plan.monthKey,data:plan.teacherContent});
+  }
+  const matrix: Record<string, Record<string, boolean>> = {};
+  const sources: ChecklistPlanSource[] = [];
+  const officialCodes = new Set(items.filter(item => item.category !== "kavram").map(item => item.code));
+  let matches = 0;
+  for (const source of candidates) {
+    const month = monthNames[source.month.slice(5,7)]; if (!month) continue;
+    const text = plannedFields.map(k => typeof source.data[k] === "string" ? source.data[k] : JSON.stringify(source.data[k] ?? "")).join(" ");
+    const codes = programCodeCandidates(text).filter(code => officialCodes.has(code));
+    sources.push({id:source.id,kind:source.kind,revision:source.revision,month:source.month,codes,meaning:"planned"});
+    for (const item of items) {
+      if (codes.includes(item.code) && !matrix[item.id]?.[month]) { (matrix[item.id] ??= {})[month] = true; matches++; }
+    }
+  }
+  return {matrix,sourceCount:sources.length,matchCount:matches,sources};
 }

@@ -91,13 +91,14 @@ test("Planlar içindeki resmî TYMM kütüphanesi PDF sözleşmesini ve erişim 
     name: "Resmî TYMM okul öncesi kütüphanesi",
   });
   await expect(dialog).toBeVisible();
-  const reviewDisclosure = dialog.getByRole("region", {
+  const reviewDisclosure = dialog.getByRole("group", {
     name: "Pedagojik eşleme inceleme durumu",
   });
   await expect(reviewDisclosure).toHaveAttribute(
     "data-review-status",
     "pending-human-review",
   );
+  await reviewDisclosure.locator("summary").click();
   await expect(reviewDisclosure).toContainText(
     "Pedagojik eşlemeler doğrulanmış değildir",
   );

@@ -1,17 +1,17 @@
 {
   "id": "/",
-  "name": "MaarifOS — Akış Pusulası",
+  "name": "MaarifOS — Okul Öncesi Öğretmen Çalışma Alanı",
   "short_name": "MaarifOS",
-  "description": "Emine Öğretmen için yerel öncelikli okul öncesi öğretmen çalışma ekosistemi.",
+  "description": "Planlama, gözlem ve öğretmen belgelerini tek akışta buluşturan bağımsız okul öncesi öğretmen çalışma alanı.",
   "lang": "tr-TR",
   "dir": "ltr",
-  "start_url": "/",
+  "start_url": "/?view=app&native=1",
   "scope": "/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#f4fbfc",
-  "theme_color": "#007f91",
+  "background_color": "#fffdf8",
+  "theme_color": "#347a57",
   "categories": ["education", "productivity"],
   "icons": [
     {
@@ -32,5 +32,14 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

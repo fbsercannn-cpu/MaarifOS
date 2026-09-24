@@ -414,7 +414,7 @@ export function assertGrowthMeasurementSnapshotRelations(
     }
     if (record.eventKind !== "selection") {
       if (record.measuredOn < period.windowStart) {
-        throw new Error(`Boy-kilo gerçek ölçüm tarihi hedef dönem başlamadan önce: settings/${record.id}`);
+        throw new Error(`Boy-kilo kaydı yapılamaz; hedef dönem henüz başlamamış: settings/${record.id}`);
       }
       const membership = resolveStudentMembershipOn(student, {
         academicYearId: record.academicYearId,

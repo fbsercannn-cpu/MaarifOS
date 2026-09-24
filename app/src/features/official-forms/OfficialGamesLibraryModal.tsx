@@ -1,3 +1,4 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -127,48 +128,7 @@ export function OfficialGamesLibraryModal({ onClose }: Props) {
     printOfficialFormA4(`TYMM_Oyun_Kartlari_Kutuphanesi`);
   };
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Resmî Oyun Kartı - ${activeGame.name}</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; color: #1e293b; line-height: 1.4; }
-        h1 { font-size: 16pt; color: #ea580c; text-align: center; }
-        .meta { background: #fff7ed; padding: 10px; border-left: 4px solid #f97316; margin-bottom: 14px; }
-        .section { font-weight: bold; font-size: 11pt; color: #c2410c; margin-top: 12px; }
-        ol { padding-left: 20px; }
-        li { margin-bottom: 5px; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI · TTKB OKUL ÖNCESİ EĞİTİMİ</h1>
-        <h2 style="text-align: center; font-size: 13pt; color: #475569;">OYUN TEMELLİ ETKİNLİK KARTI (TTKB s. 86–91)</h2>
-        <h2 style="text-align: center; color: #ea580c;">${activeGame.name}</h2>
-
-        <div class="meta">
-          <p><strong>Kategori:</strong> ${activeGame.category} | <strong>Yaş Grubu:</strong> ${activeGame.ageBand} | <strong>Kişi Sayısı:</strong> ${activeGame.playerCount}</p>
-          <p><strong>Kazandırdığı Temel Beceriler:</strong> ${activeGame.skillsGained}</p>
-          <p><strong>Gerekli Materyaller:</strong> ${activeGame.materials}</p>
-        </div>
-
-        <div class="section">NASIL OYNANIR? (UYGULAMA ADIMLARI)</div>
-        <ol>
-          ${activeGame.howToPlay.map(step => `<li>${step}</li>`).join("")}
-        </ol>
-
-        <div class="section">ÖĞRETMENE PEDAGOJİK İPUCU:</div>
-        <p>${activeGame.teacherTip}</p>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Oyun_Karti_${activeGame.name.replace(/\s+/g, "_")}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("OfficialGamesLibraryModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -273,7 +233,7 @@ export function OfficialGamesLibraryModal({ onClose }: Props) {
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

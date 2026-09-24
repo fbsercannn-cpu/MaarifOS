@@ -28,6 +28,7 @@ import {
   parseFounderProductionProfile,
   preflightSitesBuild,
   prepareSitesBuild,
+  renderSitesWorker,
   renderStaticAssetHeadersFile,
   validateProductionFounderEnvironment,
   validateProductionLicenseApiOrigin,
@@ -47,7 +48,313 @@ import worker, {
   TYMM_OFFICIAL_DOCUMENT_FRAME_SOURCES,
   createSitesWorker,
   createSecurityHeaders,
+  ACCOUNT_PROXY_MAX_BODY_BYTES,
+  ACCOUNT_UPSTREAM_ORIGINS,
+  AI_GATEWAY_MAX_BODY_BYTES,
+  AI_GATEWAY_MODELS,
+  validateAIGatewayConfiguration,
+  validateAccountProxyConfiguration,
 } from "../worker/index.js";
+
+const accountProxyEnvironment = () => ({
+  MAARIFOS_ACCOUNT_UPSTREAM: ACCOUNT_UPSTREAM_ORIGINS[0],
+  MAARIFOS_ACCOUNT_PROXY_KEY: "synthetic-test-proxy-key-never-a-live-secret-2026",
+  ASSETS: { fetch: async () => new Response("static missing", { status: 404 }) },
+});
+
+const aiGatewayEnvironment = () => ({
+  ...accountProxyEnvironment(),
+  MAARIFOS_DEEPSEEK_API_KEY: `sk-${"synthetic_test_material_2026".replaceAll("_", "-")}`,
+  MAARIFOS_DEEPSEEK_MODEL: AI_GATEWAY_MODELS[0],
+});
+
+const connectedAccountFetcher = async () => Response.json({
+  available: true,
+  status: "connected",
+  user: { subject: "synthetic-teacher", displayName: "Kurgu Öğretmen" },
+  driveConnected: false,
+});
+
+const aiRequest = (pathname, init = {}) => new Request(`https://example.test${pathname}`, {
+  ...init,
+  headers: {
+    Origin: "https://example.test",
+    Cookie: "__Host-maarifos-session=synthetic-session",
+    ...(init.headers ?? {}),
+  },
+});
+
+test("AI gateway accepts only server bindings and approved models", () => {
+  const env = aiGatewayEnvironment();
+  assert.deepEqual(validateAIGatewayConfiguration(env), {
+    apiKey: env.MAARIFOS_DEEPSEEK_API_KEY,
+    model: AI_GATEWAY_MODELS[0],
+  });
+  for (const apiKey of [undefined, "short", "sk-bad key", `sk-${"a".repeat(300)}`]) {
+    assert.equal(validateAIGatewayConfiguration({ ...env, MAARIFOS_DEEPSEEK_API_KEY: apiKey }), null);
+  }
+  assert.equal(validateAIGatewayConfiguration({ ...env, MAARIFOS_DEEPSEEK_MODEL: "attacker-model" }), null);
+});
+
+test("browser-delivered AI sources contain no provider endpoint or embedded secret", async () => {
+  const browserSources = await Promise.all([
+    "../src/services/secure-ai-client.ts",
+    "../src/services/ai-plan-generator.ts",
+    "../src/services/ai-observation-classifier.ts",
+    "../src/components/MaarifAIAssistant.tsx",
+    "../src/components/MaarifApiConfigModal.tsx",
+    "../src/features/chatgpt-bridge/ChatGPTBridgeModal.tsx",
+  ].map((relativePath) => readFile(new URL(relativePath, import.meta.url), "utf8")));
+  const combined = browserSources.join("\n");
+  for (const forbidden of [
+    "api.deepseek.com",
+    "api.openai.com",
+    "generativelanguage.googleapis.com",
+    "deepseek-chat",
+    "Authorization: `Bearer",
+  ]) assert.equal(combined.includes(forbidden), false, forbidden);
+  assert.equal(/sk-[A-Za-z0-9_-]{20,}/u.test(combined), false);
+});
+
+test("AI gateway fails closed when secret or account authentication is absent", async () => {
+  const unconfigured = createSitesWorker({ accountFetcher: connectedAccountFetcher });
+  assert.equal((await unconfigured.fetch(aiRequest("/api/ai/status"), accountProxyEnvironment())).status, 503);
+
+  let providerCalls = 0;
+  const secured = createSitesWorker({
+    accountFetcher: async () => Response.json({ available: true, status: "not_connected" }),
+    aiFetcher: async () => { providerCalls++; return Response.json({}); },
+  });
+  const response = await secured.fetch(aiRequest("/api/ai/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "Kurgu eğitim taslağı" }),
+  }), aiGatewayEnvironment());
+  assert.equal(response.status, 401);
+  assert.equal(providerCalls, 0);
+  assertSecurityHeaders(response);
+});
+
+test("AI gateway rejects cross-origin and oversized requests before provider access", async () => {
+  let providerCalls = 0;
+  const secured = createSitesWorker({
+    accountFetcher: connectedAccountFetcher,
+    aiFetcher: async () => { providerCalls++; return Response.json({}); },
+  });
+  const env = aiGatewayEnvironment();
+  const crossOrigin = await secured.fetch(aiRequest("/api/ai/status", {
+    headers: { Origin: "https://evil.test" },
+  }), env);
+  assert.equal(crossOrigin.status, 403);
+  const oversized = await secured.fetch(aiRequest("/api/ai/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": String(AI_GATEWAY_MAX_BODY_BYTES + 1) },
+    body: "{}",
+  }), env);
+  assert.equal(oversized.status, 413);
+  assert.equal(providerCalls, 0);
+});
+
+test("AI gateway keeps provider secret server-side and returns bounded text", async () => {
+  const env = aiGatewayEnvironment();
+  let providerCalls = 0;
+  const secured = createSitesWorker({
+    accountFetcher: connectedAccountFetcher,
+    aiFetcher: async (url, init) => {
+      providerCalls++;
+      assert.equal(url, "https://api.deepseek.com/chat/completions");
+      assert.equal(init.headers.Authorization, `Bearer ${env.MAARIFOS_DEEPSEEK_API_KEY}`);
+      const body = JSON.parse(init.body);
+      assert.equal(body.model, AI_GATEWAY_MODELS[0]);
+      assert.equal(body.stream, false);
+      return Response.json({ choices: [{ message: { content: "Öğretmen incelemesine açık kurgu taslak." } }] });
+    },
+  });
+  const status = await secured.fetch(aiRequest("/api/ai/status"), env);
+  assert.equal(status.status, 200);
+  assert.deepEqual(await status.json(), { available: true, provider: "deepseek", model: AI_GATEWAY_MODELS[0] });
+  const response = await secured.fetch(aiRequest("/api/ai/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: "Kurgu eğitim taslağı" }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { text: "Öğretmen incelemesine açık kurgu taslak.", model: AI_GATEWAY_MODELS[0] });
+  assert.equal(providerCalls, 1);
+  assert.equal(JSON.stringify(await secured.fetch(aiRequest("/api/ai/status"), env)).includes(env.MAARIFOS_DEEPSEEK_API_KEY), false);
+});
+
+test("account proxy accepts only the exact HTTPS backend and server-only credential", () => {
+  const env = accountProxyEnvironment();
+  assert.equal(validateAccountProxyConfiguration(env).origin, ACCOUNT_UPSTREAM_ORIGINS[0]);
+  for (const value of [
+    "http://maarifos-account-api.otonom-hesaplama.workers.dev",
+    "https://maarifos-account-api.otonom-hesaplama.workers.dev.evil.test",
+    "https://other.otonom-hesaplama.workers.dev", "https://127.0.0.1",
+    "https://maarifos-account-api.otonom-hesaplama.workers.dev/path",
+    "https://user:password@maarifos-account-api.otonom-hesaplama.workers.dev",
+    `${env.MAARIFOS_ACCOUNT_UPSTREAM}?target=another`, `${env.MAARIFOS_ACCOUNT_UPSTREAM}#fragment`,
+  ]) assert.equal(validateAccountProxyConfiguration({ ...env, MAARIFOS_ACCOUNT_UPSTREAM: value }), null);
+  for (const key of [undefined, "short", "a".repeat(257), "a".repeat(32) + "\n"])
+    assert.equal(validateAccountProxyConfiguration({ ...env, MAARIFOS_ACCOUNT_PROXY_KEY: key }), null);
+});
+
+test("unconfigured account routes return explicit no-store JSON before static assets", async () => {
+  const env = { ASSETS: { fetch: () => { throw new Error("must not serve an account asset"); } } };
+  for (const pathname of ["/api/account/status", "/api/account", "/auth/google/start", "/auth/google/callback?code=synthetic-code&state=synthetic-state"]) {
+    const response = await worker.fetch(new Request(`https://example.test${pathname}`), env);
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const value = await response.json();
+    assert.equal(value.status, "not_configured");
+    assert.equal(value.code, "account_not_configured");
+    assert.equal(JSON.stringify(value).includes("synthetic-code"), false);
+    assertSecurityHeaders(response);
+  }
+});
+
+test("account proxy forwards only contract headers, preserves JSON and replaces forged credentials", async () => {
+  const env = accountProxyEnvironment();
+  const accountWorker = createSitesWorker({ accountFetcher: async (request) => {
+    assert.equal(request.url, `${env.MAARIFOS_ACCOUNT_UPSTREAM}/auth/google/start`);
+    assert.equal(request.method, "POST");
+    assert.equal(request.redirect, "manual");
+    assert.equal(request.headers.get("origin"), "https://example.test");
+    assert.equal(request.headers.get("cookie"), "__Host-maarifos-session=synthetic-session");
+    assert.equal(request.headers.get("content-type"), "application/json");
+    assert.equal(request.headers.get("x-csrf-token"), "synthetic-csrf");
+    assert.equal(request.headers.get("x-maarifos-account-proxy"), env.MAARIFOS_ACCOUNT_PROXY_KEY);
+    for (const name of ["host", "forwarded", "x-forwarded-host", "x-forwarded-proto", "x-forwarded-for", "authorization", "sec-fetch-site", "cf-connecting-ip", "x-arbitrary"])
+      assert.equal(request.headers.get(name), null, name);
+    assert.deepEqual(await request.json(), { purpose: "login" });
+    return Response.json({ authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=synthetic" }, { headers: { "Cache-Control": "public, max-age=600", "Access-Control-Allow-Origin": "*" } });
+  } });
+  const response = await accountWorker.fetch(new Request("https://example.test/auth/google/start", {
+    method: "POST", body: JSON.stringify({ purpose: "login" }), headers: {
+      Origin: "https://example.test", Cookie: "__Host-maarifos-session=synthetic-session",
+      "Content-Type": "application/json", "X-CSRF-Token": "synthetic-csrf",
+      Host: "evil.test", Forwarded: "host=evil.test", "X-Forwarded-Host": "evil.test",
+      "X-Forwarded-Proto": "http", "X-Forwarded-For": "127.0.0.1", Authorization: "Bearer forged",
+      "Sec-Fetch-Site": "same-origin", "CF-Connecting-IP": "127.0.0.1", "X-Arbitrary": "ignored",
+      "X-MaarifOS-Account-Proxy": "forged-client-key",
+    },
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
+  assertSecurityHeaders(response);
+});
+
+test("OAuth callback keeps raw query, manual redirect and separate host-only cookies", async () => {
+  const cookies = [
+    "__Host-maarifos-attempt=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
+    "__Host-maarifos-session=synthetic; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax",
+  ];
+  const query = "?code=synthetic%2Bcode&state=a%2Fb%3D&scope=openid+profile";
+  let calls = 0;
+  const accountWorker = createSitesWorker({ accountFetcher: async (request) => {
+    calls++;
+    assert.equal(new URL(request.url).search, query);
+    assert.equal(request.redirect, "manual");
+    const headers = new Headers({ Location: "/classroom?native=1&account=connected" });
+    for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+    return new Response(null, { status: 303, headers });
+  } });
+  const response = await accountWorker.fetch(new Request(`https://example.test/auth/google/callback${query}`), accountProxyEnvironment());
+  assert.equal(calls, 1);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/classroom?native=1&account=connected");
+  assert.deepEqual(response.headers.getSetCookie(), cookies);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("account proxy refuses noncanonical paths and does not proxy neighboring namespaces", async () => {
+  let calls = 0;
+  const accountWorker = createSitesWorker({ accountFetcher: async () => { calls++; return Response.json({ ok: true }); } });
+  const env = accountProxyEnvironment();
+  for (const pathname of ["/api/account%2fstatus", "/%61pi/account/status", "/auth/google/%63allback"]) {
+    assert.equal((await accountWorker.fetch(new Request(`https://example.test${pathname}`), env)).status, 400);
+  }
+  for (const pathname of ["/api/accounting", "/auth/google-other/start", "/api/elsewhere", "/healthz"]) {
+    assert.equal((await accountWorker.fetch(new Request(`https://example.test${pathname}`), env)).status, 404);
+  }
+  assert.equal((await accountWorker.fetch(new Request("https://example.test/api/account/backups", { method: "DELETE" }), env)).status, 405);
+  assert.equal(calls, 0);
+});
+
+test("cloud body limit uses actual streamed bytes and rejects declared oversize before fetch", async () => {
+  let calls = 0;
+  const accountWorker = createSitesWorker({ accountFetcher: async (request) => {
+    calls++;
+    const reader = request.body.getReader();
+    while (!(await reader.read()).done) { /* Consume with bounded memory, like the backend reader. */ }
+    return Response.json({ ok: true });
+  } });
+  const env = accountProxyEnvironment();
+  const oversized = await accountWorker.fetch(new Request("https://example.test/api/account/backups", {
+    method: "POST", body: "synthetic", headers: { "Content-Length": String(ACCOUNT_PROXY_MAX_BODY_BYTES + 1) },
+  }), env);
+  assert.equal(oversized.status, 413);
+  assert.equal(calls, 0);
+  const chunk = new Uint8Array(1024 * 1024);
+  let sent = 0;
+  const stream = new ReadableStream({ pull(controller) { if (sent++ < 9) controller.enqueue(chunk); else controller.close(); } });
+  const response = await accountWorker.fetch(new Request("https://example.test/api/account/backups", {
+    method: "POST", body: stream, duplex: "half", headers: { "Content-Length": "1" },
+  }), env);
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /8 MB/);
+  assert.equal(calls, 1);
+});
+
+test("upstream transport errors disclose no callback query or server credential", async () => {
+  const accountWorker = createSitesWorker({ accountFetcher: async () => { throw new Error("synthetic-private-token"); } });
+  const response = await accountWorker.fetch(new Request("https://example.test/auth/google/callback?code=synthetic-private-code"), accountProxyEnvironment());
+  assert.equal(response.status, 502);
+  const body = await response.text();
+  assert.equal(body.includes("synthetic-private"), false);
+  assert.equal(body.includes(accountProxyEnvironment().MAARIFOS_ACCOUNT_PROXY_KEY), false);
+});
+
+test("public Vite account proxy credentials are rejected instead of embedded in client builds", () => {
+  assert.throws(() => validateProductionFounderEnvironment({ VITE_MAARIFOS_ACCOUNT_PROXY_KEY: "synthetic-private-value" }), /forbidden secret-bearing name/);
+});
+
+test("the 8 MiB cloud request boundary is inclusive and does not buffer the body twice", async () => {
+  let receivedBytes = 0;
+  const accountWorker = createSitesWorker({ accountFetcher: async (request) => {
+    const reader = request.body.getReader();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+    }
+    return Response.json({ accepted: true });
+  } });
+  const chunk = new Uint8Array(1024 * 1024);
+  let sent = 0;
+  const body = new ReadableStream({ pull(controller) { if (sent++ < 8) controller.enqueue(chunk); else controller.close(); } });
+  const response = await accountWorker.fetch(new Request("https://example.test/api/account/backups", {
+    method: "POST", body, duplex: "half",
+  }), accountProxyEnvironment());
+  assert.equal(response.status, 200);
+  assert.equal(receivedBytes, ACCOUNT_PROXY_MAX_BODY_BYTES);
+});
+
+test("Sites worker rendering never serializes the runtime account proxy secret", async () => {
+  const name = "MAARIFOS_ACCOUNT_PROXY_KEY";
+  const before = process.env[name];
+  process.env[name] = "synthetic-runtime-only-secret-should-never-be-rendered";
+  try {
+    const source = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
+    const built = renderSitesWorker(source, null);
+    assert.equal(built.includes(process.env[name]), false);
+    assert.equal(built.includes("env.MAARIFOS_ACCOUNT_PROXY_KEY"), true);
+  } finally {
+    if (before === undefined) delete process.env[name];
+    else process.env[name] = before;
+  }
+});
 
 const assertSecurityHeaders = (response, licenseApiOrigin = null) => {
   const expectedHeaders = createSecurityHeaders(licenseApiOrigin);

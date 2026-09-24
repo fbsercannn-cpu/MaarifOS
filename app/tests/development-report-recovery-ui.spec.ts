@@ -1,3 +1,4 @@
+import {changeRepositorySource} from './helpers/production-repository';
 import { expect, test, type Page } from "@playwright/test";
 import { setup, installCivilClock, openReport, readRecords, evaluation, observation } from "./helpers/development-workspace-ui";
 
@@ -5,35 +6,18 @@ test.describe.configure({ timeout: 120_000 });
 test.use({ viewport: { width: 390, height: 844 } });
 
 async function changeRawSource(page: Page, suffix: string) {
-  await page.evaluate(async (text) => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
-    });
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction("observations", "readwrite");
-        const records = tx.objectStore("observations");
-        const read = records.getAll();
-        read.onsuccess = () => {
-          const current = read.result.find((item: Record<string, unknown>) => !item.deletedAt);
-          records.put({ ...current, rawText: current.rawText + text, updatedAt: new Date().toISOString() });
-        };
-        tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
-      });
-    } finally { db.close(); }
-  }, suffix);
+ await changeRepositorySource(page,'observations',{suffix});
 }
-
 test("kota hatasında arka plana geçiş metni gizler; güvenli yeniden bağlanma kaydedilmemiş öğretmen metnini korur", async ({ page }) => {
   await setup(page);
   const report = await openReport(page);
   await expect.poll(async () => (await readRecords(page)).reports.length).toBe(1);
+  await page.evaluate((id)=>(window as any).__reportFaultId=id,(await readRecords(page)).reports[0].id);
   await page.evaluate(() => {
     const host = window as Window & { __reportOriginalPut?: typeof IDBObjectStore.prototype.put };
     host.__reportOriginalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function(value, key) {
-      if (value?.settingType === "development-report") throw new DOMException("Kurgu rapor kota hatası", "QuotaExceededError");
+      if (this.name === "settings" && value?.id === (window as any).__reportFaultId) throw new DOMException("Kurgu rapor kota hatası", "QuotaExceededError");
       return key === undefined ? host.__reportOriginalPut!.call(this, value) : host.__reportOriginalPut!.call(this, value, key);
     };
   });

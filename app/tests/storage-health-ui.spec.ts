@@ -48,7 +48,7 @@ test("yerel kasa yedek bütünlüğünü, exact geri yükleme tatbikatını ve r
   await expect(health).toContainText("başarılı şifreli yedek kaydı yok");
 
   const passphrase = "Kurgu-Kasa-2026!";
-  await page.getByLabel("Yedek parolası").fill(passphrase);
+  await page.locator("#backup-password").fill(passphrase);
   await page.getByLabel("Parolayı doğrula").fill(passphrase);
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: /Şifreli yedek oluştur/ }).click();

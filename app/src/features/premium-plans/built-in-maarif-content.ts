@@ -25,25 +25,25 @@ const BUILT_IN_RELEASES: Readonly<
     version: "2.0.0",
     manifestDigest:
       "sha256:f59acdadd13d535936ef23bd4667914e49ef8cec96a5acc72ef33008a979d2a1",
-    contentUrl: "/assets/maarif-content/tymm-6072-2026-09-v2.json",
+    contentUrl: "./assets/maarif-content/tymm-6072-2026-09-v2.json",
   }),
   v3: Object.freeze({
     id: "maarifos-tymm-6072-2026-2027-v3",
     version: "3.0.0",
     manifestDigest:
       "sha256:9b4c2bcc155e3f6f8567ba5737249cd417405bc4205b75b68d194e63ca3eff1e",
-    contentUrl: "/assets/maarif-content/tymm-6072-2026-09-v3.json",
+    contentUrl: "./assets/maarif-content/tymm-6072-2026-09-v3.json",
   }),
 });
 const cachedBuiltInPacks = new Map<BuiltInMaarifRelease, PremiumContentPack>();
 const BUILT_IN_SOURCE_ASSETS = new Map<string, string>([
   [
     "/src/features/values/values-pedagogy-constitution.v1.json",
-    "/assets/maarif-content/values-pedagogy-constitution.v1.json",
+    "./assets/maarif-content/values-pedagogy-constitution.v1.json",
   ],
   [
     "/src/features/values/official-preschool-value-actions.v1.json",
-    "/assets/maarif-content/official-preschool-value-actions.v1.json",
+    "./assets/maarif-content/official-preschool-value-actions.v1.json",
   ],
 ]);
 

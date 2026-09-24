@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -49,13 +51,13 @@ const DEFAULT_ATTENDEES: ParentAttendee[] = [
 ];
 
 export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () => void }) {
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [className, setClassName] = useState("Papatyalar Sınıfı (60-72 Ay)");
-  const [meetingDate, setMeetingDate] = useState("2026-09-15");
-  const [meetingTitle, setMeetingTitle] = useState("2026-2027 Eğitim-Öğretim Yılı Sene Başı Genel Veli Toplantısı");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [decisions, setDecisions] = useState<MeetingDecision[]>(DEFAULT_DECISIONS);
-  const [attendees, setAttendees] = useState<ParentAttendee[]>(DEFAULT_ATTENDEES);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (60-72 Ay)");
+  const [meetingDate, setMeetingDate] = useOfficialFormState("meetingDate", "2026-09-15");
+  const [meetingTitle, setMeetingTitle] = useOfficialFormState("meetingTitle", "2026-2027 Eğitim-Öğretim Yılı Sene Başı Genel Veli Toplantısı");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [decisions, setDecisions] = useOfficialFormState<MeetingDecision[]>("decisions", DEFAULT_DECISIONS);
+  const [attendees, setAttendees] = useOfficialFormState<ParentAttendee[]>("attendees", DEFAULT_ATTENDEES);
 
   const handleUpdateDecision = (id: string, field: "topic" | "decision", value: string) => {
     setDecisions(prev => prev.map(d => (d.id === id ? { ...d, [field]: value } : d)));
@@ -65,87 +67,7 @@ export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () =>
     printOfficialFormA4(`MEB_Veli_Toplantisi_Tutanagi_${meetingDate}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Veli_Toplantisi_Tutanagi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.3; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 5px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          GENEL VELİ TOPLANTISI TUTANAĞI VE ALINAN KARARLAR
-        </div>
-        <table>
-          <tr><td><b>Okul Adı:</b> ${schoolName}</td><td><b>Şube:</b> ${className}</td></tr>
-          <tr><td><b>Toplantı Tarihi:</b> ${meetingDate}</td><td><b>Toplantı Başkanı:</b> ${teacherName}</td></tr>
-          <tr><td colspan='2'><b>Toplantı Konusu:</b> ${meetingTitle}</td></tr>
-        </table>
-        <h4>Görüşülen Gündem Maddeleri ve Alınan Kararlar</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 30%'>Gündem Konusu</th>
-              <th style='width: 70%'>Alınan Ortak Karar ve Uygulama Esasları</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${decisions.map(d => `
-              <tr>
-                <td><b>${d.topic}</b></td>
-                <td>${d.decision}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <h4>Toplantıya Katılan Veli İmza Listesi</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 30px;'>No</th>
-              <th>Öğrencinin Adı Soyadı</th>
-              <th>Velinin Adı Soyadı</th>
-              <th>İletişim Tel</th>
-              <th style='width: 80px;'>İmza</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${attendees.map((a, idx) => `
-              <tr>
-                <td style='text-align:center;'>${idx + 1}</td>
-                <td>${a.studentName}</td>
-                <td>${a.parentName}</td>
-                <td>${a.phone}</td>
-                <td style='text-align:center;'>${a.signed ? 'İmzalandı' : ''}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni / Yazman</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay<br/>Mühür / İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Veli_Toplantisi_Tutanagi_${meetingDate}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialFamilyMeetingMinutesModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -210,7 +132,7 @@ export function OfficialFamilyMeetingMinutesModal({ onClose }: { onClose?: () =>
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

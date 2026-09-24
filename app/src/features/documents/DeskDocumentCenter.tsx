@@ -272,6 +272,7 @@ export function DeskDocumentCenter({
                   onClick={() => setSelectedDate(item.civilDate)}
                 >
                   <strong>{Number(item.civilDate.slice(-2))}</strong>
+                  <span className="desk-day-weekday">{["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][item.dayOfWeek - 1]}</span>
                   <span>
                     {item.items.length
                       ? `${item.items.length} kayıt`
@@ -357,7 +358,7 @@ export function DeskDocumentCenter({
       )}
 
       {officialFormsOpen && (
-        <OfficialFormsWorkspace onClose={() => setOfficialFormsOpen(false)} />
+        <OfficialFormsWorkspace store={store} disabled={disabled} onClose={() => setOfficialFormsOpen(false)} />
       )}
     </section>
   );

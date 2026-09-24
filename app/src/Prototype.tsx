@@ -1,3 +1,13 @@
+import { BUILD_IDENTITY } from "./build-identity";
+import { MaarifLogo } from "./components/MaarifLogo.tsx";
+import {
+  classifyObservationWithAI,
+  type AIObservationClassification,
+  persistClassifiedObservation,
+} from "./services/ai-observation-classifier.ts";
+import { EdgeVisionObservationModal } from "./features/vision/EdgeVisionObservationModal.tsx";
+import { generateParentEmpathyDigest } from "./services/parent-empathy-shield.ts";
+import { DeviceTransferGuide } from "./features/cloud-account/DeviceTransferGuide";
 import type { ClassRosterLayoutId } from "./features/classroom/class-roster-layouts.ts";
 import { PdfPreviewHost } from "./features/documents/PdfPreviewHost.tsx";
 import { studentProfileCopy } from "./features/students/student-profile-copy.ts";
@@ -7,6 +17,7 @@ import { FOLLOWUP_CHANGED_EVENT } from "./features/teacher-followup/teacher-foll
 import type { ManagementSection } from "./features/classroom-admin/ClassroomManagementWorkspace.tsx";
 import type { FollowupSection } from "./features/teacher-followup/TeacherFollowupWorkspace.tsx";
 import { downloadBrowserFile } from "./features/documents/browser-file-download.ts";
+import { flushSync } from "react-dom";
 import {
   lazy,
   Suspense,
@@ -81,6 +92,7 @@ import { isEncryptedBackupEnvelope } from "./core/backup/encrypted-backup";
 import type { BackupEnvelope, RestoreMode } from "./core/backup/schema";
 import { IndexedDbDataStore } from "./core/repository/indexed-db";
 import type { RecoverySnapshotMetadata } from "./core/repository/contracts";
+import { migrateLegacyAcademicYearOperationalStart } from "./core/migrations/academic-year-operational-migration.ts";
 import { OBSERVATION_TAXONOMY_VERSION_V2 } from "./core/domain/observation-taxonomy";
 import {
   civilDateInIstanbul,
@@ -156,6 +168,7 @@ import {
 import {
   emptyTeacherWorkCycle,
   loadTeacherWorkCycle,
+  resolveTeacherWorkCycle,
   resolveSimpleDailyDocumentReadiness,
   type TeacherWorkCycleWorkspace,
 } from "./features/teacher-cycle/teacher-work-cycle.ts";
@@ -166,6 +179,7 @@ import {
   closeTeacherDay,
   emptyTeacherDayClosureWorkspace,
   loadTeacherDayClosureWorkspace,
+  resolveTeacherDayClosureWorkspace,
   transitionTeacherDayCarryForward,
   type TeacherDayClosureWorkspace,
 } from "./features/day-closure/teacher-day-closure.ts";
@@ -173,8 +187,10 @@ import {
   confirmObservationCurriculumLink,
   createCitedAssessmentDraft,
   createPlanWithActivity,
+  normalizeCurriculumProfile,
   updateScheduledPlanWithActivity,
   CURRICULUM_PROGRAM_LABELS,
+  type CurriculumProfileInput,
   type CurriculumProfileSnapshot,
 } from "./features/evidence/evidence-flow";
 import {
@@ -230,6 +246,7 @@ import {
   loadScheduledPlanEditDraft,
   loadScheduledPlanWorkspace,
   loadTeacherOwnedDailyFlowCopySources,
+  resolveScheduledPlanWorkspace,
   type ScheduledPlanEditDraft,
   type ScheduledPlanSummary,
   type ScheduledPlanWorkspace,
@@ -246,6 +263,7 @@ import type { PremiumPackAccessReference } from "./features/premium-access/entit
 import {
   curriculumFrameworkForProgram,
   loadEvidenceWorkspace,
+  resolveEvidenceWorkspace,
   type EvidenceActivitySummary,
   type EvidenceObservationSummary,
   type EvidencePremiumProvenance,
@@ -286,6 +304,7 @@ import {
   academicYearOperationalStatus,
   loadPlanDayWorkspace,
   loadTodayWorkspace,
+  resolveTodayWorkspace,
   saveClassroomConfiguration,
   setTodayActivityStatus,
   transitionAcademicYearConfiguration,
@@ -307,6 +326,7 @@ import {
   academicYearMatchesCalendarProfile,
   loadAcademicCalendar,
   officialEventsOnDate,
+  resolveAcademicCalendar,
   removeCalendarEntry,
   saveCalendarEntry,
   type AcademicCalendarWorkspace,
@@ -334,6 +354,7 @@ import type { PedagogicalPlanProvenance } from "./core/domain/pedagogical-plan-p
 import { hasLocalSharedAccess } from "./features/access/local-shared-access.ts";
 import type { ActivityStudioOpenOptions } from "./features/simple-experience/SimplePlanWorkspaceScreen.tsx";
 import { REPORT_EDITOR_COPY } from "./features/development/development-editor-copy.ts";
+import { triggerHaptic } from "./services/mobile-haptics";
 
 const ClassroomDevelopmentPanel = lazy(() => import("./features/development/DevelopmentPanels.tsx").then((module) => ({ default: module.ClassroomDevelopmentPanel })));
 const StudentDevelopmentPanel = lazy(() => import("./features/development/DevelopmentPanels.tsx").then((module) => ({ default: module.StudentDevelopmentPanel })));
@@ -369,6 +390,7 @@ const MonthEndPackagePanel = lazy(() => import("./features/documents/MonthEndPac
 const DocumentHistoryPanel = lazy(() => import("./features/documents/DocumentHistoryPanel.tsx").then(module => ({ default: module.DocumentHistoryPanel })));
 const TeacherReportCenterPanel = lazy(() => import("./features/teacher-report-center/TeacherReportCenterPanel.tsx").then(module => ({ default: module.TeacherReportCenterPanel })));
 const CloudAccountPanel = lazy(() => import("./features/cloud-account/CloudAccountPanel.tsx").then(module => ({ default: module.CloudAccountPanel })));
+const LocalObservationSearch = lazy(() => import("./features/teacher-assistant/LocalObservationSearch.tsx").then(module => ({ default: module.LocalObservationSearch })));
 const ClassDutySchedulePanel = lazy(() => import("./features/class-duty-schedule/ClassDutySchedulePanel.tsx").then(module => ({ default: module.ClassDutySchedulePanel })));
 const TomorrowReadyCard = lazy(() => import("./features/tomorrow-ready/TomorrowReadyCard.tsx").then(module => ({ default: module.TomorrowReadyCard })));
 const TomorrowSmallGroupPanel = lazy(() => import("./features/small-group-cards/SmallGroupCardsPanel.tsx").then(module => ({ default: module.SmallGroupCardsPanel })));
@@ -573,6 +595,16 @@ function emptyTeacherWeekState(civilDate: string): TeacherWeekWorkspace {
   };
 }
 
+async function resolveTeacherWeekWorkspaceLazy(
+  snapshot: DataSnapshot,
+  options: { readonly civilDate: string },
+): Promise<TeacherWeekWorkspace> {
+  const module = await import(
+    "./features/teacher-cycle/teacher-week-workspace.ts"
+  );
+  return module.resolveTeacherWeekWorkspace(snapshot, options.civilDate);
+}
+
 async function loadTeacherWeekWorkspaceLazy(
   store: IndexedDbDataStore,
   options: { readonly civilDate: string },
@@ -624,9 +656,12 @@ function runHydrationStep<Result>(
   step: HydrationStepId,
   operation: Promise<Result>,
 ): Promise<Result> {
-  return operation.catch((reason: unknown) => {
-    throw new HydrationStepError(step, reason);
-  });
+  return operation.then(
+    (result) => result,
+    (reason: unknown) => {
+      throw new HydrationStepError(step, reason);
+    },
+  );
 }
 
 function describeHydrationFailure(reason: unknown): {
@@ -980,16 +1015,16 @@ const APP_LOCK_SETTING_TYPE = "app-lock-config-v1";
 function parseAppLockSetting(
   record: StoredRecord | undefined,
 ): AppLockSettingRecord | null {
-  if (!record || record.deletedAt || record.settingType !== APP_LOCK_SETTING_TYPE) {
+  if (!record || record.deletedAt) {
     return null;
   }
   try {
+    if (record.settingType !== APP_LOCK_SETTING_TYPE) throw new Error("Geçersiz kilit kaydı.");
     assertAppLockConfig(record.config);
     assertAppLockAttemptState(record.attemptState);
     return record as AppLockSettingRecord;
-  } catch (error) {
-    console.warn("[MaarifOS] Bozuk veya uyumsuz uygulama kilidi kaydı kurtarıldı:", error);
-    return null;
+  } catch {
+    throw new Error("Uygulama kilidi doğrulanamadı; cihaz kayıtları açılmadı.");
   }
 }
 
@@ -1003,9 +1038,8 @@ async function loadAppLockSetting(
         records.find((record) => record.id === APP_LOCK_SETTING_ID),
       );
     });
-  } catch (error) {
-    console.warn("[MaarifOS] Uygulama kilidi okunurken hata oluştu, kilit devre dışı bırakılarak devam edildi:", error);
-    return null;
+  } catch {
+    throw new Error("Uygulama kilidi okunamadı; cihaz kayıtları açılmadı.");
   }
 }
 
@@ -1230,11 +1264,7 @@ function createFlowHeader(title: string, step: string, onClose: () => void) {
 function createQuickObservationHeader(_activityTitle: string, onClose: () => void) {
   return (flow: FlowControls) => (
     <div className="quick-observation-header">
-      <img
-        src="/assets/brand/maarifos-icon-192.png"
-        alt=""
-        aria-hidden="true"
-      />
+      <MaarifLogo size={28} variant="emblem-only" />
       <div>
         <strong>Hızlı Gözlem</strong>
         <small>Çocuk seç · not ekle · kaydet</small>
@@ -1579,7 +1609,9 @@ function EvidenceCaptureScreen({
   const [batchId, setBatchId] = useState<string>(() => crypto.randomUUID());
   const [selectionMode, setSelectionMode] =
     useState<"single" | "selected-children">("single");
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(() =>
+    initialStudentId || (eligibleStudents.length > 0 ? eligibleStudents[0].id : ""),
+  );
   const [groupStudentIds, setGroupStudentIds] = useState<string[]>([]);
   const [groupConfirmed, setGroupConfirmed] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -1599,9 +1631,95 @@ function EvidenceCaptureScreen({
   const [busy, setBusy] = useState(false);
   const [safeError, setSafeError] = useState("");
   const [feedback, setFeedback] = useState<TeacherFeedback | null>(null);
+  const [aiClassification, setAiClassification] = useState<AIObservationClassification | null>(null);
+  const [isAiClassifying, setIsAiClassifying] = useState(false);
+  const [aiStatusMsg, setAiStatusMsg] = useState("");
+  const [copiedNotice, setCopiedNotice] = useState("");
+  const [visionModalOpen, setVisionModalOpen] = useState(false);
+
+  const runAiClassification = async () => {
+    if (!rawText.trim() || isAiClassifying) return;
+    triggerHaptic("medium");
+    setIsAiClassifying(true);
+    setAiStatusMsg("");
+    try {
+      const result = await classifyObservationWithAI(rawText);
+      setAiClassification(result);
+      if (!context.trim() && result.learningCenter) {
+        setContext(result.learningCenter);
+      }
+      setObservationType("systematic");
+      setAiStatusMsg("MEB TYMM 2026 ontolojisiyle başarıyla eşleştirildi.");
+      triggerHaptic("success");
+    } catch (err) {
+      setAiStatusMsg(err instanceof Error ? err.message : "Analiz tamamlanamadı.");
+      triggerHaptic("error");
+    } finally {
+      setIsAiClassifying(false);
+    }
+  };
+
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const speechRecognitionRef = useRef<any>(null);
+
+  const toggleVoiceRecording = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      window.alert("Tarayıcınız sesli dikte özelliğini desteklemiyor. Lütfen Google Chrome veya Edge kullanın.");
+      return;
+    }
+
+    if (isVoiceRecording) {
+      if (speechRecognitionRef.current) {
+        try { speechRecognitionRef.current.stop(); } catch { /* ignore */ }
+      }
+      setIsVoiceRecording(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "tr-TR";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsVoiceRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setRawText((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${transcript.trim()}` : transcript.trim();
+          });
+        }
+      };
+
+      recognition.onerror = () => {
+        setIsVoiceRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsVoiceRecording(false);
+      };
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setIsVoiceRecording(false);
+    }
+  };
+
   const [draftStatus, setDraftStatus] = useState<
     "ready" | "loading" | "saving" | "saved" | "error"
-  >("ready");
+  >(() => eligibleStudents.length > 0 ? "loading" : "ready");
   const draftTimerRef = useRef<number | null>(null);
   const draftLoadSequenceRef = useRef(0);
   const finalizedRef = useRef(false);
@@ -1623,9 +1741,10 @@ function EvidenceCaptureScreen({
     taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
     developmentSelection,
   });
-  const selectedStudent = eligibleStudents.find((student) => student.id === studentId);
+  const effectiveStudentId = studentId || (selectionMode === "single" && eligibleStudents.length > 0 ? eligibleStudents[0].id : "");
+  const selectedStudent = eligibleStudents.find((student) => student.id === effectiveStudentId);
   const selectedStudentCount =
-    selectionMode === "single" ? (studentId ? 1 : 0) : groupStudentIds.length;
+    selectionMode === "single" ? (effectiveStudentId ? 1 : 0) : groupStudentIds.length;
   const allEligibleStudentsSelected =
     eligibleStudents.length > 0 &&
     groupStudentIds.length === eligibleStudents.length;
@@ -1633,7 +1752,7 @@ function EvidenceCaptureScreen({
   draftSnapshotRef.current = {
     selectionMode,
     batchId,
-    studentId,
+    studentId: effectiveStudentId,
     studentIds: groupStudentIds,
     rawText,
     context,
@@ -1845,8 +1964,9 @@ function EvidenceCaptureScreen({
     [actions.registerDraftFlusher, flushCurrentDraft],
   );
 
-  const chooseStudent = async (nextStudentId: string) => {
-    if (nextStudentId === studentId) return;
+  const chooseStudent = async (nextStudentId: string, forceLoad = false) => {
+    if (nextStudentId === studentId && !forceLoad) return;
+    triggerHaptic("selection");
     try {
       await flushCurrentDraft();
     } catch {
@@ -1997,16 +2117,15 @@ function EvidenceCaptureScreen({
   };
 
   useEffect(() => {
-    if (
-      initialStudentId &&
-      !initialSelectionAppliedRef.current &&
-      !studentId &&
-      eligibleStudents.some((student) => student.id === initialStudentId)
-    ) {
-      initialSelectionAppliedRef.current = true;
-      void chooseStudent(initialStudentId);
-    }
-  }, [initialDraft, initialStudentId]);
+    if (initialSelectionAppliedRef.current || selectionMode !== "single") return;
+    const initialSelectionId =
+      initialStudentId && eligibleStudents.some((student) => student.id === initialStudentId)
+        ? initialStudentId
+        : studentId || eligibleStudents[0]?.id;
+    if (!initialSelectionId) return;
+    initialSelectionAppliedRef.current = true;
+    void chooseStudent(initialSelectionId, true);
+  }, [eligibleStudents, initialDraft, initialStudentId, selectionMode, studentId]);
 
   useEffect(() => {
     if (initialStudentId || batchRestoreAppliedRef.current) return;
@@ -2100,8 +2219,8 @@ function EvidenceCaptureScreen({
     ? "Taslak yükleniyor; yazma alanı veri kaybını önlemek için kısa süre kilitli."
     : busy
       ? "Gözlem bu cihaza kaydediliyor."
-    : selectionMode === "single" && !studentId
-      ? "Önce gözlem yaptığınız çocuğu seçin."
+    : selectionMode === "single" && !effectiveStudentId
+      ? (eligibleStudents.length === 0 ? "Önce sınıfa bir çocuk ekleyin." : "Önce gözlem yaptığınız çocuğu seçin.")
       : selectionMode === "selected-children" && groupStudentIds.length < 2
         ? "Toplu gözlem için en az iki çocuk seçin."
         : selectionMode === "selected-children" && !groupConfirmed
@@ -2131,7 +2250,8 @@ function EvidenceCaptureScreen({
   };
 
   const save = async () => {
-    const singleReady = selectionMode === "single" && Boolean(studentId);
+    const activeStudentId = effectiveStudentId;
+    const singleReady = selectionMode === "single" && Boolean(activeStudentId);
     const groupReady =
       selectionMode === "selected-children" &&
       groupStudentIds.length >= 2 &&
@@ -2159,7 +2279,7 @@ function EvidenceCaptureScreen({
       if (selectionMode === "single") {
         await actions.capture(captureActivity, {
           observationId,
-          studentId,
+          studentId: activeStudentId,
           rawText,
           ...(context.trim() ? { context } : {}),
           ...(childQuote.trim() ? { childQuote } : {}),
@@ -2181,7 +2301,21 @@ function EvidenceCaptureScreen({
     developmentSelection,
         });
       }
+      if (aiClassification) {
+        try {
+          if (selectionMode === "single" && activeStudentId) {
+            void persistClassifiedObservation(null, activeStudentId, rawText, aiClassification);
+          } else if (groupStudentIds.length > 0) {
+            for (const sId of groupStudentIds) {
+              void persistClassifiedObservation(null, sId, rawText, aiClassification);
+            }
+          }
+        } catch (e) {
+          console.warn("[EvidenceCaptureScreen] AI gözlem persist hatası:", e);
+        }
+      }
       await actions.close();
+      triggerHaptic("success");
     } catch (reason) {
       finalizedRef.current = false;
       setFeedback(
@@ -2192,6 +2326,119 @@ function EvidenceCaptureScreen({
       );
       setBusy(false);
     }
+  };
+
+  const copyEokulFormat = () => {
+    triggerHaptic("light");
+    const activeStudent = students.find((s) => s.id === (effectiveStudentId || studentId));
+    const studentName = activeStudent?.name || "Öğrenci";
+    const dim = aiClassification?.dimensionLabel || "Gelişim";
+    const cleanText = rawText.trim().replace(/\s+/g, " ");
+    const eOkulText = `[${studentName}] ${dim}: ${cleanText}`.slice(0, 250);
+    try {
+      void navigator.clipboard.writeText(eOkulText);
+      setCopiedNotice("✓ e-Okul (MEBBİS 250 karakter) formatında panoya kopyalandı!");
+      setTimeout(() => setCopiedNotice(""), 3500);
+    } catch {
+      setCopiedNotice("Panoya kopyalama başarısız oldu.");
+    }
+  };
+
+  const printOfficialEk2Form = () => {
+    triggerHaptic("medium");
+    const activeStudent = students.find((s) => s.id === (effectiveStudentId || studentId));
+    const studentName = activeStudent?.name || "Öğrenci";
+    const dateFormatted = formatTurkishCivilDate(captureActivity.civilDate);
+    const center = aiClassification?.learningCenter || context || "Öğrenme Merkezi";
+    const interpretation = aiClassification?.pedagogicalInterpretation || "";
+
+    const printWin = window.open("", "_blank");
+    if (!printWin) return;
+    printWin.document.write(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>MEB EK-2 Gözlem Formu - ${studentName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    * { box-sizing: border-box; }
+    body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 12px; font-size: 11pt; line-height: 1.5; }
+    .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+    .header h1 { font-size: 14pt; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header h2 { font-size: 12pt; margin: 3px 0; color: #334155; }
+    .header h3 { font-size: 11pt; margin: 3px 0 0; color: #0284c7; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .meta-table td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 10.5pt; }
+    .meta-table .lbl { font-weight: bold; background: #f8fafc; width: 25%; }
+    .card { border: 1px solid #cbd5e1; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; page-break-inside: avoid; }
+    .card-title { font-weight: bold; font-size: 10.5pt; color: #0369a1; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
+    .card-content { font-size: 10.5pt; margin: 0; white-space: pre-wrap; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 9.5pt; margin-right: 5px; margin-bottom: 4px; font-weight: 600; }
+    .badge-domain { background: #e0f2fe; color: #0369a1; }
+    .badge-val { background: #dcfce7; color: #15803d; }
+    .badge-tnd { background: #f3e8ff; color: #7e22ce; }
+    .signatures { margin-top: 36px; display: flex; justify-content: space-between; page-break-inside: avoid; padding: 0 20px; }
+    .sig-col { text-align: center; font-size: 10.5pt; line-height: 1.8; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>T.C. Millî Eğitim Bakanlığı</h1>
+    <h2>Temel Eğitim Genel Müdürlüğü · Türkiye Yüzyılı Maarif Modeli</h2>
+    <h3>EK-2: OKUL ÖNCESİ EĞİTİM GÖZLEM VE ANEKDOT KAYIT FORMU</h3>
+  </div>
+  <table class="meta-table">
+    <tr>
+      <td class="lbl">Öğrenci Adı Soyadı</td>
+      <td><strong>${studentName}</strong></td>
+      <td class="lbl">Gözlem Tarihi</td>
+      <td>${dateFormatted}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Gelişim Boyutu</td>
+      <td>${aiClassification?.dimensionLabel || "Tüm Gelişim Alanları"}</td>
+      <td class="lbl">Öğrenme Merkezi</td>
+      <td>${center}</td>
+    </tr>
+  </table>
+  <div class="card">
+    <div class="card-title">1. GÖZLENEN DAVRANIŞ (Çocuğun Doğrudan Eylemi / Aynen Sözü)</div>
+    <div class="card-content">${rawText.trim()}</div>
+  </div>
+  <div class="card">
+    <div class="card-title">2. TYMM 2026 ALAN BECERİLERİ, ERDEMLER VE EĞİLİMLER</div>
+    <div>
+      ${(aiClassification?.domainLabels || []).map((l, i) => `<span class="badge badge-domain">🎯 ${l} (${aiClassification?.domainCodes[i] || "MAB"})</span>`).join("")}
+      ${(aiClassification?.valueCodes || []).map((v) => `<span class="badge badge-val">💎 ${v}</span>`).join("")}
+      ${(aiClassification?.tendencyCodes || []).map((t) => `<span class="badge badge-tnd">🌱 ${t}</span>`).join("")}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">3. PEDAGOJİK DEĞERLENDİRME & GELİŞİM YORUMU (Öğretmen Kanaati)</div>
+    <div class="card-content" style="font-style: italic; color: #1e293b;">${interpretation}</div>
+  </div>
+  <div class="signatures">
+    <div class="sig-col">
+      <strong>Gözlemi Yapan Sınıf Öğretmeni</strong><br><br><br>
+      İmza: ...........................................
+    </div>
+    <div class="sig-col">
+      <strong>Okul Öncesi Zümre Başkanı</strong><br><br><br>
+      İmza / Mühür: ...........................................
+    </div>
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 250);
+    };
+  </script>
+</body>
+</html>`);
+    printWin.document.close();
   };
 
   return (
@@ -2403,9 +2650,9 @@ function EvidenceCaptureScreen({
                   <h1 id="quick-student-heading">Kimin için yazıyorsunuz?</h1>
                 </div>
                 {selectedStudentCount > 0 ? (
-                  <strong>
+                  <strong style={{ color: "#059669", background: "#ecfdf5", padding: "4px 10px", borderRadius: "16px", border: "1px solid #a7f3d0", fontSize: "0.82rem" }}>
                     {selectionMode === "single"
-                      ? selectedStudent?.name
+                      ? `✓ ${selectedStudent?.name}`
                       : `${selectedStudentCount} çocuk seçildi`}
                   </strong>
                 ) : (
@@ -2438,7 +2685,7 @@ function EvidenceCaptureScreen({
                 {eligibleStudents.map((student, index) => {
                   const selected =
                     selectionMode === "single"
-                      ? student.id === studentId
+                      ? student.id === effectiveStudentId
                       : groupStudentIds.includes(student.id);
                   return (
                     <button
@@ -2452,10 +2699,19 @@ function EvidenceCaptureScreen({
                       }
                       aria-pressed={selected}
                       disabled={draftStatus === "loading" || busy}
+                      style={{
+                        outline: selected ? "3px solid #10b981" : "none",
+                        backgroundColor: selected ? "#ecfdf5" : undefined,
+                        boxShadow: selected ? "0 4px 12px rgba(16, 185, 129, 0.25)" : "none",
+                        fontWeight: selected ? 800 : 500,
+                        transition: "all 0.15s ease",
+                      }}
                     >
-                      <span className="quick-student-avatar" aria-hidden="true">
+                      <span className="quick-student-avatar" aria-hidden="true" style={{ position: "relative" }}>
                         {studentInitials(student.name)}
-                        {selected ? <CheckCircledIcon /> : null}
+                        {selected ? (
+                          <span style={{ position: "absolute", bottom: "-2px", right: "-2px", background: "#10b981", color: "#fff", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold" }}>✓</span>
+                        ) : null}
                       </span>
                       <span>{student.name}</span>
                     </button>
@@ -2529,13 +2785,100 @@ function EvidenceCaptureScreen({
 
             <section className="quick-note-card">
               <div className="quick-note-label-row">
-                <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <label id="quick-note-heading" htmlFor="d1-observation-text">
                     {developmentSelection ? "Gözlem notunuz" : observationQuestion}
                   </label>
+                  <button
+                    type="button"
+                    onClick={toggleVoiceRecording}
+                    style={{
+                      background: isVoiceRecording
+                        ? "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)"
+                        : "rgba(2, 132, 199, 0.08)",
+                      border: isVoiceRecording ? "1px solid #ef4444" : "1px solid rgba(2, 132, 199, 0.3)",
+                      color: isVoiceRecording ? "#ffffff" : "#0284c7",
+                      borderRadius: "6px",
+                      padding: "2px 8px",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                    title="Mikrofon ile konuşun, söyledikleriniz otomatik yazıya dökülsün"
+                  >
+                    <span>{isVoiceRecording ? "🔴" : "🎤"}</span>
+                    <span>{isVoiceRecording ? "Dinleniyor..." : "Sesli Dikte"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVisionModalOpen(true)}
+                    style={{
+                      background: "rgba(16, 185, 129, 0.08)",
+                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                      color: "#059669",
+                      borderRadius: "6px",
+                      padding: "2px 8px",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                    title="Fotoğraftan görsel pedagojik analiz yapın (Edge Computer Vision)"
+                  >
+                    <span>📷</span>
+                    <span>Görsel Analiz</span>
+                  </button>
                 </div>
                 <small>{rawText.length.toLocaleString("tr-TR")} karakter</small>
               </div>
+
+              {/* Hızlı 1-Dokunuş Gözlem Çipleri */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }} role="group" aria-label="Hızlı gözlem cümleleri">
+                {[
+                  { label: "✏️ Daire çizdi", text: "Daire çizdi ve şeklini akranına gösterdi." },
+                  { label: "✂️ Makasla kesti", text: "Makasla çizgiyi takip ederek düzgünce kesti." },
+                  { label: "⏳ Sırasını bekledi", text: "Oyunda sırasını sabırla bekledi ve arkadaşına izin verdi." },
+                  { label: "🤝 Kuleyi paylaştı", text: "Bloklarla inşa ettiği kuleyi arkadaşıyla paylaştı." },
+                  { label: "🔢 10'a kadar saydı", text: "Masadaki renkli blokları birebir eşleyerek 10'a kadar saydı." },
+                  { label: "💬 Duygusunu anlattı", text: "Resim yaparken mutlu olduğunu ve renkleri çok sevdiğini anlattı." },
+                ].map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      setRawText((prev) => {
+                        const trimmed = prev.trim();
+                        return trimmed ? `${trimmed} ${chip.text}` : chip.text;
+                      });
+                    }}
+                    disabled={draftLoading || busy}
+                    style={{
+                      background: "#f8fafc",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "16px",
+                      padding: "3px 9px",
+                      fontSize: "0.72rem",
+                      fontWeight: 600,
+                      color: "#334155",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      transition: "all 0.12s ease",
+                    }}
+                    title={`Hızlıca nota ekle: ${chip.text}`}
+                  >
+                    <span>{chip.label}</span>
+                  </button>
+                ))}
+              </div>
+
               <KeyboardTextarea
                 id="d1-observation-text"
                 aria-label={isChildQuoteObservation ? "Çocuğun aynen sözü" : "Ne oldu?"}
@@ -2549,6 +2892,245 @@ function EvidenceCaptureScreen({
               <p id="quick-observation-guidance">
                 {observationGuidance}
               </p>
+              {/* ─── YAPAY ZEKÂ TYMM 2026 SEMANTİK DEĞERLENDİRME MASASI ─── */}
+              <div style={{ marginTop: "10px", marginBottom: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="quick-ai-analyze-btn"
+                  disabled={!rawText.trim() || isAiClassifying || draftLoading || busy}
+                  onClick={() => void runAiClassification()}
+                  style={{
+                    background: rawText.trim()
+                      ? "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)"
+                      : "#e2e8f0",
+                    color: rawText.trim() ? "#ffffff" : "#94a3b8",
+                    border: "none",
+                    padding: "9px 16px",
+                    borderRadius: "8px",
+                    fontWeight: 700,
+                    fontSize: "0.84rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    cursor: rawText.trim() && !isAiClassifying ? "pointer" : "not-allowed",
+                    boxShadow: rawText.trim() ? "0 2px 8px rgba(2, 132, 199, 0.25)" : "none",
+                    transition: "all 0.15s ease",
+                  }}
+                  title="Yazdığınız gözlemi DeepSeek AI ile analiz edip TYMM 2026 Becerileri, Erdemleri ve Merkezlerine bağlayın"
+                >
+                  <span style={{ fontSize: "1.1rem" }}>{isAiClassifying ? "⏳" : "🪄"}</span>
+                  <span>{isAiClassifying ? "Yapay Zekâ TYMM Çözümlüyor..." : "Yapay Zekâ ile Değerlendir & TYMM'ye Bağla"}</span>
+                </button>
+
+                {aiStatusMsg ? (
+                  <p style={{ margin: "2px 0 0", fontSize: "0.76rem", color: aiClassification ? "#059669" : "#dc2626", fontWeight: 600 }}>
+                    {aiStatusMsg}
+                  </p>
+                ) : null}
+
+                {aiClassification ? (
+                  <div
+                    style={{
+                      background: "linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%)",
+                      border: "1px solid #6ee7b7",
+                      borderRadius: "10px",
+                      padding: "10px 14px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "7px",
+                      boxShadow: "0 2px 10px rgba(16, 185, 129, 0.08)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                      <strong style={{ color: "#065f46", fontSize: "0.84rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>✨</span>
+                        <span>TYMM 2026 Otomatik Pedagojik Eşleşme</span>
+                      </strong>
+                      <span style={{ fontSize: "0.72rem", background: "#d1fae5", color: "#047857", padding: "2px 8px", borderRadius: "10px", fontWeight: 800 }}>
+                        {aiClassification.dimensionLabel}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {aiClassification.domainLabels.map((lbl, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            background: "#0284c7",
+                            color: "#ffffff",
+                            fontSize: "0.72rem",
+                            padding: "3px 9px",
+                            borderRadius: "12px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          🎯 {lbl} ({aiClassification.domainCodes[idx] || "MAB"})
+                        </span>
+                      ))}
+                      {aiClassification.valueCodes.map((val, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            background: "#059669",
+                            color: "#ffffff",
+                            fontSize: "0.72rem",
+                            padding: "3px 9px",
+                            borderRadius: "12px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          💎 {val}
+                        </span>
+                      ))}
+                      {aiClassification.tendencyCodes.map((tnd, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            background: "#7c3aed",
+                            color: "#ffffff",
+                            fontSize: "0.72rem",
+                            padding: "3px 9px",
+                            borderRadius: "12px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          🌱 {tnd}
+                        </span>
+                      ))}
+                      {aiClassification.learningCenter ? (
+                        <span
+                          style={{
+                            background: "#d97706",
+                            color: "#ffffff",
+                            fontSize: "0.72rem",
+                            padding: "3px 9px",
+                            borderRadius: "12px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          🏛️ {aiClassification.learningCenter}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#1e293b", lineHeight: "1.4" }}>
+                      💡 <em>{aiClassification.pedagogicalInterpretation}</em>
+                    </p>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px", paddingTop: "8px", borderTop: "1px dashed #6ee7b7" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const activeName = students.find((s) => s.id === (effectiveStudentId || studentId))?.name || "Öğrenci";
+                          const digest = generateParentEmpathyDigest({
+                            studentName: activeName,
+                            observationText: rawText,
+                            customValue: aiClassification.valueCodes[0],
+                            learningCenter: aiClassification.learningCenter,
+                          });
+                          window.open(digest.whatsAppUrl, "_blank");
+                        }}
+                        style={{
+                          background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 12px",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 2px 6px rgba(16, 185, 129, 0.25)",
+                        }}
+                        title="Veliye 2 cümlelik MEB TYMM uyumlu WhatsApp bülteni oluşturup gönderin"
+                      >
+                        <span>💬</span>
+                        <span>Veli WhatsApp Bülteni</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={copyEokulFormat}
+                        style={{
+                          background: "#0284c7",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 12px",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 2px 6px rgba(2, 132, 199, 0.25)",
+                        }}
+                        title="e-Okul / MEBBİS 250 karakter kısıtlamasına uygun formatta kopyalayın"
+                      >
+                        <span>📋</span>
+                        <span>e-Okul Kopyala</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={printOfficialEk2Form}
+                        style={{
+                          background: "#4f46e5",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 12px",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 2px 6px rgba(79, 70, 229, 0.25)",
+                        }}
+                        title="Resmî MEB EK-2 A4 Gözlem Kayıt Formunu doğrudan yazdırın"
+                      >
+                        <span>🖨️</span>
+                        <span>Resmî EK-2 A4 Yazdır</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void save()}
+                        disabled={busy || draftLoading}
+                        style={{
+                          background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 12px",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)",
+                          marginLeft: "auto",
+                        }}
+                        title="Gözlemi anında yerel IndexedDB portfolyosuna kaydedin"
+                      >
+                        <span>💾</span>
+                        <span>Hemen Kaydet</span>
+                      </button>
+                    </div>
+
+                    {copiedNotice ? (
+                      <p style={{ margin: "4px 0 0", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
+                        {copiedNotice}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
               <details className="quick-writing-help">
                 <summary>Yazmak için ipuçları</summary>
               {!isChildQuoteObservation ? (
@@ -2750,6 +3332,18 @@ function EvidenceCaptureScreen({
           </small>
         </div>
       ) : null}
+
+      <EdgeVisionObservationModal
+        isOpen={visionModalOpen}
+        onClose={() => setVisionModalOpen(false)}
+        studentName={students.find((s) => s.id === studentId)?.name || "Öğrenci"}
+        onApplyObservation={(anecdote, centerName) => {
+          setRawText((prev) => (prev ? `${prev}\n${anecdote}` : anecdote));
+          if (centerName && !context) {
+            setContext(centerName);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -3499,6 +4093,7 @@ export default function Prototype() {
   });
   const internalStaffExportEnabled = false;
   const store = useMemo(() => new IndexedDbDataStore(), []);
+  const storeCloseTimerRef = useRef<number | null>(null);
   const [classDutyRequest,setClassDutyRequest]=useState<{kind:'fruit'|'child-of-week';scheduleId?:string;month?:string}|null>(null);
   const [tomorrowTool,setTomorrowTool]=useState<{kind:'groups'|'family';civilDate:string}|null>(null);
   const backupServicePromiseRef = useRef<
@@ -3532,6 +4127,8 @@ export default function Prototype() {
   const d1ReturnFocusRef = useRef<HTMLElement | null>(null);
   const d1ReturnFocusSelectorRef = useRef<string | null>(null);
   const d1ReturnFocusStudentIdRef = useRef<string | null>(null);
+  const d1ReturnToProfileRef = useRef(false);
+  const [pendingProfileFocusId, setPendingProfileFocusId] = useState<string | null>(null);
   const studentProfileReturnFocusRef = useRef<HTMLElement | null>(null);
   const studentProfileSheetRef = useRef<HTMLDivElement | null>(null);
   const studentProfileExitDialogRef = useRef<HTMLElement | null>(null);
@@ -3576,6 +4173,11 @@ export default function Prototype() {
   const [planGuidanceCivilDate, setPlanGuidanceCivilDate] = useState<string | null>(null);
   const [calendarSnapshot, setCalendarSnapshot] = useState<DataSnapshot | null>(null);
   useEffect(() => { const changed = () => setFollowupRevision(value => value + 1); window.addEventListener(FOLLOWUP_CHANGED_EVENT, changed); return () => window.removeEventListener(FOLLOWUP_CHANGED_EVENT, changed); }, []);
+  useEffect(() => {
+    const handleOpenAttendance = () => setAttendanceOpen(true);
+    window.addEventListener("maarif_open_attendance", handleOpenAttendance);
+    return () => window.removeEventListener("maarif_open_attendance", handleOpenAttendance);
+  }, []);
   const [studentImportScope, setStudentImportScope] = useState<{ classroomId: string; academicYearId: string } | null>(null);
   useEffect(() => {
     if (
@@ -3744,7 +4346,9 @@ export default function Prototype() {
     useState<TodayWorkspace | null>(null);
   const [evidenceWorkspace, setEvidenceWorkspace] =
     useState<EvidenceWorkspace>(emptyEvidenceWorkspace);
+  const [observationOpening, setObservationOpening] = useState(false);
   const [planFlowOpen, setPlanFlowOpen] = useState(false);
+  const [manualPlanCivilDate, setManualPlanCivilDate] = useState<string | null>(null);
   const [studioActivityTitle, setStudioActivityTitle] = useState<string | null>(null);
   const studioOpenOptionsRef = useRef<ActivityStudioOpenOptions>({});
   const [studioPedagogicalProvenance, setStudioPedagogicalProvenance] =
@@ -4009,10 +4613,11 @@ export default function Prototype() {
     teacherWorkCycle.weekly?.relation === "upcoming"
       ? teacherWorkCycle.weekly.periodStart
       : null;
-  const defaultPlanFlowCivilDate =
+  const basePlanFlowCivilDate =
     preparationPlanningWindow.defaultCivilDate ??
     upcomingPlanningCivilDate ??
     todayWorkspace.civilDate;
+  const defaultPlanFlowCivilDate = (planFlowOpen ? manualPlanCivilDate : null) ?? basePlanFlowCivilDate;
   const planFlowTeacherWeek =
     teacherWorkCycle.weekly &&
     defaultPlanFlowCivilDate >= teacherWorkCycle.weekly.periodStart &&
@@ -4637,6 +5242,41 @@ export default function Prototype() {
   }, [classExportPreviewOpen, studentAddOpen]);
 
   useEffect(() => {
+    if (!studentProfileOpen || !pendingProfileFocusId) return undefined;
+    // The encrypted profile workspace can mount after the sheet animation.
+    // Observe its actual arrival rather than guessing a fixed number of frames.
+    let frame = 0;
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(deadline);
+      document.removeEventListener("pointerdown", cancel, true);
+      document.removeEventListener("keydown", cancel, true);
+    };
+    const cancel = () => { stop(); setPendingProfileFocusId(null); };
+    const restore = () => {
+      if (stopped) return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const target = Array.from(studentProfileSheetRef.current?.querySelectorAll<HTMLElement>("[data-student-development-trigger]") ?? [])
+          .find(element => element.dataset.studentDevelopmentTrigger === pendingProfileFocusId);
+        if (!target || target.matches(":disabled") || target.closest("[inert], [aria-hidden='true']") || !target.getClientRects().length) return;
+        target.focus({ preventScroll: true });
+        if (document.activeElement === target) cancel();
+      });
+    };
+    const observer = new MutationObserver(restore);
+    const deadline = window.setTimeout(cancel, 15000);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert", "aria-hidden", "data-state"] });
+    document.addEventListener("pointerdown", cancel, true);
+    document.addEventListener("keydown", cancel, true);
+    restore();
+    return stop;
+  }, [studentProfileOpen, pendingProfileFocusId]);
+
+  useEffect(() => {
     const selector = d1ReturnFocusSelectorRef.current;
     if (!captureMenuOpen || evidenceFlowRequest || !selector) return undefined;
     let focusFrame = 0;
@@ -4754,6 +5394,13 @@ export default function Prototype() {
   ]);
 
   useEffect(() => {
+    // React StrictMode mounts effects twice in development. Defer the physical
+    // connection close by one task so the immediate remount can retain the
+    // same store; a real unmount still closes both IndexedDB connections.
+    if (storeCloseTimerRef.current !== null) {
+      window.clearTimeout(storeCloseTimerRef.current);
+      storeCloseTimerRef.current = null;
+    }
     let cancelled = false;
     setLocalVaultRecoveryRequired(false);
     persistenceReadyRef.current = false;
@@ -4764,8 +5411,8 @@ export default function Prototype() {
       pendingWrites: 0,
     });
     setDataStatus("Bu cihazdaki veriler hazırlanıyor.");
-    void Promise.all([
-      runHydrationStep(
+    const hydrateFromOneSnapshot = async () => {
+      const state = await runHydrationStep(
         "dashboard",
         loadDashboardState(store, fallbackDashboardState).catch(async (error) => {
           console.warn(
@@ -4786,74 +5433,85 @@ export default function Prototype() {
             return fallbackDashboardState;
           }
         }),
-      ),
-      runHydrationStep(
-        "today",
-        loadTodayWorkspace(store).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Today workspace hydration fallback:", error);
-          return emptyTodayWorkspace;
-        }),
-      ),
-      runHydrationStep(
-        "evidence",
-        loadEvidenceWorkspace(store).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Evidence workspace hydration fallback:", error);
-          return emptyEvidenceWorkspace;
-        }),
-      ),
-      runHydrationStep(
-        "calendar",
-        loadAcademicCalendar(store).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Calendar workspace hydration fallback:", error);
-          return emptyAcademicCalendar;
-        }),
-      ),
-      runHydrationStep(
-        "scheduled-plans",
-        loadScheduledPlanWorkspace(store).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Scheduled plans hydration fallback:", error);
-          return emptyScheduledPlanWorkspace;
-        }),
-      ),
-      runHydrationStep(
-        "teacher-cycle",
-        loadTeacherWorkCycle(store, {
-          civilDate: fallbackDashboardState.attendanceCivilDate,
-        }).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Teacher cycle hydration fallback:", error);
-          return emptyTeacherWorkCycle(fallbackDashboardState.attendanceCivilDate);
-        }),
-      ),
-      runHydrationStep(
-        "teacher-week",
-        loadTeacherWeekWorkspaceLazy(store, {
-          civilDate: fallbackDashboardState.attendanceCivilDate,
-        }).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Teacher week hydration fallback:", error);
-          return emptyTeacherWeekState(fallbackDashboardState.attendanceCivilDate);
-        }),
-      ),
-      runHydrationStep(
-        "day-closure",
-        loadTeacherDayClosureWorkspace(store, {
-          civilDate: fallbackDashboardState.attendanceCivilDate,
-        }).catch((error) => {
-          console.warn("[MaarifOS Self-Healing] Day closure hydration fallback:", error);
-          return emptyTeacherDayClosureWorkspace(fallbackDashboardState.attendanceCivilDate);
-        }),
-      ),
-      runHydrationStep("app-lock", loadAppLockSetting(store)),
-      getBackupService()
-        .then((service) => service.listRecoverySnapshots())
-        .then(
-          (snapshots) => ({ snapshots, warning: "" }),
-          () => ({
-            snapshots: [] as RecoverySnapshotMetadata[],
-            warning:
-              "Önceki cihaz-içi kurtarma noktaları doğrulanamadı. Ana öğretmen kayıtları açıldı; kurtarma noktaları silinmedi ve geri yükleme için inceleme gerekiyor.",
+      );
+      try {
+        await migrateLegacyAcademicYearOperationalStart(store);
+      } catch (error) {
+        console.warn(
+          "[MaarifOS Self-Healing] Academic year operational migration skipped:",
+          error,
+        );
+      }
+      // A single verified snapshot feeds every read model. Decrypting the same
+      // annual plan for each workspace made WebKit reloads stall repeatedly.
+      const snapshot = await runHydrationStep("dashboard", store.readSnapshot());
+      const now = new Date();
+      const civilDate = state.attendanceCivilDate;
+      const resolved = await Promise.all([
+        runHydrationStep(
+          "today",
+          Promise.resolve().then(() => resolveTodayWorkspace(snapshot, now)).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Today workspace hydration fallback:", error);
+            return emptyTodayWorkspace;
           }),
         ),
-    ])
+        runHydrationStep(
+          "evidence",
+          Promise.resolve().then(() => resolveEvidenceWorkspace(snapshot, now)).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Evidence workspace hydration fallback:", error);
+            return emptyEvidenceWorkspace;
+          }),
+        ),
+        runHydrationStep(
+          "calendar",
+          Promise.resolve().then(() => resolveAcademicCalendar(snapshot)).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Calendar workspace hydration fallback:", error);
+            return emptyAcademicCalendar;
+          }),
+        ),
+        runHydrationStep(
+          "scheduled-plans",
+          Promise.resolve().then(() => resolveScheduledPlanWorkspace(snapshot)).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Scheduled plans hydration fallback:", error);
+            return emptyScheduledPlanWorkspace;
+          }),
+        ),
+        runHydrationStep(
+          "teacher-cycle",
+          Promise.resolve().then(() => resolveTeacherWorkCycle(snapshot, { civilDate })).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Teacher cycle hydration fallback:", error);
+            return emptyTeacherWorkCycle(civilDate);
+          }),
+        ),
+        runHydrationStep(
+          "teacher-week",
+          resolveTeacherWeekWorkspaceLazy(snapshot, { civilDate }).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Teacher week hydration fallback:", error);
+            return emptyTeacherWeekState(civilDate);
+          }),
+        ),
+        runHydrationStep(
+          "day-closure",
+          Promise.resolve().then(() => resolveTeacherDayClosureWorkspace(snapshot, civilDate)).catch((error) => {
+            console.warn("[MaarifOS Self-Healing] Day closure hydration fallback:", error);
+            return emptyTeacherDayClosureWorkspace(civilDate);
+          }),
+        ),
+        runHydrationStep("app-lock", loadAppLockSetting(store)),
+        getBackupService()
+          .then((service) => service.listRecoverySnapshots())
+          .then(
+            (snapshots) => ({ snapshots, warning: "" }),
+            () => ({
+              snapshots: [] as RecoverySnapshotMetadata[],
+              warning:
+                "Önceki cihaz-içi kurtarma noktaları doğrulanamadı. Ana öğretmen kayıtları açıldı; kurtarma noktaları silinmedi ve geri yükleme için inceleme gerekiyor.",
+            }),
+          ),
+      ]);
+      return [state, ...resolved] as const;
+    };
+    void hydrateFromOneSnapshot()
       .then(([state, workspace, evidence, calendar, scheduledPlans, cycle, week, dayClosure, lockSetting, recovery]) => {
         if (cancelled) return;
         setStudents(state.students);
@@ -4956,7 +5614,10 @@ export default function Prototype() {
       });
     return () => {
       cancelled = true;
-      store.close();
+      storeCloseTimerRef.current = window.setTimeout(() => {
+        storeCloseTimerRef.current = null;
+        store.close();
+      }, 0);
     };
   }, [
     applyPersistenceState,
@@ -7698,6 +8359,8 @@ export default function Prototype() {
     setEvidenceFlowRequest(null);
     const returnFocusTarget = d1ReturnFocusRef.current;
     const returnFocusStudentId = d1ReturnFocusStudentIdRef.current;
+    if (d1ReturnToProfileRef.current) setPendingProfileFocusId(returnFocusStudentId);
+    d1ReturnToProfileRef.current = false;
     d1ReturnFocusRef.current = null;
     d1ReturnFocusStudentIdRef.current = null;
     const restoreDevelopmentFocus = (remainingFrames: number) => {
@@ -7930,6 +8593,7 @@ export default function Prototype() {
     initialTemplate?: PremiumDailyTemplateSelection,
     initialActivityTitle?: string,
     initialPedagogicalProvenance?: PedagogicalPlanProvenance,
+    requestedCivilDate?: string,
   ) => {
     if (writesBlocked) {
       setAnnouncement(
@@ -7970,12 +8634,14 @@ export default function Prototype() {
       setAnnouncement("Plan için program katalog kimliği ve kaynak sürümünü tamamlayın.");
       return;
     }
+    const openingDate = requestedCivilDate ?? basePlanFlowCivilDate;
+    const openingWeek = teacherWorkCycle.weekly && openingDate >= teacherWorkCycle.weekly.periodStart && openingDate <= teacherWorkCycle.weekly.periodEnd ? teacherWorkCycle.weekly : null;
     let copySources: TeacherOwnedDailyFlowCopySource[] = [];
-    if (!initialTemplate && planFlowTeacherWeek) {
+    if (!initialTemplate && openingWeek) {
       try {
         copySources = await loadTeacherOwnedDailyFlowCopySources(store, {
-          weeklyPlanId: planFlowTeacherWeek.id,
-          beforeCivilDate: defaultPlanFlowCivilDate,
+          weeklyPlanId: openingWeek.id,
+          beforeCivilDate: openingDate,
         });
       } catch {
         copySources = [];
@@ -7993,6 +8659,8 @@ export default function Prototype() {
     setStudioActivityTitle(initialActivityTitle?.trim() || null);
     setStudioPedagogicalProvenance(initialPedagogicalProvenance ?? null);
     setScheduledPlanEditDraft(null);
+    setManualPlanCivilDate(requestedCivilDate ?? null);
+    setPlanGuidanceCivilDate(null);
     setTeacherOwnedDailyFlowCopySources(copySources);
     setPlanFlowOpen(true);
   };
@@ -8175,6 +8843,7 @@ export default function Prototype() {
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    setObservationOpening(true);
     setDataBusy(true);
     surfaceTransitionRef.current = "evidence-flow";
     try {
@@ -8195,9 +8864,19 @@ export default function Prototype() {
           },
         );
       }
-      const refreshed = await refreshD1Workspaces();
-      const activity = refreshed.evidence.activities.find((item) => item.id === selected.id);
-      if (!activity) throw new Error("Etkinlik yeniden yüklenemedi.");
+      // The selected activity is already a verified read model. Re-reading the
+      // whole encrypted repository (and seven unrelated workspaces) before the
+      // dialog can paint made this primary action stall on retained histories.
+      const activity =
+        selected.status === "planned" && activityStartPolicy === "start-if-planned"
+          ? { ...selected, status: "in_progress" as const }
+          : selected;
+      setEvidenceWorkspace((current) => ({
+        ...current,
+        activities: current.activities.map((item) =>
+          item.id === activity.id ? activity : item,
+        ),
+      }));
       d1ReturnFocusRef.current ??= returnFocusTarget;
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
@@ -8215,6 +8894,7 @@ export default function Prototype() {
       );
     } finally {
       setDataBusy(false);
+      setObservationOpening(false);
     }
   };
 
@@ -8230,6 +8910,7 @@ export default function Prototype() {
       );
       return;
     }
+    setObservationOpening(true);
     setDataBusy(true);
     setStudentProfileError("");
     surfaceTransitionRef.current = "evidence-flow";
@@ -8238,6 +8919,29 @@ export default function Prototype() {
         ? document.activeElement
         : null;
     try {
+      const existingActivity = evidenceWorkspace.activities.find(
+        (activity) =>
+          activity.contextKind === "spontaneous-observation" &&
+          activity.civilDate === civilDate,
+      );
+      if (existingActivity) {
+        keyboard.hide();
+        d1ReturnFocusRef.current ??= returnFocusTarget;
+        setStudentProfileOpen(false);
+        setPlansOpen(false);
+        setEvidenceFlowRequest({
+          activity: existingActivity,
+          ...(initialStudentId ? { initialStudentId } : {}),
+          ...(initialDraft ? { initialDraft } : {}),
+        });
+        setAnnouncement(
+          initialStudentId
+            ? `${student.name} için anlık gözlem hazır.`
+            : "Hızlı gözlem hazır; çocuk veya çocukları seçin.",
+        );
+        return;
+      }
+
       const context = await enqueuePersistence(
         () =>
           ensureSpontaneousObservationContext(store, {
@@ -8251,13 +8955,28 @@ export default function Prototype() {
           successDetail: `${student.name} için anlık gözlem alanı hazırlandı.`,
         },
       );
-      const refreshed = await refreshD1Workspaces();
-      const activity = refreshed.evidence.activities.find(
-        (item) => item.id === context.activity.id,
+      const profile = normalizeCurriculumProfile(
+        context.activity.curriculumProfileSnapshot as CurriculumProfileInput,
       );
-      if (!activity) {
-        throw new Error("Anlık gözlem bağlamı yeniden açılamadı.");
-      }
+      const activity: EvidenceActivitySummary = {
+        id: context.activity.id,
+        planId: String(context.activity.planId),
+        title: String(context.activity.title),
+        startTime: String(context.activity.startTime),
+        status: "in_progress",
+        civilDate,
+        curriculumProfile: profile,
+        curriculumTargets: [],
+        assignedStudentIds: [],
+        assignmentMode: "legacy-unscoped",
+        contextKind: "spontaneous-observation",
+      };
+      setEvidenceWorkspace((current) => ({
+        ...current,
+        activities: current.activities.some((item) => item.id === activity.id)
+          ? current.activities
+          : [...current.activities, activity],
+      }));
       keyboard.hide();
       d1ReturnFocusRef.current ??= returnFocusTarget;
       surfaceTransitionRef.current = "evidence-flow";
@@ -8282,6 +9001,7 @@ export default function Prototype() {
       );
     } finally {
       setDataBusy(false);
+      setObservationOpening(false);
     }
   };
 
@@ -8335,13 +9055,20 @@ export default function Prototype() {
       d1ReturnFocusRef.current = focusedReturnTarget;
     }
     d1ReturnFocusStudentIdRef.current = initialStudentId ?? null;
+    d1ReturnToProfileRef.current = studentProfileOpen;
     keyboard.hide();
     surfaceTransitionRef.current = "evidence-flow";
     setCaptureMenuOpen(false);
+    setObservationOpening(true);
     setDataBusy(true);
     try {
-      const liveEvidence = await loadEvidenceWorkspace(store, { now: new Date() });
-      setEvidenceWorkspace(liveEvidence);
+      const now = new Date();
+      const today = civilDateInIstanbul(now);
+      const liveEvidence =
+        evidenceWorkspace.civilDate === today
+          ? evidenceWorkspace
+          : await loadEvidenceWorkspace(store, { now });
+      if (liveEvidence !== evidenceWorkspace) setEvidenceWorkspace(liveEvidence);
       const resolution = resolveObservationContext(liveEvidence, {
         ...(initialStudentId ? { studentId: initialStudentId } : {}),
       });
@@ -8392,6 +9119,7 @@ export default function Prototype() {
       );
     } finally {
       setDataBusy(false);
+      setObservationOpening(false);
     }
   };
 
@@ -9128,7 +9856,9 @@ export default function Prototype() {
       setObservationRefreshNotice(null);
       setAnnouncement(`${observation.studentName} için gözlem notu kaydedildi.`);
       setFollowupRevision(value => value + 1);
-      setCompletionRequest({ studentId, observationId: observation.id });
+      // Keep follow-up available through the existing pending-work entry point;
+      // saving a quick observation must not force another modal dismissal.
+      lastCompletionRequestRef.current = { studentId, observationId: observation.id };
     },
     captureBatch: async (activity, input) => {
       if (educationalWriteNotice) throw new Error(educationalWriteNotice);
@@ -9175,7 +9905,7 @@ export default function Prototype() {
       }
       setObservationRefreshNotice(null);
       setFollowupRevision(value => value + 1);
-      setCompletionRequest({});
+      lastCompletionRequestRef.current = {};
       setAnnouncement(
         `${result.observations.length} çocuk için ayrı gözlem notları kaydedildi.`,
       );
@@ -9250,7 +9980,7 @@ export default function Prototype() {
 
     if (typeof document !== "undefined" && "startViewTransition" in document) {
       (document as unknown as { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
-        performTransition();
+        flushSync(performTransition);
       });
     } else {
       performTransition();
@@ -10157,7 +10887,7 @@ export default function Prototype() {
                 id="teacher-name"
                 value={classroomForm.teacherName}
                 onChange={(event) => setClassroomForm((current) => ({ ...current, teacherName: event.target.value }))}
-                placeholder="Örn. Emine Akın"
+                placeholder="Örn. Ayşe Yılmaz"
                 autoComplete="name"
               />
               <label htmlFor="classroom-name">Sınıf adı</label>
@@ -10484,6 +11214,7 @@ export default function Prototype() {
           }).catch(() => setAnnouncement("Plan kayıtlı; Planlar bölümünden yeniden açabilirsiniz."));
         }} />
       <PlanNextSteps store={store} civilDate={civilDate} requestedLevel={requestedLevel}
+        onManualPlan={date => { void openPlanFlow(undefined, undefined, undefined, date); }}
         refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} density="compact"
         disabled={writesBlocked || dataBusy || planWritesDisabled} disabledReason={educationalWriteNotice ?? undefined}
         onChanged={() => {
@@ -10767,7 +11498,7 @@ export default function Prototype() {
                     onOpenAssessment={civilDate=>{void openDayClosure(civilDate);}}
                     onOpenStudentReport={studentId=>{keyboard.hide();setDevelopmentReportStudentId(studentId);setDevelopmentReportPeriod(null);setDevelopmentReportOpen(true);}}
                     onOpenMonthlyEvaluation={monthlyPlanId=>openTeacherPlanRecords("monthly",null,monthlyPlanId)} />,
-                archive:<><MonthEndPackagePanel store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy}
+                archive:<><LocalObservationSearch store={store} disabled={securityGateOpen || dataBusy} /><MonthEndPackagePanel store={store} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} disabled={writesBlocked || dataBusy}
                     onComplete={(_kind, month) => openTeacherPlanRecords("monthly", month)} />
                   {calendarScope && <DocumentHistoryPanel store={store} scope={calendarScope} refreshKey={`${persistenceState.lastCommittedAt}:${followupRevision}`} />}
                 </>}}
@@ -14369,6 +15100,24 @@ export default function Prototype() {
             }}>
               <GearIcon aria-hidden="true" /> {configuredClassroom ? "Sınıf ayarlarını düzenle" : "Sınıfı kur"}
             </button>
+            <button
+              className="install-app-button"
+              type="button"
+              style={{
+                marginTop: "8px",
+                background: "linear-gradient(135deg, #059669 0%, #047857 100%)",
+                color: "#ffffff",
+                border: "none",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                setProfileOpen(false);
+                window.dispatchEvent(new CustomEvent("maarif_open_settings"));
+              }}
+            >
+              ⭐ MaarifOS Lisans ve Aktivasyon Kodu (PIN) Gir
+            </button>
           </section>
 
           <section className="local-vault-card" aria-label="Cihazdaki veri durumu">
@@ -14479,7 +15228,7 @@ export default function Prototype() {
           </section>
 
           {profileOpen&&!securityGateOpen&&<Suspense fallback={<p role="status">Hesap seçenekleri açılıyor…</p>}><CloudAccountPanel store={store} version={CURRENT_RELEASE.version} disabled={writesBlocked||dataBusy||securityGateOpen} canWrite={()=>!deskDocumentBlocked.current}
-            onChanged={()=>{setAnnouncement("Cihaz kayıtları eşitlendi. Güncel sınıf açılıyor.");window.location.reload();}} /></Suspense>}
+            onChanged={({localChanged})=>{setAnnouncement("Şifreli Drive yedeği doğrulandı.");if(localChanged)window.location.reload();}} /></Suspense>}
 
           <section className="security-section" aria-labelledby="install-heading">
             <div className="security-heading-row">
@@ -14526,6 +15275,7 @@ export default function Prototype() {
             <p>{CURRENT_RELEASE.title}</p>
             <div className="release-meta" aria-label="Sürüm bilgileri">
               <span>Uygulama {CURRENT_RELEASE.version}</span>
+              <span title={`Kaynak ${BUILD_IDENTITY.revision}; SHA-256 ${BUILD_IDENTITY.sourceSha256}; UTC ${BUILD_IDENTITY.builtAt}`}>Derleme {BUILD_IDENTITY.sourceSha256.slice(0, 12)}</span>
               {pwaStatus?.activeVersion ? (
                 <span>Çevrim dışı paket {pwaStatus.activeVersion}</span>
               ) : null}
@@ -14660,6 +15410,17 @@ export default function Prototype() {
                 </p>
               </div>
             </div>
+            <DeviceTransferGuide
+              disabled={dataBusy || writesBlocked}
+              lastBackupAt={lastSuccessfulBackupAt}
+              lastVerifiedRestoreAt={recoveryHealth.lastRestoreDrillAt}
+              onPrepareBackup={() => {
+                const input = document.getElementById("backup-password");
+                input?.scrollIntoView({ block: "center", behavior: "instant" });
+                input?.focus();
+              }}
+              onSelectBackup={() => restoreFileRef.current?.click()}
+            />
             {lastSuccessfulBackupAt ? (
               <div className="backup-setup-complete" role="status">
                 <CheckCircledIcon aria-hidden="true" />
@@ -15293,6 +16054,26 @@ export default function Prototype() {
         </Dialog.Root>
       ) : null}
 
+      {observationOpening && !evidenceFlowRequest ? (
+        <Dialog.Root open>
+          <Dialog.Overlay className="d1-flow-overlay" />
+          <Dialog.Content
+            className="d1-flow-layer observation-opening-layer"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+          >
+            <Dialog.Title className="sr-only">Hızlı Gözlem</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Gözlem bağlamı cihaz kayıtlarından hazırlanıyor.
+            </Dialog.Description>
+            <div className="surface-loading" role="status" aria-live="polite" aria-atomic="true">
+              <strong>Hızlı Gözlem</strong>
+              <span>Çocuk ve bugünün plan bağlantısı hazırlanıyor…</span>
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
+      ) : null}
+
       {evidenceFlowRequest ? (
         <Dialog.Root
           open
@@ -15371,7 +16152,7 @@ export default function Prototype() {
               }}
             >
               <img
-                src="/assets/brand/maarifos-icon-192.png"
+                src="./assets/brand/maarifos-icon-192.png"
                 alt=""
                 aria-hidden="true"
               />

@@ -1,0 +1,427 @@
+/**
+ * commercial.css — MaarifOS 0.72.0
+ * Ticari Lisans, Paywall ve Fiyatlandırma Masası Stilleri.
+ */
+
+.maarif-paywall-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  animation: paywallFadeIn 0.2s ease-out;
+}
+
+@keyframes paywallFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.maarif-paywall-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  max-width: 920px;
+  width: 100%;
+  max-height: 94vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(56, 189, 248, 0.15);
+  color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+
+.maarif-paywall-header {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  position: relative;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0) 100%);
+}
+
+.maarif-paywall-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.maarif-badge-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.maarif-badge-gold {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.maarif-badge-emerald {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.maarif-paywall-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.maarif-paywall-subtitle {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.maarif-paywall-close-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  transition: all 0.15s;
+}
+
+.maarif-paywall-close-btn:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+/* ─── DENEME LİMİT İKAZ ŞERİDİ ─── */
+.maarif-paywall-trial-alert {
+  margin: 16px 28px 0;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.maarif-trial-progress-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.maarif-trial-progress-circle {
+  font-size: 1.3rem;
+}
+
+.maarif-trial-progress-text strong {
+  color: #fbbf24;
+  display: block;
+  font-size: 0.88rem;
+}
+
+.maarif-trial-progress-text span {
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+/* ─── PAKET SEÇENEKLERİ GRİDİ ─── */
+.maarif-paywall-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px;
+  padding: 24px 28px;
+}
+
+.maarif-plan-box {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.maarif-plan-box.popular {
+  border-color: #0284c7;
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.08) 0%, #1e293b 100%);
+  box-shadow: 0 0 25px rgba(2, 132, 199, 0.2);
+}
+
+.maarif-plan-popular-pill {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  background: linear-gradient(135deg, #0284c7, #0d9488);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.4);
+}
+
+.maarif-plan-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 6px;
+}
+
+.maarif-plan-desc {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0 0 16px;
+  line-height: 1.4;
+  min-height: 38px;
+}
+
+.maarif-plan-price-block {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #334155;
+}
+
+.maarif-plan-price-main {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #38bdf8;
+}
+
+.maarif-plan-price-original {
+  font-size: 1rem;
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.maarif-plan-price-period {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.maarif-plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.maarif-plan-features li {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.35;
+}
+
+.maarif-plan-features li.pro-highlight {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+/* ─── SATIN ALMA AKSİYONLARI ─── */
+.maarif-plan-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.maarif-btn-buy-whatsapp {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.maarif-btn-buy-whatsapp:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.maarif-btn-iban {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.maarif-btn-iban:hover {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+/* ─── LİSANS ETKİNLEŞTİRME FORMU (ALT PANEL) ─── */
+.maarif-paywall-activation-section {
+  padding: 20px 28px 24px;
+  background: #0b1120;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.maarif-activation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.maarif-activation-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.maarif-activation-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.maarif-activation-input {
+  flex: 1;
+  min-width: 260px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: monospace;
+  letter-spacing: 1px;
+  outline: none;
+  text-transform: uppercase;
+}
+
+.maarif-activation-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.maarif-btn-activate {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.maarif-btn-activate:hover {
+  background: #0284c7;
+}
+
+/* ─── YÖNETİCİ LİSANS ÜRETİCİ (GİZLİ / KULLANICIYA ÖZEL) ─── */
+.maarif-admin-generator-toggle {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.maarif-admin-generator-box {
+  background: #1e293b;
+  border: 1px solid #0284c7;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.maarif-admin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px;
+  gap: 10px;
+}
+
+.maarif-admin-input {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.maarif-admin-generated-result {
+  background: #0f172a;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #10b981;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: monospace;
+  font-size: 0.92rem;
+  color: #34d399;
+  font-weight: 700;
+}

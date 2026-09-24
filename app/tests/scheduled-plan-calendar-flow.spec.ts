@@ -1,3 +1,4 @@
+import { readRepositorySnapshot } from "./helpers/production-repository";
 import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -6,6 +7,15 @@ test("mobil Planlar → okul etkinliği → tarih → akış → düzenle → re
   page,
 }) => {
   test.setTimeout(45_000);
+  // Keep the seeded September 8 plan in the future without freezing animations.
+  await page.addInitScript((offset: number) => {
+    const NativeDate = Date;
+    globalThis.Date = new Proxy(NativeDate, {
+      construct(target, args) { return Reflect.construct(target, args.length ? args : [NativeDate.now() + offset]); },
+      apply() { return new NativeDate(NativeDate.now() + offset).toString(); },
+      get(target, key, receiver) { return key === "now" ? () => NativeDate.now() + offset : Reflect.get(target, key, receiver); },
+    });
+  }, Date.parse("2026-09-07T06:00:00.000Z") - Date.now());
   await page.goto("/tests/runtime-fixture.html");
   const seeded = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
@@ -275,25 +285,9 @@ test("mobil Planlar → okul etkinliği → tarih → akış → düzenle → re
     "Kurgu düzenlenmiş günlük plan",
   );
 
-  const persisted = await page.evaluate(async ({ planId, activityId }) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<Record<string, unknown>>((resolve, reject) => {
-        const transaction = database.transaction(["plans", "activities"], "readonly");
-        const planRequest = transaction.objectStore("plans").get(planId);
-        const activityRequest = transaction.objectStore("activities").get(activityId);
-        transaction.oncomplete = () =>
-          resolve({ plan: planRequest.result, activity: activityRequest.result });
-        transaction.onerror = () => reject(transaction.error);
-      });
-    } finally {
-      database.close();
-    }
-  }, { planId: seeded.dailyPlanId, activityId: seeded.activityId });
+  const snapshot = await readRepositorySnapshot(page);
+  const persisted = { plan: snapshot.plans.find((record: any) => record.id === seeded.dailyPlanId),
+    activity: snapshot.activities.find((record: any) => record.id === seeded.activityId) };
   const plan = persisted.plan as Record<string, unknown>;
   const activity = persisted.activity as Record<string, unknown>;
   expect(plan.id).toBe(seeded.dailyPlanId);

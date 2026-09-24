@@ -1,13 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { readRepositorySnapshot } from "./helpers/production-repository";
+import { expect, test, type Page } from "@playwright/test";
 import { expectNoUntriagedAxeViolations } from "./smoke/accessibility-fixtures.ts";
 
+async function installAcademicYearClock(page: Page) {
+  // Shift civil time while preserving the browser animation and timeout clocks.
+  await page.addInitScript((initialOffset: number) => {
+    const NativeDate = Date;
+    const now = () => NativeDate.now() + Number(sessionStorage.getItem("academic-year-test-offset") ?? initialOffset);
+    globalThis.Date = new Proxy(NativeDate, {
+      construct(target, args) { return Reflect.construct(target, args.length ? args : [now()]); },
+      apply() { return new NativeDate(now()).toString(); },
+      get(target, key, receiver) { return key === "now" ? now : Reflect.get(target, key, receiver); },
+    });
+  }, Date.parse("2026-08-31T06:00:00.000Z") - Date.now());
+}
 test.describe.configure({ timeout: 60_000 });
 test.use({ viewport: { width: 390, height: 844 } });
 
 test("2026–2027 sınıfı ana ekrandan başlatılır ve yeniden yüklemede kayıt kullanımı açık kalır", async ({
   page,
 }) => {
-  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+  await installAcademicYearClock(page);
   await page.goto("/?native=1", { waitUntil: "networkidle" });
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   await setup.getByLabel("Okul adı").fill("Hazırlık Kurgu Anaokulu");
@@ -57,32 +70,11 @@ test("2026–2027 sınıfı ana ekrandan başlatılır ve yeniden yüklemede kay
   const attendance = page.getByRole("button", { name: /Bugünün yoklaması/ });
   await expect(attendance).toBeEnabled();
   await attendance.click();
-  await expect(page.getByRole("dialog", { name: "Bugünün devam durumu" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Hızlı Dokunmatik Yoklama (E5)" })).toBeVisible();
   await page.keyboard.press("Escape");
 
-  const savedYear = await page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      const records = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-        const transaction = database.transaction("academicYears", "readonly");
-        const request = transaction.objectStore("academicYears").getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const year = records.find((record) => record.status === "active");
-      return year ? {
-        startDate: year.startDate,
-        endDate: year.endDate,
-        operationalStartDate: year.operationalStartDate,
-      } : null;
-    } finally {
-      database.close();
-    }
-  });
+  const year = (await readRepositorySnapshot(page)).academicYears.find((record: any) => record.status === "active");
+  const savedYear = year ? { startDate: year.startDate, endDate: year.endDate, operationalStartDate: year.operationalStartDate } : null;
   expect(savedYear).toEqual({
     startDate: "2026-09-01",
     endDate: "2027-08-31",
@@ -150,7 +142,7 @@ test("boş sınıf ile arama sonucu olmayan sınıf farklı ve eyleme dönük me
 test("sona ermiş yıldan yeni döneme geçiş 320 ve 390 px ilk görünümde tek karardır", async ({
   page,
 }, testInfo) => {
-  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+  await installAcademicYearClock(page);
   await page.goto("/?native=1", { waitUntil: "networkidle" });
 
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla", exact: true });
@@ -175,7 +167,7 @@ test("sona ermiş yıldan yeni döneme geçiş 320 ve 390 px ilk görünümde te
   await expect(addStudent).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
 
-  await page.clock.setFixedTime(new Date("2026-09-01T06:00:00.000Z"));
+  await page.evaluate(() => sessionStorage.setItem("academic-year-test-offset", String(Math.trunc(Date.parse("2026-09-01T06:00:00.000Z") - performance.timeOrigin - performance.now()))));
   await page.reload({ waitUntil: "networkidle" });
   const prepareNextYear = page.getByRole("button", {
     name: "Yeni dönemi hazırla",
@@ -290,41 +282,12 @@ test("sona ermiş yıldan yeni döneme geçiş 320 ve 390 px ilk görünümde te
   await page.reload({ waitUntil: "networkidle" });
   await expect(carriedStudent).toBeVisible();
 
-  const storedTransition = await page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const read = (collection: string) =>
-      new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-        const request = database
-          .transaction(collection, "readonly")
-          .objectStore(collection)
-          .getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    try {
-      const [years, classrooms] = await Promise.all([
-        read("academicYears"),
-        read("classrooms"),
-      ]);
-      const activeYear = years.find((record) => record.status === "active");
-      const archivedYear = years.find((record) => record.status === "archived");
-      const activeClassroom = classrooms.find(
-        (record) => record.academicYearId === activeYear?.id && record.status === "active",
-      );
-      return {
-        activeYearName: activeYear?.name,
-        activeYearStart: activeYear?.startDate,
-        archivedYearName: archivedYear?.name,
-        activeClassroomId: activeClassroom?.id,
-      };
-    } finally {
-      database.close();
-    }
-  });
+  const snapshot = await readRepositorySnapshot(page);
+  const activeYear = snapshot.academicYears.find((record: any) => record.status === "active");
+  const archivedYear = snapshot.academicYears.find((record: any) => record.status === "archived");
+  const activeClassroom = snapshot.classrooms.find((record: any) => record.academicYearId === activeYear?.id && record.status === "active");
+  const storedTransition = { activeYearName: activeYear?.name, activeYearStart: activeYear?.startDate,
+    archivedYearName: archivedYear?.name, activeClassroomId: activeClassroom?.id };
 
   expect(storedTransition).toMatchObject({
     activeYearName: "2026–2027 Eğitim Yılı",

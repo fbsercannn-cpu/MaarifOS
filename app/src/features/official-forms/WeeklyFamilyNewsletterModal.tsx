@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -36,7 +38,7 @@ const PRESET_NEWSLETTERS: WeeklyNewsletterData[] = [
     themeTitle: "Sonbaharın Renkleri, Rüzgar ve Doğa Döngüsü",
     schoolName: "Denizli Maarif Anaokulu",
     className: "Papatyalar Sınıfı (5 Yaş)",
-    teacherName: "Emine Öğretmen",
+    teacherName: "Okul Öncesi Öğretmeni",
     conceptsLearned: ["Kırmızı", "Sarı", "Kahverengi", "Büyük - Küçük", "Rüzgar", "Kuru - Yaş", "Daire"],
     virtueAndValue: {
       value: "Sorumluluk & Doğa Sevgisi",
@@ -64,7 +66,7 @@ const PRESET_NEWSLETTERS: WeeklyNewsletterData[] = [
     themeTitle: "Cumhuriyetimizin Işığı, Bayrağımız ve Birlik Olmak",
     schoolName: "Denizli Maarif Anaokulu",
     className: "Papatyalar Sınıfı (5 Yaş)",
-    teacherName: "Emine Öğretmen",
+    teacherName: "Okul Öncesi Öğretmeni",
     conceptsLearned: ["Kırmızı", "Beyaz", "Ay - Yıldız", "Özgürlük", "Birlik", "Vatan", "Eşit"],
     virtueAndValue: {
       value: "Vatanseverlik & Adalet",
@@ -92,13 +94,7 @@ interface Props {
 }
 
 export function WeeklyFamilyNewsletterModal({ onClose }: Props) {
-  const [newsletters, setNewsletters] = useState<WeeklyNewsletterData[]>(() => {
-    try {
-      const saved = localStorage.getItem("maarif_weekly_newsletters");
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
+  const [newsletters, setNewsletters] = useOfficialFormState<WeeklyNewsletterData[]>("newsletters", () => {
     return PRESET_NEWSLETTERS;
   });
 
@@ -110,11 +106,6 @@ export function WeeklyFamilyNewsletterModal({ onClose }: Props) {
   const handleUpdateCurrent = (field: keyof WeeklyNewsletterData, val: any) => {
     setNewsletters((prev) => {
       const next = prev.map((item) => (item.id === current.id ? { ...item, [field]: val } : item));
-      try {
-        localStorage.setItem("maarif_weekly_newsletters", JSON.stringify(next));
-      } catch {
-        // storage full
-      }
       return next;
     });
   };
@@ -157,70 +148,7 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
     });
   };
 
-  const handleDownloadDoc = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Haftalık Veli Bülteni - Hafta ${current.weekNumber}</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; padding: 20px; line-height: 1.5; color: #1e293b; }
-        .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
-        .header h1 { font-size: 18pt; margin: 0; color: #0369a1; }
-        .header p { margin: 4px 0; font-size: 11pt; color: #64748b; }
-        .card { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 16px; }
-        .card-title { font-weight: bold; color: #0284c7; font-size: 12pt; margin-bottom: 8px; text-transform: uppercase; }
-        .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 12px; margin: 2px; font-size: 9.5pt; font-weight: bold; }
-        .quote-box { border-left: 4px solid #f59e0b; padding-left: 12px; font-style: italic; color: #475569; }
-      </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI</h1>
-          <h2>${current.schoolName} - ${current.className}</h2>
-          <p><strong>HAFTALIK VELİ BÜLTENİ VE EV ETKİNLİK PUSULASI (Hafta ${current.weekNumber})</strong></p>
-          <p>Tarih: ${current.dateRange} | Öğretmen: ${current.teacherName}</p>
-        </div>
-
-        <div class="card">
-          <div class="card-title">1. Bu Hafta Neler Keşfettik? (Tema: ${current.themeTitle})</div>
-          <p><strong>Haftanın Kavramları:</strong></p>
-          <p>${current.conceptsLearned.map(c => `<span class="badge">${c}</span>`).join(" ")}</p>
-          <p><strong>Değer ve Erdemimiz:</strong> <strong>${current.virtueAndValue.value}</strong> — ${current.virtueAndValue.action}</p>
-        </div>
-
-        <div class="card">
-          <div class="card-title">2. Haftanın Şarkısı & Şiiri: ${current.songOrPoem.title}</div>
-          <div class="quote-box">${current.songOrPoem.lyrics.replace(/\n/g, "<br/>")}</div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">3. Ev Etkinlik Pusulası: ${current.homeActivity.title}</div>
-          <p>${current.homeActivity.description}</p>
-          <p><strong>Gerekli Basit Malzemeler:</strong> ${current.homeActivity.materials}</p>
-        </div>
-
-        <div class="card">
-          <div class="card-title">4. Evde Sohbet Başlatıcı Sorular</div>
-          <ul>
-            ${current.chatPrompts.map(p => `<li>${p}</li>`).join("")}
-          </ul>
-        </div>
-
-        <div class="card">
-          <div class="card-title">5. Önemli Duyurular ve Hatırlatmalar</div>
-          <p>${current.announcements}</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([htmlContent], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Haftalik_Veli_Bulteni_Hafta_${current.weekNumber}.doc`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("WeeklyFamilyNewsletterModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -263,7 +191,7 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
             <span>Haftalık Görsel Veli Bülteni & Ev Etkinlik Pusulası</span>
           </h2>
           <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
-            TTKB s. 102–104 Aile Katılımı ve Bilgilendirme | WhatsApp uyumlu, tek tıkla A4 renkli çıktı, Excel (.xlsx) ve Word (.doc)
+            TTKB s. 102–104 Aile Katılımı ve Bilgilendirme | WhatsApp uyumlu, tek tıkla A4 renkli çıktı, Excel (.xlsx) ve Word (.docx)
           </p>
         </div>
 
@@ -330,7 +258,7 @@ Sevgi ve neşeyle dolu bir hafta dileriz! 🌸`;
             }}
           >
             <span>💾</span>
-            <span>Word (.doc) İndir</span>
+            <span>Word (.docx) İndir</span>
           </button>
           <button
             onClick={handlePrint}

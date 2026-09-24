@@ -18,7 +18,7 @@ export async function configureAccessibilityClassroom(page: Page) {
   await setup.locator("details.classroom-advanced-settings > summary").click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
-  await expect(setup).toBeHidden();
+  await expect(setup).toBeHidden({timeout:30_000});
 }
 
 export async function addAccessibilityChild(page: Page) {

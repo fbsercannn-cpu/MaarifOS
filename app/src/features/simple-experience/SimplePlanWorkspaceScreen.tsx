@@ -481,6 +481,7 @@ export function SimplePlanWorkspaceScreen({
   const [addActivityOpen, setAddActivityOpen] = useState(false);
   const [dailyDrawerOpen, setDailyDrawerOpen] = useState(false);
   const [officialFormsWorkspaceOpen, setOfficialFormsWorkspaceOpen] = useState(false);
+  const [officialCatalogOpen, setOfficialCatalogOpen] = useState(false);
   const [initialOfficialForm, setInitialOfficialForm] = useState<OfficialFormType>("daily");
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<"word" | "pdf" | null>(null);
@@ -558,6 +559,111 @@ export function SimplePlanWorkspaceScreen({
         <p>Hazır adımı seçin; MaarifOS planı yerleştirip sıradaki adımı hazırlasın.</p>
       </header>
 
+      <section className="simple-workspace__section" aria-labelledby="official-forms-heading">
+        <div className="simple-workspace__heading"><div><small>PLAN VE BELGE</small><h2 id="official-forms-heading">Form çalışma alanı</h2></div></div>
+        <p>Kayıtlı bilgileri düzenleyin, çıktıyı hazırlamadan önce içeriği gözden geçirin.</p>
+        <div className="simple-action-list">
+          <button
+            type="button"
+            style={{
+              background: "linear-gradient(135deg, rgba(2, 132, 199, 0.12), rgba(13, 148, 136, 0.12))",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              borderRadius: "10px",
+              padding: "12px 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              cursor: "pointer",
+              textAlign: "left",
+              marginBottom: "10px",
+            }}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub", { detail: { tab: "jit_compiler" } }));
+            }}
+          >
+            <span style={{ fontSize: "1.4rem" }}>⏱️</span>
+            <span style={{ flex: 1 }}>
+              <strong style={{ color: "#059669", fontSize: "0.92rem", display: "block" }}>
+                Dinamik Gün Akışı ve Etkinlik Planlayıcı (528 MEB Etkinliği)
+              </strong>
+              <em style={{ color: "#64748b", fontSize: "0.78rem", fontStyle: "normal" }}>
+                Hava durumu, biyolojik ritim ve sınıf mevcuduna göre 3 bloklu EK-6 günlük akışını düzenleyin
+              </em>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            style={{
+              width: "100%",
+              background: "rgba(2, 132, 199, 0.06)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              borderRadius: "10px",
+              padding: "12px 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              cursor: "pointer",
+              textAlign: "left",
+              marginBottom: "10px",
+            }}
+            onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub"))}
+          >
+            <span style={{ fontSize: "1.4rem" }}>📋</span>
+            <span style={{ flex: 1 }}>
+              <strong style={{ color: "#0284c7", fontSize: "0.92rem", display: "block" }}>
+                TYMM 2026 Resmî Planlama Merkezi (528 MEB Etkinlik Kitabı)
+              </strong>
+              <em style={{ color: "#64748b", fontSize: "0.78rem", fontStyle: "normal" }}>
+                Adım adım EK-6 günlük planlayıcı, 528 MEB etkinliği, canlı EK-5 ve EK-15 kontrol matrisi
+              </em>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={dataBusy}
+            onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub", { detail: { tab: "wizard" } }))}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true"><ReaderIcon /></span>
+            <span>
+              <strong>Günlük plan (EK-6)</strong>
+              <em>Adım adım planlayıcı veya 528 MEB etkinliği</em>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            disabled={dataBusy}
+            onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub", { detail: { tab: "monthly" } }))}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true"><ReaderIcon /></span>
+            <span>
+              <strong>Aylık plan (EK-5)</strong>
+              <em>Günlük planlardan otomatik derlenen resmî plan</em>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            disabled={dataBusy}
+            onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_tymm_hub", { detail: { tab: "checklist" } }))}
+          >
+            <span className="simple-action-list__icon" aria-hidden="true"><ReaderIcon /></span>
+            <span>
+              <strong>EK-15 kontrol çizelgesi</strong>
+              <em>Aylara göre öğrenme çıktıları canlı matrisi</em>
+            </span>
+            <ChevronRightIcon aria-hidden="true" />
+          </button>
+          <button type="button" disabled={dataBusy} onClick={() => { setOfficialCatalogOpen(true); setOfficialFormsWorkspaceOpen(true); }}>
+            <span className="simple-action-list__icon" aria-hidden="true"><ReaderIcon /></span><span><strong>Tüm formlarda ara</strong><em>Kategoriye veya konuya göre form seçin</em></span><ChevronRightIcon aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+
       {nextSteps}
 
       {!nextSteps ? (
@@ -580,641 +686,6 @@ export function SimplePlanWorkspaceScreen({
         </button>
       </section>
       ) : null}
-
-      <section className="simple-workspace__section" aria-labelledby="official-forms-heading">
-        <div className="simple-workspace__heading">
-          <div>
-            <small>T.C. MEB TTKB RESMÎ MATBU FORMLAR</small>
-            <h2 id="official-forms-heading">Resmî Plan ve A4 Çıktı Merkezi</h2>
-          </div>
-          <span className="simple-state is-ready" style={{ background: "#ea580c", color: "#fff" }}>
-            2026 TTKB Uyumlu
-          </span>
-        </div>
-        <div className="simple-action-list">
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("daily");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #ea580c" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fff7ed", color: "#ea580c" }}>
-              <ReaderIcon />
-            </span>
-            <span>
-              <small>EK-6 · TTKB SAYFA 183–184</small>
-              <strong>Günlük Plan Şablonu (A4 Yazdır / Word İndir)</strong>
-              <em>Öğrenme alanları, süreç bileşenleri, eğilimler, rutinler ve değerlendirme.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("monthly");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0284c7" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0f9ff", color: "#0284c7" }}>
-              <CalendarIcon />
-            </span>
-            <span>
-              <small>EK-5 · TTKB SAYFA 182</small>
-              <strong>Aylık Eğitim Planı Şablonu (A4 Yazdır / Word İndir)</strong>
-              <em>Çocuk, program ve öğretmen değerlendirme alternatifleri ile tam uyumlu.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("anecdote");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #16a34a" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdf4", color: "#16a34a" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>EK-2 · TTKB SAYFA 178</small>
-              <strong>Anekdot Kayıt Formu (A4 Yazdır / Word İndir)</strong>
-              <em>Gözlenen mekân, durum, beceriler ve gözlemcinin genel değerlendirmesi.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("outside");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #9333ea" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#faf5ff", color: "#9333ea" }}>
-              <TargetIcon />
-            </span>
-            <span>
-              <small>EK-4 · TTKB SAYFA 180–181</small>
-              <strong>Okul Dışı Öğrenme Etkinlik Planı (A4 Yazdır / Word İndir)</strong>
-              <em>Güzergâh, araç ve personel bilgileri, etkinlik öncesi/sırası/sonrası ve 8 değerlendirme sorusu.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("term_report");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #d97706" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fffbeb", color: "#d97706" }}>
-              <ReaderIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 109–114, 197</small>
-              <strong>Resmî Dönem Sonu Gelişim Raporu (Karne)</strong>
-              <em>7 alan becerisi, 3 seviyeli gelişim göstergesi, öğretmen görüşleri ve renkli A4/Word çıktısı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("portfolio");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #059669" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#ecfdf5", color: "#059669" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 110, 177</small>
-              <strong>Dijital Gelişim Dosyası &amp; Portfolyo Seçkisi</strong>
-              <em>Öğrenci ürün fotoğrafları, çocuk sözleri, öğretmen notu ve sene sonu ürün kataloğu albümü.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İncele</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("newsletter");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #2563eb" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#eff6ff", color: "#2563eb" }}>
-              <CalendarIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 102–104</small>
-              <strong>Haftalık Veli Bülteni &amp; Ev Etkinlik Pusulası</strong>
-              <em>Haftanın kavramları, erdemi, şarkısı, ev etkinliği; tek tıkla WhatsApp ve renkli A4 bülten.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Paylaş</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("differentiation");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #7c3aed" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-              <TargetIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 105–108</small>
-              <strong>Bireyselleştirilmiş Farklılaştırma &amp; BEP Kılavuzu</strong>
-              <em>Destekleme (özel gereksinim) ve zenginleştirme (ileri düzey) stratejileri, tutanak ve A4 plan.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Uygula</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("checklist");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0891b2" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#ecfeff", color: "#0891b2" }}>
-              <CalendarIcon />
-            </span>
-            <span>
-              <small>EK-15 · TTKB SAYFA 207–220</small>
-              <strong>Aylık Eğitim Planı Kontrol Çizelgesi</strong>
-              <em>10 aylık tam müfredat kazanım matrisi ve tek tıkla plandan otomatik doldurma motoru.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Yazdır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("ek1_skills");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #1e40af" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#eff6ff", color: "#1e40af" }}>
-              <ReaderIcon />
-            </span>
-            <span>
-              <small>EK-1 · TTKB SAYFA 141–177</small>
-              <strong>Alan Becerileri ve Süreç Bileşenleri Sandığı</strong>
-              <em>36–48, 48–60 ve 60–72 Ay Türkçe, Matematik, Fen, Sosyal, Motor, Sanat ve Müzik matrisi.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Kopyala</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("outside_protocol");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #7e22ce" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#faf5ff", color: "#7e22ce" }}>
-              <TargetIcon />
-            </span>
-            <span>
-              <small>EK-3 · TTKB SAYFA 179</small>
-              <strong>Okul Dışı Öğrenme Güvenlik ve İzin Protokolü</strong>
-              <em>Gezi öncesi, sırası ve sonrası 14 resmî güvenlik şartı, veli dilekçesi ve mülki amir onayı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İmzala</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("zero_waste");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #15803d" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdf4", color: "#15803d" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>OB8 · TTKB SAYFA 97, 206</small>
-              <strong>Doğal ve Sıfır Atık Materyal Dönüşüm Pusulası</strong>
-              <em>Merkez bazlı geri dönüşüm malzemeleri rehberi ve tek dokunuşla veli WhatsApp listesi.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İncele</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("games");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #c2410c" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fff7ed", color: "#c2410c" }}>
-              <TargetIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 86–91</small>
-              <strong>Resmî TYMM Oyun Sandığı &amp; Oyun Çarkı</strong>
-              <em>Geleneksel Türk çocuk oyunları, kurallı/serbest oyunlar, rastgele oyun çarkı ve A4 oyun kartı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Oyna</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("monthly_evaluation");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0284c7" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0f9ff", color: "#0284c7" }}>
-              <ReaderIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 111–114</small>
-              <strong>Aylık Eğitim Planı 3 Boyutlu Değerlendirme Raporu</strong>
-              <em>Tablo 1 (Çocuk), Tablo 2 (Program), Tablo 3 (Öğretmen) kriterleri ve A4 resmî yansıtma raporu.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Değerlendir</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("inspection_dossier");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #b91c1c" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fef2f2", color: "#b91c1c" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>MAARİF MÜFETTİŞLİĞİ STANDARTLARI</small>
-              <strong>Okul Öncesi Sınıf Teftiş ve Resmî Evrak Dosyası İndeksi</strong>
-              <em>22 resmî matbu evrak kontrol çetelesi, dosya kapağı ve A4/Word müfettiş teslim tutanağı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Denetle</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("child_interview");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #6366f1" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#eef2ff", color: "#6366f1" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 109–110 · ÇOCUĞU TANIMA</small>
-              <strong>Çocukla Bireysel Görüşme (Mülakat) ve Düşünce Kayıt Formu</strong>
-              <em>Çocuğun bilişsel ve duygusal muhakemesini ortaya koyan birebir mülakat kaydı, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Görüş</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("classroom_skills");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0284c7" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0f9ff", color: "#0284c7" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 109–114 · SINIF PROFİLİ</small>
-              <strong>Sınıf Düzeyi Bütüncül Beceriler ve Eğilimler Gelişim Matrisi</strong>
-              <em>Tüm sınıfın 7 alan becerisi ve 10 eğilimdeki gelişim seyrini gösteren toplu A4 karne tablosu.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İncele</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("centers_audit");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0d9488" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdfa", color: "#0d9488" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 97–104 · DONATIM &amp; GÜVENLİK</small>
-              <strong>Öğrenme Merkezleri Standart Donatım ve Güvenlik Denetim Tutanağı</strong>
-              <em>6 öğrenme merkezinin CE standartları, ergonomi ve güvenlik şartları teftiş formu.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Denetle</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("family_activity");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #d97706" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fffbeb", color: "#d97706" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 94–96 · AİLE KATILIMI</small>
-              <strong>Sınıf İçi Aile Katılımı Etkinlik Uygulama Planı</strong>
-              <em>Velilerin sınıfta uygulayacakları atölye, sanat ve meslek tanıtımı resmî uygulama planı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Planla</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("skill_acquisition");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #f59e0b" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fef3c7", color: "#f59e0b" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 110 · E-OKUL KARNESİ</small>
-              <strong>Beceri Edinim Raporu (e-Okul Dönem Sonu Belgesi)</strong>
-              <em>7 öğrenme alanı ve öğretmen kanaatleri, e-Okul kopyalama butonu, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Kopyala</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("guidance");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #8b5cf6" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f5f3ff", color: "#8b5cf6" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 81–84 · PDR SERVİSİ</small>
-              <strong>Rehberlik ve Psikolojik Danışma Öğrenci Yönlendirme Formu</strong>
-              <em>Sosyal uyum, duygu ve üstün yetenek takibi, RAM sevk tutanağı, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Sevk Et</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("meeting_minutes");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #059669" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#ecfdf5", color: "#059669" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 94–96 · VELİ TOPLANTISI</small>
-              <strong>Genel Veli Toplantısı Tutanağı ve Alınan Kararlar</strong>
-              <em>Sene başı/sonu veli toplantı gündemi, kararlar ve imzalı katılım listesi, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Tutanak</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("digital_learning");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0891b2" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#ecfeff", color: "#0891b2" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 107–108 · DİJİTAL ORTAMLAR</small>
-              <strong>Dijital Öğrenme, Ekran Süresi ve Mahremiyet Taahhütnamesi</strong>
-              <em>30 dk ekran kuralı, sosyal medya koruma kalkanı ve aile taahhütnamesi, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İmzala</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("rubric");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #7c3aed" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 109 · DERECELİ PUANLAMA</small>
-              <strong>Süreç Odaklı Dereceli Puanlama Anahtarı (Gözlem Rubriği)</strong>
-              <em>7 alanda 3 düzeyli gelişim rubriği, anlık skorlama, A4 ve Word çıktısı.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Değerlendir</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("outdoor_garden");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #15803d" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdf4", color: "#15803d" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 104–106 · AÇIK HAVA ÖĞRENME</small>
-              <strong>Açık Hava, Bahçe ve Çamur Mutfağı Güvenlik Rehberi</strong>
-              <em>12 maddelik günlük açık hava hijyen/güvenlik kontrolü, istasyon pedagojisi, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Denetle</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("self_peer");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #f59e0b" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fffbeb", color: "#f59e0b" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 110 · ÇOCUK KATILIMI</small>
-              <strong>Öz Değerlendirme ve Akran Değerlendirme Kartı</strong>
-              <em>Resimli gülen yüzler, akran iş birliği ve çocuk cümleleriyle değerlendirme, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; İşaretle</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("day_closing");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #6366f1" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#eef2ff", color: "#6366f1" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 92, 100–102 · GÜN SONU RUTİNİ</small>
-              <strong>Günü Değerlendirme Çemberi ve Yansıtma Tutanağı</strong>
-              <em>Duygu, kavram, erdem ve yarına hazırlık çemberi, çocuk alıntıları, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Kapat</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("morning_orientation");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #ea580c" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fff7ed", color: "#ea580c" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 93–94 · RUTİN 1</small>
-              <strong>Güne Başlama Zamanı, Duygu Panosu ve Günün Mesajı</strong>
-              <em>Sabah selamlaşması, duygu iklimi yoklaması, günün mesajı ve merak kancası, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Başla</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("conflict_resolution");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #0d9488" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdfa", color: "#0d9488" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 84, 108 · AKRAN ARABULUCULUĞU</small>
-              <strong>Barış Masası ve Çatışma Çözme Protokolü</strong>
-              <em>4 adımlı onarıcı adalet, empati, dinleme ve ortak uzlaşma tutanağı, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Uzlaştır</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("nutrition_tracker");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #16a34a" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#f0fdf4", color: "#16a34a" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 92, 98 · RUTİN 3</small>
-              <strong>Günlük Beslenme, Hijyen ve Öz Bakım Takip Çizelgesi</strong>
-              <em>Kahvaltı/öğle tüketim oranları, su takibi, el/diş hijyen cetveli, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Takip Et</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setInitialOfficialForm("student_intake");
-              setOfficialFormsWorkspaceOpen(true);
-            }}
-            style={{ borderLeft: "4px solid #d97706" }}
-          >
-            <span className="simple-action-list__icon" aria-hidden="true" style={{ background: "#fffbeb", color: "#d97706" }}>
-              <FileTextIcon />
-            </span>
-            <span>
-              <small>TTKB SAYFA 193–196 · UYUM &amp; TANIMA</small>
-              <strong>Sene Başı Öğrenciyi Tanıma ve Aile Bilgi Formu</strong>
-              <em>Alerjiler, sağlık, uyku/beslenme alışkanlıkları, teslim yetkilileri, A4 ve Word.</em>
-            </span>
-            <span className="simple-state is-ready">Aç &amp; Tanı</span>
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
-
-
-        </div>
-      </section>
 
       <section className="simple-workspace__section" aria-labelledby="simple-plan-types">
         <div className="simple-workspace__heading">
@@ -1650,8 +1121,9 @@ export function SimplePlanWorkspaceScreen({
         disabled={educationalWritesDisabled || dataBusy}
       />
       {officialFormsWorkspaceOpen && (
-        <OfficialFormsWorkspace
+        <OfficialFormsWorkspace store={store} disabled={educationalWritesDisabled || dataBusy}
           initialForm={initialOfficialForm}
+          initialSelectorOpen={officialCatalogOpen}
           onClose={() => setOfficialFormsWorkspaceOpen(false)}
         />
       )}

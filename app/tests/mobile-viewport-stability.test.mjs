@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("1. Viewport Meta & Zoom Kilidi: index.html donanım seviyesinde mühürlüdür", () => {
+test("1. Viewport yakınlaştırmayı ve güvenli ekran kenarlarını destekler", () => {
   const indexPath = path.join(root, "index.html");
   assert.ok(existsSync(indexPath), "index.html mevcut olmalıdır");
   const html = readFileSync(indexPath, "utf8");
@@ -16,8 +16,8 @@ test("1. Viewport Meta & Zoom Kilidi: index.html donanım seviyesinde mühürlü
     "index.html içinde viewport meta etiketi tanımlı olmalıdır",
   );
   assert.ok(
-    html.includes("maximum-scale=1.0") && html.includes("user-scalable=no"),
-    "Viewport etiketi maximum-scale=1.0 ve user-scalable=no ile drift'e karşı kilitli olmalıdır",
+    !html.includes("maximum-scale=1.0") && !html.includes("user-scalable=no"),
+    "Kullanıcının yakınlaştırması engellenmemelidir",
   );
   assert.ok(
     html.includes("viewport-fit=cover"),
@@ -43,7 +43,7 @@ test("2. Zero Horizontal Drift & Pan-Y: styles.css tek sayfa kararlılık kurall
     "styles.css içinde overscroll-behavior-x none kuralı bulunmalıdır",
   );
   assert.ok(
-    css.includes("touch-action: pan-y !important;"),
+    css.includes("touch-action: pan-y pinch-zoom !important;"),
     "styles.css içinde touch-action pan-y kuralı bulunmalıdır",
   );
 });
@@ -57,7 +57,7 @@ test("3. View Transitions API: styles.css donanım hızlandırmalı rota geçiş
     "::view-transition-old(root) pseudo elementi tanımlı olmalıdır",
   );
   assert.ok(
-    css.includes("::view-transition-new(root)"),
+    css.includes("::view-transition-new(root)") && css.includes("prefers-reduced-motion: reduce"),
     "::view-transition-new(root) pseudo elementi tanımlı olmalıdır",
   );
 });

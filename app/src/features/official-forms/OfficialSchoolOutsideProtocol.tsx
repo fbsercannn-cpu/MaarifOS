@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -121,12 +123,12 @@ interface Props {
 }
 
 export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
-  const [checklist, setChecklist] = useState<ProtocolCheckItem[]>(DEFAULT_PROTOCOL_CHECKS);
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [destination, setDestination] = useState("Denizli Çamlık Doğa Parkı ve Botanik Bahçesi");
-  const [activityDate, setActivityDate] = useState("21.10.2026");
-  const [responsibleTeacher, setResponsibleTeacher] = useState("Emine Öğretmen");
-  const [companionCount, setCompanionCount] = useState("2 Öğretmen, 2 Rehber Veli");
+  const [checklist, setChecklist] = useOfficialFormState<ProtocolCheckItem[]>("checklist", DEFAULT_PROTOCOL_CHECKS);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [destination, setDestination] = useOfficialFormState("destination", "Denizli Çamlık Doğa Parkı ve Botanik Bahçesi");
+  const [activityDate, setActivityDate] = useOfficialFormState("activityDate", "21.10.2026");
+  const [responsibleTeacher, setResponsibleTeacher] = useOfficialFormState("responsibleTeacher", "Okul Öncesi Öğretmeni");
+  const [companionCount, setCompanionCount] = useOfficialFormState("companionCount", "2 Öğretmen, 2 Rehber Veli");
 
   const toggleCheck = (id: string) => {
     setChecklist((prev) =>
@@ -138,75 +140,7 @@ export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
     printOfficialFormA4(`EK-3_Guvenlik_Protokolu_${destination.replace(/\s+/g, "_")}_${activityDate}`);
   };
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Okul Dışı Öğrenme Güvenlik ve İzin Protokolü</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; line-height: 1.4; }
-        h1 { font-size: 15pt; color: #7e22ce; text-align: center; }
-        .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        .meta-table td { padding: 5px 8px; border: 1px solid #cbd5e1; font-size: 9.5pt; }
-        .section-title { font-weight: bold; background: #f3e8ff; padding: 6px; margin: 12px 0 6px 0; font-size: 11pt; color: #6b21a8; }
-        .item { margin-bottom: 6px; font-size: 9.5pt; }
-        .sig { margin-top: 30px; display: flex; justify-content: space-between; font-size: 10pt; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI · TTKB OKUL ÖNCESİ EĞİTİMİ</h1>
-        <h2 style="text-align: center; font-size: 12pt; color: #475569;">EK-3 OKUL DIŞI ÖĞRENME ETKİNLİĞİ PLANLANIRKEN DİKKAT EDİLECEK HUSUSLAR VE GÜVENLİK PROTOKOLÜ (s. 179)</h2>
-
-        <table class="meta-table">
-          <tr>
-            <td style="width: 25%;"><strong>Okul Adı:</strong></td>
-            <td style="width: 25%;">${schoolName}</td>
-            <td style="width: 25%;"><strong>Etkinlik Tarihi:</strong></td>
-            <td style="width: 25%;">${activityDate}</td>
-          </tr>
-          <tr>
-            <td><strong>Gidilecek Yer:</strong></td>
-            <td>${destination}</td>
-            <td><strong>Sorumlu Ekip:</strong></td>
-            <td>${responsibleTeacher} (${companionCount})</td>
-          </tr>
-        </table>
-
-        <div class="section-title">1. ETKİNLİK ÖNCESİ PLANLAMA VE GÜVENLİK KONTROL LİSTESİ</div>
-        ${checklist.filter(c => c.category === "Etkinlik Öncesi").map(c => `
-          <div class="item">[${c.checked ? "X" : " "}] <strong>${c.title}:</strong> ${c.ruleText}</div>
-        `).join("")}
-
-        <div class="section-title">2. ETKİNLİK SIRASINDA UYGULAMA PROTOKOLÜ</div>
-        ${checklist.filter(c => c.category === "Etkinlik Sırası").map(c => `
-          <div class="item">[${c.checked ? "X" : " "}] <strong>${c.title}:</strong> ${c.ruleText}</div>
-        `).join("")}
-
-        <div class="section-title">3. ETKİNLİK SONRASI DEĞERLENDİRME VE PEKİŞTİRME</div>
-        ${checklist.filter(c => c.category === "Etkinlik Sonrası").map(c => `
-          <div class="item">[${c.checked ? "X" : " "}] <strong>${c.title}:</strong> ${c.ruleText}</div>
-        `).join("")}
-
-        <div style="margin-top: 30px; display: table; width: 100%;">
-          <div style="display: table-cell; width: 50%;">
-            <strong>Gezi Sorumlusu Öğretmen:</strong><br/><br/>
-            ${responsibleTeacher} (İmza)
-          </div>
-          <div style="display: table-cell; width: 50%; text-align: right;">
-            <strong>Okul Müdürü:</strong><br/><br/>
-            Uygundur (İmza / Mühür)
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `EK3_Okul_Disi_Guvenlik_Protokolu.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("OfficialSchoolOutsideProtocol");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -289,7 +223,7 @@ export function OfficialSchoolOutsideProtocol({ onClose }: Props) {
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

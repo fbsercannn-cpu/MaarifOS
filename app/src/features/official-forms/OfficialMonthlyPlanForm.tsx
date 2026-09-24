@@ -1,11 +1,16 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { FormPresetSelector } from "./FormPresetSelector.tsx";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import { OfficialConceptsAndDaysPalette } from "./OfficialConceptsAndDaysPalette.tsx";
-import { OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS } from "./officialSamplePlansService.ts";
+import { MAARIFOS_MONTHLY_SAMPLE_DRAFTS } from "./officialSamplePlansService.ts";
 import {
   exportOfficialTableToExcel,
   printOfficialFormA4,
 } from "./official-form-export-service.ts";
 import { OfficialPlanLinkedOutputsModal } from "./OfficialPlanLinkedOutputsModal.tsx";
+import { buildMonthlySyncResult, syncResultToFieldText } from "./daily-to-monthly-sync.ts";
+import { type MonthKey, type AgeGroup } from "./daily-plan-core.ts";
 import "./official-forms.css";
 
 export interface MonthlyPlanFormData {
@@ -57,13 +62,14 @@ const EVALUATION_PRESETS = {
 };
 
 export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
+  const [sampleUndo, setSampleUndo] = useState<MonthlyPlanFormData | null>(null);
   const [isSampleOutputsOpen, setIsSampleOutputsOpen] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [formData, setFormData] = useState<MonthlyPlanFormData>({
+  const [formData, setFormData] = useOfficialFormState<MonthlyPlanFormData>("formData", {
     schoolName: initialData?.schoolName || "Atatürk Anaokulu",
     month: initialData?.month || "Ekim 2026",
     ageGroup: initialData?.ageGroup || "60-72 Ay",
-    teacherName: initialData?.teacherName || "Emine Öğretmen",
+    teacherName: initialData?.teacherName || "Okul Öncesi Öğretmeni",
     domainSkills:
       initialData?.domainSkills ||
       "TÜRKÇE: TADB.1. Konuşmalarında nezaket sözcüklerini kullanır; TADB.2. Dinlediği hikâyenin ana fikrini ve karakterlerini açıklar.\nMATEMATİK: MAB.1. 1'den 20'ye kadar ritmik sayar; nesneleri birebir eşler; MAB.2. İki boyutlu geometrik şekilleri tanır ve gruplar.\nFEN: FAB.1. Çevresindeki doğal unsurları (sonbahar mevsimi, yapraklar, hava durumu) duyu organlarıyla inceler.\nSANAT: SNAB.2. Çeşitli malzemeleri (kuru yapraklar, pastel boya, kil) kullanarak özgün kompozisyonlar üretir.\nMÜZİK: MÜAB.1. Ritim aletleriyle verilen tempoyu takip eder ve basit ezgileri seslendirir.\nHAREKET VE SAĞLIK: HAB.1. Temel motor hareketleri (koşma, sıçrama, dengede durma) kurallı oyunlarda sergiler.",
@@ -156,97 +162,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
     }
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>EK-5 AYLIK EĞİTİM PLANI - ${formData.month}</title>
-<style>
-  body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 10pt; color: #111; line-height: 1.35; padding: 20px; }
-  h2 { text-align: center; font-size: 13pt; color: #0284c7; margin-bottom: 6px; }
-  .subtitle { text-align: center; font-size: 9pt; color: #64748b; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  th, td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
-  .label-cell { width: 28%; background-color: #f8fafc; font-weight: bold; }
-  .section-header { background-color: #e0f2fe; font-weight: bold; color: #0369a1; padding: 6px; font-size: 10pt; }
-</style>
-</head>
-<body>
-  <h2>EK-5 AYLIK EĞİTİM PLANI</h2>
-  <div class="subtitle">T.C. Millî Eğitim Bakanlığı Temel Eğitim Genel Müdürlüğü - Türkiye Yüzyılı Maarif Modeli</div>
-  <table>
-    <tr>
-      <td class="label-cell">Okul Adı:</td><td>${formData.schoolName}</td>
-      <td class="label-cell">Ay / Yıl:</td><td>${formData.month}</td>
-    </tr>
-    <tr>
-      <td class="label-cell">Öğretmenin Adı:</td><td>${formData.teacherName}</td>
-      <td class="label-cell">Yaş Grubu (AY):</td><td>${formData.ageGroup}</td>
-    </tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header" colspan="2">ALAN BECERİLERİ, ÖĞRENME ÇIKTILARI VE SÜREÇ BİLEŞENLERİ</th></tr>
-    <tr><td colspan="2">${formData.domainSkills.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">EĞİLİMLER</th></tr>
-    <tr><td colspan="2">${formData.tendencies.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">PROGRAMLAR ARASI BİLEŞENLER</th></tr>
-    <tr>
-      <td style="width: 50%;"><b>Sosyal-Duygusal Beceriler:</b><br>${formData.socialEmotional.replace(/\n/g, "<br>")}</td>
-      <td style="width: 50%;"><b>Değerler:</b><br>${formData.values.replace(/\n/g, "<br>")}</td>
-    </tr>
-    <tr>
-      <td colspan="2"><b>Okuryazarlık Becerileri:</b><br>${formData.literacy.replace(/\n/g, "<br>")}</td>
-    </tr>
-    
-    <tr><th class="section-header" colspan="2">KAVRAMLAR</th></tr>
-    <tr><td colspan="2">${formData.concepts.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">BELİRLİ GÜN VE HAFTALAR</th></tr>
-    <tr><td colspan="2">${formData.specialDays.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">ÖĞRENME-ÖĞRETME YAŞANTILARI (UYGULAMALAR)</th></tr>
-    <tr><td colspan="2">${formData.learningExperiences.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">FARKLILAŞTIRMA</th></tr>
-    <tr>
-      <td><b>Zenginleştirme:</b><br>${formData.enrichment.replace(/\n/g, "<br>")}</td>
-      <td><b>Destekleme:</b><br>${formData.support.replace(/\n/g, "<br>")}</td>
-    </tr>
-    
-    <tr><th class="section-header" colspan="2">AİLE VE TOPLUM KATILIMI</th></tr>
-    <tr><td colspan="2">${formData.familyCommunityEngagement.replace(/\n/g, "<br>")}</td></tr>
-    
-    <tr><th class="section-header" colspan="2">ÖĞRENME KANITLARI (DEĞERLENDİRME)</th></tr>
-    <tr>
-      <td colspan="2">
-        <b>1. Çocuk Açısından:</b><br>${formData.childEvaluation.replace(/\n/g, "<br>")}<br><br>
-        <b>2. Program Açısından:</b><br>${formData.programEvaluation.replace(/\n/g, "<br>")}<br><br>
-        <b>3. Öğretmen Açısından:</b><br>${formData.teacherEvaluation.replace(/\n/g, "<br>")}
-      </td>
-    </tr>
-    
-    <tr><th class="section-header" colspan="2">ÖĞRETMEN YANSITMALARI</th></tr>
-    <tr><td colspan="2">${formData.teacherReflections.replace(/\n/g, "<br>")}</td></tr>
-  </table>
-</body>
-</html>`;
-
-    const blob = new Blob(["\ufeff", htmlContent], {
-      type: "application/msword;charset=utf-8"
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `EK-5_Aylik_Egitim_Plani_${formData.month.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialMonthlyPlanForm");
 
   const updateField = (field: keyof MonthlyPlanFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -259,19 +175,22 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-5 Aylık Eğitim Planı (TTKB Sayfa 182)</strong>
-            <small>Resmî Format · A4 Çıktı ve Word (.doc) Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı ve Word (.docx) Uyumluluğu</small>
           </div>
-          <div className="official-form-actions__buttons">
+          <details className="official-output-menu"><summary className="of-btn">Çıktıyı hazırla ve plan araçları</summary><div className="official-form-actions__buttons">
             <select
               className="of-btn"
               style={{ background: "#f0f9ff", color: "#0369a1", border: "1.5px solid #0284c7", fontWeight: 700, padding: "6px 10px", cursor: "pointer" }}
               onChange={(e) => {
-                const plan = OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS.find(p => p.id === e.target.value);
+                const plan = MAARIFOS_MONTHLY_SAMPLE_DRAFTS.find(p => p.id === e.target.value);
                 if (plan) {
+                  const preview = Object.entries(plan).filter(([key]) => !["id"].includes(key)).map(([key, value]) => `${key}: ${String(value)}`).join("\n\n");
+                  if (!window.confirm(`${plan.sourceNotice}\n\nÖrnek plan metinleri mevcut plan alanlarını değiştirecek. Kayıt tarihi ve yaş bandı korunur. Uygulamadan önce metni inceleyin:\n\n${preview}`)) { e.target.value = ""; return; }
+                  setSampleUndo(structuredClone(formData));
                   setFormData(prev => ({
                     ...prev,
-                    month: plan.monthName,
-                    ageGroup: plan.ageGroup,
+
+
                     domainSkills: plan.domainSkills,
                     tendencies: plan.tendencies,
                     socialEmotional: plan.socialEmotional,
@@ -291,13 +210,42 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                 }
               }}
               defaultValue=""
-              aria-label="MEB Resmî Örnek Aylık Planı Yükle"
+              aria-label="MaarifOS aylık örnek taslağını incele"
             >
-              <option value="" disabled>⚡ MEB Resmî Örnek Planı Yükle...</option>
-              {OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS.map(p => (
+              <option value="" disabled>⚡ MaarifOS örnek taslağını incele...</option>
+              {MAARIFOS_MONTHLY_SAMPLE_DRAFTS.map(p => (
                 <option key={p.id} value={p.id}>{p.ageGroup} ({p.pageRef}): {p.planTitle}</option>
               ))}
             </select>
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#7c3aed", color: "#ffffff", border: "1px solid #6d28d9", fontWeight: 700 }}
+              onClick={() => {
+                const allMonths: MonthKey[] = ["Eylül", "Ekim", "Kasım", "Aralık", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran"];
+                const matchedMonth = allMonths.find(m => formData.month.includes(m)) || "Ekim";
+                const matchedAgeGroup: AgeGroup = formData.ageGroup.includes("36") ? "36-48" : formData.ageGroup.includes("48") ? "48-60" : "60-72";
+                const sync = buildMonthlySyncResult(matchedMonth, matchedAgeGroup);
+                if (sync.planCount === 0) {
+                  alert(`${matchedMonth} ayı için kayıtlı günlük plan bulunamadı. Önce Günlük Planlayıcı ile plan oluşturun.`);
+                  return;
+                }
+                const fields = syncResultToFieldText(sync);
+                setFormData(prev => ({
+                  ...prev,
+                  domainSkills: fields.domainSkills !== "—" ? fields.domainSkills : prev.domainSkills,
+                  tendencies: fields.tendencies !== "—" ? fields.tendencies : prev.tendencies,
+                  socialEmotional: fields.socialEmotional !== "—" ? fields.socialEmotional : prev.socialEmotional,
+                  values: fields.values !== "—" ? fields.values : prev.values,
+                  literacy: fields.literacy !== "—" ? fields.literacy : prev.literacy,
+                  concepts: fields.concepts !== "—" ? fields.concepts : prev.concepts,
+                }));
+                alert(`✨ ${matchedMonth} ayındaki ${sync.planCount} adet günlük plandan alan becerileri, eğilimler, değerler ve kavramlar otomatik olarak aylık plana aktarıldı!`);
+              }}
+              title="Bu ayın günlük planlarındaki alan becerilerini, eğilimleri, değerleri ve kavramları otomatik aktar"
+            >
+              ✨ Günlük Planlardan Doldur ({formData.month.split(" ")[0]})
+            </button>
             <button
               type="button"
               className="of-btn"
@@ -321,14 +269,10 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
             <button type="button" className="of-btn of-btn--word" onClick={handleDownloadWord}>
-              📄 Word Olarak İndir (.doc)
+              📄 Word Olarak İndir (.docx)
             </button>
-            {onClose && (
-              <button type="button" className="of-btn of-btn--close" onClick={onClose}>
-                ✕ Kapat
-              </button>
-            )}
-          </div>
+            {sampleUndo && <button type="button" className="of-btn" onClick={() => { if (window.confirm("Örnek yüklenmeden önceki metne dönülecek. Sonraki düzenlemeler değişebilir. Devam edilsin mi?")) { setFormData(sampleUndo); setSampleUndo(null); } }}>Örnek yüklemeyi geri al</button>}
+          </div></details>
         </div>
 
         {/* Sheet Content */}
@@ -351,7 +295,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <input
                     type="text"
                     className="of-input"
-                    value={formData.schoolName}
+                    aria-label="Okul adı" value={formData.schoolName}
                     onChange={e => updateField("schoolName", e.target.value)}
                   />
                   <span className="print-only-text">{formData.schoolName}</span>
@@ -361,7 +305,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <input
                     type="text"
                     className="of-input"
-                    value={formData.month}
+                    aria-label="Ay" readOnly title="Üstteki kayıt kapsamından seçilir" value={formData.month}
                     onChange={e => updateField("month", e.target.value)}
                   />
                   <span className="print-only-text">{formData.month}</span>
@@ -373,7 +317,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <input
                     type="text"
                     className="of-input"
-                    value={formData.teacherName}
+                    aria-label="Öğretmen adı" value={formData.teacherName}
                     onChange={e => updateField("teacherName", e.target.value)}
                   />
                   <span className="print-only-text">{formData.teacherName}</span>
@@ -383,7 +327,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <input
                     type="text"
                     className="of-input"
-                    value={formData.ageGroup}
+                    aria-label="Yaş grubu" readOnly title="Üstteki kayıt kapsamından seçilir" value={formData.ageGroup}
                     onChange={e => updateField("ageGroup", e.target.value)}
                   />
                   <span className="print-only-text">{formData.ageGroup}</span>
@@ -407,7 +351,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={4}
-                    value={formData.domainSkills}
+                    aria-label="Alan becerileri" value={formData.domainSkills}
                     onChange={e => updateField("domainSkills", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.domainSkills}</div>
@@ -431,7 +375,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={2}
-                    value={formData.tendencies}
+                    aria-label="Eğilimler" value={formData.tendencies}
                     onChange={e => updateField("tendencies", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.tendencies}</div>
@@ -456,7 +400,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.socialEmotional}
+                    aria-label="Sosyal duygusal öğrenme" value={formData.socialEmotional}
                     onChange={e => updateField("socialEmotional", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.socialEmotional}</div>
@@ -466,7 +410,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.values}
+                    aria-label="Değerler" value={formData.values}
                     onChange={e => updateField("values", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.values}</div>
@@ -478,7 +422,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={2}
-                    value={formData.literacy}
+                    aria-label="Okuryazarlık" value={formData.literacy}
                     onChange={e => updateField("literacy", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.literacy}</div>
@@ -496,7 +440,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={2}
-                    value={formData.concepts}
+                    aria-label="Kavramlar" value={formData.concepts}
                     onChange={e => updateField("concepts", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.concepts}</div>
@@ -513,7 +457,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={2}
-                    value={formData.specialDays}
+                    aria-label="Belirli gün ve haftalar" value={formData.specialDays}
                     onChange={e => updateField("specialDays", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.specialDays}</div>
@@ -542,7 +486,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={4}
-                    value={formData.learningExperiences}
+                    aria-label="Öğrenme yaşantıları" value={formData.learningExperiences}
                     onChange={e => updateField("learningExperiences", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.learningExperiences}</div>
@@ -567,7 +511,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.enrichment}
+                    aria-label="Zenginleştirme" value={formData.enrichment}
                     onChange={e => updateField("enrichment", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.enrichment}</div>
@@ -577,7 +521,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.support}
+                    aria-label="Destekleme" value={formData.support}
                     onChange={e => updateField("support", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.support}</div>
@@ -601,7 +545,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.familyCommunityEngagement}
+                    aria-label="Aile ve toplum katılımı" value={formData.familyCommunityEngagement}
                     onChange={e => updateField("familyCommunityEngagement", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.familyCommunityEngagement}</div>
@@ -625,25 +569,12 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <div style={{ marginBottom: "12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                       <strong>1. Çocuk Açısından Değerlendirme:</strong>
-                      <div className="no-print" style={{ display: "flex", gap: "4px", fontSize: "0.8rem" }}>
-                        <span style={{ color: "#64748b" }}>Örnek Seç:</span>
-                        {EVALUATION_PRESETS.child.map((preset, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className="of-btn of-btn--close"
-                            style={{ padding: "2px 6px", fontSize: "0.75rem" }}
-                            onClick={() => updateField("childEvaluation", preset)}
-                          >
-                            Seçenek {idx + 1}
-                          </button>
-                        ))}
-                      </div>
+                      <FormPresetSelector options={EVALUATION_PRESETS.child.map((text, index) => ({ id: String(index), title: ["Etkin katılım ve merak", "Dil gelişimi ve iş birliği", "Bireysel destek ihtiyacı", "Öz düzenleme ve sorumluluk"][index]!, text }))} currentValue={formData.childEvaluation} onSelect={text => updateField("childEvaluation", text)} />
                     </div>
                     <textarea
                       className="of-textarea"
                       rows={2}
-                      value={formData.childEvaluation}
+                      aria-label="Çocuk açısından değerlendirme" value={formData.childEvaluation}
                       onChange={e => updateField("childEvaluation", e.target.value)}
                     />
                     <div className="print-only-text multiline-text">{formData.childEvaluation}</div>
@@ -652,25 +583,12 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <div style={{ marginBottom: "12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                       <strong>2. Program Açısından Değerlendirme:</strong>
-                      <div className="no-print" style={{ display: "flex", gap: "4px", fontSize: "0.8rem" }}>
-                        <span style={{ color: "#64748b" }}>Örnek Seç:</span>
-                        {EVALUATION_PRESETS.program.map((preset, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className="of-btn of-btn--close"
-                            style={{ padding: "2px 6px", fontSize: "0.75rem" }}
-                            onClick={() => updateField("programEvaluation", preset)}
-                          >
-                            Seçenek {idx + 1}
-                          </button>
-                        ))}
-                      </div>
+                      <FormPresetSelector options={EVALUATION_PRESETS.program.map((text, index) => ({ id: String(index), title: ["Çıktıların yaşa uygunluğu", "Ortam ve materyal desteği", "Açık hava için sonraki adım", "Disiplinler arası bütünlük"][index]!, text }))} currentValue={formData.programEvaluation} onSelect={text => updateField("programEvaluation", text)} />
                     </div>
                     <textarea
                       className="of-textarea"
                       rows={2}
-                      value={formData.programEvaluation}
+                      aria-label="Program açısından değerlendirme" value={formData.programEvaluation}
                       onChange={e => updateField("programEvaluation", e.target.value)}
                     />
                     <div className="print-only-text multiline-text">{formData.programEvaluation}</div>
@@ -679,25 +597,12 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                       <strong>3. Öğretmen Açısından Değerlendirme:</strong>
-                      <div className="no-print" style={{ display: "flex", gap: "4px", fontSize: "0.8rem" }}>
-                        <span style={{ color: "#64748b" }}>Örnek Seç:</span>
-                        {EVALUATION_PRESETS.teacher.map((preset, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className="of-btn of-btn--close"
-                            style={{ padding: "2px 6px", fontSize: "0.75rem" }}
-                            onClick={() => updateField("teacherEvaluation", preset)}
-                          >
-                            Seçenek {idx + 1}
-                          </button>
-                        ))}
-                      </div>
+                      <FormPresetSelector options={EVALUATION_PRESETS.teacher.map((text, index) => ({ id: String(index), title: ["Süreçte rehberlik", "Gözlem kayıtlarının takibi", "Farklılaştırma uygulaması", "Aile geri bildirimleri"][index]!, text }))} currentValue={formData.teacherEvaluation} onSelect={text => updateField("teacherEvaluation", text)} />
                     </div>
                     <textarea
                       className="of-textarea"
                       rows={2}
-                      value={formData.teacherEvaluation}
+                      aria-label="Öğretmen açısından değerlendirme" value={formData.teacherEvaluation}
                       onChange={e => updateField("teacherEvaluation", e.target.value)}
                     />
                     <div className="print-only-text multiline-text">{formData.teacherEvaluation}</div>
@@ -722,7 +627,7 @@ export function OfficialMonthlyPlanForm({ initialData, onClose }: Props) {
                   <textarea
                     className="of-textarea"
                     rows={3}
-                    value={formData.teacherReflections}
+                    aria-label="Öğretmen yansıtması" value={formData.teacherReflections}
                     onChange={e => updateField("teacherReflections", e.target.value)}
                   />
                   <div className="print-only-text multiline-text">{formData.teacherReflections}</div>

@@ -73,7 +73,7 @@ export function ActivityTeacherGuide({
         </p>
         <img
           className="activity-teacher-guide__image"
-          src="/assets/teaching/teacher-workshop.webp"
+          src="./assets/teaching/teacher-workshop.webp"
           alt=""
           aria-hidden="true"
           draggable={false}

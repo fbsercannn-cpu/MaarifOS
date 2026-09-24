@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -11,15 +13,15 @@ interface MoodCount {
 }
 
 export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => void }) {
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [date, setDate] = useState("2026-09-15");
-  const [greetingType, setGreetingType] = useState("Kalp / Sarılma & Nezaket Selamı");
-  const [weatherType, setWeatherType] = useState("Güneşli ve Rüzgârlı (22°C)");
-  const [presentCount, setPresentCount] = useState(19);
-  const [totalCount, setTotalCount] = useState(20);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [greetingType, setGreetingType] = useOfficialFormState("greetingType", "Kalp / Sarılma & Nezaket Selamı");
+  const [weatherType, setWeatherType] = useOfficialFormState("weatherType", "Güneşli ve Rüzgârlı (22°C)");
+  const [presentCount, setPresentCount] = useOfficialFormState("presentCount", 19);
+  const [totalCount, setTotalCount] = useOfficialFormState("totalCount", 20);
 
-  const [moods, setMoods] = useState<MoodCount>({
+  const [moods, setMoods] = useOfficialFormState<MoodCount>("moods", {
     happy: 10,
     excited: 5,
     calm: 3,
@@ -27,15 +29,15 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
     sadOrAnxious: 0,
   });
 
-  const [morningMessage, setMorningMessage] = useState(
+  const [morningMessage, setMorningMessage] = useOfficialFormState("morningMessage",
     "Günaydın Papatyalar Sınıfı! Bugün sonbaharın gelişini kutluyoruz. Bahçeden toplanan yapraklar merkezlerde bizi bekliyor!"
   );
 
-  const [curiosityQuestion, setCuriosityQuestion] = useState(
+  const [curiosityQuestion, setCuriosityQuestion] = useOfficialFormState("curiosityQuestion",
     "Ağaçların yaprakları neden sonbaharda sararır ve dökülür? Rüzgâr onları nereye taşır?"
   );
 
-  const [specialSupportNotes, setSpecialSupportNotes] = useState(
+  const [specialSupportNotes, setSpecialSupportNotes] = useOfficialFormState("specialSupportNotes",
     "Sabah ayrılık kaygısı yaşayan 1 öğrencimiz (Ali) sakinleşme köşesinde peluş oyuncağıyla desteklendi, duygu panosuna gülen yüz asarak oyuna katıldı."
   );
 
@@ -47,72 +49,7 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
     printOfficialFormA4(`Gune_Baslama_ve_Duygu_Panosu_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Gune_Baslama_Zamani_Tutanagi_${date}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          GÜNE BAŞLAMA ZAMANI, DUYGU PANOSU VE GÜNÜN MESAJI TUTANAĞI
-        </div>
-        <table>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td><td><b>Yoklama:</b> ${presentCount} / ${totalCount} Mevcut</td></tr>
-          <tr><td><b>Günün Selamlaşma Rutini:</b> ${greetingType}</td><td><b>Hava Durumu:</b> ${weatherType}</td></tr>
-        </table>
-        <h4>Duygu Durumu Panosu Sabah Dağılımı (TTKB Sayfa 93–94)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>Duygu İfadesi</th>
-              <th>Çocuk Sayısı</th>
-              <th>Pedagojik Anlam ve Karşılama Stratejisi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>😊 Neşeli / Mutlu</td><td style='text-align:center;'>${moods.happy}</td><td>Grup etkinliklerinde aktif katılım ve liderlik rolleri desteklendi.</td></tr>
-            <tr><td>🤩 Heyecanlı / Coşkulu</td><td style='text-align:center;'>${moods.excited}</td><td>Merkez oyunlarında odaklanma ve keşif odaklı materyallere yönlendirildi.</td></tr>
-            <tr><td>😌 Sakin / Huzurlu</td><td style='text-align:center;'>${moods.calm}</td><td>Kitap ve sanat merkezinde derinleşmeleri sağlandı.</td></tr>
-            <tr><td>🥱 Yorgun / Uykulu</td><td style='text-align:center;'>${moods.tired}</td><td>Su içme, hafif esneme hareketleri ve sakin karşılama rutini uygulandı.</td></tr>
-            <tr><td>🥺 Üzgün / Endişeli</td><td style='text-align:center;'>${moods.sadOrAnxious}</td><td>Bireysel ilgi, empati çemberi ve güven verici yetişkin teması sağlandı.</td></tr>
-          </tbody>
-        </table>
-        <h4>Günün Mesajı ve Merak Sorusu</h4>
-        <p><b>Günün Mesajı:</b> ${morningMessage}</p>
-        <p><b>Merak Sorusu:</b> ${curiosityQuestion}</p>
-        <h4>Özel Destek ve Sabah Uyum Gözlemleri</h4>
-        <p>${specialSupportNotes}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Gune_Baslama_Zamani_Tutanagi_${date}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialMorningOrientationModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -169,7 +106,7 @@ export function OfficialMorningOrientationModal({ onClose }: { onClose?: () => v
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

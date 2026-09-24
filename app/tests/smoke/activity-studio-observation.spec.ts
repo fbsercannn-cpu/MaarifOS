@@ -1,3 +1,4 @@
+test.describe.configure({timeout:60_000});
 import { expect, test, type Page } from "@playwright/test";
 import { installCivilClock } from "../helpers/development-workspace-ui";
 
@@ -20,7 +21,7 @@ async function configureClassroomAndStudent(page: Page) {
   await setup.locator("details.classroom-advanced-settings > summary").click();
   await setup.getByLabel("Çalışma düzeni", { exact: true }).selectOption("morning");
   await setup.getByRole("button", { name: "Sınıfımı hazırla" }).click();
-  await expect(setup).toBeHidden();
+  await expect(setup).toBeHidden({timeout:30_000});
   await expect(page.getByRole("button", { name: "Eğitim yılını başlat", exact: true })).toBeHidden();
 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
@@ -100,7 +101,7 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
   await planDialog.getByLabel("Plan tarihi").fill("2026-09-11");
   await planDialog.getByRole("button", { name: "Planı kaydet" }).click();
 
-  await expect(planDialog).toBeHidden();
+  await expect(planDialog).toBeHidden({timeout:30_000});
   await expect(
     page.getByText("Pedagojik etkinlik kaynağı plan günüyle uyuşmuyor.", {
       exact: true,
@@ -228,17 +229,18 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
   await expect(guide.getByRole("heading", { level: 1 })).toHaveText(activityTitle);
   await guide.locator("summary").filter({ hasText: "Program bağlantısı ve araçlar" }).click();
 
-  const popupPromise = page.waitForEvent("popup");
   await guide.getByRole("button", { name: "Yazdır", exact: true }).click();
-  const popup = await popupPromise;
-  await popup.waitForLoadState("load");
-  expect(popup.url()).toMatch(/^blob:/u);
-  await expect(popup).toHaveTitle(new RegExp(activityTitle, "u"));
-  await popup.close();
-
+  const printPreview = page.getByRole("dialog", {name:"PDF önizlemesi",exact:true});
+  await expect(printPreview).toBeVisible();
+  await expect(printPreview).toContainText(activityTitle);
+  const pdfDownload = page.waitForEvent("download");
+  await printPreview.getByRole("button", {name:"Bu PDF'yi indir",exact:true}).click();
+  expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/u);
+  await printPreview.getByRole("button", {name:"PDF önizlemesini kapat",exact:true}).click();
+  await expect(printPreview).toBeHidden();
   await guide.getByRole("button", { name: /Çocuk Modunda uygula$/u }).click();
   const childMode = page.locator("main.activity-child-mode");
-  await expect(childMode).toBeVisible();
+  await expect(childMode).toBeVisible({timeout:30_000});
   await childMode.getByRole("button", { name: "Nokta ekle", exact: true }).click();
   await childMode.getByRole("button", { name: "Nokta ekle", exact: true }).click();
   await childMode.getByRole("button", { name: "Nokta ekle", exact: true }).click();

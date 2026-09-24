@@ -1,4 +1,5 @@
 import { HOME_GAME_CARD_KEYS, HOME_GAME_CARD_SETTING_TYPE, isHomeGameCardRecord, assertHomeGameCardRelationships } from "../../features/home-game-cards/home-game-card-model.ts";
+import { OFFICIAL_FORM_KEYS, OFFICIAL_FORM_SETTING_TYPE, OFFICIAL_FORM_LEGACY_TYPE, isOfficialFormRecord, isOfficialFormLegacyRecord, assertOfficialFormRelationships } from "../../features/official-forms/official-form-record.ts";
 import {STUDENT_ERASURE_TYPE,isStudentErasure} from '../domain/student-erasure.ts';
 import {
   COLLECTION_NAMES,
@@ -605,6 +606,7 @@ const COLLECTION_ALLOWED_KEYS: Record<CollectionName, readonly string[]> = {
     "scope",
   ],
   settings: [
+    ...OFFICIAL_FORM_KEYS,
     "erasedStudentHash",
     ...DOCUMENT_VERSION_KEYS,
     ...HOME_GAME_CARD_KEYS,
@@ -1160,6 +1162,14 @@ function validateCollectionRecordSemantics(
   }
 
   if (collection === "settings") {
+    if (record.settingType === OFFICIAL_FORM_SETTING_TYPE) {
+      if (!isOfficialFormRecord(record)) throw new Error("Form taslağı sözleşmesi geçersiz.");
+      return;
+    }
+    if (record.settingType === OFFICIAL_FORM_LEGACY_TYPE) {
+      if (!isOfficialFormLegacyRecord(record)) throw new Error("Eski form arşivi sözleşmesi geçersiz.");
+      return;
+    }
     if (record.settingType === HOME_GAME_CARD_SETTING_TYPE) {
       if (!isHomeGameCardRecord(record)) throw new Error("Ev oyunu kartı kayıt sözleşmesi geçersiz.");
       return;
@@ -5578,6 +5588,7 @@ function assertBackupRelationships(
   assertOfficialAppointmentCompletionRelationships(payload);
   assertPlayFamilyCycleRelationships(payload);
   assertHomeGameCardRelationships(payload);
+  assertOfficialFormRelationships(payload);
   for (const setting of payload.settings) {
     if (setting.settingType === DOCUMENT_VERSION_SETTING_TYPE) {
       if (!isDocumentVersionRecord(setting)) throw new Error("Belge sürümü kayıt sözleşmesi geçersiz.");

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -86,12 +88,12 @@ const INITIAL_CENTERS: CenterAudit[] = [
 ];
 
 export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () => void }) {
-  const [centers, setCenters] = useState<CenterAudit[]>(INITIAL_CENTERS);
-  const [schoolName, setSchoolName] = useState("Millî Egemenlik Anaokulu");
-  const [className, setClassName] = useState("Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
-  const [auditDate, setAuditDate] = useState("2026-09-15");
-  const [auditorName, setAuditorName] = useState("Emine Öğretmen");
-  const [remedialAction, setRemedialAction] = useState(
+  const [centers, setCenters] = useOfficialFormState<CenterAudit[]>("centers", INITIAL_CENTERS);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Millî Egemenlik Anaokulu");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
+  const [auditDate, setAuditDate] = useOfficialFormState("auditDate", "2026-09-15");
+  const [auditorName, setAuditorName] = useOfficialFormState("auditorName", "Okul Öncesi Öğretmeni");
+  const [remedialAction, setRemedialAction] = useOfficialFormState("remedialAction",
     "Kitap merkezine çocuk yapımı ürün askılığı eklenecek. Blok merkezine ahşap trafik tabelaları temin edilecek. Tüm merkezlerde hijyen ve CE uygunluğu tam."
   );
 
@@ -143,69 +145,7 @@ export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () =>
     printOfficialFormA4(`Ogrenme_Merkezleri_Denetim_Tutanagi_${auditDate}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Ogrenme_Merkezleri_Denetim_Tutanagi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.3; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        th, td { border: 1px solid #000; padding: 5px; font-size: 9pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          ÖĞRENME MERKEZLERİ STANDART DONATIM VE GÜVENLİK DENETİM TUTANAĞI
-        </div>
-        <table>
-          <tr><td><b>Okul Adı:</b> ${schoolName}</td><td><b>Şube / Yaş Grubu:</b> ${className}</td></tr>
-          <tr><td><b>Denetim Tarihi:</b> ${auditDate}</td><td><b>Denetleyen:</b> ${auditorName}</td></tr>
-          <tr><td colspan='2'><b>Genel Standart Uygunluk Skoru:</b> %${complianceScore} (${uygunCount} Uygun, ${kismenCount} Kısmen, ${eksikCount} Eksik)</td></tr>
-        </table>
-        ${centers.map(c => `
-          <h4>${c.icon} ${c.centerName}</h4>
-          <table>
-            <thead>
-              <tr>
-                <th style='width: 60%'>Denetim Kriteri</th>
-                <th style='width: 15%'>Durum</th>
-                <th style='width: 25%'>Açıklama / Tespit</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${c.items.map(it => `
-                <tr>
-                  <td>${it.criterion}</td>
-                  <td style='text-align: center;'>${it.status === 'uygun' ? 'UYGUN [✓]' : it.status === 'kismen' ? 'KISMEN [⚠️]' : 'EKSİK [✗]'}</td>
-                  <td>${it.notes || '-'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `).join('')}
-        <p><b>Gerekli İyileştirme ve Tamamlama Eylemleri:</b><br/>${remedialAction}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${auditorName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü / Denetçi</b><br/><br/>Mühür / İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Ogrenme_Merkezleri_Denetim_${auditDate}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialLearningCentersAuditModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -274,7 +214,7 @@ export function OfficialLearningCentersAuditModal({ onClose }: { onClose?: () =>
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

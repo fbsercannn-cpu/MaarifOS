@@ -1,25 +1,27 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Kerem Aydın");
-  const [studentAge, setStudentAge] = useState("61 Ay");
-  const [parentContact, setParentContact] = useState("Fatma Aydın (Anne) - 0555 123 45 67");
-  const [referralDate, setReferralDate] = useState("2026-09-15");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [referralReason, setReferralReason] = useState<string[]>(["akran_uyum", "duygusal"]);
-  const [customReason, setCustomReason] = useState("");
-  const [observations, setObservations] = useState(
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Kerem Aydın");
+  const [studentAge, setStudentAge] = useOfficialFormState("studentAge", "61 Ay");
+  const [parentContact, setParentContact] = useOfficialFormState("parentContact", "Fatma Aydın (Anne) - 0555 123 45 67");
+  const [referralDate, setReferralDate] = useOfficialFormState("referralDate", "2026-09-15");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [referralReason, setReferralReason] = useOfficialFormState<string[]>("referralReason", ["akran_uyum", "duygusal"]);
+  const [customReason, setCustomReason] = useOfficialFormState("customReason", "");
+  const [observations, setObservations] = useOfficialFormState("observations",
     "Serbest oyun ve merkez zamanlarında akranlarıyla iletişime girmekte çekingen davranmakta, oyuncağı elinden alındığında yoğun ağlama ve içe kapanma tepkisi göstermektedir. Güne başlama çemberinde konuşmaktan kaçınmaktadır."
   );
-  const [classroomInterventions, setClassroomInterventions] = useState(
+  const [classroomInterventions, setClassroomInterventions] = useOfficialFormState("classroomInterventions",
     "1. Blok ve dramatik oyun merkezinde sakin bir akranla ikili eşleştirme yapıldı.\n2. Duyguları tanıma kartlarıyla 'Bugün Nasıl Hissediyorum?' sohbeti gerçekleştirildi.\n3. Başardığı küçük görevlerden sonra sözel pekiştireçle desteklendi."
   );
-  const [familyMeetings, setFamilyMeetings] = useState(
+  const [familyMeetings, setFamilyMeetings] = useOfficialFormState("familyMeetings",
     "08.09.2026 tarihinde veliyle yüz yüze görüşüldü. Ev ortamında da benzer çekingenlik ve kardeşiyle paylaşım zorluğu yaşandığı ifade edildi. Aile okul rehberliği desteğine açık olduğunu belirtti."
   );
-  const [referralExpectation, setReferralExpectation] = useState(
+  const [referralExpectation, setReferralExpectation] = useOfficialFormState("referralExpectation",
     "Öğrencinin sosyal-duygusal uyumunun, ayrılık kaygısının ve öz güven gelişiminin okul rehberlik ve psikolojik danışma servisi tarafından bireysel gözlem ve oyun terapisi/rehberlik seanslarıyla incelenmesi rica olunur."
   );
 
@@ -42,57 +44,7 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
     printOfficialFormA4(`Rehberlik_Yonlendirme_Formu_${studentName.replace(/\s+/g, '_')}`);
   };
 
-  const handleExportWord = () => {
-    const reasonLabels = referralReason
-      .map(r => REASONS.find(item => item.id === r)?.label)
-      .filter(Boolean)
-      .join(", ");
-
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Rehberlik_Yonlendirme_${studentName}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 10pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          REHBERLİK VE PSİKOLOJİK DANIŞMA SERVİSİ ÖĞRENCİ YÖNLENDİRME FORMU
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${studentName}</td><td><b>Yaş / Ay:</b> ${studentAge}</td></tr>
-          <tr><td><b>Veli Bilgisi ve İletişim:</b> ${parentContact}</td><td><b>Tarih:</b> ${referralDate}</td></tr>
-          <tr><td colspan='2'><b>Sınıf Öğretmeni:</b> ${teacherName}</td></tr>
-          <tr><td colspan='2'><b>Yönlendirme Alanları:</b> ${reasonLabels} ${customReason ? ' - ' + customReason : ''}</td></tr>
-        </table>
-        <p><b>1. Sınıf İçi Gözlenen Durumlar ve Belirtiler:</b><br/>${observations}</p>
-        <p><b>2. Sınıfta Uygulanan Önleyici ve Destekleyici Tedbirler:</b><br/>${classroomInterventions}</p>
-        <p><b>3. Aile ile Yapılan Görüşmelerin Özeti:</b><br/>${familyMeetings}</p>
-        <p><b>4. Rehberlik Servisinden Beklentiler ve Öneriler:</b><br/>${referralExpectation}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Rehberlik Öğretmeni / PDR</b><br/><br/>Teslim Alan<br/>İmza / Tarih</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Rehberlik_Yonlendirme_${studentName.replace(/\s+/g, '_')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialGuidanceReferralForm");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -151,7 +103,7 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -182,7 +134,7 @@ export function OfficialGuidanceReferralForm({ onClose }: { onClose?: () => void
             <tr>
               <td style={{ width: "20%" }}><strong>Öğrencinin Adı Soyadı:</strong></td>
               <td style={{ width: "30%" }}>
-                <input
+                <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                   type="text"
                   className="of-input"
                   value={studentName}

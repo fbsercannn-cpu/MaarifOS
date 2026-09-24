@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -43,40 +45,40 @@ interface Props {
 }
 
 export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
-  const [selectedMonth, setSelectedMonth] = useState("Ekim 2026");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [className, setClassName] = useState("Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
+  const [selectedMonth, setSelectedMonth] = useOfficialFormState("selectedMonth", "Ekim 2026");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
 
-  const [selectedChildCriteria, setSelectedChildCriteria] = useState<string[]>([
+  const [selectedChildCriteria, setSelectedChildCriteria] = useOfficialFormState<string[]>("selectedChildCriteria", [
     CHILD_CRITERIA[0],
     CHILD_CRITERIA[1],
     CHILD_CRITERIA[3],
     CHILD_CRITERIA[4],
   ]);
 
-  const [selectedProgramCriteria, setSelectedProgramCriteria] = useState<string[]>([
+  const [selectedProgramCriteria, setSelectedProgramCriteria] = useOfficialFormState<string[]>("selectedProgramCriteria", [
     PROGRAM_CRITERIA[0],
     PROGRAM_CRITERIA[1],
     PROGRAM_CRITERIA[2],
   ]);
 
-  const [selectedTeacherCriteria, setSelectedTeacherCriteria] = useState<string[]>([
+  const [selectedTeacherCriteria, setSelectedTeacherCriteria] = useOfficialFormState<string[]>("selectedTeacherCriteria", [
     TEACHER_CRITERIA[0],
     TEACHER_CRITERIA[1],
     TEACHER_CRITERIA[4],
     TEACHER_CRITERIA[7],
   ]);
 
-  const [childNarrative, setChildNarrative] = useState(
+  const [childNarrative, setChildNarrative] = useOfficialFormState("childNarrative",
     "Ay boyunca uygulanan etkinliklerde çocukların özellikle fen ve doğa gözlemlerine büyük ilgi duyduğu, merak ve soru sorma eğilimlerinin arttığı gözlemlenmiştir. Grup oyunlarında akran paylaşımı ve sıra alma becerisi pekişmiş; ince motor çalışmalarında belirgin bir ilerleme kaydedilmiştir."
   );
 
-  const [programNarrative, setProgramNarrative] = useState(
+  const [programNarrative, setProgramNarrative] = useOfficialFormState("programNarrative",
     "Aylık eğitim planındaki öğrenme çıktıları zümre kararları doğrultusunda eksiksiz uygulanmıştır. Doğal materyal kullanımının çocukların yaratıcılığına olumlu katkı sağladığı; bahçe ve açık hava oyunlarının sürece dinamizm kattığı değerlendirilmiştir."
   );
 
-  const [teacherNarrative, setTeacherNarrative] = useState(
+  const [teacherNarrative, setTeacherNarrative] = useOfficialFormState("teacherNarrative",
     "Öğrenme merkezlerinde rehberlik rolü aktif tutulmuş, çocukların kendi ilgi alanlarına göre merkez seçmelerine imkân tanınmıştır. Gelecek ayda ritim ve beden perküsyonu çalışmalarına daha fazla ağırlık verilmesi kararlaştırılmıştır."
   );
 
@@ -92,75 +94,7 @@ export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
     printOfficialFormA4(`Aylik_Plan_3B_Degerlendirme_${selectedMonth}`);
   };
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Aylık Eğitim Planı Değerlendirme Raporu - ${selectedMonth}</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; line-height: 1.45; color: #1e293b; }
-        h1 { font-size: 16pt; color: #0284c7; text-align: center; }
-        .meta { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-        .meta td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 9.5pt; }
-        .section-title { font-weight: bold; font-size: 11.5pt; color: #0369a1; background: #e0f2fe; padding: 6px 10px; margin-top: 14px; border-left: 4px solid #0284c7; }
-        ul { margin: 6px 0; padding-left: 20px; font-size: 9.5pt; }
-        li { margin-bottom: 3px; }
-        .narrative { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; font-size: 9.5pt; margin-top: 6px; font-style: italic; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI · TTKB OKUL ÖNCESİ EĞİTİMİ</h1>
-        <h2 style="text-align: center; font-size: 12.5pt; color: #475569;">AYLIK EĞİTİM PLANI 3 BOYUTLU DEĞERLENDİRME RAPORU (TTKB s. 111–114)</h2>
-
-        <table class="meta">
-          <tr>
-            <td><strong>Okul Adı:</strong> ${schoolName}</td>
-            <td><strong>Değerlendirilen Ay:</strong> ${selectedMonth}</td>
-          </tr>
-          <tr>
-            <td><strong>Sınıf / Şube:</strong> ${className}</td>
-            <td><strong>Öğretmen:</strong> ${teacherName}</td>
-          </tr>
-        </table>
-
-        <div class="section-title">1. ÇOCUK AÇISINDAN DEĞERLENDİRME (TABLO 1 ÖLÇÜTLERİ)</div>
-        <ul>
-          ${selectedChildCriteria.map(c => `<li>${c}</li>`).join("")}
-        </ul>
-        <div class="narrative">${childNarrative}</div>
-
-        <div class="section-title">2. PROGRAM AÇISINDAN DEĞERLENDİRME (TABLO 2 ÖLÇÜTLERİ)</div>
-        <ul>
-          ${selectedProgramCriteria.map(c => `<li>${c}</li>`).join("")}
-        </ul>
-        <div class="narrative">${programNarrative}</div>
-
-        <div class="section-title">3. ÖĞRETMEN AÇISINDAN DEĞERLENDİRME (TABLO 3 ÖLÇÜTLERİ)</div>
-        <ul>
-          ${selectedTeacherCriteria.map(c => `<li>${c}</li>`).join("")}
-        </ul>
-        <div class="narrative">${teacherNarrative}</div>
-
-        <div style="margin-top: 30px; display: table; width: 100%;">
-          <div style="display: table-cell; width: 50%;">
-            <strong>Okul Öncesi Öğretmeni:</strong><br/><br/>
-            ${teacherName} (İmza)
-          </div>
-          <div style="display: table-cell; width: 50%; text-align: right;">
-            <strong>Okul Müdürü:</strong><br/><br/>
-            Uygundur (İmza / Mühür)
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Aylik_Degerlendirme_Raporu_${selectedMonth.replace(/\s+/g, "_")}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("OfficialMonthlyEvaluationReportModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -252,7 +186,7 @@ export function OfficialMonthlyEvaluationReportModal({ onClose }: Props) {
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

@@ -3,6 +3,8 @@ import { installCivilClock } from "./helpers/development-workspace-ui";
 
 test.describe.configure({ timeout: 60_000 });
 
+test.beforeEach(async ({ page }) => { await installCivilClock(page); });
+
 async function configureClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
   if (!(await setup.isVisible().catch(() => false))) return;
@@ -42,6 +44,7 @@ async function addChild(page: Page, name: string) {
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
   await expect(addStudent).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await expect(page.getByTestId("today-screen")).toBeVisible();
 }
 
 async function openClassroomOperations(page: Page) {
@@ -65,7 +68,7 @@ async function openAttendance(page: Page) {
     .getByRole("button", { name: /^Bugünün yoklaması/u })
     .click();
   const attendance = page.getByRole("dialog", {
-    name: "Bugünün devam durumu",
+    name: "Hızlı Dokunmatik Yoklama (E5)",
   });
   await expect(attendance).toBeVisible();
   return attendance;
@@ -87,7 +90,7 @@ async function createEncryptedBackupFile(
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await settings.getByLabel("Yedek parolası").first().fill(passphrase);
+  await settings.locator("#backup-password").fill(passphrase);
   await settings.getByLabel("Parolayı doğrula").fill(passphrase);
   const downloadPromise = page.waitForEvent("download");
   await settings
@@ -189,8 +192,8 @@ test("IndexedDB yazma hatasında yoklama geri alınır ve yeni yazmalar fail-clo
   await configureClassroom(page);
   await addChild(page, childName);
   await openAttendance(page);
-  const student = page.locator("button.student-row").filter({ hasText: childName });
-  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+  const student = page.getByRole("button", { name: `${childName} Geldi`, exact: true });
+  await expect(student).toHaveAttribute("aria-pressed", "false");
 
   await page.evaluate(() => {
     const testWindow = window as Window & {
@@ -221,7 +224,7 @@ test("IndexedDB yazma hatasında yoklama geri alınır ve yeni yazmalar fail-clo
     .getByRole("button", { name: "Cihaz verilerine yeniden bağlan" })
     .click();
   await expect(gate).toBeHidden();
-  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+  await expect(student).toHaveAttribute("aria-pressed", "false");
 });
 
 test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", async ({
@@ -232,8 +235,8 @@ test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", asyn
   await configureClassroom(page);
   await addChild(page, childName);
   await openAttendance(page);
-  const student = page.locator("button.student-row").filter({ hasText: childName });
-  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+  const student = page.getByRole("button", { name: `${childName} Geldi`, exact: true });
+  await expect(student).toHaveAttribute("aria-pressed", "false");
 
   await page.evaluate(() => {
     const testWindow = window as Window & {
@@ -249,7 +252,7 @@ test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", asyn
   await expect(
     page.getByRole("dialog", { name: "Yeni kayıtlar güvenlik için durduruldu" }),
   ).toBeHidden();
-  await expect(student.getByText("İşaretlenmedi", { exact: true })).toBeVisible();
+  await expect(student).toHaveAttribute("aria-pressed", "false");
 
   await page.evaluate(() => {
     const testWindow = window as Window & {
@@ -261,7 +264,7 @@ test("alan doğrulama hatası yazma kanalını küresel olarak kilitlemez", asyn
     }
   });
   await student.click();
-  await expect(student.getByText("Geldi", { exact: true })).toBeVisible();
+  await expect(student).toHaveAttribute("aria-pressed", "true");
 });
 
 test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak geri döner", async ({
@@ -270,7 +273,6 @@ test("gözlem taslağı Escape ve çocuk değişiminden önce flush edilir; odak
   const firstChild = "Taslak Bir";
   const secondChild = "Taslak İki";
   const draftText = "Bloklarla iki köprü kurdu ve arkadaşına sırasını anlattı.";
-  await installCivilClock(page);
   await page.goto("/", { waitUntil: "networkidle" });
   await configureClassroom(page);
   await addChild(page, firstChild);
@@ -782,4 +784,52 @@ test("kurtarma kapısı 320 px'de taşmaz, görünmez input odağı almaz ve yed
   await expect(
     page.getByRole("dialog", { name: "Sınıfını hazırla" }),
   ).toBeVisible();
+});
+
+test("uygulama kilidi kaydı bozukken öğretmen verileri açılmaz", async ({ page }) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  await page.getByRole("button", { name: "Ayarları aç" }).click();
+  await page.getByLabel("Uygulama PIN’i").fill("246810");
+  await page.getByLabel("PIN’i doğrula").fill("246810");
+  await page.getByRole("button", { name: "Uygulama kilidini etkinleştir" }).click();
+  await expect(page.getByText("Uygulama kilidi bu cihazda etkinleştirildi.")).toBeVisible();
+  await page.evaluate(async () => {
+    const modulePath = "/src/core/repository/indexed-db.ts";
+    const { IndexedDbDataStore } = await import(/* @vite-ignore */ modulePath);
+    const store = new IndexedDbDataStore();
+    try {
+      await store.transaction("readwrite", ["settings"], async (transaction: { getAll: (name: string) => Promise<Array<Record<string, unknown>>>; putMany: (name: string, value: Array<Record<string, unknown>>) => Promise<void> }) => {
+        const record = (await transaction.getAll("settings")).find(record => record.settingType === "app-lock-config-v1");
+        if (!record) throw new Error("Kurgu kilit kaydı bulunamadı");
+        await transaction.putMany("settings", [{ ...record, config: { invalid: true } }]);
+      });
+    } finally { await store.close(); }
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  const gate = page.getByTestId("persistence-gate");
+  await expect(gate).toBeVisible();
+  await expect(gate).toContainText("HYD-LOCK");
+  await expect(page.locator(".maarif-app-content")).toHaveAttribute("inert", "");
+  await expect(page.locator(".maarif-app-content")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByRole("main")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Sınıfını hazırla" })).toHaveCount(0);
+});
+
+test("uygulama kilidi depolaması okunamazken kilitsiz oturum açılmaz", async ({ page }) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await configureClassroom(page);
+  await page.addInitScript(() => {
+    const originalGetAll = IDBObjectStore.prototype.getAll;
+    IDBObjectStore.prototype.getAll = function (...args: Parameters<typeof originalGetAll>) {
+      if (this.name === "settings") throw new DOMException("Kurgu ayar okuma hatası", "UnknownError");
+      return originalGetAll.apply(this, args);
+    };
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByTestId("persistence-gate")).toBeVisible();
+  await expect(page.locator(".maarif-app-content")).toHaveAttribute("inert", "");
+  await expect(page.locator(".maarif-app-content")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByRole("main")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Sınıfını hazırla" })).toHaveCount(0);
 });

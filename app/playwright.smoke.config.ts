@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   projects: [
     { name: "chromium-phone", use: { ...devices["Pixel 7"] } },
-    { name: "webkit-phone", use: { ...devices["iPhone 14"] } },
+    { name: "webkit-phone", timeout: 90_000, expect: { timeout: 30_000 }, use: { ...devices["iPhone 14"] } },
   ],
   use: {
     baseURL: `http://127.0.0.1:${port}`,

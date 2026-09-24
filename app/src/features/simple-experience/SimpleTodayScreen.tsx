@@ -63,8 +63,26 @@ import { QuickStatsBar, type QuickStat } from "./QuickStatsBar.tsx";
 import { OfflineStatusBadge } from "./OfflineStatusBadge.tsx";
 import { WeeklyFocusCard } from "./WeeklyFocusCard.tsx";
 import { OfficialDailyRoutinesTracker } from "./OfficialDailyRoutinesTracker.tsx";
+import {
+  loadDailyPlans,
+  upsertDailyPlan,
+  changeDailyPlanDate,
+  type DailyPlanRecord,
+  type AgeGroup,
+} from "../official-forms/daily-plan-core.ts";
+import { generateDailyPlanWithAI } from "../../services/ai-plan-generator.ts";
+import {
+  exportParentContactExcel,
+  printParentContactA4,
+} from "../../services/parent-contact-template-service.ts";
+import {
+  printOfficialFormA4,
+  downloadOfficialFormWord,
+} from "../official-forms/official-form-export-service.ts";
 import "./simple-experience.css";
 import "./today-teaching.css";
+import { MaarifLogo } from "../../components/MaarifLogo";
+import { ClassroomDynamicIsland } from "../../components/ClassroomDynamicIsland";
 
 export interface SimpleTodayScreenActions {
   onOpenStudentProfile?: TodayScreenActions["onOpenStudentProfile"];
@@ -107,7 +125,7 @@ const HOME_SHORTCUT_COPY: Record<TeacherHomeShortcutId, {
 
 function teacherGreeting(teacherName?: string): string {
   const firstName = teacherName?.trim().split(/\s+/u)[0];
-  return firstName ? `Merhaba ${firstName} Öğretmen` : "Merhaba öğretmenim";
+  return firstName ? `Merhaba, ${firstName} Öğretmen` : "Merhaba, Değerli Öğretmenim";
 }
 
 function ageBandLabel(value?: string): string {
@@ -142,6 +160,8 @@ export function SimpleTodayScreen({
     useState<PedagogicalScenarioId>("balanced");
   const [advancedSupportOpen, setAdvancedSupportOpen] = useState(false);
   const classroom = configuredClassroomFromToday(model.workspace);
+  const hasActiveClassroom = classroom?.operationalStatus === "active";
+  const showClassroomMetrics = hasActiveClassroom && model.students.length > 0;
   const [homePreferences, setHomePreferences] = useState<TeacherHomePreferencesModel>({
     scope: null,
     ...DEFAULT_TEACHER_HOME_PREFERENCES,
@@ -152,6 +172,62 @@ export function SimpleTodayScreen({
   );
   const [preferenceBusy, setPreferenceBusy] = useState(false);
   const [preferenceNotice, setPreferenceNotice] = useState("");
+
+  const [dailyPlans, setDailyPlans] = useState<DailyPlanRecord[]>(() => loadDailyPlans());
+  useEffect(() => {
+    const handlePlansUpdate = () => {
+      setDailyPlans(loadDailyPlans());
+    };
+    window.addEventListener("maarifos_plans_updated", handlePlansUpdate);
+    window.addEventListener("maarif_plan_saved", handlePlansUpdate);
+    window.addEventListener("storage", handlePlansUpdate);
+    return () => {
+      window.removeEventListener("maarifos_plans_updated", handlePlansUpdate);
+      window.removeEventListener("maarif_plan_saved", handlePlansUpdate);
+      window.removeEventListener("storage", handlePlansUpdate);
+    };
+  }, []);
+
+  const todayCivilDate = model.workspace.civilDate;
+  const todayOfficialPlan = useMemo(() => {
+    return dailyPlans.find((p) => p.date === todayCivilDate) || null;
+  }, [dailyPlans, todayCivilDate]);
+
+  const [todayAiPrompt, setTodayAiPrompt] = useState("");
+  const [todayAiBusy, setTodayAiBusy] = useState(false);
+  const [todayAiNotice, setTodayAiNotice] = useState("");
+
+  const handleTodayAiGenerate = async (customPrompt?: string) => {
+    const promptToUse = (customPrompt || todayAiPrompt).trim() || "Günün mevsimine ve MEB müfredatına uygun bütünleştirilmiş günlük plan";
+    setTodayAiBusy(true);
+    setTodayAiNotice("⚡ Yapay zekâ MEB TYMM 2026 EK-6 günlük planını hazırlıyor...");
+    try {
+      const rawAge = classroom?.ageGroup || "60-72";
+      const ageGroup: AgeGroup = rawAge.includes("36") ? "36-48" : rawAge.includes("48") && !rawAge.includes("60") ? "48-60" : "60-72";
+      const newPlan = await generateDailyPlanWithAI({
+        prompt: promptToUse,
+        date: todayCivilDate,
+        ageGroup,
+        schoolName: classroom?.schoolName || "Resmî Anaokulu",
+        teacherName: classroom?.teacherName || "Okul Öncesi Öğretmeni",
+      });
+      upsertDailyPlan(newPlan);
+      setDailyPlans(loadDailyPlans());
+      setTodayAiNotice("✅ Günün resmî MEB planı başarıyla üretildi ve bugüne atandı!");
+      setTodayAiPrompt("");
+    } catch (err: any) {
+      setTodayAiNotice(`❌ Plan oluşturulamadı: ${err.message || String(err)}`);
+    } finally {
+      setTodayAiBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).__MAARIF_ACTIVE_STUDENTS__ = model.students;
+      (window as any).__MAARIF_ACTIVE_CLASSROOM__ = classroom;
+    }
+  }, [model.students, classroom]);
   useEffect(() => {
     let active = true;
     if (!preferenceStore) return undefined;
@@ -418,14 +494,14 @@ export function SimpleTodayScreen({
   const quickStats: QuickStat[] = [
     {
       label: "Sınıfta",
-      value: `${control.attendance.inClass}/${control.attendance.expected}`,
+      value: control.attendance.expected > 0 ? `${control.attendance.inClass}/${control.attendance.expected}` : "Yoklama kapsamı yok",
       detail: `Bugün ${control.attendance.inClass} mevcut, ${control.attendance.expected} beklenen çocuk (Kayıtlı: ${model.students.length}).`,
       onClick: actions.onOpenAttendance,
       tone: model.attendance.marked ? "ok" : "warn",
     },
     {
       label: "Haftalık Plan",
-      value: `${model.teacherWeek.plannedDayCount}/${model.teacherWeek.expectedDayCount} gün`,
+      value: model.teacherWeek.expectedDayCount > 0 ? `${model.teacherWeek.plannedDayCount}/${model.teacherWeek.expectedDayCount} gün` : "Plan günü yok",
       detail: `${model.teacherWeek.plannedDayCount} gün planlandı.`,
       onClick: () => void actions.onOpenCalendar(),
       tone: model.teacherWeek.plannedDayCount >= model.teacherWeek.expectedDayCount ? "ok" : "warn",
@@ -445,50 +521,130 @@ export function SimpleTodayScreen({
       aria-labelledby="simple-today-title"
       data-testid="today-screen"
       data-setup-only={classroom ? "false" : "true"}
+      data-empty-classroom={classroom && model.students.length === 0 ? "true" : "false"}
+      data-academic-year-start-required={presentation.primary.label === "Eğitim yılını başlat" ? "true" : "false"}
     >
       <header className="simple-today__header">
         <div className="simple-today__brand" aria-label="MaarifOS Bugün">
-          <img
-            src="/assets/brand/maarifos-icon-192.png"
-            alt=""
-            aria-hidden="true"
-          />
+          <MaarifLogo size={38} variant="emblem-only" />
           <span>
-            <small>MaarifOS</small>
+            <small>MaarifOS Millî Model</small>
             <strong>Bugün</strong>
           </span>
         </div>
-        {!homePreferences.lessonMode ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <button
             type="button"
-            className="simple-icon-button"
-            onClick={actions.onOpenSettings}
-            aria-label="Ayarları aç"
+            onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_ai_assistant"))}
+            aria-label="Pedagojik Yapay Zekâ Desteğini Aç"
+            title="Pedagojik Yapay Zekâ Desteği"
+            style={{
+              background: "linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, rgba(16, 185, 129, 0.12) 100%)",
+              border: "1px solid rgba(56, 189, 248, 0.45)",
+              color: "#0284c7",
+              borderRadius: "10px",
+              padding: "6px 11px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              whiteSpace: "nowrap",
+              height: "38px",
+            }}
           >
-            <GearIcon aria-hidden="true" />
+            <span style={{ fontSize: "0.95rem" }}>✨</span>
+            <span>Yapay Zekâ</span>
           </button>
-        ) : <span className="simple-today__lesson-badge">Ders modu</span>}
-      </header>
 
-      <section className="today-teaching__context" aria-label="Bugünün sınıf bilgisi">
-        <p>{model.civilDateLabel}</p>
-        <strong>{classroom?.classroomName ?? "Sınıf kurulumu"}</strong>
-        <span>{classroom
-          ? `Kayıtlı ${model.students.length} · Bugünün yoklama kapsamı ${model.attendance.total} · ${ageBandLabel(classroom.ageGroup)} · ${compactTodayProgramLabel(classroom.curriculumProgram)}`
-          : "Bilgileri bir kez girin; her belgede hazır olsun"}</span>
+          {!homePreferences.lessonMode ? (
+            <button
+              type="button"
+              className="simple-icon-button"
+              onClick={actions.onOpenSettings}
+              aria-label="Ayarları aç"
+              title="Sınıf ve Uygulama Ayarları"
+            >
+              <GearIcon aria-hidden="true" />
+            </button>
+          ) : <span className="simple-today__lesson-badge">Ders modu</span>}
+        </div>
+      </header>
+ 
+      {/* ─── DİNAMİK PEDAGOJİK ADA (AMBIENT CO-PILOT) ─── */}
+      <ClassroomDynamicIsland
+        presentCount={control.attendance.inClass}
+        absentCount={
+          model.attendance.marked
+            ? Math.max(0, control.attendance.expected - control.attendance.inClass)
+            : 0
+        }
+        totalStudents={model.students.length}
+        classroomName={classroom?.classroomName || "Sınıfım"}
+        teacherName={classroom?.teacherName || "Öğretmenim"}
+        onOpenAttendance={actions.onOpenAttendance}
+        onOpenPlanFlow={actions.onOpenPlanFlow}
+        onOpenQuickObservation={actions.onOpenQuickObservation}
+      />
+
+      <section className="today-context-hero-card" aria-label="Bugünün sınıf bilgisi">
+        <div className="today-context-hero-header">
+          <div>
+            <div className="today-context-meta-row">
+              <span className="today-context-date">📅 {model.civilDateLabel}</span>
+              <span className="today-context-pill today-context-pill--cyan">
+                {classroom ? ageBandLabel(classroom.ageGroup) : "MEB Okul Öncesi"}
+              </span>
+              <span className="today-context-pill today-context-pill--emerald">
+                {classroom ? compactTodayProgramLabel(classroom.curriculumProgram) : "TYMM 2026"}
+              </span>
+            </div>
+            <h2 className="today-context-class-title">
+              {classroom?.classroomName ?? "Sınıf Kurulumu"}
+            </h2>
+            <p className="today-context-summary">
+              {classroom
+                ? `Kayıtlı ${model.students.length} Öğrenci · Bugünün Yoklama Listesi: ${model.attendance.total} Öğrenci`
+                : "Öğrenci ve sınıf bilgilerinizi girerek başlayabilirsiniz."}
+            </p>
+          </div>
+
+          <div className="today-context-actions">
+            <button
+              type="button"
+              className="today-export-btn today-export-btn--excel"
+              onClick={() => exportParentContactExcel(model.students, { classroomName: classroom?.classroomName, teacherName: classroom?.teacherName, schoolName: "T.C. MİLLÎ EĞİTİM BAKANLIĞI" })}
+              title="MEB standartlarında Veli İletişim Çizelgesi (Excel)"
+            >
+              <span>📊</span>
+              <span>Veli İletişim Çizelgesi (Excel)</span>
+            </button>
+            <button
+              type="button"
+              className="today-export-btn today-export-btn--pdf"
+              onClick={() => printParentContactA4(model.students, { classroomName: classroom?.classroomName, teacherName: classroom?.teacherName, schoolName: "T.C. MİLLÎ EĞİTİM BAKANLIĞI" })}
+              title="Yatay A4 formatında resmî mühürlü Veli İletişim Listesi"
+            >
+              <span>🖨️</span>
+              <span>Veli İletişim Listesi (A4 Baskı)</span>
+            </button>
+          </div>
+        </div>
       </section>
 
-      <QuickStatsBar stats={quickStats} />
+      {showClassroomMetrics ? <QuickStatsBar stats={quickStats} /> : null}
 
-      {!homePreferences.lessonMode ? (
+      {showClassroomMetrics && model.teacherWeek.expectedDayCount > 0 && !homePreferences.lessonMode ? (
         <WeeklyFocusCard
           focus={{
-            weekLabel: `${model.teacherWeek.plannedDayCount}/${model.teacherWeek.expectedDayCount} Günlük Öğretmen Akışı`,
+            weekLabel: `${model.teacherWeek.weekStart} – ${model.teacherWeek.weekEnd}`,
             theme: compactTodayProgramLabel(classroom?.curriculumProgram),
             keyActivities: dailySuggestions.slice(0, 3).map((a) => a.title),
             reminder: pedagogicalSignals[0]?.detail,
           }}
-          mondayCivilDate={model.workspace.civilDate}
+          mondayCivilDate={model.teacherWeek.weekStart}
         />
       ) : null}
 
@@ -523,7 +679,451 @@ export function SimpleTodayScreen({
         </ul> : null}
       </section>
 
-      {classroom?.operationalStatus === "active" ? (
+      {/* ─── GÜNÜN RESMÎ MEB TYMM 2026 PLANI (EK-6) KART VE EYLEM KÖPRÜSÜ ─── */}
+      <section
+        className="today-official-plan-card"
+        style={{
+          margin: "16px 0",
+          background: todayOfficialPlan
+            ? "linear-gradient(135deg, rgba(5, 150, 105, 0.08) 0%, rgba(2, 132, 199, 0.08) 100%)"
+            : "linear-gradient(135deg, rgba(2, 132, 199, 0.06) 0%, rgba(15, 23, 42, 0.03) 100%)",
+          border: todayOfficialPlan
+            ? "1px solid rgba(16, 185, 129, 0.4)"
+            : "1px dashed rgba(56, 189, 248, 0.4)",
+          borderRadius: "14px",
+          padding: "16px",
+          position: "relative",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+        }}
+        aria-label="Günün Resmî MEB Planı"
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.3rem" }}>{todayOfficialPlan ? "🎯" : "📅"}</span>
+            <div>
+              <span
+                style={{
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.6px",
+                  color: todayOfficialPlan ? "#059669" : "#0284c7",
+                  display: "block",
+                }}
+              >
+                {todayOfficialPlan ? "✓ MEB TYMM 2026 Resmî Günlük Planı Aktif" : "MEB TYMM 2026 Resmî Günlük Planı"}
+              </span>
+              <strong style={{ fontSize: "1rem", color: "#0f172a" }}>
+                {todayOfficialPlan
+                  ? (todayOfficialPlan.topic || todayOfficialPlan.activityName)
+                  : "Bugünün Resmî EK-6 Planı"}
+              </strong>
+            </div>
+          </div>
+          {todayOfficialPlan ? (
+            <span
+              style={{
+                fontSize: "0.72rem",
+                fontWeight: 800,
+                background: "rgba(16, 185, 129, 0.15)",
+                color: "#059669",
+                padding: "2px 8px",
+                borderRadius: "6px",
+              }}
+            >
+              {todayOfficialPlan.ageGroup} Ay · EK-6
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                background: "rgba(2, 132, 199, 0.1)",
+                color: "#0284c7",
+                padding: "2px 8px",
+                borderRadius: "6px",
+              }}
+            >
+              528 MEB Etkinliği
+            </span>
+          )}
+        </div>
+
+        {todayOfficialPlan ? (
+          <div>
+            <p style={{ margin: "0 0 10px 0", fontSize: "0.84rem", color: "#334155", lineHeight: "1.4" }}>
+              <strong>Merak / Araştırma Sorusu:</strong> {todayOfficialPlan.researchQuestion || "Günün sorusu hazırlandı."}
+            </p>
+            {todayOfficialPlan.activityName && (
+              <div style={{ fontSize: "0.8rem", color: "#475569", marginBottom: "10px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                <span style={{ background: "rgba(0,0,0,0.05)", padding: "3px 8px", borderRadius: "5px" }}>
+                  🎨 <strong>Etkinlik:</strong> {todayOfficialPlan.activityName}
+                </span>
+                {todayOfficialPlan.selectedCenters?.length > 0 && (
+                  <span style={{ background: "rgba(0,0,0,0.05)", padding: "3px 8px", borderRadius: "5px" }}>
+                    🧩 <strong>Merkezler:</strong> {todayOfficialPlan.selectedCenters.slice(0, 3).join(", ")}
+                  </span>
+                )}
+                {todayOfficialPlan.materialLabels?.length > 0 && (
+                  <span style={{ background: "rgba(0,0,0,0.05)", padding: "3px 8px", borderRadius: "5px" }}>
+                    📦 <strong>Materyaller:</strong> {todayOfficialPlan.materialLabels.slice(0, 2).join(", ")}
+                  </span>
+                )}
+              </div>
+            )}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "my_plans" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "#0284c7",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "7px 14px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                🖨️ EK-6 A4 Çıktı / Görüntüle
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "wizard" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "transparent",
+                  color: "#0284c7",
+                  border: "1px solid rgba(2, 132, 199, 0.4)",
+                  borderRadius: "8px",
+                  padding: "7px 14px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✏️ Planda Değişiklik Yap
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "textbook" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "transparent",
+                  color: "#475569",
+                  border: "1px solid rgba(148, 163, 184, 0.4)",
+                  borderRadius: "8px",
+                  padding: "7px 14px",
+                  fontWeight: 600,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                }}
+              >
+                📚 528 Kitaptan Değiştir
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleTodayAiGenerate(todayOfficialPlan.topic || "Günün MEB planını geliştir")}
+                disabled={todayAiBusy}
+                style={{
+                  background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "7px 14px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: todayAiBusy ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+                title="AI ile Planı Güncelle / Yeniden Yaz"
+              >
+                {todayAiBusy ? "⏳ Yenileniyor..." : "⚡ AI ile Yenile"}
+              </button>
+
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "auto" }}>
+                <span style={{ fontSize: "0.74rem", color: "#64748b", fontWeight: 700 }}>📅 Tarih Taşı:</span>
+                <input
+                  type="date"
+                  value={todayOfficialPlan.date}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    if (newDate && newDate !== todayOfficialPlan.date) {
+                      changeDailyPlanDate(todayOfficialPlan.id, newDate);
+                      setDailyPlans(loadDailyPlans());
+                    }
+                  }}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid rgba(2, 132, 199, 0.4)",
+                    borderRadius: "6px",
+                    padding: "4px 8px",
+                    fontSize: "0.76rem",
+                    color: "#0284c7",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  title="Planı başka bir iş gününe taşı (Aylık plan ve EK-15 matrisi otomatik kaydırılır)"
+                />
+              </div>
+            </div>
+            {todayAiNotice && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  color: todayAiNotice.startsWith("✅") ? "#059669" : todayAiNotice.startsWith("⚡") ? "#4f46e5" : "#e11d48",
+                }}
+              >
+                {todayAiNotice}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <p style={{ margin: "0 0 12px 0", fontSize: "0.82rem", color: "#64748b" }}>
+              Bugün için henüz resmî bir EK-6 planı oluşturulmadı. Yapay zekâ ile anında plan hazırlayabilir, 528 MEB etkinlik havuzundan tercih yapabilir veya adım adım planlayabilirsiniz.
+            </p>
+
+            {/* Hızlı AI Plan İstasyonu */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(16, 185, 129, 0.06) 100%)",
+                border: "1px solid rgba(2, 132, 199, 0.25)",
+                borderRadius: "10px",
+                padding: "12px",
+                marginBottom: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "1rem" }}>✨</span>
+                  <strong style={{ fontSize: "0.84rem", color: "#0369a1" }}>
+                    Yapay Zekâ ile Günlük Plan (EK-6) Hazırla
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("maarif_open_api_config"))}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#0284c7",
+                    fontSize: "0.72rem",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    fontWeight: 600,
+                  }}
+                >
+                  ⚙️ Model Ayarları
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+                <input
+                  type="text"
+                  value={todayAiPrompt}
+                  onChange={(e) => setTodayAiPrompt(e.target.value)}
+                  placeholder="Örn: 29 Ekim Cumhuriyet Bayramı, Sonbahar Doğası ve Yapraklar..."
+                  disabled={todayAiBusy}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !todayAiBusy) {
+                      void handleTodayAiGenerate();
+                    }
+                  }}
+                  style={{
+                    flex: "1 1 240px",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(2, 132, 199, 0.3)",
+                    fontSize: "0.82rem",
+                    outline: "none",
+                    background: "#ffffff",
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={todayAiBusy}
+                  onClick={() => void handleTodayAiGenerate()}
+                  style={{
+                    background: todayAiBusy
+                      ? "#94a3b8"
+                      : "linear-gradient(135deg, #0284c7 0%, #059669 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "8px 16px",
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: todayAiBusy ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 6px rgba(2, 132, 199, 0.25)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {todayAiBusy ? "⏳ Hazırlanıyor..." : "✨ Planı Oluştur"}
+                </button>
+              </div>
+
+              {/* Hızlı Temalar */}
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: "0.7rem", color: "#64748b" }}>Örnek Temalar:</span>
+                {[
+                  "🍂 Sonbahar ve Doğa",
+                  "🇹🇷 Cumhuriyet ve Bayrak",
+                  "🍎 Sağlıklı Beslenme",
+                  "🔢 Sayılar ve Ritim",
+                ].map((theme) => (
+                  <button
+                    key={theme}
+                    type="button"
+                    disabled={todayAiBusy}
+                    onClick={() => void handleTodayAiGenerate(theme)}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid rgba(2, 132, 199, 0.25)",
+                      borderRadius: "6px",
+                      padding: "3px 8px",
+                      fontSize: "0.72rem",
+                      color: "#0369a1",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {theme}
+                  </button>
+                ))}
+              </div>
+
+              {todayAiNotice && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: todayAiNotice.startsWith("✅") ? "#059669" : todayAiNotice.startsWith("⚡") ? "#0284c7" : "#e11d48",
+                  }}
+                >
+                  {todayAiNotice}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "textbook" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "9px 12px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  boxShadow: "0 1px 3px rgba(2, 132, 199, 0.2)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>📚 528 MEB Etkinlik Havuzu</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "wizard" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: "8px",
+                  padding: "9px 12px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>📋 Adım Adım Resmî Planlayıcı</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("maarif_open_tymm_hub", {
+                      detail: { tab: "jit_compiler" },
+                    })
+                  );
+                }}
+                style={{
+                  background: "#f8fafc",
+                  color: "#334155",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "9px 12px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  whiteSpace: "nowrap",
+                }}
+                title="Hava durumu, yoklama ve enerjiye göre anlık günlük akışı düzenleyin"
+              >
+                <span>⏱️ Dinamik Gün Akışı</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {showClassroomMetrics ? (
         <OfficialDailyRoutinesTracker
           onOpenAttendance={actions.onOpenAttendance}
           onOpenQuickObservation={actions.onOpenQuickObservation}
@@ -532,7 +1132,7 @@ export function SimpleTodayScreen({
         />
       ) : null}
 
-      {classroom?.operationalStatus === "active" ? (
+      {showClassroomMetrics ? (
         <section className="simple-today__lesson-tools" aria-labelledby="simple-today-lesson-tools-title">
           <header>
             <div>
@@ -625,8 +1225,8 @@ export function SimpleTodayScreen({
 
       <section className="simple-today__completion" aria-labelledby="simple-today-completion-title">
         <header>
-          <h2 id="simple-today-completion-title">Bugünü tamamla</h2>
-          <small>En çok üç iş</small>
+          <h2 id="simple-today-completion-title">Günün Öncelikli Adımları</h2>
+          <small>Öncelik Sırası</small>
         </header>
         {completionEntries[0] ? (
           <section
@@ -677,9 +1277,9 @@ export function SimpleTodayScreen({
         ) : null}
       </section>
 
-      {!homePreferences.lessonMode && slots.thisWeek ? slots.thisWeek : null}
+      {showClassroomMetrics && !homePreferences.lessonMode && slots.thisWeek ? slots.thisWeek : null}
 
-      {!homePreferences.lessonMode && slots.followupInbox ? (
+      {showClassroomMetrics && !homePreferences.lessonMode && slots.followupInbox ? (
         <details className="simple-today__ready-work">
           <summary>
             <span><strong>Hazır paketler ve diğer işler</strong><small>Gerektiğinde açın</small></span>
@@ -922,7 +1522,7 @@ export function SimpleTodayScreen({
         </section>
       ) : null}
 
-      {model.teacherWeek.status === "ready" ? (
+      {showClassroomMetrics && model.teacherWeek.status === "ready" ? (
         <section className="simple-today__week" aria-labelledby="simple-today-week-title">
           <header>
             <div>

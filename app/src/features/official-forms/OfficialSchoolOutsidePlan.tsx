@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -33,7 +35,7 @@ interface Props {
 }
 
 export function OfficialSchoolOutsidePlan({ initialData, onClose }: Props) {
-  const [formData, setFormData] = useState<SchoolOutsidePlanData>({
+  const [formData, setFormData] = useOfficialFormState<SchoolOutsidePlanData>("formData", {
     place: initialData?.place || "Oyuncak Müzesi",
     date: initialData?.date || new Date().toISOString().slice(0, 10),
     schoolName: initialData?.schoolName || "Atatürk Anaokulu",
@@ -78,80 +80,7 @@ export function OfficialSchoolOutsidePlan({ initialData, onClose }: Props) {
     printOfficialFormA4(`EK-4_Okul_Disi_Plan_${formData.place.replace(/\s+/g, "_")}_${formData.date}`);
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>EK-4 OKUL DIŞI ÖĞRENME ETKİNLİĞİ PLANI - ${formData.place}</title>
-<style>
-  body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 10pt; color: #111; line-height: 1.35; padding: 20px; }
-  h2 { text-align: center; font-size: 13pt; color: #c2410c; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-  th, td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
-  .label-cell { width: 35%; background-color: #f8fafc; font-weight: bold; }
-  .section-header { background-color: #ffedd5; font-weight: bold; text-align: center; color: #c2410c; padding: 6px; }
-  .content-cell { background-color: #fff; }
-</style>
-</head>
-<body>
-  <h2>EK-4 OKUL DIŞI ÖĞRENME ETKİNLİĞİ PLAN ÖRNEĞİ</h2>
-  <table>
-    <tr><td class="label-cell">Etkinlik Yeri:</td><td>${formData.place}</td></tr>
-    <tr><td class="label-cell">Etkinlik Tarihi:</td><td>${formData.date}</td></tr>
-    <tr><td class="label-cell">Okulun Adı:</td><td>${formData.schoolName}</td></tr>
-    <tr><td class="label-cell">Etkinliğe Katılacak Sınıflar:</td><td>${formData.classes}</td></tr>
-    <tr><td class="label-cell">Yaş Grubu:</td><td>${formData.ageGroup}</td></tr>
-    <tr><td class="label-cell">Etkinliğe Katılacak Çocuk Sayısı:</td><td>${formData.girlCount} Kız, ${formData.boyCount} Erkek (Toplam: ${Number(formData.girlCount) + Number(formData.boyCount)})</td></tr>
-    <tr><td class="label-cell">Gidiş-Dönüş Saatleri:</td><td>${formData.departureReturnHours}</td></tr>
-    <tr><td class="label-cell">Etkinliğe Katılacak Öğretmen / Personel:</td><td>${formData.staff}</td></tr>
-    <tr><td class="label-cell">Etkinliğe Katılacak Ebeveyn Bilgisi:</td><td>${formData.parents}</td></tr>
-    <tr><td class="label-cell">Taşıt Bilgisi (Araç tipi ve plakası):</td><td>${formData.vehicleInfo}</td></tr>
-    <tr><td class="label-cell">Yol / Güzergâh:</td><td>${formData.route}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">ALAN BECERİLERİ, ÖĞRENME ÇIKTILARI VE SÜREÇ BİLEŞENLERİ</th></tr>
-    <tr><td class="content-cell">${formData.domainSkills.split("\n").join("<br>")}</td></tr>
-    <tr><th class="section-header">EĞİLİMLER</th></tr>
-    <tr><td class="content-cell">${formData.tendencies.split("\n").join("<br>")}</td></tr>
-    <tr><th class="section-header">PROGRAMLAR ARASI BİLEŞENLER</th></tr>
-    <tr><td class="content-cell">${formData.interdisciplinary.split("\n").join("<br>")}</td></tr>
-    <tr><td class="label-cell"><b>Kavramlar:</b> ${formData.concepts}</td></tr>
-    <tr><td class="label-cell"><b>Materyaller:</b> ${formData.materials}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">ÖĞRENME-ÖĞRETME UYGULAMALARI</th></tr>
-    <tr><td><b>Okul Dışı Öğrenme Etkinliği Öncesi:</b><br>${formData.beforeActivity.split("\n").join("<br>")}</td></tr>
-    <tr><td><b>Okul Dışı Öğrenme Etkinliği Süreci:</b><br>${formData.duringActivity.split("\n").join("<br>")}</td></tr>
-    <tr><td><b>Okul Dışı Öğrenme Etkinliği Sonrası:</b><br>${formData.afterActivity.split("\n").join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">DEĞERLENDİRME</th></tr>
-    <tr><td>${formData.evaluationQuestions.split("\n").join("<br>")}</td></tr>
-  </table>
-
-  <div style="margin-top: 30px; display: flex; justify-content: space-between;">
-    <div>Okul Müdürü<br>İmza / Mühür</div>
-    <div style="text-align: right;">Sınıf Öğretmeni: ${formData.teacherName}<br>İmza</div>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob(["﻿" + htmlContent], {
-      type: "application/msword;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `EK-4_Okul_Disi_Plan_${formData.place.replace(/\s+/g, "_")}_${formData.date}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialSchoolOutsidePlan");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -213,7 +142,7 @@ export function OfficialSchoolOutsidePlan({ initialData, onClose }: Props) {
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
             <button type="button" className="of-btn of-btn--word" onClick={handleDownloadWord}>
-              📄 Word Olarak İndir (.doc)
+              📄 Word Olarak İndir (.docx)
             </button>
             {onClose ? (
               <button type="button" className="of-btn of-btn--close" onClick={onClose}>

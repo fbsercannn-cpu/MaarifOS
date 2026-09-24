@@ -1,3 +1,5 @@
+import { changeRepositorySource } from "./helpers/production-repository";
+
 import { expect, test } from "@playwright/test";
 import { setup, openProfile, openReport, readRecords, installCivilClock, childName, otherChildName, observation, evaluation } from "./helpers/development-workspace-ui";
 
@@ -19,6 +21,12 @@ test("sade kart, çocuk kapsamı ve seçilen dönem rapora doğru taşınır", a
   await expect(card).not.toContainText(otherChildName);
   await page.screenshot({ path: testInfo.outputPath("student-card-390.png") });
   await card.getByRole("button", { name: "10 Eylül 2026 tarihli gözlemi aç" }).click();
+  const actions = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  await expect(actions).toContainText(observation);
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeHidden();
+  if (!(await profile.isVisible())) await openProfile(page);
+  await profile.locator(".student-profile-context-details > summary").click();
   await expect(profile.getByRole("region", { name: "Gözlem arşivi" })).toBeVisible();
   await expect(profile.locator(".student-observation-timeline")).toContainText(observation);
   await profile.getByRole("button", { name: "Bu hafta", exact: true }).click();
@@ -136,12 +144,17 @@ test(`320px telefonda onay ve PDF ${production ? "soğuk çevrimdışı açılı
   const pdf = report.getByRole("button", { name: "PDF indir", exact: true });
   await expect(pdf).toBeEnabled();
   await expect(pdf).toBeInViewport();
-  const downloadEvent = page.waitForEvent("download");
   await pdf.click();
+  const preview = page.getByRole("dialog", { name: "PDF önizlemesi", exact: true });
+  await expect(preview).toBeVisible();
+  const downloadEvent = page.waitForEvent("download");
+  await preview.getByRole("button", { name: "Bu PDF'yi indir", exact: true }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   await download.saveAs(testInfo.outputPath("approved-teacher-observation-summary.pdf"));
   expect(await download.failure()).toBeNull();
+  await preview.getByRole("button", { name: "PDF önizlemesini kapat", exact: true }).click();
+  await expect(preview).toBeHidden();
   await expect(report).toContainText("PDF bu cihaz için hazırlandı.");
   await page.screenshot({ path: testInfo.outputPath("report-approved-320.png") });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -156,21 +169,7 @@ test("kaynak sonradan değişirse onaylı raporun PDF indirmesi durdurulur", asy
   await report.getByRole("button", { name: "Özeti onayla", exact: true }).click();
   await expect(report.getByRole("button", { name: "PDF indir", exact: true })).toBeEnabled();
   // Simulate another tab changing linked evidence after this dialog read its snapshot.
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
-    });
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction("evidenceCurriculumLinks", "readwrite");
-        const store = tx.objectStore("evidenceCurriculumLinks");
-        const read = store.getAll();
-        read.onsuccess = () => { const link = read.result.find((item: Record<string, unknown>) => !item.deletedAt); store.put({ ...link, referenceTitle: "Deneme değişmiş kaynak", updatedAt: new Date().toISOString() }); };
-        tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
-      });
-    } finally { db.close(); }
-  });
+  await changeRepositorySource(page,'evidenceCurriculumLinks',{referenceTitle:'Deneme değişmiş kaynak'});
   const downloads: string[] = [];
   page.on("download", (download) => downloads.push(download.suggestedFilename()));
   await report.getByRole("button", { name: "PDF indir", exact: true }).click();

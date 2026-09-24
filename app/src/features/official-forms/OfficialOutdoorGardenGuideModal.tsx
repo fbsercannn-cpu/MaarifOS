@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -98,12 +100,12 @@ const DEFAULT_INSPECTION_ITEMS: OutdoorInspectionItem[] = [
 ];
 
 export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => void }) {
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [date, setDate] = useState("2026-09-15");
-  const [weatherCondition, setWeatherCondition] = useState("Güneşli / Açık (23°C)");
-  const [items, setItems] = useState<OutdoorInspectionItem[]>(DEFAULT_INSPECTION_ITEMS);
-  const [activeStation, setActiveStation] = useState("camur");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [weatherCondition, setWeatherCondition] = useOfficialFormState("weatherCondition", "Güneşli / Açık (23°C)");
+  const [items, setItems] = useOfficialFormState<OutdoorInspectionItem[]>("items", DEFAULT_INSPECTION_ITEMS);
+  const [activeStation, setActiveStation] = useOfficialFormState("activeStation", "camur");
 
   const toggleItem = (id: string) => {
     setItems((prev) =>
@@ -118,72 +120,7 @@ export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => v
     printOfficialFormA4(`Acik_Hava_ve_Doga_Guvenlik_Rehberi_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Acik_Hava_ve_Bahce_Guvenlik_Rehberi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          AÇIK HAVA, BAHÇE, ÇAMUR MUTFAĞI VE DOĞA OYUNLARI GÜVENLİK VE UYGULAMA REHBERİ
-        </div>
-        <table>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td><td><b>Hava Koşulları:</b> ${weatherCondition}</td></tr>
-          <tr><td colspan='2'><b>Denetim Durumu:</b> ${checkedCount} / ${items.length} Şart Sağlandı (${isAllReady ? "BAHÇE UYGULAMASINA TAM UYGUN" : "EKSİKLER GİDERİLMELİ"})</td></tr>
-        </table>
-        <h4>12 Maddelik Günlük Açık Hava Güvenlik ve Hijyen Denetim Listesi (TTKB Sayfa 104–106)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 10%'>Durum</th>
-              <th style='width: 25%'>Denetim Başlığı</th>
-              <th style='width: 65%'>Mevzuat ve Güvenlik Standardı</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map(it => `
-              <tr>
-                <td style='text-align: center;'>[${it.isChecked ? "X" : " "}]</td>
-                <td><b>${it.title}</b><br/><small>${it.category}</small></td>
-                <td>${it.requirement}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <br/>
-        <h4>Açık Hava Pedagojisi ve Veli Bilgilendirme İlkesi</h4>
-        <p><b>'Kirlenmek Öğrenmektir':</b> Doğal ortamlarda toprak, su, kum ve bitkilerle etkileşim kuran çocukların bağışıklık sistemi güçlenir; ince-kaba motor becerileri ve problem çözme kapasiteleri gelişir. Islanma ve çamurlanma öğrenme sürecinin doğal bir parçasıdır.</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Acik_Hava_ve_Bahce_Guvenlik_Rehberi.doc";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialOutdoorGardenGuideModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -241,7 +178,7 @@ export function OfficialOutdoorGardenGuideModal({ onClose }: { onClose?: () => v
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

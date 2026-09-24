@@ -73,6 +73,42 @@ export function AttendancePanels(props: AttendancePanelsProps) {
   const absentCount = props.students.filter((s) => s.status === "absent" && s.attendanceMarked !== false).length;
   const lateCount = props.students.filter((s) => s.status === "late" && s.attendanceMarked !== false).length;
 
+  const [showAiRecipe, setShowAiRecipe] = useState(false);
+  const [recipeTone, setRecipeTone] = useState<"gentle" | "sick" | "critical">("gentle");
+  const [recipeNotice, setRecipeNotice] = useState<string | null>(null);
+
+  const absentStudentNames = useMemo(
+    () => props.students.filter((s) => s.status === "absent").map((s) => s.name),
+    [props.students]
+  );
+
+  const recipeMessage = useMemo(() => {
+    const names = absentStudentNames.length > 0 ? absentStudentNames.join(", ") : "öğrencimiz";
+    if (absentCount === 0) {
+      return `Sayın Velilerimiz,\nBugün sınıfımızın tüm öğrencileri (%100) eksiksiz olarak okulumuzdadır! Gösterdiğiniz bu yüksek katılım ve özen için hepinize yürekten teşekkür ederiz. Çocuklarımızın düzenli katılımı, TYMM 2026 kapsamındaki akran işbirliği ve ritmik öğrenme süreçlerini güçlendirmektedir.\nSevgilerimizle,\nOkul Öncesi Sınıf Öğretmeniniz`;
+    }
+    if (recipeTone === "sick") {
+      return `Sayın Velimiz,\nBugün ${names} aramızda bulunamadı. Bir sağlık problemi veya rahatsızlığı varsa çok geçmiş olsun dileklerimizi iletiyoruz. Çocuğumuzun dinlenmesi ve sağlığı her şeyden önceliklidir. İyileşme sürecinde evde sıkılmaması için basit hikaye ve resim etkinlikleri önerebiliriz. Durumu hakkında bize haber verirseniz çok seviniriz.\nSağlıklı günler dileriz,\nOkul Öncesi Sınıf Öğretmeniniz`;
+    }
+    if (recipeTone === "critical") {
+      return `Sayın Velimiz,\n${names} isimli öğrencimizin son günlerdeki devamsızlığı dikkatimizi çekmiştir. MEB Okul Öncesi Eğitim Yönetmeliği (Md. 18) uyarınca kesintisiz devam, çocuğumuzun gelişim takibi ve ilkokula hazırlık becerileri açısından esastır. Geçerli mazeret durumunu okul idaresine/öğretmenimize bildirmenizi ve devamlılığı konusunda hassasiyet göstermenizi rica ederiz.\nSaygılarımızla,\nOkul Öncesi Sınıf Öğretmeniniz`;
+    }
+    return `Sayın Velimiz,\nBugün ${names} sınıfımızda aramızda olamadı ve yokluğunu hissettik. Okul öncesi dönemde günlük rutinler ve akran çemberi çocuğumuzun gelişiminde kritik öneme sahiptir. Sağlık veya özel bir mazereti varsa lütfen bizi bilgilendiriniz; bugün sınıfta yaptığımız kavram ve oyun çalışmalarını evde telafi edebilmeniz için destek vermekten mutluluk duyarız.\nSevgilerimizle,\nOkul Öncesi Sınıf Öğretmeniniz`;
+  }, [absentStudentNames, absentCount, recipeTone]);
+
+  const handleCopyRecipe = () => {
+    navigator.clipboard.writeText(recipeMessage).then(() => {
+      triggerHaptic(20);
+      setRecipeNotice("✅ Veli bildirim mesajı panoya kopyalandı!");
+      setTimeout(() => setRecipeNotice(null), 3500);
+    });
+  };
+
+  const handleOpenWhatsAppRecipe = () => {
+    triggerHaptic(15);
+    window.open(`https://wa.me/?text=${encodeURIComponent(recipeMessage)}`, "_blank");
+  };
+
   const handleMarkAllUnmarkedPresent = () => {
     triggerHaptic(15);
     props.students
@@ -181,6 +217,31 @@ export function AttendancePanels(props: AttendancePanelsProps) {
           </button>
           <button
             type="button"
+            onClick={() => {
+              triggerHaptic(15);
+              setShowAiRecipe(!showAiRecipe);
+            }}
+            style={{
+              background: showAiRecipe
+                ? "linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(16, 185, 129, 0.35) 100%)"
+                : "linear-gradient(135deg, rgba(2, 132, 199, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%)",
+              color: "#0284c7",
+              border: showAiRecipe ? "2px solid #0284c7" : "1px solid #38bdf8",
+              fontWeight: 700,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            title="Devamsızlık ve sınıf mevcudu için pedagojik AI veli mesajını doğrudan aç"
+          >
+            ✨ AI Devamsızlık Reçetesi
+          </button>
+          <button
+            type="button"
             onClick={() => void handleExportAttendanceExcel()}
             style={{
               background: "#ecfdf5",
@@ -220,6 +281,192 @@ export function AttendancePanels(props: AttendancePanelsProps) {
             🖨️ A4 Yazdır / PDF
           </button>
         </div>
+
+        {/* ─── INLINE AMBIENT AI DEVAMSIZLIK VE VELİ REÇETESİ KONSOLU (ZERO CHATBOT MODAL) ─── */}
+        {showAiRecipe && (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(8, 15, 28, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "14px",
+              boxShadow: "0 6px 20px rgba(0,0,0,0.35)",
+              color: "#f8fafc",
+              animation: "fadeIn 0.2s ease-in",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "1.1rem" }}>✨</span>
+                <strong style={{ fontSize: "0.85rem", color: "#38bdf8" }}>
+                  Pedagojik Devamsızlık Reçetesi (TYMM 2026 Veli Bülteni)
+                </strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiRecipe(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  cursor: "pointer",
+                  fontSize: "1rem",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Ton Seçici Butonlar */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setRecipeTone("gentle")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "14px",
+                  fontSize: "0.74rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: recipeTone === "gentle" ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
+                  background: recipeTone === "gentle" ? "rgba(56, 189, 248, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: recipeTone === "gentle" ? "#38bdf8" : "#94a3b8",
+                }}
+              >
+                🌸 Nazik Hatırlatma
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecipeTone("sick")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "14px",
+                  fontSize: "0.74rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: recipeTone === "sick" ? "1px solid #10b981" : "1px solid rgba(255,255,255,0.1)",
+                  background: recipeTone === "sick" ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: recipeTone === "sick" ? "#34d399" : "#94a3b8",
+                }}
+              >
+                🤒 Hastalık & Geçmiş Olsun
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecipeTone("critical")}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "14px",
+                  fontSize: "0.74rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: recipeTone === "critical" ? "1px solid #f59e0b" : "1px solid rgba(255,255,255,0.1)",
+                  background: recipeTone === "critical" ? "rgba(245, 158, 11, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: recipeTone === "critical" ? "#fbbf24" : "#94a3b8",
+                }}
+              >
+                ⚠️ Resmî Devam Uyarısı (Md. 18)
+              </button>
+            </div>
+
+            {/* Mesaj Önizleme Kutusu */}
+            <div
+              style={{
+                background: "rgba(0, 0, 0, 0.35)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "8px",
+                padding: "10px",
+                fontSize: "0.78rem",
+                color: "#e2e8f0",
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                marginBottom: "10px",
+                maxHeight: "180px",
+                overflowY: "auto",
+              }}
+            >
+              {recipeMessage}
+            </div>
+
+            {recipeNotice && (
+              <div
+                style={{
+                  background: "rgba(16, 185, 129, 0.2)",
+                  border: "1px solid #10b981",
+                  color: "#6ee7b7",
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  fontSize: "0.76rem",
+                  fontWeight: 700,
+                  marginBottom: "10px",
+                }}
+              >
+                {recipeNotice}
+              </div>
+            )}
+
+            {/* Eylem Butonları */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={handleCopyRecipe}
+                style={{
+                  background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "7px 14px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                📋 Mesajı Panoya Kopyala
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenWhatsAppRecipe}
+                style={{
+                  background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "7px 14px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                💬 WhatsApp ile Gönder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const query = `Bugün sınıfta ${presentCount} öğrenci var, ${absentCount} devamsız. TYMM 2026 devamsızlık telafi stratejisi hazırla.`;
+                  window.dispatchEvent(new CustomEvent("maarif_open_ai_assistant", { detail: { query } }));
+                }}
+                style={{
+                  background: "transparent",
+                  color: "#94a3b8",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "6px",
+                  padding: "7px 12px",
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                }}
+              >
+                🔍 Detaylı Pedagojik Rapor
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* E5 Hızlı Özet Şeridi */}
         <div className="qag-summary-bar">

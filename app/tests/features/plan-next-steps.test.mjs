@@ -324,3 +324,27 @@ test("eski günlük seçim ve değişmiş etkin sınıf sıfır yazımla reddedi
     assert.deepEqual(await store.readSnapshot(), before);
   });
 });
+
+test("özel eğitim yılında Ağustos için eksik hafta hazırlanır; varsayılan resmî omurga yaz aylarını eklemez", async () => {
+  const start = "2026-08-01", end = "2027-06-25";
+  assert.equal(buildNeutralTeacherYearOutline({ annualPeriodStart: start, annualPeriodEnd: end }).some(month => month.monthKey === "2026-08"), false);
+  const store = activeStore();
+  store.snapshot.academicYears[0].startDate = start;
+  const months = buildTeacherFullYearMonthDrafts({ annualPeriodStart: start, annualPeriodEnd: end,
+    months: buildNeutralTeacherYearOutline({ annualPeriodStart: start, annualPeriodEnd: end, includeSummerMonths: true }) });
+  const august = { ...months[0], weeks: months[0].weeks.slice(0, 1) };
+  await createTeacherOwnedPlanGraph(store, { title: "Özel dönem", periodStart: start, periodEnd: end,
+    teacherContent: { narrative: "Öğretmenin özel çalışma dönemi" }, months: [august], now: new Date("2026-08-01T06:00:00Z") });
+  const model = await loadPlanNextSteps(store, { civilDate: "2026-08-27" });
+  assert.equal(model.status, "action-required");
+  assert.equal(model.level, "weekly");
+  const request = model.options[0].request;
+  assert.equal(request.kind, "append-plan-week");
+  assert.equal(request.week.periodStart, "2026-08-24");
+  assert.equal(request.week.periodEnd, "2026-08-30");
+  await applyPlanNextStep(store, request, { now: new Date("2026-08-27T06:00:00Z") });
+  const snapshot = await store.readSnapshot();
+  assert.equal(snapshot.plans.filter(plan => plan.planType === "weekly" && plan.periodStart === "2026-08-24").length, 1);
+  const outside = await loadPlanNextSteps(store, { civilDate: "2026-07-31" });
+  assert.equal(outside.status, "blocked");
+});

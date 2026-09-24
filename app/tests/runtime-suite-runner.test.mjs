@@ -4,7 +4,7 @@ import test from "node:test";
 import { RUNTIME_SCRIPT_SEQUENCE } from "../scripts/run-runtime-suite.mjs";
 
 test("runtime kalite kapısı iç içe npm zinciri yerine bütün yaprak testleri tekil sırada çalıştırır", () => {
-  assert.equal(RUNTIME_SCRIPT_SEQUENCE.length, 35);
+  assert.equal(RUNTIME_SCRIPT_SEQUENCE.length, 39);
   assert.equal(new Set(RUNTIME_SCRIPT_SEQUENCE).size, RUNTIME_SCRIPT_SEQUENCE.length);
   assert.ok(
     RUNTIME_SCRIPT_SEQUENCE.every(

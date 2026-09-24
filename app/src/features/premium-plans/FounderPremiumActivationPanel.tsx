@@ -70,7 +70,7 @@ export function founderPremiumAccessPresentation(
       active: false,
       badge: "Cihaza özel",
       detail:
-        "Size ve Emine Öğretmen’e ayrılan iki cihazlık erişim. Ücretli premium üyeliklerden tamamen ayrıdır.",
+        "Kurucu öğretmen ve sınıf içi yardımcı cihaz için ayrılan iki cihazlık erişim. Ücretli premium üyeliklerden tamamen ayrıdır.",
       canOpenExistingPlans: false,
     };
   }

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import {
   exportOfficialTableToExcel,
@@ -20,24 +22,7 @@ interface StudentSkillRow {
   egl: number; // Eğilimler
 }
 
-const INITIAL_STUDENTS: StudentSkillRow[] = [
-  { id: "s1", name: "Ahmet Yılmaz", tab: 3, mab: 2, fab: 3, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 3, egl: 3 },
-  { id: "s2", name: "Ayşe Kaya", tab: 3, mab: 3, fab: 2, sab: 3, hab: 2, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s3", name: "Can Demir", tab: 2, mab: 3, fab: 3, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 2 },
-  { id: "s4", name: "Defne Çelik", tab: 3, mab: 3, fab: 3, sab: 3, hab: 3, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s5", name: "Demir Korkmaz", tab: 3, mab: 3, fab: 3, sab: 3, hab: 3, snab: 2, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s6", name: "Elif Şahin", tab: 3, mab: 2, fab: 2, sab: 3, hab: 2, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s7", name: "Emir Yıldız", tab: 2, mab: 2, fab: 2, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 2 },
-  { id: "s8", name: "Fatma Öztürk", tab: 3, mab: 3, fab: 2, sab: 3, hab: 2, snab: 3, mzb: 2, sdb: 3, ed: 3, egl: 3 },
-  { id: "s9", name: "Kerem Aydın", tab: 2, mab: 3, fab: 3, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 3 },
-  { id: "s10", name: "Melis Arslan", tab: 3, mab: 2, fab: 2, sab: 3, hab: 2, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s11", name: "Mustafa Koç", tab: 2, mab: 2, fab: 2, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 2 },
-  { id: "s12", name: "Nehir Doğan", tab: 3, mab: 3, fab: 3, sab: 3, hab: 3, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s13", name: "Ozan Güler", tab: 2, mab: 3, fab: 3, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 2 },
-  { id: "s14", name: "Selin Çetin", tab: 3, mab: 2, fab: 2, sab: 3, hab: 2, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-  { id: "s15", name: "Umut Kurt", tab: 2, mab: 2, fab: 2, sab: 2, hab: 3, snab: 2, mzb: 2, sdb: 2, ed: 2, egl: 2 },
-  { id: "s16", name: "Zeynep Aslan", tab: 3, mab: 3, fab: 3, sab: 3, hab: 3, snab: 3, mzb: 3, sdb: 3, ed: 3, egl: 3 },
-];
+const INITIAL_STUDENTS: StudentSkillRow[] = [{id: "", name: "", tab: 0, mab: 0, fab: 0, sab: 0, hab: 0, snab: 0, mzb: 0, sdb: 0, ed: 0, egl: 0}];
 
 const DOMAINS: { key: keyof Omit<StudentSkillRow, "id" | "name">; label: string; short: string }[] = [
   { key: "tab", label: "Türkçe Becerileri", short: "TÜRKÇE" },
@@ -54,11 +39,11 @@ const DOMAINS: { key: keyof Omit<StudentSkillRow, "id" | "name">; label: string;
 
 export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () => void }) {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [students, setStudents] = useState<StudentSkillRow[]>(INITIAL_STUDENTS);
-  const [term, setTerm] = useState("1. Dönem Sonu İzleme");
-  const [schoolYear, setSchoolYear] = useState("2026-2027");
-  const [className, setClassName] = useState("Papatyalar Sınıfı (60-72 Ay)");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
+  const [students, setStudents] = useOfficialFormState<StudentSkillRow[]>("students", INITIAL_STUDENTS);
+  const [term, setTerm] = useOfficialFormState("term", "1. Dönem Sonu İzleme");
+  const [schoolYear, setSchoolYear] = useOfficialFormState("schoolYear", "2026-2027");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (60-72 Ay)");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
   const [searchTerm, setSearchTerm] = useState("");
 
   const handleCycleScore = (studentId: string, domainKey: keyof Omit<StudentSkillRow, "id" | "name">) => {
@@ -66,7 +51,7 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
       prev.map(s => {
         if (s.id !== studentId) return s;
         const current = s[domainKey];
-        const next = current === 3 ? 1 : current + 1;
+        const next = current === 3 ? 0 : current + 1;
         return { ...s, [domainKey]: next };
       })
     );
@@ -79,7 +64,8 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
   // Compute Domain Averages
   const domainAverages = DOMAINS.map(d => {
     const sum = students.reduce((acc, s) => acc + s[d.key], 0);
-    const avg = (sum / (students.length || 1)).toFixed(1);
+    const measured = students.filter(s => s[d.key] > 0).length;
+    const avg = measured ? (sum / measured).toFixed(1) : "—";
     return { ...d, avg };
   });
 
@@ -115,11 +101,11 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
           { header: "Genel Ort.", key: "overallAvg", width: 14, align: "center", isNumeric: true },
         ],
         rows: students.map((s, idx) => {
-          const rowAvg = Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1));
+          const rowAvg = (DOMAINS.some(d => s[d.key] > 0) ? Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.filter(d => s[d.key] > 0).length).toFixed(1)) : "");
           return {
             no: idx + 1,
             name: s.name,
-            ...DOMAINS.reduce((acc, d) => ({ ...acc, [d.key]: s[d.key] }), {}),
+            ...DOMAINS.reduce((acc, d) => ({ ...acc, [d.key]: s[d.key] || "" }), {}),
             overallAvg: rowAvg,
           };
         }),
@@ -150,11 +136,11 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
       ];
 
       students.forEach((s, idx) => {
-        const rowAvg = Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1));
+        const rowAvg = (DOMAINS.some(d => s[d.key] > 0) ? Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.filter(d => s[d.key] > 0).length).toFixed(1)) : "");
         summaryAoa.push([
           idx + 1,
           s.name,
-          ...DOMAINS.map((d) => s[d.key]),
+          ...DOMAINS.map((d) => s[d.key] || ""),
           rowAvg,
         ]);
       });
@@ -195,8 +181,8 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
 
         DOMAINS.forEach((d) => {
           const score = s[d.key];
-          const levelText = score === 3 ? "Çok Başarılı (Yetkin)" : score === 2 ? "İyi Düzeyde (Gelişmekte)" : "Geliştirilmeli (Başlangıç)";
-          const note = score === 3
+          const levelText = score === 0 ? "Henüz gözlem kaydı yok" : score === 3 ? "Çok Başarılı (Yetkin)" : score === 2 ? "İyi Düzeyde (Gelişmekte)" : "Geliştirilmeli (Başlangıç)";
+          const note = score === 0 ? "" : score === 3
             ? "Kazanım ve göstergeleri bağımsız ve tutarlı sergilemektedir."
             : score === 2
             ? "Rehberlik eşliğinde beceriyi başarıyla uygulamaktadır."
@@ -228,75 +214,7 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
     }
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Sinif_Duzeyi_Gelisim_Matrisi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 9pt; line-height: 1.2; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        th, td { border: 1px solid #000; padding: 4px; text-align: center; font-size: 8.5pt; }
-        th { background-color: #f2f2f2; }
-        .student-name { text-align: left; font-weight: bold; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ
-        </div>
-        <p><b>Eğitim Yılı:</b> ${schoolYear} | <b>Dönem:</b> ${term} | <b>Şube:</b> ${className} | <b>Öğretmen:</b> ${teacherName}</p>
-        <p><small>Ölçütler: 1: Geliştirilmeli (Düşük) | 2: İyi Düzeyde (Orta) | 3: Çok Başarılı (Yetkin)</small></p>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 30px;'>No</th>
-              <th style='width: 140px; text-align: left;'>Öğrenci Adı Soyadı</th>
-              ${DOMAINS.map(d => `<th>${d.short}</th>`).join('')}
-              <th>Genel Ort.</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${students.map((s, idx) => {
-              const rowAvg = (
-                DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length
-              ).toFixed(1);
-              return `
-                <tr>
-                  <td>${idx + 1}</td>
-                  <td class='student-name'>${s.name}</td>
-                  ${DOMAINS.map(d => `<td>${s[d.key]}</td>`).join('')}
-                  <td><b>${rowAvg}</b></td>
-                </tr>
-              `;
-            }).join('')}
-            <tr style='background-color: #e2e8f0; font-weight: bold;'>
-              <td colspan='2' style='text-align: left;'>Sınıf Ortalaması</td>
-              ${domainAverages.map(d => `<td>${d.avg}</td>`).join('')}
-              <td>-</td>
-            </tr>
-          </tbody>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü / Maarif Müfettişi</b><br/><br/>Onay<br/>İmza / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Sinif_Gelisim_Matrisi_${schoolYear.replace('/', '-')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialClassroomSkillsMatrixModal");
 
   return (
     <div className="official-form-container">
@@ -339,7 +257,7 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
             🖨️ A4 Yazdır / PDF (Yatay)
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -458,7 +376,8 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
           <tbody>
             {filteredStudents.map((student, idx) => {
               const rowSum = DOMAINS.reduce((acc, d) => acc + student[d.key], 0);
-              const rowAvg = (rowSum / DOMAINS.length).toFixed(1);
+              const measured = DOMAINS.filter(d => student[d.key] > 0).length;
+              const rowAvg = measured ? (rowSum / measured).toFixed(1) : "—";
 
               return (
                 <tr key={student.id}>
@@ -466,8 +385,8 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
                   <td style={{ fontWeight: "600" }}>{student.name}</td>
                   {DOMAINS.map(d => {
                     const score = student[d.key];
-                    const bg = score === 3 ? "#dcfce7" : score === 2 ? "#fef9c3" : "#fee2e2";
-                    const color = score === 3 ? "#15803d" : score === 2 ? "#a16207" : "#b91c1c";
+                    const bg = score === 0 ? "#f8fafc" : score === 3 ? "#dcfce7" : score === 2 ? "#fef9c3" : "#fee2e2";
+                    const color = score === 0 ? "#64748b" : score === 3 ? "#15803d" : score === 2 ? "#a16207" : "#b91c1c";
                     return (
                       <td key={d.key} style={{ textAlign: "center", padding: "2px" }}>
                         <button
@@ -484,9 +403,9 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
                             cursor: "pointer",
                             width: "100%",
                           }}
-                          title="Tıkla seviye değiştir (1..3)"
+                          aria-label={`${student.name}, ${d.label}: ${score || "gözlenmedi"}; düzeyi değiştir`} title="Döngü: gözlenmedi, 1, 2, 3"
                         >
-                          {score}
+                          {score || "—"}
                         </button>
                       </td>
                     );
@@ -507,7 +426,7 @@ export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () =
                 </td>
               ))}
               <td style={{ textAlign: "center", color: "#1e3a8a" }}>
-                {(domainAverages.reduce((acc, d) => acc + Number(d.avg), 0) / domainAverages.length).toFixed(1)}
+                {(domainAverages.some(d => d.avg !== "—") ? (domainAverages.filter(d => d.avg !== "—").reduce((acc, d) => acc + Number(d.avg), 0) / domainAverages.filter(d => d.avg !== "—").length).toFixed(1) : "—")}
               </td>
             </tr>
           </tbody>

@@ -5,6 +5,7 @@
  * Turk karakter normalizasyonu: "S -> s, I -> i, O -> o, U -> u, G -> g, C -> c".
  * Gigo: girdi bosluk/undefined temizligi.
  */
+import {AlternativeActivityPanel} from "../teacher-assistant/AlternativeActivityPanel.tsx";
 import { useMemo, useState } from "react";
 import { ChevronRightIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import type { ActivityStudioItem } from "./activity-studio-model.ts";
@@ -93,6 +94,7 @@ export function ActivityLibraryPanel({
         <p>{filtered.length} etkinlik listeleniyor</p>
       </header>
 
+      <AlternativeActivityPanel items={items} onAddToPlan={onAddToPlan} onOpenActivity={onOpenActivity} disabled={disabled}/>
       <div className="activity-library__filters">
         {/* Arama */}
         <label className="activity-library__search" aria-label="Etkinlik ara">

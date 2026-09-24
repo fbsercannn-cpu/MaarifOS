@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const definitionUrl = new URL("../../.codex/agents/marif.toml", import.meta.url);
+const definitionUrl = new URL("../.codex/agents/marif.toml", import.meta.url);
 const source = await readFile(definitionUrl, "utf8");
 const instructionMatch = source.match(
   /developer_instructions\s*=\s*"""([\s\S]*?)"""\s*$/,

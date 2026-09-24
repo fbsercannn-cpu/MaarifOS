@@ -73,7 +73,7 @@ export function createSimpleTodayPresentation(
         detail: "Çocuk listesi Sınıfım bölümünde yönetilir",
         action: { kind: "setup", stepId: "students" },
       },
-      reasons: ["Sınıf kurulumu korunuyor; günlük kayıtlar için önce etkin bir çocuk ekleyin."],
+      reasons: ["Sınıfınız hazır. Günlük yoklama ve plan kayıtları için lütfen öğrenci ekleyin."],
       followUps: [],
     };
   }

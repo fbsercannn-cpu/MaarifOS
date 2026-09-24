@@ -83,8 +83,8 @@ test("kişisel asistan tek sonraki adım ve en fazla iki takip satırı gösteri
 });
 
 test("eksik yaş bandı etkinlik, pedagojik akış ve TYMM hedeflerini fail-closed tutar", () => {
-  assert.match(todaySource, /const dailySuggestions = suggestedAgeBand\s*\?/u);
-  assert.match(todaySource, /const pedagogicalDay = suggestedAgeBand\s*\?/u);
+  assert.match(todaySource, /const dailySuggestions = useMemo\(\(\) => \{\s*return suggestedAgeBand\s*\?[\s\S]*?: \[\];\s*\}, \[suggestedAgeBand, model\.workspace\.civilDate\]\)/u);
+  assert.match(todaySource, /const pedagogicalDay = useMemo\(\(\) => \{\s*return suggestedAgeBand\s*\?[\s\S]*?: null;\s*\},/u);
   assert.match(todaySource, /Yaş bandı seçilmeden etkinlik önerisi gösterilmez/u);
   assert.match(todaySource, /sistem eksik\s*bilgiyi 48–60 ay olarak tahmin etmez/u);
   assert.match(todaySource, /actions\.onOpenSetupStep\("classroom"\)/u);
@@ -327,4 +327,19 @@ test("Emine ana akışı ortak kodla hazır Maarif içeriklerini kapısız açar
     prototypeSource,
     /Yıllık, aylık, haftalık ve günlük premium planlar/u,
   );
+});
+
+test("kurulumda sınıf metriği veya dönem kartı üretilmez; haftalık odak gerçek pazartesiye bağlanır", () => {
+  assert.match(todaySource, /const hasActiveClassroom = classroom\?\.operationalStatus === "active"/u);
+  assert.match(todaySource, /const showClassroomMetrics = hasActiveClassroom && model\.students\.length > 0/u);
+  assert.match(todaySource, /showClassroomMetrics \? <QuickStatsBar/u);
+  assert.match(todaySource, /showClassroomMetrics && model\.teacherWeek\.expectedDayCount > 0 && !homePreferences\.lessonMode \? \(\s*<WeeklyFocusCard/u);
+  assert.match(todaySource, /mondayCivilDate=\{model\.teacherWeek\.weekStart\}/u);
+  assert.match(todaySource, /showClassroomMetrics && !homePreferences\.lessonMode && slots\.thisWeek/u);
+});
+
+test("çocuksuz sınıfta ders araçları ve beş rutin ilk çocuk eylemiyle yarışmaz", () => {
+  assert.match(todaySource, /showClassroomMetrics \? \(\s*<OfficialDailyRoutinesTracker/u);
+  assert.match(todaySource, /showClassroomMetrics \? \(\s*<section className="simple-today__lesson-tools"/u);
+  assert.match(todaySource, /showClassroomMetrics && !homePreferences\.lessonMode && slots\.followupInbox/u);
 });

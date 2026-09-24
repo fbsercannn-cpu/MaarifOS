@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { installCivilClock } from "./helpers/development-workspace-ui.ts";
+test.beforeEach(async ({ page }) => { await installCivilClock(page); });
 test.describe.configure({ timeout: 60_000 });
 
 async function configureClassroom(page: Page) {
@@ -34,6 +36,7 @@ async function addChild(page: Page, name: string) {
   await addStudent.getByLabel("Çocuğun adı").fill(name);
   await addStudent.getByRole("button", { name: "Kaydet ve kapat" }).click();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await expect(page.getByTestId("today-screen")).toBeVisible();
 }
 
 async function openClassroomAttendance(page: Page) {
@@ -53,7 +56,7 @@ async function openClassroomAttendance(page: Page) {
 async function openAttendanceDetail(page: Page, childName: string) {
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openClassroomAttendance(page);
-  const attendance = page.getByRole("dialog", { name: "Bugünün devam durumu" });
+  const attendance = page.getByRole("dialog", { name: "Hızlı Dokunmatik Yoklama (E5)" });
   const detailTrigger = attendance.getByRole("button", {
     name: `${childName} için yoklama ayrıntısını aç`,
   });
@@ -97,7 +100,7 @@ test("giriş şimdi, erken ayrılma, undo, reload ve öğrenci geçmişi birlikt
   );
 
   await page.keyboard.press("Escape");
-  const attendance = page.getByRole("dialog", { name: "Bugünün devam durumu" });
+  const attendance = page.getByRole("dialog", { name: "Hızlı Dokunmatik Yoklama (E5)" });
   await attendance.getByRole("button", { name: "Son değişikliği geri al" }).click();
   await expect(page.locator(".sr-live")).toHaveText(
     `${childName} için Erken ayrılma olayı geri alındı.`,

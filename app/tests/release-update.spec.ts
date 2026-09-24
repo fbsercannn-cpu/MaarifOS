@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const RELEASE_STORAGE_KEY = "maarifos.release.acknowledgement.v1";
+import { CURRENT_RELEASE, RELEASE_ACKNOWLEDGEMENT_STORAGE_KEY as RELEASE_STORAGE_KEY } from "../src/release.ts";
 
 async function configureClassroom(page: Page) {
   const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
@@ -52,14 +52,14 @@ test("eski sürümden sonra güncellemeyi sessizce kaydeder ve tarihli notları 
   ).toHaveCount(0);
   await expect(
     page.getByText(
-      "MaarifOS 0.37.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      `MaarifOS ${CURRENT_RELEASE.version} sade Maarif Modeli sürümü kullanıma hazır.`,
       { exact: true },
     ),
   ).toBeVisible();
   await expect.poll(async () => page.evaluate((storageKey) => {
     const value = window.localStorage.getItem(storageKey);
     return value ? JSON.parse(value).acknowledgedVersion : null;
-  }, RELEASE_STORAGE_KEY)).toBe("0.37.0");
+  }, RELEASE_STORAGE_KEY)).toBe(CURRENT_RELEASE.version);
 
   await page.reload();
   await expect(
@@ -70,14 +70,15 @@ test("eski sürümden sonra güncellemeyi sessizce kaydeder ve tarihli notları 
   const settings = page.getByRole("dialog", {
     name: "Hesap ve veri güvenliği",
   });
-  await expect(settings).toContainText("MaarifOS 0.37.0");
-  await expect(settings).toContainText("10 Eylül 2026");
+  await expect(settings).toContainText(`MaarifOS ${CURRENT_RELEASE.version}`);
+  await expect(settings.locator(`time[datetime="${CURRENT_RELEASE.releasedOn}"]`)).toBeVisible();
   await settings.getByRole("button", {
     name: "Sürüm notlarını göster",
   }).click();
-  await expect(settings).toContainText(
-    "Belge merkezinde ders öncesi hazırlık, basılı sınıf kullanımı ve ders sonrası kayıt ayrılır; telefon sınıf içinde zorunlu tutulmaz ve yalnız kurumun güncel yetkili kanalı belirtilir.",
-  );
+  for (const note of CURRENT_RELEASE.notes) await expect(settings).toContainText(note);
+  await expect.poll(async () => page.evaluate((storageKey) => {
+    return JSON.parse(window.localStorage.getItem(storageKey)!).firstSeenVersion;
+  }, RELEASE_STORAGE_KEY)).toBe("0.1.0");
 });
 
 test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi sessizce kaydeder", async ({
@@ -96,14 +97,14 @@ test("sürüm kaydı olmayan mevcut Emine kurulumu ilk yükseltmeyi sessizce kay
   ).toHaveCount(0);
   await expect(
     page.getByText(
-      "MaarifOS 0.37.0 sade Maarif Modeli sürümü kullanıma hazır.",
+      `MaarifOS ${CURRENT_RELEASE.version} sade Maarif Modeli sürümü kullanıma hazır.`,
       { exact: true },
     ),
   ).toBeVisible();
   await expect.poll(async () => page.evaluate((storageKey) => {
     const value = window.localStorage.getItem(storageKey);
     return value ? JSON.parse(value).acknowledgedVersion : null;
-  }, RELEASE_STORAGE_KEY)).toBe("0.37.0");
+  }, RELEASE_STORAGE_KEY)).toBe(CURRENT_RELEASE.version);
 });
 
 test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", async ({
@@ -112,7 +113,7 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await page.goto("/?native=1");
   await configureClassroom(page);
 
-  await page.getByRole("button", { name: "Sınıfım" }).click();
+  await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await page.getByRole("button", { name: "Çocuk ekle", exact: true }).click();
   const addSheet = page.getByRole("dialog", { name: "Çocuk ekle" });
   const studentName = addSheet.getByLabel("Çocuğun adı");
@@ -127,7 +128,7 @@ test("güncelleme hazır olayı açık öğretmen girdisini zorla yenilemez", as
   await expect(addSheet).toBeHidden();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: /MaarifOS 0\.37\.0 hazır.*Yenile/ }),
+    page.getByRole("button").filter({ has: page.getByText(`MaarifOS ${CURRENT_RELEASE.version} hazır`, { exact: true }) }),
   ).toBeVisible();
 });
 

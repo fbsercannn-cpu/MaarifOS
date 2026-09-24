@@ -1,3 +1,4 @@
+import {AlternativeActivityPanel} from "../teacher-assistant/AlternativeActivityPanel.tsx";
 import {
   useEffect,
   useId,
@@ -309,6 +310,7 @@ export function ActivityStudio({
   const runCardAction = async (
     kind: "plan" | "apply" | "print",
     activity: ActivityStudioItem,
+    chosenAgeBand?: ActivityStudioAgeBand,
   ) => {
     keyboard.hide();
     const actionKey = `${kind}:${activity.id}`;
@@ -321,7 +323,7 @@ export function ActivityStudio({
     setErrorMessage(null);
     try {
       if (kind === "plan") {
-        await onAddToPlan(activity, context);
+        await onAddToPlan(activity, chosenAgeBand ? {...context, ageBand:chosenAgeBand, ageLabel:ACTIVITY_STUDIO_AGE_LABELS[chosenAgeBand]} : context);
       } else if (kind === "print") {
         await onPrint({
           activity,
@@ -611,6 +613,10 @@ export function ActivityStudio({
           </p>
         </div>
       </header>
+
+      <AlternativeActivityPanel items={ACTIVITY_STUDIO_ITEMS} disabled={busyAction!==null}
+        onOpenActivity={(id,chosenAge)=>{const activity=ACTIVITY_STUDIO_ITEMS.find(item=>item.id===id);if(activity){setAgeBand(chosenAge);openTeacherGuide(activity);}}}
+        onAddToPlan={(id,chosenAge)=>{const activity=ACTIVITY_STUDIO_ITEMS.find(item=>item.id===id);if(activity)void runCardAction("plan",activity,chosenAge);}}/>
 
       <section className="activity-studio__filters" aria-label="Etkinlik filtreleri">
         <label className="activity-studio__search">

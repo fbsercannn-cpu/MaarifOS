@@ -1,8 +1,10 @@
+import { readRepositorySnapshot } from "./helpers/production-repository";
+import { installCivilClock } from "./helpers/development-workspace-ui";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-test.use({ viewport: { width: 390, height: 844 } });
+test.use({ viewport: { width: 390, height: 844 }, actionTimeout: 10_000 });
 test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+  await installCivilClock(page, undefined, "2026-08-31T06:00:00.000Z");
 });
 
 const CYCLE_COUNT = 20;
@@ -128,63 +130,15 @@ async function interact(
 }
 
 async function readObservations(page: Page) {
-  return page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.addEventListener("success", () => resolve(request.result));
-      request.addEventListener("error", () => reject(request.error));
-    });
-    try {
-      return await new Promise<
-        Array<{
-          id: string;
-          studentId: string;
-          studentIds?: string[];
-          rawText: string;
-          rawTextImmutable: boolean;
-          observationType: string;
-          deletedAt: string | null;
-        }>
-      >((resolve, reject) => {
-        const request = database
-          .transaction("observations", "readonly")
-          .objectStore("observations")
-          .getAll();
-        request.addEventListener("success", () => resolve(request.result));
-        request.addEventListener("error", () => reject(request.error));
-      });
-    } finally {
-      database.close();
-    }
-  });
+  return (await readRepositorySnapshot(page)).observations;
 }
 
 async function readSavedBatchDraftSummary(page: Page, rawText: string) {
-  return page.evaluate(async (expectedRawText) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      const drafts = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-        const request = database.transaction("settings", "readonly").objectStore("settings").getAll();
-        request.onsuccess = () => resolve(request.result.filter((record) =>
-          record.settingType === "quick-observation-draft" &&
-          record.captureScope === "selected-children" &&
-          record.deletedAt === null &&
-          record.rawText === expectedRawText));
-        request.onerror = () => reject(request.error);
-      });
-      return {
-        count: drafts.length,
-        childCount: new Set(drafts.map((draft) => draft.studentId)).size,
-        batchCount: new Set(drafts.map((draft) => draft.batchId)).size,
-      };
-    } finally {
-      database.close();
-    }
-  }, rawText);
+  const drafts = (await readRepositorySnapshot(page)).settings.filter((record: any) =>
+    record.settingType === "quick-observation-draft" && record.captureScope === "selected-children" &&
+    record.deletedAt === null && record.rawText === rawText);
+  return { count: drafts.length, childCount: new Set(drafts.map((draft: any) => draft.studentId)).size,
+    batchCount: new Set(drafts.map((draft: any) => draft.batchId)).size };
 }
 
 test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kalıcı kanıt üretir", async ({
@@ -193,6 +147,7 @@ test("390×844 sade hızlı gözlem 20 çevrimde ≤3 etkileşimle tekil ve kal�
   test.setTimeout(TECHNICAL_RUNTIME_BUDGET_MS + 30_000);
   await clearLocalDatabase(page);
   await page.goto("/", { waitUntil: "networkidle" });
+  expect(await page.evaluate(() => new Date().toISOString().slice(0, 10))).toBe("2026-08-31");
   await acknowledgeReleaseIfNeeded(page);
   await configureClassroom(page);
   await addFictionalChild(page);
@@ -330,6 +285,7 @@ test("390×844 yarım kalan toplu gözlem çocukları ve metniyle geri açılır
   const childNames = ["Ada Kurgu", "Ece Kurgu", "Mert Kurgu"];
   await clearLocalDatabase(page);
   await page.goto("/", { waitUntil: "networkidle" });
+  expect(await page.evaluate(() => new Date().toISOString().slice(0, 10))).toBe("2026-08-31");
   await acknowledgeReleaseIfNeeded(page);
   await configureClassroom(page);
   for (const childName of childNames) {
@@ -358,6 +314,7 @@ test("390×844 yarım kalan toplu gözlem çocukları ve metniyle geri açılır
 
   await openBatchObservation(page);
   await expect(dialog).toBeVisible();
+  await expect.poll(async () => (await dialog.locator(".quick-observation-header").boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(0);
   const restoredHeaderBox = await dialog.locator(".quick-observation-header").boundingBox();
   expect(restoredHeaderBox).not.toBeNull();
   expect(restoredHeaderBox?.y ?? -1).toBeGreaterThanOrEqual(0);

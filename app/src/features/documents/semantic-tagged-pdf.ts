@@ -7,7 +7,7 @@ const A4_HEIGHT = 841.89;
 
 export const ACCESSIBLE_PDF_FONT_ASSET_PATH =
   "/assets/fonts/MaarifOSSans-Regular.ttf" as const;
-export const ACCESSIBLE_PDF_BOLD_FONT_ASSET_PATH = "/assets/fonts/MaarifOSSans-Bold.ttf" as const;
+export const ACCESSIBLE_PDF_BOLD_FONT_ASSET_PATH = "./assets/fonts/MaarifOSSans-Bold.ttf" as const;
 export type SemanticPdfColor = readonly [number, number, number];
 /** Opt-in presentation; an absent theme preserves the original font and PDF bytes. */
 export interface SemanticPdfTheme {

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -37,18 +39,18 @@ const DEFAULT_DIMENSIONS: ClosingDimension[] = [
 ];
 
 export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => void }) {
-  const [date, setDate] = useState("2026-09-15");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [presentCount, setPresentCount] = useState(18);
-  const [totalCount, setTotalCount] = useState(20);
-  const [dimensions, setDimensions] = useState<ClosingDimension[]>(DEFAULT_DIMENSIONS);
-  const [quotes, setQuotes] = useState<string[]>([
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [presentCount, setPresentCount] = useOfficialFormState("presentCount", 18);
+  const [totalCount, setTotalCount] = useOfficialFormState("totalCount", 20);
+  const [dimensions, setDimensions] = useOfficialFormState<ClosingDimension[]>("dimensions", DEFAULT_DIMENSIONS);
+  const [quotes, setQuotes] = useOfficialFormState<string[]>("quotes", [
     "Demir: 'Ben kozalağı tarttım, taş kadar ağır çıktı!'",
     "Zeynep: 'Arkadaşımın dökülen boyasını mendille sildim, bana teşekkür etti.'",
     "Ali: 'Yarın yine bahçeye çıkalım, solucanın evini bulduk!'",
   ]);
-  const [teacherReflection, setTeacherReflection] = useState(
+  const [teacherReflection, setTeacherReflection] = useOfficialFormState("teacherReflection",
     "Günün 5 rutini eksiksiz tamamlandı. Açık hava çamur mutfağı istasyonu çocukların duyusal sakinleşmesine büyük katkı sağladı. Yarınki planda fen deneyine ek süre ayrılacaktır."
   );
 
@@ -70,72 +72,7 @@ export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => voi
     printOfficialFormA4(`Gunu_Degerlendirme_Cemberi_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Gunu_Degerlendirme_Cemberi_${date}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          GÜNÜN DEĞERLENDİRİLMESİ ZAMANI VE YANSITMA TUTANAĞI
-        </div>
-        <table>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td><td><b>Katılım:</b> ${presentCount} / ${totalCount} Çocuk</td></tr>
-        </table>
-        <h4>Günün Değerlendirilmesi Çemberi 4 Temel Boyutu (TTKB Sayfa 92, 100–102)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 35%'>Çember Boyutu ve Yönlendirici Soru</th>
-              <th style='width: 65%'>Sınıf Paylaşımları ve Ortak Çıkarımlar</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${dimensions.map(d => `
-              <tr>
-                <td><b>${d.title}</b><br/><small><i>${d.guidingQuestion}</i></small></td>
-                <td>${d.notes}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <h4>Çocukların Ağzından Günün Cümleleri (Birebir Alıntılar)</h4>
-        <ul>
-          ${quotes.map(q => `<li>${q}</li>`).join('')}
-        </ul>
-        <h4>Öğretmenin Gün Sonu Pedagojik Yansıtması</h4>
-        <p>${teacherReflection}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Gunu_Degerlendirme_Cemberi_${date}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialDayClosingCircleModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -203,7 +140,7 @@ export function OfficialDayClosingCircleModal({ onClose }: { onClose?: () => voi
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>

@@ -73,12 +73,24 @@ function useDeviceScale(deviceWidth: number, deviceHeight: number) {
 }
 
 export function PhoneFrame({ children }: PropsWithChildren) {
-  const { device } = useMobileDevice();
+  const { device, native } = useMobileDevice();
   const { geometry } = device;
   const scale = useDeviceScale(geometry.device.width, geometry.device.height);
   const screenRef = useRef<HTMLDivElement | null>(null);
   const contextValue = useMemo(() => ({ screenRef }), []);
   const mobileCursor = useMobileCursor();
+
+  // SİBER-MOBİL KALKAN: Gerçek telefon ekranında asla yapay iPhone çerçevesi çizme!
+  const isMobileScreen = typeof window !== "undefined" && (window.innerWidth <= 768 || native);
+  if (isMobileScreen) {
+    return (
+      <ScreenPortalContext.Provider value={contextValue}>
+        <div ref={screenRef} className="native-app-runtime" style={{ width: "100%", height: "100dvh" }}>
+          {children}
+        </div>
+      </ScreenPortalContext.Provider>
+    );
+  }
 
   return (
     <ScreenPortalContext.Provider value={contextValue}>

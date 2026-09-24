@@ -12847,3 +12847,19 @@ fieldset.student-contact-permissions legend {
   font-weight: 700;
   font-display: block;
 }
+.attendance-calculation-disclosure > summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 12px 4px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+/* Measured phone touch-target regressions: keep targets accessible in normal flow. */
+.simple-today .offline-status-badge { position: relative; bottom: auto; right: auto; z-index: 1; align-self: flex-end; margin-top: 12px; }
+.simple-today .offline-status-badge__dot { width: 44px; height: 44px; min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+.simple-student-list__delete-direct,
+.official-routines-tracker button,
+.student-profile-sheet > button.secondary-action,
+.student-observation-empty > button,
+.quick-context-banner__header > .quick-context-toggle-btn { min-height: 44px; min-width: 44px; box-sizing: border-box; }

@@ -1,34 +1,36 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => void }) {
-  const [parentName, setParentName] = useState("Ayşe Yılmaz (Veli)");
-  const [studentName, setStudentName] = useState("Can Yılmaz (Öğrenci)");
-  const [parentProfession, setParentProfession] = useState("Geleneksel El Sanatları Ustası / Ebru Sanatçısı");
-  const [activityName, setActivityName] = useState("Renklerin Dansı: Geleneksel Ebru Sanatı Atölyesi");
-  const [activityType, setActivityType] = useState("Sanat ve Kültürel Miras Etkinliği");
-  const [date, setDate] = useState("2026-09-15");
-  const [duration, setDuration] = useState("40 Dakika");
-  const [targetSkills, setTargetSkills] = useState(
+  const [parentName, setParentName] = useOfficialFormState("parentName", "Ayşe Yılmaz (Veli)");
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Can Yılmaz (Öğrenci)");
+  const [parentProfession, setParentProfession] = useOfficialFormState("parentProfession", "Geleneksel El Sanatları Ustası / Ebru Sanatçısı");
+  const [activityName, setActivityName] = useOfficialFormState("activityName", "Renklerin Dansı: Geleneksel Ebru Sanatı Atölyesi");
+  const [activityType, setActivityType] = useOfficialFormState("activityType", "Sanat ve Kültürel Miras Etkinliği");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [duration, setDuration] = useOfficialFormState("duration", "40 Dakika");
+  const [targetSkills, setTargetSkills] = useOfficialFormState("targetSkills",
     "Sanat Alan Becerisi (SNAB.4 Sanatsal Uygulama Yapma), İnce Motor Beceriler, Sabır ve Öz Denetim Değerleri (ED1, ED2)"
   );
-  const [materials, setMaterials] = useState(
+  const [materials, setMaterials] = useOfficialFormState("materials",
     "Ebru teknesi, kitreli su, doğal toprak boyalar, at kılı fırçalar, bizler, kurutma kağıtları, koruyucu önlükler (Veli tarafından temin edilmiştir)."
   );
-  const [introStep, setIntroStep] = useState(
+  const [introStep, setIntroStep] = useOfficialFormState("introStep",
     "Veli kendini ve mesleğini/uğraşını tanıtır. Ebru sanatının tarihi ve kitreli suyun sırrı çocuklara hikaye gibi anlatılır. Çocukların teknedeki suya dokunarak kıvamını hissetmeleri sağlanır."
   );
-  const [devStep, setDevStep] = useState(
+  const [devStep, setDevStep] = useOfficialFormState("devStep",
     "Her çocuk sırayla tekne başına gelir. Fırçayla boya serperek su üzerinde damlalar oluşturur. Biz kullanarak laleler, çiçekler veya dalgalar çizer. Kağıt teknenin üzerine bırakılıp çekilerek çocuğun eseri somutlaştırılır."
   );
-  const [conclusionStep, setConclusionStep] = useState(
+  const [conclusionStep, setConclusionStep] = useOfficialFormState("conclusionStep",
     "Ürünler kuruma panosuna asılır. Çocuklar eserlerine isim verirler ('Gökkuşağı Havuzu', 'Büyülü Bahçe' vb.). Sınıfça veliye teşekkür edilir ve öğrencilerin hazırladığı teşekkür çiçeği takdim edilir."
   );
-  const [parentNotes, setParentNotes] = useState(
+  const [parentNotes, setParentNotes] = useOfficialFormState("parentNotes",
     "Çocukların merakı ve teknede boyaların yayılmasını izlerken duydukları heyecan büyüleyiciydi. Hepsi çok dikkatli ve saygılıydı."
   );
-  const [teacherEvaluation, setTeacherEvaluation] = useState(
+  const [teacherEvaluation, setTeacherEvaluation] = useOfficialFormState("teacherEvaluation",
     "Aile katılımı sınıf iklimine olağanüstü zenginlik katmıştır. Çocukların kültürel mirasımıza yönelik farkındalıkları artmış, odaklanma süreleri ve estetik duyarlılıkları desteklenmiştir."
   );
 
@@ -36,57 +38,7 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
     printOfficialFormA4(`Sinif_Ici_Aile_Katilim_Plani_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Aile_Katilimi_Etkinlik_Plani</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 10pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          AİLE KATILIMI ETKİNLİK UYGULAMA PLANI
-        </div>
-        <table>
-          <tr><td><b>Katılımcı Veli:</b> ${parentName}</td><td><b>Öğrencinin Adı:</b> ${studentName}</td></tr>
-          <tr><td><b>Velinin Mesleği/Alanı:</b> ${parentProfession}</td><td><b>Uygulama Tarihi:</b> ${date} (${duration})</td></tr>
-          <tr><td colspan='2'><b>Etkinliğin Adı:</b> ${activityName}</td></tr>
-          <tr><td colspan='2'><b>Etkinliğin Türü:</b> ${activityType}</td></tr>
-          <tr><td colspan='2'><b>Hedeflenen Beceriler ve Değerler:</b> ${targetSkills}</td></tr>
-          <tr><td colspan='2'><b>Kullanılacak Materyaller:</b> ${materials}</td></tr>
-        </table>
-        <h4>Uygulama Aşamaları</h4>
-        <p><b>1. Giriş ve Isınma (Merak Uyandırma):</b><br/>${introStep}</p>
-        <p><b>2. Gelişme ve Uygulama (Birlikte Deneyimleme):</b><br/>${devStep}</p>
-        <p><b>3. Sonuç ve Değerlendirme (Ürün ve Paylaşım):</b><br/>${conclusionStep}</p>
-        <h4>Süreç Değerlendirmeleri</h4>
-        <p><b>Katılımcı Velinin Duygu ve Görüşleri:</b><br/>${parentNotes}</p>
-        <p><b>Öğretmenin Pedagojik Değerlendirmesi:</b><br/>${teacherEvaluation}</p>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Katılımcı Veli</b><br/><br/>${parentName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>Emine Öğretmen<br/>İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Aile_Katilimi_Plani_${date}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialFamilyActivityPlanModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -149,7 +101,7 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -189,7 +141,7 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
               </td>
               <td style={{ width: "20%" }}><strong>Öğrencinin Adı:</strong></td>
               <td style={{ width: "30%" }}>
-                <input
+                <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                   type="text"
                   className="of-input"
                   value={studentName}
@@ -351,7 +303,7 @@ export function OfficialFamilyActivityPlanModal({ onClose }: { onClose?: () => v
           </div>
           <div className="of-signature-block">
             <span className="of-signature-block__title">Sınıf Öğretmeni</span>
-            <span className="of-signature-block__name">Emine Öğretmen</span>
+            <span className="of-signature-block__name">Okul Öncesi Öğretmeni</span>
             <span className="of-signature-block__sign">İmza</span>
           </div>
         </div>

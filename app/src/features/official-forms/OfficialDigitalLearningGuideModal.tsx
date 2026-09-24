@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -43,74 +45,17 @@ const DIGITAL_RULES: DigitalRuleItem[] = [
 ];
 
 export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Demir Korkmaz");
-  const [parentName, setParentName] = useState("Ahmet Korkmaz (Veli)");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [date, setDate] = useState("2026-09-15");
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Demir Korkmaz");
+  const [parentName, setParentName] = useOfficialFormState("parentName", "Ahmet Korkmaz (Veli)");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
 
   const handlePrint = () => {
     printOfficialFormA4(`Dijital_Ogrenme_Taahhutnamesi_${date}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Dijital_Ogrenme_ve_Ekran_Sozlesmesi</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 18px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 9.5pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          DİJİTAL ÖĞRENME, EKRAN SÜRESİ VE ÇOCUK MAHREMİYETİ TAAHHÜTNAMESİ
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${studentName}</td><td><b>Veli Adı Soyadı:</b> ${parentName}</td></tr>
-          <tr><td><b>Okul / Kurum Adı:</b> ${schoolName}</td><td><b>Tarih:</b> ${date}</td></tr>
-          <tr><td colspan='2'><b>Sınıf Öğretmeni:</b> ${teacherName}</td></tr>
-        </table>
-        <h4>Mevzuat İlkeleri ve Karşılıklı Aile Taahhütleri (TTKB Sayfa 107–108)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 45%'>Pedagojik İlke ve Bilinçli Kullanım Rehberi</th>
-              <th style='width: 55%'>Velinin Kabul ve Uygulama Taahhüdü</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${DIGITAL_RULES.map(r => `
-              <tr>
-                <td><b>${r.title}</b><br/><small>${r.description}</small></td>
-                <td>[X] ${r.parentCommitment}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Öğrenci Velisi</b><br/><br/>${parentName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Dijital_Ogrenme_Taahhutnamesi_${studentName.replace(/\s+/g, '_')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialDigitalLearningGuideModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -169,7 +114,7 @@ export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () =>
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -200,7 +145,7 @@ export function OfficialDigitalLearningGuideModal({ onClose }: { onClose?: () =>
             <tr>
               <td style={{ width: "20%" }}><strong>Öğrencinin Adı Soyadı:</strong></td>
               <td style={{ width: "30%" }}>
-                <input
+                <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                   type="text"
                   className="of-input"
                   value={studentName}

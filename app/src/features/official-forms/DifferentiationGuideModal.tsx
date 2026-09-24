@@ -1,3 +1,5 @@
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -155,8 +157,8 @@ interface Props {
 
 export function DifferentiationGuideModal({ onClose }: Props) {
   const [selectedDomainId, setSelectedDomainId] = useState<string>("diff-1");
-  const [targetStudentName, setTargetStudentName] = useState<string>("Ali Yılmaz");
-  const [customTeacherNote, setCustomTeacherNote] = useState<string>(
+  const [targetStudentName, setTargetStudentName] = useOfficialFormState<string>("targetStudentName", "");
+  const [customTeacherNote, setCustomTeacherNote] = useOfficialFormState<string>("customTeacherNote",
     "Öğrencinin görsel odaklanma becerisi güçlüdür; sözel yönergelerin somut materyal ve görsellerle desteklenmesi motivasyonunu doğrudan artırmaktadır."
   );
 
@@ -166,64 +168,7 @@ export function DifferentiationGuideModal({ onClose }: Props) {
     printOfficialFormA4(`Bireysel_Farklilastirma_Tutanagi_${targetStudentName.replace(/\s+/g, "_")}`);
   };
 
-  const handleDownloadDoc = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Bireysel Farklılaştırma Tutanağı - ${targetStudentName}</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; padding: 20px; line-height: 1.5; color: #1e293b; }
-        .header { text-align: center; border-bottom: 2px solid #6366f1; padding-bottom: 12px; margin-bottom: 20px; }
-        .header h1 { font-size: 16pt; margin: 0; color: #4338ca; }
-        .box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 16px; }
-        .support { background: #eff6ff; border-left: 5px solid #3b82f6; }
-        .enrich { background: #fdf4ff; border-left: 5px solid #d946ef; }
-        .title { font-weight: bold; font-size: 12pt; margin-bottom: 8px; }
-      </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI</h1>
-          <h2>TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİMİ</h2>
-          <p><strong>BİREYSELLEŞTİRİLMİŞ FARKLILAŞTIRMA VE UYARLAMA KILAVUZ PLANI (TTKB s. 105–108)</strong></p>
-          <p>Öğrenci: <strong>${targetStudentName}</strong> | Alan: <strong>${activeStrategy.domain} (${activeStrategy.domainCode})</strong></p>
-        </div>
-
-        <div class="box support">
-          <div class="title" style="color: #1d4ed8;">1. DESTEKLEME STRATEJİLERİ (Özel Gereksinim & Gelişimsel Destek)</div>
-          <p><strong>Uyarlama Başlığı:</strong> ${activeStrategy.supportStrategies.adaptationTitle}</p>
-          <ul>
-            ${activeStrategy.supportStrategies.actionSteps.map(s => `<li>${s}</li>`).join("")}
-          </ul>
-          <p><strong>Tavsiye Materyaller:</strong> ${activeStrategy.supportStrategies.materialHint}</p>
-          <p><strong>Aileye Ev Tavsiyesi:</strong> ${activeStrategy.supportStrategies.familyRecommendation}</p>
-        </div>
-
-        <div class="box enrich">
-          <div class="title" style="color: #a21caf;">2. ZENGİNLEŞTİRME STRATEJİLERİ (İleri Düzey & Üstün Yetenek)</div>
-          <p><strong>Uyarlama Başlığı:</strong> ${activeStrategy.enrichmentStrategies.adaptationTitle}</p>
-          <ul>
-            ${activeStrategy.enrichmentStrategies.actionSteps.map(s => `<li>${s}</li>`).join("")}
-          </ul>
-          <p><strong>Tavsiye Materyaller:</strong> ${activeStrategy.enrichmentStrategies.materialHint}</p>
-          <p><strong>Aileye Ev Tavsiyesi:</strong> ${activeStrategy.enrichmentStrategies.familyRecommendation}</p>
-        </div>
-
-        <div class="box">
-          <div class="title">3. ÖĞRETMENİN BİREYSEL GÖZLEM VE UYARLAMA NOTU</div>
-          <p>${customTeacherNote}</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([htmlContent], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Farklilastirma_Plani_${targetStudentName.replace(/\s+/g, "_")}.doc`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("DifferentiationGuideModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -326,7 +271,7 @@ export function DifferentiationGuideModal({ onClose }: Props) {
             }}
           >
             <span>💾</span>
-            <span>Word (.doc) İndir</span>
+            <span>Word (.docx) İndir</span>
           </button>
           <button
             onClick={handlePrint}
@@ -375,7 +320,7 @@ export function DifferentiationGuideModal({ onClose }: Props) {
           </label>
           <input
             type="text"
-            value={targetStudentName}
+            readOnly title="Çocuk profilindeki kayıtlı bilgi" value={targetStudentName}
             onChange={(e) => setTargetStudentName(e.target.value)}
             style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "0.88rem" }}
             placeholder="Örn: Ali Yılmaz"
@@ -573,7 +518,7 @@ export function DifferentiationGuideModal({ onClose }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", borderTop: "1px solid #cbd5e1", paddingTop: "14px", fontSize: "0.82rem", color: "#475569" }}>
           <div>
             <strong>Okul Öncesi Öğretmeni</strong>
-            <div style={{ marginTop: "30px", fontWeight: 700, color: "#1e293b" }}>Emine Öğretmen (İmza)</div>
+            <div style={{ marginTop: "30px", fontWeight: 700, color: "#1e293b" }}>......................... (İmza)</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <strong>Okul Müdürü / Rehberlik Servisi</strong>

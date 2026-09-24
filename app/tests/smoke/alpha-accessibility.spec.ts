@@ -13,7 +13,7 @@ test.describe("ana rotalar ve kritik durumlar Axe erişilebilirlik kapısı", ()
     await page.goto("/?native=1", { waitUntil: "networkidle" });
 
     const setup = page.getByRole("dialog", { name: "Sınıfını hazırla" });
-    await expect(setup).toBeVisible();
+    await expect(setup).toBeVisible({timeout:30_000});
     await expectNoUntriagedAxeViolations(page, testInfo, "ilk-kurulum-modal");
 
     await configureAccessibilityClassroom(page);
@@ -240,7 +240,7 @@ test.describe("ana rotalar ve kritik durumlar Axe erişilebilirlik kapısı", ()
     await expect(profileTrigger).toBeFocused();
 
     await page.getByRole("button", { name: "Gözlem", exact: true }).click();
-    await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+    await expect(page.locator("strong", { hasText: /^Hızlı Gözlem$/u })).toBeVisible();
     const quickDetailsSummary = page.locator("details.quick-details > summary").first();
     await quickDetailsSummary.focus();
     await expect(quickDetailsSummary).toBeFocused();

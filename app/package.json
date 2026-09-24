@@ -1,12 +1,13 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.60.0",
+  "version": "0.66.1",
   "type": "module",
   "scripts": {
     "test:agent": "node --test tests/marif-agent-contract.test.mjs",
     "test:ui-contracts": "node --test tests/prototype-keyboard-input-contract.test.mjs",
     "test:viewport": "node --test tests/mobile-viewport-stability.test.mjs",
+    "test:account-api": "npm --prefix ../account-api test",
     "test:license-api": "npm --prefix ../license-api test",
     "check:runtime": "node scripts/check-mobile-runtime.mjs",
     "update:runtime-lock": "node scripts/update-mobile-runtime-lock.mjs",
@@ -70,7 +71,7 @@
     "test:browser-smoke": "playwright test --config=playwright.smoke.config.ts",
     "test:browser-live": "playwright test --config=playwright.live.config.ts",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
-    "quality:gate": "npm run test:agent && npm run test:ui-contracts && npm run test:license-api && npm run test:runtime-lock && npm run check:runtime && npm run lint && npm run test:typecheck && npm run test:auth && npm run test:coverage && npm run test:runtime && npm run test:pwa && npm run build && npm run check:bundle && npm run test:browser-smoke && npm run test:sites && npm run test:pwa:production",
+    "quality:gate": "npm run test:agent && npm run test:ui-contracts && npm run test:viewport && npm run test:account-api && npm run test:license-api && npm run test:runtime-lock && npm run check:runtime && npm run lint && npm run test:typecheck && npm run test:auth && npm run test:coverage && npm run test:runtime && npm run test:pwa && npm run build && npm run check:bundle && npm run test:browser-smoke && npm run test:sites && npm run test:pwa:production",
     "test:quality": "npm run quality:gate",
     "predev": "npm run check:runtime && node scripts/prepare-premium-preview.mjs",
     "dev": "vite",
@@ -78,11 +79,15 @@
     "build": "tsc && vite build && node scripts/prepare-sites-build.mjs",
     "preflight:sites:founder": "node scripts/prepare-sites-build.mjs --preflight --mode founder-production --require-founder",
     "build:sites:founder": "npm run preflight:sites:founder && node scripts/prepare-premium-preview.mjs && tsc && vite build --mode founder-production && node scripts/prepare-sites-build.mjs --mode founder-production --require-founder",
-    "test:runtime:ui:workflows:development-workspace": "node scripts/run-runtime-tests.mjs --budget-ms=180000 tests/development-workspace-ui.spec.ts tests/development-report-recovery-ui.spec.ts --workers=1",
+    "test:runtime:ui:workflows:development-workspace": "node scripts/run-runtime-tests.mjs --budget-ms=180000 tests/development-workspace-ui.spec.ts tests/development-report-recovery-ui.spec.ts --workers=2",
     "test:pwa:development-workspace": "playwright test --config=playwright.development-workspace-production.config.ts",
     "test:documents": "node scripts/run-document-acceptance.mjs",
     "test:atomic-receipt": "node --test tests/features/tymm-official-library-audit.test.mjs",
-    "tymm:review-package": "node scripts/tymm-human-review-package.mjs"
+    "tymm:review-package": "node scripts/tymm-human-review-package.mjs",
+    "test:runtime:ui:official-forms": "node scripts/run-runtime-tests.mjs --budget-ms=120000 tests/official-forms-mobile.spec.ts --workers=1",
+    "test:runtime:ui:cloud-account": "node scripts/run-runtime-tests.mjs --budget-ms=120000 tests/core/cloud-session.spec.ts tests/core/cloud-sync.spec.ts tests/cloud-account-ui.spec.ts --workers=1",
+    "test:runtime:ui:assistant-tools": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/assistant-tools-ui.spec.ts --workers=1",
+    "test:runtime:ui:device-transfer": "node scripts/run-runtime-tests.mjs --budget-ms=60000 tests/device-transfer-guide.spec.ts --workers=1"
   },
   "dependencies": {
     "@fontsource/roboto": "5.2.10",

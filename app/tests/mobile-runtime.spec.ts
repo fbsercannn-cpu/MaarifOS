@@ -218,7 +218,7 @@ test("native MobileScroll delegates vertical gestures and click handling to the 
 
   const scroll = page.getByTestId("mobile-scroll");
   await expect(scroll).toHaveAttribute("data-native-scroll", "true");
-  await expect(scroll).toHaveCSS("touch-action", "pan-y");
+  await expect(scroll).toHaveCSS("touch-action", "pan-y pinch-zoom");
   await expect(scroll).toHaveCSS("overscroll-behavior-y", "contain");
 
   const result = await scroll.evaluate((element) => {

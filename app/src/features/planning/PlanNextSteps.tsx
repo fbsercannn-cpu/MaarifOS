@@ -20,11 +20,12 @@ export interface PlanNextStepsProps {
   density?: "compact" | "full";
   onChanged?: (result: ApplyResult) => void | Promise<void>;
   onOpenPlan?: (target: OpenTarget) => void | Promise<void>;
+  onManualPlan?: (civilDate: string) => void;
   onApplyStep?: (request: ApplyRequest) => Promise<ApplyResult>;
 }
 
 export function PlanNextSteps({ store, civilDate, refreshKey, requestedLevel, disabled = false,
-  disabledReason, density = "full", onChanged, onOpenPlan, onApplyStep }: PlanNextStepsProps) {
+  disabledReason, density = "full", onChanged, onOpenPlan, onApplyStep, onManualPlan }: PlanNextStepsProps) {
   const [day, setDay] = useState(civilDate);
   const [model, setModel] = useState<NextStepsModel | null>(null);
   const [message, setMessage] = useState("");
@@ -104,6 +105,7 @@ export function PlanNextSteps({ store, civilDate, refreshKey, requestedLevel, di
       <p>{model?.detail ?? copy.loading}</p></header>
     <label className="plan-next-steps-date">{copy.day}<KeyboardInput type="date" aria-label={copy.day} value={day}
       disabled={busy} onChange={event => { setDay(event.target.value); setMessage(""); setSavedTarget(null); }} /></label>
+    {onManualPlan && <button type="button" disabled={disabled || busy || !/^\d{4}-\d{2}-\d{2}$/.test(day)} onClick={() => onManualPlan(day)}>Kendim planla</button>}
     {message && <p role="status" className="plan-next-steps-success">{message}</p>}
     {disabled && disabledReason && <p role="status">{disabledReason}</p>}
     {error && <div role="alert" className="plan-next-steps-error"><p>{error}</p><button type="button" disabled={busy} onClick={() => void refresh()}>{copy.refresh}</button></div>}

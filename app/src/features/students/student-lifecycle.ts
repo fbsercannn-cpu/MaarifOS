@@ -1,3 +1,4 @@
+import { assertNoUnresolvedLegacyForms, redactOfficialFormsForStudent } from "../official-forms/official-form-record.ts";
 import {
   COLLECTION_NAMES,
   createEmptySnapshot,
@@ -542,6 +543,7 @@ async function permanentlyDeleteStudentInternal(
     );
   }
   const initial = await store.readSnapshot();
+  assertNoUnresolvedLegacyForms(initial, typeof localStorage === "undefined" ? undefined : localStorage);
   const impact = previewPermanentStudentDeletion(initial, input.studentId);
   const student = initial.students.find(
     (record) => record.id === input.studentId,
@@ -582,6 +584,7 @@ async function permanentlyDeleteStudentInternal(
           snapshot[collection] = await transaction.getAll(collection);
         }),
       );
+      assertNoUnresolvedLegacyForms(snapshot, typeof localStorage === "undefined" ? undefined : localStorage);
       const currentImpact = previewPermanentStudentDeletion(
         snapshot,
         input.studentId,
@@ -790,11 +793,12 @@ async function permanentlyDeleteStudentInternal(
         relationIdentifiers,
       );
       next.settings = filterReferencingRecords(
-        snapshot.settings.filter(record => record.settingType !== CONSENT_TRIP_SETTING_TYPE && record.settingType !== CLASSROOM_ADMIN_SETTING_TYPE && record.settingType !== CLASS_DUTY_SETTING_TYPE
+        snapshot.settings.filter(record => record.settingType !== "official-form-draft-v1" && record.settingType !== CONSENT_TRIP_SETTING_TYPE && record.settingType !== CLASSROOM_ADMIN_SETTING_TYPE && record.settingType !== CLASS_DUTY_SETTING_TYPE
           && !(record.settingType === "home-game-card-v1" && record.studentId === input.studentId)
           && !(record.settingType === "document-version" && includesStudent(record.studentIds, input.studentId))),
         relationIdentifiers,
       );
+      next.settings.push(...redactOfficialFormsForStudent(snapshot, input.studentId, timestamp));
       next.settings.push(...redactStudentConsentTripRecords(snapshot, input.studentId));
       next.settings.push(...redactStudentClassroomAdminRecords(snapshot, input.studentId, relationIdentifiers));
       const dutyErasure=eraseClassDutyStudent(snapshot,input.studentId);

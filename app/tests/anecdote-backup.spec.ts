@@ -378,9 +378,12 @@ test("anekdot formu yerel/reload/yedek zincirinden Belgeler ekranına ve gerçek
   expect(wordDownload.suggestedFilename()).toMatch(
     /^MaarifOS_Anekdot_Kayit_Formu_Ece_Yıldız_2026-09-09\.docx$/,
   );
+  await documents.getByRole("button", { name: "Görsel PDF indir" }).click();
+  const pdfPreview = page.getByRole("dialog", { name: "PDF önizlemesi", exact: true });
+  await expect(pdfPreview).toBeVisible();
   const [pdfDownload] = await Promise.all([
     page.waitForEvent("download"),
-    documents.getByRole("button", { name: "Görsel PDF indir" }).click(),
+    pdfPreview.getByRole("button", { name: "Bu PDF'yi indir", exact: true }).click(),
   ]);
   expect(pdfDownload.suggestedFilename()).toMatch(
     /^MaarifOS_Anekdot_Kayit_Formu_Ece_Yıldız_2026-09-09\.pdf$/,

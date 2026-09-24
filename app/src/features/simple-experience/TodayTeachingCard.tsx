@@ -8,7 +8,7 @@ export function TodayTeachingCard({ focus }: { focus: TodayTeachingFocus }) {
   const duration = suggested?.durationMinutes ?? recorded?.durationMinutes;
   return (
     <section className="today-teaching-card" aria-labelledby="today-teaching-card-title">
-      {suggested ? <img className="today-teaching-card__image" src="/assets/teaching/teacher-workshop.webp" alt="" width={1280} height={512} draggable={false} /> : null}
+      {suggested ? <img className="today-teaching-card__image" src="./assets/teaching/teacher-workshop.webp" alt="" width={1280} height={512} draggable={false} /> : null}
       <p className="today-teaching-card__eyebrow">
         {suggested ? copy.suggestion : recorded?.status === "in_progress" ? copy.current : copy.next}
       </p>

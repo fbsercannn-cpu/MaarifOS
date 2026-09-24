@@ -1,3 +1,4 @@
+import { assertOfficialLegacyIntegrity } from "../../features/official-forms/official-form-record.ts";
 import { assertDocumentHistoryIntegrity } from "../../features/documents/document-history-service.ts";
 import {assertStudentErasureIntegrity} from '../domain/student-erasure.ts';
 import {
@@ -370,6 +371,7 @@ export class BackupService {
       payload,
     };
     assertBackupEnvelope(envelope);
+    await assertOfficialLegacyIntegrity(envelope.payload);
     await assertStudentErasureIntegrity(envelope.payload);
     await assertExternalFeedbackContentHashes(envelope.payload);
     await assertValueEvidenceDesignDigests(envelope.payload);
@@ -435,6 +437,7 @@ export class BackupService {
     const upgraded = await upgradeLegacyBackupEnvelope(candidate);
     const normalized = await normalizeLegacyBackupScopes(upgraded);
     assertBackupEnvelope(normalized);
+    await assertOfficialLegacyIntegrity(normalized.payload);
     await assertStudentErasureIntegrity(normalized.payload);
     await assertExternalFeedbackContentHashes(normalized.payload);
     await assertValueEvidenceDesignDigests(normalized.payload);

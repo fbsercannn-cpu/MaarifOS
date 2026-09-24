@@ -1,7 +1,7 @@
 /**
  * T.C. Hazine ve Maliye Bakanlığı & Gelir İdaresi Başkanlığı Standartları
  * Birleşik 4'lü Dışa Aktarma Araç Çubuğu (Quad-Export Bar)
- * A4 Yazdır · PDF İndir · Excel (.xlsx) İndir · Word (.doc) İndir · Bağlı Örnek Çıktılar
+ * A4 Yazdır · PDF İndir · Excel (.xlsx) İndir · Word (.docx) İndir · Bağlı Örnek Çıktılar
  */
 
 import React from "react";
@@ -156,9 +156,9 @@ export function OfficialFormExportBar({
             }}
             onClick={onDownloadWord}
             disabled={isBusy}
-            title="Microsoft Word (.doc) olarak indir"
+            title="Microsoft Word (.docx) olarak indir"
           >
-            📄 Word (.doc)
+            📄 Word (.docx)
           </button>
         )}
       </div>

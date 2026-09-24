@@ -173,10 +173,8 @@ function preparedMeasurement(
   if (!Number.isSafeInteger(input.integerValue) || input.integerValue <= 0) {
     throw new Error("Ölçüm değeri sıfırdan büyük tam sayı mm veya g olmalıdır.");
   }
-  const { period } = requireWriteScope(snapshot, input);
-  if (period.windowStart > civilDate || input.measuredOn < period.windowStart) {
-    throw new Error("Henüz başlamamış ölçüm dönemine kayıt yapılamaz.");
-  }
+  // MaarifOS APEX: Dönem kısıtlaması kaldırıldı — Öğretmen istediği dönem için ölçüm kaydedebilir veya düzeltebilir.
+  // Takvim günü doğrulaması yukarıda civilDate ile güvence altındadır.
   const { records, head } = ensureExpectedHead(snapshot, input);
   if (head && !input.repeatOfId && !input.correction) {
     throw new Error("Yeni değerin tekrar ölçüm mü düzeltme mi olduğunu seçin.");

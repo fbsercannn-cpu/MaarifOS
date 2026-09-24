@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -71,14 +73,14 @@ const RUBRIC_CRITERIA: RubricCriterion[] = [
 ];
 
 export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Demir Korkmaz");
-  const [date, setDate] = useState("2026-09-15");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [ageGroup, setAgeGroup] = useState("60-72 Ay (5 Yaş)");
-  const [contextName, setContextName] = useState("Doğal Materyallerle Sayma, Tartı ve Yaratıcı Tasarım Atölyesi");
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "Demir Korkmaz");
+  const [date, setDate] = useOfficialFormState("date", "2026-09-15");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [ageGroup, setAgeGroup] = useOfficialFormState("ageGroup", "60-72 Ay (5 Yaş)");
+  const [contextName, setContextName] = useOfficialFormState("contextName", "Doğal Materyallerle Sayma, Tartı ve Yaratıcı Tasarım Atölyesi");
 
-  const [scores, setScores] = useState<Record<string, number>>({
+  const [scores, setScores] = useOfficialFormState<Record<string, number>>("scores", {
     turkce: 3,
     matematik: 2,
     fen: 3,
@@ -88,13 +90,14 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
     muzik: 3,
   });
 
-  const [teacherNotes, setTeacherNotes] = useState(
+  const [teacherNotes, setTeacherNotes] = useOfficialFormState("teacherNotes",
     "Öğrenci genel olarak üst düzey merak ve katılım sergilemektedir. Matematik ve örüntü çalışmalarında somut materyallerle desteklenmesi gelişimini pekiştirecektir."
   );
 
   const totalScore = Object.values(scores).reduce((acc, val) => acc + val, 0);
-  const maxScore = RUBRIC_CRITERIA.length * 3;
-  const percentage = Math.round((totalScore / maxScore) * 100);
+  const assessedCount = Object.values(scores).filter(score => score > 0).length;
+  const maxScore = assessedCount * 3;
+  const percentage = maxScore ? Math.round((totalScore / maxScore) * 100) : 0;
 
   const handleScoreChange = (criterionId: string, level: number) => {
     setScores((prev) => ({ ...prev, [criterionId]: level }));
@@ -104,98 +107,24 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
     printOfficialFormA4(`Gelisimsel_Rubrik_${studentName.replace(/\s+/g, "_")}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Gelisim_Gozlem_Rubrigi_${studentName.replace(/\s+/g, "_")}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.3; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        th, td { border: 1px solid #000; padding: 5px; font-size: 9pt; }
-        th { background-color: #f2f2f2; text-align: center; }
-        .selected { background-color: #d1fae5; font-weight: bold; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          SÜREÇ ODAKLI DERECELİ PUANLAMA ANAHTARI (GELİŞİM GÖZLEM RUBRİĞİ)
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${studentName}</td><td><b>Yaş Grubu:</b> ${ageGroup}</td></tr>
-          <tr><td><b>Gözlem Bağlamı / Etkinlik:</b> ${contextName}</td><td><b>Gözlem Tarihi:</b> ${date}</td></tr>
-          <tr><td><b>Okul / Kurum:</b> ${schoolName}</td><td><b>Değerlendiren Öğretmen:</b> ${teacherName}</td></tr>
-          <tr><td colspan='2'><b>Genel Performans Skoru:</b> ${totalScore} / ${maxScore} (%${percentage})</td></tr>
-        </table>
-        <h4>7 Öğrenme Alanı Süreç Odaklı Düzey Değerlendirmesi (TTKB Sayfa 109)</h4>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 25%'>Öğrenme Alanı ve Beceri</th>
-              <th style='width: 25%'>1. Düzey: Başlangıç (1 P)</th>
-              <th style='width: 25%'>2. Düzey: Gelişmekte (2 P)</th>
-              <th style='width: 25%'>3. Düzey: Yetkin (3 P)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${RUBRIC_CRITERIA.map((c) => {
-              const currentScore = scores[c.id] || 1;
-              return `
-                <tr>
-                  <td><b>${c.domain}</b><br/><small>${c.skillName}</small><br/><b>[Seçilen: ${currentScore} Puan]</b></td>
-                  <td class='${currentScore === 1 ? "selected" : ""}'>${c.level1}</td>
-                  <td class='${currentScore === 2 ? "selected" : ""}'>${c.level2}</td>
-                  <td class='${currentScore === 3 ? "selected" : ""}'>${c.level3}</td>
-                </tr>
-              `;
-            }).join("")}
-          </tbody>
-        </table>
-        <br/>
-        <table>
-          <tr>
-            <td><b>Öğretmenin Pedagojik Geri Bildirimi ve Destekleme Planı:</b><br/>${teacherNotes}</td>
-          </tr>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Gelisim_Gozlem_Rubrigi_${studentName.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialDevelopmentalRubricModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
     const levelTitles: Record<number, string> = {
+      0: "Henüz gözlem kaydı yok",
       1: "1. Düzey: Başlangıç",
       2: "2. Düzey: Gelişmekte",
       3: "3. Düzey: Yetkin",
     };
 
     const rows = RUBRIC_CRITERIA.map((c, index) => {
-      const score = scores[c.id] || 1;
+      const score = scores[c.id] ?? 0;
       return {
         no: index + 1,
         domain: c.domain,
         skillName: c.skillName,
-        levelTitle: levelTitles[score],
+        levelTitle: levelTitles[score] ?? "Henüz gözlem kaydı yok",
         score,
         level1: c.level1,
         level2: c.level2,
@@ -252,7 +181,7 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -275,7 +204,7 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
         <div className="of-meta-grid">
           <div className="of-meta-field">
             <label className="of-meta-label">Öğrencinin Adı Soyadı:</label>
-            <input
+            <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
               type="text"
               className="of-meta-input"
               value={studentName}
@@ -345,11 +274,11 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
           }}
         >
           <div>
-            <strong style={{ color: "#166534" }}>Bütüncül Yetkinlik Skoru: </strong>
+            <strong style={{ color: "#166534" }}>Kaydedilen ölçütlerin puanı: </strong>
             <span style={{ fontSize: "1.1rem", fontWeight: "bold", color: "#15803d" }}>
-              {totalScore} / {maxScore} Puan
+              {assessedCount ? `${totalScore} / ${maxScore} puan · ${assessedCount}/${RUBRIC_CRITERIA.length} ölçüt` : "Henüz gözlem kaydı yok"}
             </span>
-            <span style={{ marginLeft: "8px", color: "#166534" }}>(%{percentage})</span>
+            <span style={{ marginLeft: "8px", color: "#166534" }}>{assessedCount ? `(%${percentage})` : ""}</span>
           </div>
           <div style={{ width: "200px", height: "10px", background: "#dcfce7", borderRadius: "5px", overflow: "hidden" }}>
             <div
@@ -382,7 +311,7 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
           </thead>
           <tbody>
             {RUBRIC_CRITERIA.map((crit) => {
-              const currentScore = scores[crit.id] || 1;
+              const currentScore = scores[crit.id] ?? 0;
               return (
                 <tr key={crit.id} style={{ pageBreakInside: "avoid" }}>
                   <td style={{ verticalAlign: "top" }}>
@@ -392,7 +321,7 @@ export function OfficialDevelopmentalRubricModal({ onClose }: { onClose?: () => 
                     </small>
                     <div style={{ marginTop: "6px" }} className="no-print">
                       <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "#1d4ed8" }}>
-                        Seçim: {currentScore} Puan
+                        Seçim: {currentScore ? `${currentScore} puan` : "Henüz gözlem kaydı yok"}
                       </span>
                     </div>
                   </td>

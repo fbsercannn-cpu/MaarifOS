@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { installCivilClock } from "./helpers/development-workspace-ui.ts";
+test.beforeEach(async ({ page }) => { await installCivilClock(page); });
 test.describe.configure({ timeout: 60_000 });
 
 async function configureClassroom(page: Page) {
@@ -46,17 +48,14 @@ test("yeni sınıf üyeliği işaretlenene kadar günlük devam sayısına girme
   await expect(attendanceSummary).toBeVisible();
   await attendanceSummary.click();
 
-  const student = page
-    .getByRole("dialog", { name: "Bugünün devam durumu" })
-    .locator(".student-row")
-    .filter({ hasText: childName });
-  const unmarked = student.getByText("İşaretlenmedi", { exact: true });
-  await expect(unmarked).toBeVisible();
-  await expect(unmarked).toHaveClass(/status-pill--unmarked/);
-  await student.click();
-  const present = student.getByText("Geldi", { exact: true });
-  await expect(present).toBeVisible();
-  await expect(present).toHaveClass(/status-pill--present/);
+  const attendance = page.getByRole("dialog", { name: "Hızlı Dokunmatik Yoklama (E5)" });
+  const student = attendance.locator(".qag-student-card").filter({ hasText: childName });
+  await expect(student).toHaveAttribute("data-status", "unmarked");
+  await expect(student.getByRole("button", { pressed: true })).toHaveCount(0);
+  const present = student.getByRole("button", { name: `${childName} Geldi`, exact: true });
+  await present.click();
+  await expect(present).toHaveAttribute("aria-pressed", "true");
+  await expect(student).toHaveAttribute("data-status", "present");
   await page.keyboard.press("Escape");
 
   await expect(

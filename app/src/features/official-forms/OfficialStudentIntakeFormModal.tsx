@@ -1,92 +1,33 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
 
 export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => void }) {
-  const [studentName, setStudentName] = useState("Demir Korkmaz");
-  const [birthDate, setBirthDate] = useState("2021-04-12");
-  const [bloodType, setBloodType] = useState("A Rh(+)");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
-  const [parentName, setParentName] = useState("Ahmet Korkmaz (Baba) / Zeliha Korkmaz (Anne)");
-  const [parentPhone, setParentPhone] = useState("0532 111 22 33");
-  const [emergencyContact, setEmergencyContact] = useState("Fatma Korkmaz (Büyükanne) - 0533 444 55 66");
-  const [pickupAuthPersons, setPickupAuthPersons] = useState("Anne (Zeliha Korkmaz), Baba (Ahmet Korkmaz), Büyükanne (Fatma Korkmaz)");
+  const [studentName, setStudentName] = useOfficialFormState("studentName", "");
+  const [birthDate, setBirthDate] = useOfficialFormState("birthDate", "");
+  const [bloodType, setBloodType] = useOfficialFormState("bloodType", "");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "");
+  const [parentName, setParentName] = useOfficialFormState("parentName", "");
+  const [parentPhone, setParentPhone] = useOfficialFormState("parentPhone", "");
+  const [emergencyContact, setEmergencyContact] = useOfficialFormState("emergencyContact", "");
+  const [pickupAuthPersons, setPickupAuthPersons] = useOfficialFormState("pickupAuthPersons", "");
 
-  const [allergies, setAllergies] = useState("Yumurta akı ve fındık alerjisi mevcuttur (Hafif deri döküntüsü yapar).");
-  const [chronicDiseases, setChronicDiseases] = useState("Bilinen kronik rahatsızlığı veya düzenli kullandığı ilaç yoktur.");
-  const [nutritionHabits, setNutritionHabits] = useState("Kendi kendine kaşık/çatal kullanarak yer. Sebze yemeklerinde seçicidir, meyve ve çorbaları sever.");
-  const [toiletIndependence, setToiletIndependence] = useState("Tuvalet ihtiyacını bağımsız karşılar, sifon çeker ve el yıkama rutinini bilir.");
-  const [sleepHabits, setSleepHabits] = useState("Öğle uykusu uyumaz; dinlenme saatinde masal dinler veya minder köşesinde kitap inceler.");
-  const [fearsAndCalming, setFearsAndCalming] = useState("Yüksek gök gürültüsü ve ani karanlıktan çekinir. Kucağa alınıp sırtı sıvazlandığında hızla sakinleşir.");
-  const [specialInterests, setSpecialInterests] = useState("Dinozorlar, taşıtlar, ahşap bloklarla köprü yapma ve parmak boyası.");
+  const [allergies, setAllergies] = useOfficialFormState("allergies", "");
+  const [chronicDiseases, setChronicDiseases] = useOfficialFormState("chronicDiseases", "");
+  const [nutritionHabits, setNutritionHabits] = useOfficialFormState("nutritionHabits", "");
+  const [toiletIndependence, setToiletIndependence] = useOfficialFormState("toiletIndependence", "");
+  const [sleepHabits, setSleepHabits] = useOfficialFormState("sleepHabits", "");
+  const [fearsAndCalming, setFearsAndCalming] = useOfficialFormState("fearsAndCalming", "");
+  const [specialInterests, setSpecialInterests] = useOfficialFormState("specialInterests", "");
 
   const handlePrint = () => {
     printOfficialFormA4(`Ogrenci_Tanima_ve_Aile_Bilgi_Formu_${studentName.replace(/\s+/g, '_')}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Ogrenciyi_Tanima_Formu_${studentName.replace(/\s+/g, "_")}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.35; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        th, td { border: 1px solid #000; padding: 5px 8px; font-size: 9pt; }
-        th { background-color: #f2f2f2; text-align: left; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          SENE BAŞI ÖĞRENCİYİ TANIMA VE AİLE BİLGİ FORMU
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${studentName}</td><td><b>Doğum Tarihi:</b> ${birthDate}</td></tr>
-          <tr><td><b>Kan Grubu:</b> ${bloodType}</td><td><b>Sınıf Öğretmeni:</b> ${teacherName}</td></tr>
-          <tr><td><b>Anne & Baba Adı:</b> ${parentName}</td><td><b>İletişim Telefonu:</b> ${parentPhone}</td></tr>
-          <tr><td><b>Acil Durum Kişisi:</b> ${emergencyContact}</td><td><b>Kurum / Okul:</b> ${schoolName}</td></tr>
-          <tr><td colspan='2'><b>Okuldan Teslim Almaya Yetkili Kişiler:</b> ${pickupAuthPersons}</td></tr>
-        </table>
-        <h4>1. Sağlık ve Alerji Bilgileri</h4>
-        <table>
-          <tr><th style='width: 30%'>Besin / İlaç Alerjisi</th><td>${allergies}</td></tr>
-          <tr><th>Kronik Rahatsızlık</th><td>${chronicDiseases}</td></tr>
-        </table>
-        <h4>2. Günlük Yaşam ve Öz Bakım Alışkanlıkları</h4>
-        <table>
-          <tr><th style='width: 30%'>Beslenme Alışkanlığı</th><td>${nutritionHabits}</td></tr>
-          <tr><th>Tuvalet Bağımsızlığı</th><td>${toiletIndependence}</td></tr>
-          <tr><th>Uyku ve Dinlenme</th><td>${sleepHabits}</td></tr>
-        </table>
-        <h4>3. Duygusal Özellikler ve Özel İlgiler</h4>
-        <table>
-          <tr><th style='width: 30%'>Korkuları ve Sakinleşme</th><td>${fearsAndCalming}</td></tr>
-          <tr><th>Özel İlgileri ve Sevdiği Oyunlar</th><td>${specialInterests}</td></tr>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Bilgileri Beyan Eden Veli</b><br/><br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Teslim Alan Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(["\ufeff", htmlContent], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Ogrenciyi_Tanima_Formu_${studentName.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialStudentIntakeFormModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -139,7 +80,7 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
             🖨️ A4 Yazdır
           </button>
           <button type="button" className="of-btn of-btn--word" onClick={handleExportWord}>
-            📄 Word İndir (.doc)
+            📄 Word İndir (.docx)
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -165,7 +106,7 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
             <input
               type="text"
               className="of-meta-input"
-              value={studentName}
+              value={studentName} readOnly aria-label="Kayıtlı çocuğun adı"
               onChange={(e) => setStudentName(e.target.value)}
             />
           </div>
@@ -174,7 +115,7 @@ export function OfficialStudentIntakeFormModal({ onClose }: { onClose?: () => vo
             <input
               type="date"
               className="of-meta-input"
-              value={birthDate}
+              value={birthDate} readOnly aria-label="Kayıtlı doğum tarihi"
               onChange={(e) => setBirthDate(e.target.value)}
             />
           </div>

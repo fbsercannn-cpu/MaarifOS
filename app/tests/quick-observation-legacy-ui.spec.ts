@@ -1,8 +1,10 @@
+import { installRepositoryBridge, readRepositorySnapshot } from "./helpers/production-repository";
+import { installCivilClock } from "./helpers/development-workspace-ui";
 import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ timeout: 60_000 });
 test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-08-31T06:00:00.000Z"));
+  await installCivilClock(page, undefined, "2026-08-31T06:00:00.000Z");
 });
 
 async function ensureClassroomConfigured(page: Page) {
@@ -34,6 +36,7 @@ async function addChild(page: Page, name: string) {
   await expect(addSheet).toBeHidden();
   await expect(studentProfileButton(page, name)).toBeVisible();
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
+  await expect(page.getByTestId("today-screen")).toBeVisible();
 }
 
 async function openQuickObservation(page: Page, childName: string) {
@@ -63,74 +66,31 @@ function studentProfileButton(page: Page, name: string) {
 }
 
 async function replaceSavedDraftWithLegacyDetails(page: Page) {
+  await installRepositoryBridge(page);
   await page.evaluate(async () => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    const store = new (window as any).__testRepository.IndexedDbDataStore();
     try {
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction("settings", "readwrite");
-        const store = transaction.objectStore("settings");
-        const request = store.getAll();
-        request.onsuccess = () => {
-          const draft = request.result.find(
-            (record) => record.settingType === "quick-observation-draft",
-          );
-          if (!draft) {
-            transaction.abort();
-            reject(new Error("Hızlı gözlem taslağı bulunamadı."));
-            return;
-          }
-          draft.context = "Eski fen merkezi bağlamı";
-          draft.childQuote = "Ben iki parçayı birleştirdim.";
-          draft.updatedAt = new Date().toISOString();
-          store.put(draft);
-        };
-        request.onerror = () => reject(request.error);
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
+      await store.transaction("readwrite", ["settings"], async (tx: any) => {
+        const draft = (await tx.getAll("settings")).find((record: any) => record.settingType === "quick-observation-draft");
+        if (!draft) throw new Error("Hızlı gözlem taslağı bulunamadı.");
+        await tx.putMany("settings", [{ ...draft, context: "Eski fen merkezi bağlamı", childQuote: "Ben iki parçayı birleştirdim.", updatedAt: new Date().toISOString() }]);
       });
-    } finally {
-      database.close();
-    }
+    } finally { store.close(); }
   });
 }
 
 async function savedObservationDetails(page: Page, rawText: string) {
-  return page.evaluate(async (expectedRawText) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<{ context: string; childQuote: string }>(
-        (resolve, reject) => {
-          const transaction = database.transaction("observations", "readonly");
-          const request = transaction.objectStore("observations").getAll();
-          request.onsuccess = () => {
-            const observation = request.result.find(
-              (record) => record.rawText === expectedRawText,
-            );
-            if (!observation) {
-              reject(new Error("Kaydedilen gözlem bulunamadı."));
-              return;
-            }
-            resolve({
-              context: observation.context ?? "",
-              childQuote: observation.childQuote ?? "",
-            });
-          };
-          request.onerror = () => reject(request.error);
-        },
-      );
-    } finally {
-      database.close();
-    }
-  }, rawText);
+  const observation = (await readRepositorySnapshot(page)).observations.find((record: any) => record.rawText === rawText);
+  if (!observation) throw new Error("Kaydedilen gözlem bulunamadı.");
+  return { context: observation.context ?? "", childQuote: observation.childQuote ?? "" };
+}
+
+async function closeNextStep(page: Page) {
+  const next = page.getByRole("dialog", { name: "Gözlemden sonraki adım", exact: true });
+  if (await next.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(next).toBeHidden();
+  }
 }
 
 test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan finalleşmez", async ({
@@ -138,6 +98,7 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
 }) => {
   const rawText = "Kurgu çocuk üç parçayı aynı sırada yeniden kurdu.";
   await page.goto("/", { waitUntil: "networkidle" });
+  expect(await page.evaluate(() => new Date().toISOString().slice(0, 10))).toBe("2026-08-31");
   await ensureClassroomConfigured(page);
   await addChild(page, "Eski Taslak Kurgu Çocuk");
   await openQuickObservation(page, "Eski Taslak Kurgu Çocuk");
@@ -162,6 +123,7 @@ test("görünmeyen eski taslak ayrıntısı öğretmenin açık kararı olmadan 
   await expect(
     page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
   ).toBeHidden();
+  await closeNextStep(page);
   await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
   await expect(savedObservationDetails(page, rawText)).resolves.toEqual({
     context: "Eski fen merkezi bağlamı",
@@ -175,6 +137,7 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
   const childName = "Çocuk Sözü Kurgu Çocuk";
   const quote = "Bu uzun parçayı köprü yapacağım.";
   await page.goto("/", { waitUntil: "networkidle" });
+  expect(await page.evaluate(() => new Date().toISOString().slice(0, 10))).toBe("2026-08-31");
   await ensureClassroomConfigured(page);
   await addChild(page, childName);
   await openQuickObservation(page, childName);
@@ -187,6 +150,7 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
   await expect(
     page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
   ).toBeHidden();
+  await closeNextStep(page);
   await expect(page.getByRole("main", { name: "Sınıfım" })).toBeVisible();
 
   await page.reload({ waitUntil: "networkidle" });
@@ -196,39 +160,8 @@ test("çocuk sözü ana gözlem alanından tek kez kaydolur ve reload sonrası p
   const profile = page.getByRole("dialog", { name: `${childName} profili` });
   await expect(profile).toContainText(quote);
 
-  const stored = await page.evaluate(async (expectedQuote) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("maarifos-local");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<{ rawText: string; childQuote: string; type: string }>(
-        (resolve, reject) => {
-          const request = database
-            .transaction("observations", "readonly")
-            .objectStore("observations")
-            .getAll();
-          request.onsuccess = () => {
-            const record = request.result.find(
-              (candidate) => candidate.rawText === expectedQuote,
-            );
-            if (!record) {
-              reject(new Error("Çocuk sözü gözlemi bulunamadı."));
-              return;
-            }
-            resolve({
-              rawText: record.rawText,
-              childQuote: record.childQuote ?? "",
-              type: record.observationType,
-            });
-          };
-          request.onerror = () => reject(request.error);
-        },
-      );
-    } finally {
-      database.close();
-    }
-  }, quote);
+  const record = (await readRepositorySnapshot(page)).observations.find((candidate: any) => candidate.rawText === quote);
+  expect(record).toBeDefined();
+  const stored = { rawText: record.rawText, childQuote: record.childQuote ?? "", type: record.observationType };
   expect(stored).toEqual({ rawText: quote, childQuote: "", type: "child-quote" });
 });

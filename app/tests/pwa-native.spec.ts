@@ -97,7 +97,8 @@ test("native mod masaüstünde merkezlenir, telefonda ekran genişliğini kullan
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const desktopBox = await page.locator(".native-app-runtime").boundingBox();
-  expect(desktopBox?.width).toBe(760);
+  expect(desktopBox?.width).toBe(1240);
+  expect(desktopBox?.x).toBe(20);
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileBox = await page.locator(".native-app-runtime").boundingBox();
@@ -358,7 +359,7 @@ test("öğrenci profili tüm telefon genişliklerinde taşmadan ve erişilebilir
     }
   }
 
-  await expect(dialog.getByText("Görsel QA Çocuğu", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Görsel QA Çocuğu", exact: true })).toBeVisible();
 });
 
 test("Hediye Alpha PWA yüzeyi portfolyo yatırımını pilot akışından gizler", async ({

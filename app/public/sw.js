@@ -1,7 +1,7 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.60.0";
+const WORKER_RELEASE = "0.66.1";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
 const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
 const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";
@@ -478,12 +478,13 @@ async function networkFirstNavigation(event) {
   try {
     const preloadedResponse = await event.preloadResponse;
     const response = preloadedResponse || (await fetchWithTimeout(event.request));
-
-    if (canStore(response) && response.headers.get("Content-Type")?.includes("text/html")) {
-      const cache = await caches.open(SHELL_CACHE);
-      await cache.put(scopeUrl, response.clone());
-      await cache.put(indexUrl, response.clone());
+    if (!canStore(response) || !response.headers.get("Content-Type")?.includes("text/html")) {
+      throw new Error("Gezinme yanıtı çevrim dışı uygulama kabuğu olarak kullanılamaz.");
     }
+
+    const cache = await caches.open(SHELL_CACHE);
+    await cache.put(scopeUrl, response.clone());
+    await cache.put(indexUrl, response.clone());
 
     event.waitUntil(markHealthyAndCleanup().catch(() => undefined));
     return response;

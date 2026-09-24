@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import React, { useState, useMemo } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -286,7 +288,7 @@ interface Props {
 export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
   const [selectedAge, setSelectedAge] = useState<"Tümü" | "36-48" | "48-60" | "60-72">("60-72");
   const [selectedDomain, setSelectedDomain] = useState<string>("Tümü");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useOfficialFormState<string>("searchQuery", "");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const filteredSkills = useMemo(() => {
@@ -316,53 +318,7 @@ export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
     printOfficialFormA4(`EK-1_Alan_Becerileri_Matrisi_${selectedAge}`);
   };
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>MEB TTKB EK-1 Alan Becerileri ve Süreç Bileşenleri</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; }
-        h1 { font-size: 16pt; color: #1e3a8a; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #cbd5e1; padding: 8px 10px; font-size: 10pt; vertical-align: top; }
-        th { background: #f1f5f9; color: #1e293b; font-weight: bold; }
-        .code { font-weight: bold; color: #0284c7; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI · TTKB OKUL ÖNCESİ EĞİTİM PROGRAMI</h1>
-        <h2 style="text-align: center; font-size: 13pt; color: #475569;">EK-1 ALAN BECERİLERİ, ÖĞRENME ÇIKTILARI VE SÜREÇ BİLEŞENLERİ (s. 141–177)</h2>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 10%;">Alan</th>
-              <th style="width: 10%;">Yaş / Kod</th>
-              <th style="width: 35%;">Öğrenme Çıktısı</th>
-              <th style="width: 45%;">Süreç Bileşenleri</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filteredSkills.map(s => `
-              <tr>
-                <td><strong>${s.domain}</strong></td>
-                <td><span class="code">${s.code}</span><br/><small>${s.ageBand} Ay</small></td>
-                <td>${s.outcomeTitle}</td>
-                <td>${s.processComponents.map(c => `<div>${c}</div>`).join("")}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `TTKB_EK1_Alan_Becerileri_${selectedAge}_Ay.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("OfficialEK1SkillMatrixModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -446,7 +402,7 @@ export function OfficialEK1SkillMatrixModal({ onClose }: Props) {
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

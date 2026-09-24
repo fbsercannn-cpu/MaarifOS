@@ -254,7 +254,7 @@ test.describe("44×44 mobil dokunma hedefi matrisi", () => {
         .click();
 
       await page.getByRole("button", { name: "Gözlem", exact: true }).click();
-      await expect(page.getByText("Hızlı Gözlem", { exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Hızlı Gözlem" })).toBeVisible();
       await audit("hizli-gozlem-dolu");
 
       if (testInfo.project.name.startsWith("live-")) {

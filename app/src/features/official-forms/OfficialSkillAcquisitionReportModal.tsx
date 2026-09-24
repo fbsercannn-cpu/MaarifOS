@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -49,18 +51,18 @@ const DEFAULT_STUDENTS: StudentReportData[] = [
 ];
 
 export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () => void }) {
-  const [students, setStudents] = useState<StudentReportData[]>(DEFAULT_STUDENTS);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("s1");
-  const [term, setTerm] = useState("2026-2027 Eğitim-Öğretim Yılı 1. Dönem");
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
+  const [students, setStudents] = useOfficialFormState<StudentReportData[]>("students", DEFAULT_STUDENTS);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(students[0]?.id ?? "");
+  const [term, setTerm] = useOfficialFormState("term", "2026-2027 Eğitim-Öğretim Yılı 1. Dönem");
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const activeStudent = students.find(s => s.id === selectedStudentId) || students[0]!;
 
   const handleUpdateField = (field: keyof StudentReportData, value: string) => {
     setStudents(prev =>
-      prev.map(s => (s.id === selectedStudentId ? { ...s, [field]: value } : s))
+      prev.map(s => (s.id === activeStudent.id ? { ...s, [field]: value } : s))
     );
   };
 
@@ -81,66 +83,7 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
     printOfficialFormA4(`Beceri_Edinim_Raporu_${activeStudent.name.replace(/\s+/g, "_")}`);
   };
 
-  const handleExportWord = () => {
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Beceri_Edinim_Raporu_${activeStudent.name}</title>
-      <style>
-        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; }
-        .header { text-align: center; font-weight: bold; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #000; padding: 6px; font-size: 10pt; }
-        th { background-color: #f2f2f2; }
-      </style>
-      </head>
-      <body>
-        <div class='header'>
-          T.C. MİLLÎ EĞİTİM BAKANLIĞI<br/>
-          TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI<br/>
-          BECERİ EDİNİM RAPORU (E-OKUL DÖNEM SONU GELİŞİM BELGESİ)
-        </div>
-        <table>
-          <tr><td><b>Öğrencinin Adı Soyadı:</b> ${activeStudent.name}</td><td><b>Yaş / Ay:</b> ${activeStudent.ageMonth}</td></tr>
-          <tr><td><b>Okul Adı:</b> ${schoolName}</td><td><b>Dönem:</b> ${term}</td></tr>
-          <tr><td colspan='2'><b>Sınıf Öğretmeni:</b> ${teacherName}</td></tr>
-        </table>
-        <table>
-          <thead>
-            <tr>
-              <th style='width: 25%'>Öğrenme Alanı / Boyut</th>
-              <th style='width: 75%'>Süreç Odaklı Beceri Edinim Düzeyi ve Kazanım Gözlemleri</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td><b>Türkçe Alanı</b></td><td>${activeStudent.turkce}</td></tr>
-            <tr><td><b>Matematik Alanı</b></td><td>${activeStudent.matematik}</td></tr>
-            <tr><td><b>Fen Alanı</b></td><td>${activeStudent.fen}</td></tr>
-            <tr><td><b>Sosyal Alan</b></td><td>${activeStudent.sosyal}</td></tr>
-            <tr><td><b>Hareket ve Sağlık</b></td><td>${activeStudent.hareketSaglik}</td></tr>
-            <tr><td><b>Sanat Alanı</b></td><td>${activeStudent.sanat}</td></tr>
-            <tr><td><b>Müzik Alanı</b></td><td>${activeStudent.muzik}</td></tr>
-            <tr><td><b>Sosyal-Duygusal &amp; Değerler</b></td><td>${activeStudent.sdbDegerler}</td></tr>
-            <tr><td><b>Öğretmen Genel Kanaati</b></td><td>${activeStudent.teacherOpinion}</td></tr>
-          </tbody>
-        </table>
-        <br/><br/>
-        <table style='border: none;'>
-          <tr style='border: none;'>
-            <td style='border: none; text-align: center; width: 50%;'><b>Sınıf Öğretmeni</b><br/><br/>${teacherName}<br/>İmza</td>
-            <td style='border: none; text-align: center; width: 50%;'><b>Okul Müdürü</b><br/><br/>Onay<br/>İmza / Mühür</td>
-          </tr>
-        </table>
-      </body>
-      </html>
-    `;
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `MEB_Beceri_Edinim_Raporu_${activeStudent.name.replace(/\s+/g, '_')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleExportWord = () => downloadOfficialFormWord("OfficialSkillAcquisitionReportModal");
 
   const handleExportExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -226,7 +169,7 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
             🖨️ A4 Yazdır / PDF
           </button>
           <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
-            📄 Word (.doc) İndir
+            📄 Word (.docx) İndir
           </button>
           {onClose && (
             <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -248,7 +191,7 @@ export function OfficialSkillAcquisitionReportModal({ onClose }: { onClose?: () 
                 <button
                   key={s.id}
                   type="button"
-                  className={`of-chip ${s.id === selectedStudentId ? "is-selected" : ""}`}
+                  className={`of-chip ${s.id === activeStudent.id ? "is-selected" : ""}`}
                   onClick={() => setSelectedStudentId(s.id)}
                 >
                   {s.name} ({s.ageMonth})

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import React, { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -51,11 +53,11 @@ interface Props {
 }
 
 export function OfficialInspectionDossierModal({ onClose }: Props) {
-  const [documents, setDocuments] = useState<DossierDocument[]>(DEFAULT_DOSSIER_DOCUMENTS);
-  const [schoolName, setSchoolName] = useState("Denizli Maarif Anaokulu");
-  const [academicYear, setAcademicYear] = useState("2026-2027");
-  const [className, setClassName] = useState("Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
-  const [teacherName, setTeacherName] = useState("Emine Öğretmen");
+  const [documents, setDocuments] = useOfficialFormState<DossierDocument[]>("documents", DEFAULT_DOSSIER_DOCUMENTS);
+  const [schoolName, setSchoolName] = useOfficialFormState("schoolName", "Denizli Maarif Anaokulu");
+  const [academicYear, setAcademicYear] = useOfficialFormState("academicYear", "2026-2027");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (5 Yaş / 60-72 Ay)");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
 
   const toggleStatus = (id: string) => {
     setDocuments((prev) =>
@@ -76,85 +78,7 @@ export function OfficialInspectionDossierModal({ onClose }: Props) {
 
   const handlePrint = () => printOfficialFormA4(`Maarif_Mufettisligi_Teftis_Dosyasi`);
 
-  const handleDownloadDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Müfettişlik Teftiş Dosyası İndeksi - ${schoolName}</title>
-      <style>
-        body { font-family: 'Segoe UI', Calibri, sans-serif; padding: 20px; line-height: 1.4; color: #1e293b; }
-        h1 { font-size: 16pt; color: #b91c1c; text-align: center; }
-        .meta { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-        .meta td { border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 9.5pt; }
-        table.dossier { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        table.dossier th, table.dossier td { border: 1px solid #94a3b8; padding: 7px 10px; font-size: 9.5pt; text-align: left; }
-        table.dossier th { background: #fee2e2; color: #991b1b; font-weight: bold; }
-        .badge { font-weight: bold; color: #15803d; }
-      </style>
-      </head>
-      <body>
-        <h1>T.C. MİLLÎ EĞİTİM BAKANLIĞI</h1>
-        <h2 style="text-align: center; font-size: 13pt; color: #334155;">MAARİF MÜFETTİŞLİĞİ OKUL ÖNCESİ SINIF TEFTİŞ DOSYASI İNDEKSİ</h2>
-        <p style="text-align: center; font-size: 10pt; color: #64748b;">Türkiye Yüzyılı Maarif Modeli 2026 Resmî Müfredat Standartları</p>
-
-        <table class="meta">
-          <tr>
-            <td><strong>Okul Adı:</strong> ${schoolName}</td>
-            <td><strong>Eğitim Öğretim Yılı:</strong> ${academicYear}</td>
-          </tr>
-          <tr>
-            <td><strong>Sınıf / Yaş Grubu:</strong> ${className}</td>
-            <td><strong>Sınıf Öğretmeni:</strong> ${teacherName}</td>
-          </tr>
-        </table>
-
-        <table class="dossier">
-          <thead>
-            <tr>
-              <th style="width: 8%;">Sıra</th>
-              <th style="width: 15%;">Resmî Kod</th>
-              <th style="width: 32%;">Evrak / Dosya Adı</th>
-              <th style="width: 15%;">TTKB Sayfa</th>
-              <th style="width: 30%;">Açıklama / Durum</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${documents.map((d, i) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td><strong>${d.code}</strong></td>
-                <td>${d.title}</td>
-                <td>${d.ttkbRef}</td>
-                <td><span class="badge">[${d.status}]</span> ${d.note}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-
-        <div style="margin-top: 35px; display: table; width: 100%;">
-          <div style="display: table-cell; width: 33%;">
-            <strong>Sınıf Öğretmeni:</strong><br/><br/>
-            ${teacherName} (İmza)
-          </div>
-          <div style="display: table-cell; width: 33%; text-align: center;">
-            <strong>Okul Müdürü:</strong><br/><br/>
-            İncelendi / Uygundur (İmza/Mühür)
-          </div>
-          <div style="display: table-cell; width: 33%; text-align: right;">
-            <strong>Maarif Müfettişi:</strong><br/><br/>
-            Görüldü (İmza)
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "Maarif_Mufettisligi_Sinif_Teftis_Dosyasi_Indeksi.doc";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadDoc = () => downloadOfficialFormWord("OfficialInspectionDossierModal");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -237,7 +161,7 @@ export function OfficialInspectionDossierModal({ onClose }: Props) {
               cursor: "pointer",
             }}
           >
-            💾 Word (.doc) İndir
+            💾 Word (.docx) İndir
           </button>
           <button
             onClick={handlePrint}

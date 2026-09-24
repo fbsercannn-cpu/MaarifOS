@@ -1,11 +1,14 @@
-// Türkiye Yüzyılı Maarif Modeli Okul Öncesi Eğitim Programı (TTKB Sayfa 115–140)
-// Birebir MEB Resmî Örnek Plan Bankası
+import { EK15_ITEMS } from "./ek15-catalog.ts";
+import { programCodeCandidates } from "./planToChecklistSync.ts";
+// MaarifOS örnek taslakları: öğretmen incelemesi gerektirir; birebir resmî belge değildir.
+export const SAMPLE_DRAFT_LABEL = "MaarifOS örnek taslağı (öğretmen incelemesi)";
 
 export interface SampleDailyPlan {
   id: string;
   ageGroup: "36-48 Ay" | "48-60 Ay" | "60-72 Ay";
   planTitle: string;
   pageRef: string;
+  sourceNotice?: string;
   domainSkills: string;
   tendencies: string;
   socialEmotional: string;
@@ -26,7 +29,7 @@ export interface SampleDailyPlan {
   communityEngagement: string;
 }
 
-export const OFFICIAL_MEB_DAILY_SAMPLE_PLANS: SampleDailyPlan[] = [
+const RAW_DAILY_SAMPLE_PLANS: SampleDailyPlan[] = [
   {
     id: "meb-daily-60-72",
     ageGroup: "60-72 Ay",
@@ -124,6 +127,7 @@ export interface SampleMonthlyPlan {
   ageGroup: "36-48 Ay" | "48-60 Ay" | "60-72 Ay";
   monthName: string;
   pageRef: string;
+  sourceNotice?: string;
   planTitle: string;
   domainSkills: string;
   tendencies: string;
@@ -142,13 +146,13 @@ export interface SampleMonthlyPlan {
   teacherReflections: string;
 }
 
-export const OFFICIAL_MEB_MONTHLY_SAMPLE_PLANS: SampleMonthlyPlan[] = [
+const RAW_MONTHLY_SAMPLE_PLANS: SampleMonthlyPlan[] = [
   {
     id: "meb-monthly-60-72",
     ageGroup: "60-72 Ay",
     monthName: "Kasım 2026",
     pageRef: "TTKB s. 124–128",
-    planTitle: "Atatürk, Bilimsel Keşif ve Sayıların Dünyası (Kasım Ayı Resmî Planı)",
+    planTitle: "Atatürk, Bilimsel Keşif ve Sayıların Dünyası (Kasım Ayı Örnek Taslağı)",
     domainSkills: `TÜRKÇE: TADB.3, TAOB.2, TAKB.1, TAEB.1
 MATEMATİK: MAB.1, MAB.2, MAB.4 (1-20 Sayılar, Örüntü, Nesne Grafiği)
 FEN: FAB.1, FAB.3, FAB.5 (Gözlem, Tahmin, Deney, Doğa Olayları)
@@ -172,3 +176,25 @@ MÜZİK: MZB.1, MZB.3 (Ritim Çalgıları, Marşlar ve Şarkılar)`,
     teacherReflections: "Açık hava bahçe oyunlarına hava koşulları nedeniyle ek salon etkinlikleri dahil edilmesi olumlu sonuç vermiştir.",
   }
 ];
+
+const codedFields = ["domainSkills", "tendencies", "socialEmotional", "values", "literacy"] as const;
+/** Keep only exact, age-supported codes. Unknown codes are never guessed or aliased. */
+export function prepareTeacherSamplePlan<T extends SampleDailyPlan | SampleMonthlyPlan>(plan: T): T {
+  const next = { ...plan };
+  const excluded: string[] = [];
+  const catalog = new Map(EK15_ITEMS.filter(item => item.category !== "kavram").map(item => [item.code, item.description]));
+  for (const key of codedFields) {
+    const candidates = programCodeCandidates(plan[key]);
+    const valid = plan.ageGroup === "60-72 Ay" ? candidates.filter(code => catalog.has(code)) : [];
+    excluded.push(...candidates.filter(code => !valid.includes(code)));
+    next[key] = valid.map(code => `${code}. ${catalog.get(code)}`).join("\n");
+  }
+  next.pageRef = SAMPLE_DRAFT_LABEL;
+  next.planTitle = plan.planTitle.replace(/Resmî Planı/g, "Örnek Taslağı");
+  next.sourceNotice = `${SAMPLE_DRAFT_LABEL}. Bu metin MEB belgesinin birebir aktarımı veya gerçekleşmiş gözlem değildir. ${plan.ageGroup === "60-72 Ay" ? "Kodlar güncel EK-15 kataloğuyla tam eşleşerek doğrulandı." : "Bu yaş bandının kaynak matrisi doğrulanmadığı için kod alanları boş bırakıldı."}${excluded.length ? ` Kaynağı doğrulanmayan kodlar uygulanmadı: ${[...new Set(excluded)].join(", ")}.` : ""}`;
+  // Planning examples cannot assert that children achieved an outcome or an activity was completed.
+  if ("childEvaluation" in next) { next.childEvaluation = ""; next.programEvaluation = ""; next.teacherEvaluation = ""; next.teacherReflections = ""; }
+  return next;
+}
+export const MAARIFOS_DAILY_SAMPLE_DRAFTS = RAW_DAILY_SAMPLE_PLANS.map(prepareTeacherSamplePlan);
+export const MAARIFOS_MONTHLY_SAMPLE_DRAFTS = RAW_MONTHLY_SAMPLE_PLANS.map(prepareTeacherSamplePlan);

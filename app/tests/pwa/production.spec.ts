@@ -195,7 +195,7 @@ async function storedStudents(page: import("@playwright/test").Page) {
 }
 
 test("üretim PWA gerçek ekranla açılır ve çevrim dışı yeniden başlar", async ({ context, page }) => {
-  await page.goto("/");
+  await page.goto("/?view=app&native=1");
 
   await expect(page.getByTestId("phone-frame")).toHaveCount(0);
   await expect(page.locator(".native-app-runtime")).toBeVisible();
@@ -412,7 +412,7 @@ test("kalıcı tarayıcı profili ağsız yeni süreçte app-shell ile soğuk ba
       viewport: { width: 1280, height: 900 },
     });
     const onlinePage = onlineContext.pages()[0] ?? (await onlineContext.newPage());
-    await onlinePage.goto(baseURL, { waitUntil: "domcontentloaded" });
+    await onlinePage.goto(new URL("/?view=app&native=1", baseURL).href, { waitUntil: "domcontentloaded" });
     await expect
       .poll(
         () =>

@@ -52,7 +52,7 @@ export async function exportMonthlyAttendanceExcel(
     store,
     schoolName = "Denizli Maarif Anaokulu",
     className = "Güneş Sınıfı (60-72 Ay)",
-    teacherName = "Emine Öğretmen",
+    teacherName = "Okul Öncesi Öğretmeni",
   } = options;
 
   const [yearStr, monthStr] = civilDate.split("-");

@@ -1,3 +1,5 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
 import { useState } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -70,7 +72,7 @@ const MATERIAL_OPTIONS = [
 ];
 
 export function OfficialFamilyParticipationForm({ initialData, onClose }: Props) {
-  const [formData, setFormData] = useState<FamilyParticipationFormData>({
+  const [formData, setFormData] = useOfficialFormState<FamilyParticipationFormData>("formData", {
     parentName: initialData?.parentName || "Veli Adı Soyadı",
     studentName: initialData?.studentName || "Öğrenci Adı Soyadı",
     className: initialData?.className || "Papatyalar Sınıfı (5 Yaş)",
@@ -89,79 +91,7 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
     printOfficialFormA4(`EK-10_Aile_Katilimi_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>EK-10 AİLE KATILIMI TERCİH FORMU - ${formData.studentName}</title>
-<style>
-  body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 10pt; color: #111; line-height: 1.35; padding: 20px; }
-  h2 { text-align: center; font-size: 13pt; color: #0284c7; margin-bottom: 6px; }
-  .subtitle { text-align: center; font-size: 9pt; color: #64748b; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-  th, td { border: 1px solid #777; padding: 6px 8px; vertical-align: top; }
-  .label-cell { width: 28%; background-color: #f8fafc; font-weight: bold; }
-  .section-header { background-color: #e0f2fe; font-weight: bold; color: #0369a1; padding: 6px; font-size: 10pt; }
-</style>
-</head>
-<body>
-  <h2>EK-10 AİLE KATILIMI TERCİH FORMU</h2>
-  <div class="subtitle">T.C. Millî Eğitim Bakanlığı Temel Eğitim Genel Müdürlüğü - Türkiye Yüzyılı Maarif Modeli</div>
-  <table>
-    <tr><td class="label-cell">Veli Adı Soyadı:</td><td>${formData.parentName}</td><td class="label-cell">Tarih:</td><td>${formData.date}</td></tr>
-    <tr><td class="label-cell">Çocuğun Adı Soyadı:</td><td>${formData.studentName}</td><td class="label-cell">Sınıfı:</td><td>${formData.className}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">A. SINIF İÇİ ETKİNLİKLERE KATILIM TERCİHLERİ</th></tr>
-    <tr><td>${formData.inClassActivities.map(a => `• ${a}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">B. AİLEDE DEĞER VE BECERİ GELİŞİMİNİ DESTEKLEME</th></tr>
-    <tr><td>${formData.homeSupport.map(h => `• ${h}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">C. MESLEK, İLGİ VE YETENEK PAYLAŞIMI</th></tr>
-    <tr><td>${formData.professionShare.map(p => `• ${p}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">Ç. OKUL DIŞI ÖĞRENME VE TOPLUM KATILIMI</th></tr>
-    <tr><td>${formData.outsideSchool.map(o => `• ${o}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">D. MATERYAL, ORTAM VE HAZIRLIK DESTEĞİ</th></tr>
-    <tr><td>${formData.materialSupport.map(m => `• ${m}`).join("<br>")}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">E. KATILIM TERCİHİ VE ZAMAN</th></tr>
-    <tr><td><b>Tercih:</b> ${formData.participationPreference}<br><b>Uygun Zaman:</b> ${formData.availableTimes}</td></tr>
-  </table>
-
-  <table>
-    <tr><th class="section-header">F. DİĞER KATKI VE ÖNERİLER</th></tr>
-    <tr><td>${formData.otherNotes.split("\n").join("<br>")}</td></tr>
-  </table>
-</body>
-</html>`;
-
-    const blob = new Blob(["\ufeff", htmlContent], {
-      type: "application/msword;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `EK-10_Aile_Katilimi_Tercih_Formu_${formData.studentName.replace(/\s+/g, "_")}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialFamilyParticipationForm");
 
   const handleDownloadExcel = async () => {
     const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
@@ -208,7 +138,7 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
         <div className="official-form-actions no-print">
           <div className="official-form-actions__title">
             <strong>EK-10 Aile Katılımı Tercih Formu (TTKB Sayfa 190–192)</strong>
-            <small>Resmî Format · A4 Çıktı, Excel ve Word (.doc) Uyumluluğu</small>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word (.docx) Uyumluluğu</small>
           </div>
           <div className="official-form-actions__buttons">
             <button
@@ -224,7 +154,7 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
               🖨️ A4 Yazdır / PDF Kaydet
             </button>
             <button type="button" className="of-btn of-btn--word" onClick={handleDownloadWord}>
-              📄 Word Olarak İndir (.doc)
+              📄 Word Olarak İndir (.docx)
             </button>
             {onClose && (
               <button type="button" className="of-btn of-btn--close" onClick={onClose}>
@@ -273,7 +203,7 @@ export function OfficialFamilyParticipationForm({ initialData, onClose }: Props)
               <tr>
                 <th className="official-table__label">Çocuğun Adı Soyadı:</th>
                 <td>
-                  <input
+                  <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
                     type="text"
                     className="of-input"
                     value={formData.studentName}

@@ -59,9 +59,21 @@ async function expectDocumentDownload(
   buttonName: "Görsel PDF hazırla" | "Word hazırla",
   extension: ".pdf" | ".docx",
 ): Promise<Download> {
-  const downloadPromise = page.waitForEvent("download");
-  await dialog.getByRole("button", { name: buttonName }).click();
-  const download = await downloadPromise;
+  let download: Download;
+  if (extension === ".pdf") {
+    await dialog.getByRole("button", { name: buttonName }).click();
+    const preview = page.getByRole("dialog", { name: "PDF önizlemesi", exact: true });
+    await expect(preview).toBeVisible();
+    const downloadPromise = page.waitForEvent("download");
+    await preview.getByRole("button", { name: "Bu PDF'yi indir", exact: true }).click();
+    download = await downloadPromise;
+    await preview.getByRole("button", { name: "PDF önizlemesini kapat", exact: true }).click();
+    await expect(preview).toBeHidden();
+  } else {
+    const downloadPromise = page.waitForEvent("download");
+    await dialog.getByRole("button", { name: buttonName }).click();
+    download = await downloadPromise;
+  }
   expect(download.suggestedFilename()).toMatch(new RegExp(`\\${extension}$`));
   return download;
 }

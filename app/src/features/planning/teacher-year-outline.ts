@@ -53,6 +53,7 @@ function nextMonthKey(value: string): string {
 export function buildNeutralTeacherYearOutline(input: {
   annualPeriodStart: string;
   annualPeriodEnd: string;
+  includeSummerMonths?: boolean;
 }): readonly TeacherYearOutlineMonth[] {
   const firstMonthKey = input.annualPeriodStart.slice(0, 7);
   const lastMonthKey = input.annualPeriodEnd.slice(0, 7);
@@ -60,7 +61,7 @@ export function buildNeutralTeacherYearOutline(input: {
   let monthKey = firstMonthKey;
   while (monthKey <= lastMonthKey) {
     const monthNumber = Number(monthKey.slice(5, 7));
-    if (monthNumber === 7 || monthNumber === 8) {
+    if (!input.includeSummerMonths && (monthNumber === 7 || monthNumber === 8)) {
       monthKey = nextMonthKey(monthKey);
       continue;
     }

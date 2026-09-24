@@ -276,13 +276,11 @@ function EntryEditor({
   };
   return <section className="growth-entry-editor" aria-label={`${studentName(state)} ölçüm girişi`}>
     <header><div><small>{state.period.label}</small><h3>{studentName(state)}</h3></div><button type="button" onClick={onCancel} disabled={busy}>Kapat</button></header>
-    {state.period.windowStart > workspace.today ? <p role="status">Bu dönem henüz başlamadı; gelecek ölçüm bugünden kaydedilmez.</p> : <>
-      <MetricEntry metric="height" current={state.height} draft={height} disabled={disabled || busy} today={workspace.today} onChange={(patch) => setHeight((current) => ({ ...current, ...patch }))} />
-      <button className="growth-same-date" type="button" disabled={disabled || busy || !height.measuredOn} onClick={() => setWeight((current) => ({ ...current, measuredOn: height.measuredOn }))}>Boy tarihini kilo için de kullan</button>
-      <MetricEntry metric="weight" current={state.weight} draft={weight} disabled={disabled || busy} today={workspace.today} onChange={(patch) => setWeight((current) => ({ ...current, ...patch }))} />
-      {error ? <p className="growth-error" role="alert">{error}</p> : null}
-      <div className="growth-entry-actions"><button type="button" disabled={disabled || busy} onClick={() => void save(false)}>{busy ? "Kaydediliyor…" : "Kaydet"}</button><button type="button" className="growth-primary" disabled={disabled || busy} onClick={() => void save(true)}>Kaydet ve sıradakine geç</button></div>
-    </>}
+    <MetricEntry metric="height" current={state.height} draft={height} disabled={disabled || busy} today={workspace.today} onChange={(patch) => setHeight((current) => ({ ...current, ...patch }))} />
+    <button className="growth-same-date" type="button" disabled={disabled || busy || !height.measuredOn} onClick={() => setWeight((current) => ({ ...current, measuredOn: height.measuredOn }))}>Boy tarihini kilo için de kullan</button>
+    <MetricEntry metric="weight" current={state.weight} draft={weight} disabled={disabled || busy} today={workspace.today} onChange={(patch) => setWeight((current) => ({ ...current, ...patch }))} />
+    {error ? <p className="growth-error" role="alert">{error}</p> : null}
+    <div className="growth-entry-actions"><button type="button" disabled={disabled || busy} onClick={() => void save(false)}>{busy ? "Kaydediliyor…" : "Kaydet"}</button><button type="button" className="growth-primary" disabled={disabled || busy} onClick={() => void save(true)}>Kaydet ve sıradakine geç</button></div>
   </section>;
 }
 
@@ -333,7 +331,7 @@ function EntryView({
     <PeriodPicker workspace={workspace} value={periodKey} onChange={(value) => { onPeriodChange(value); setEditingId(null); }} />
     {editing ? <EntryEditor key={`${editing.student.id}:${editing.period.key}:${editing.height.selectionEventId}:${editing.weight.selectionEventId}`} state={editing} workspace={workspace} store={store} disabled={disabled} onSaved={afterSave} onCancel={() => setEditingId(null)} /> : null}
     <ol className="growth-roster">{eligible.map((state, index) => <li key={state.student.id}>
-      <button type="button" disabled={disabled || state.membership === "review" || state.period.windowStart > workspace.today} onClick={() => setEditingId(state.student.id)} aria-label={`${studentName(state)} ölçümünü aç`}>
+      <button type="button" disabled={disabled || state.membership === "review"} onClick={() => setEditingId(state.student.id)} aria-label={`${studentName(state)} ölçümünü aç`}>
         <span className="growth-roster__number">{index + 1}</span><span><strong>{studentName(state)}</strong><small>{state.height.selected ? formatGrowthInteger(state.height.selected.integerValue, "height") : "Boy bekliyor"} · {state.weight.selected ? formatGrowthInteger(state.weight.selected.integerValue, "weight") : "Kilo bekliyor"}</small></span><span className={statusClass(state.status)}>{GROWTH_COPY.statuses[state.status]}</span>
       </button>
     </li>)}</ol>

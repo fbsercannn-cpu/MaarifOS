@@ -86,12 +86,12 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
   await page.getByRole("button", { name: "Sınıfım", exact: true }).click();
   await openClassroomAttendance(page);
   const attendance = page.getByRole("dialog", {
-    name: "Bugünün devam durumu",
+    name: "Hızlı Dokunmatik Yoklama (E5)",
   });
   const student = attendance
-    .locator(".student-row")
+    .locator(".qag-student-card")
     .filter({ hasText: "Kurgu Gün Sonu Öğrencisi" });
-  await student.click();
+  await student.getByRole("button", { name: "Kurgu Gün Sonu Öğrencisi Geldi", exact: true }).click();
   await attendance
     .getByRole("button", { name: "Devam durumunu tamamla", exact: true })
     .click();
@@ -101,14 +101,15 @@ test("sade Bugün ekranı kaldırılan gün-kapat kartını göstermez; yoklama 
   await openClassroomAttendance(page);
   await expect(
     page
-      .getByRole("dialog", { name: "Bugünün devam durumu" })
-      .locator(".student-row")
+      .getByRole("dialog", { name: "Hızlı Dokunmatik Yoklama (E5)" })
+      .locator(".qag-student-card")
       .filter({ hasText: "Kurgu Gün Sonu Öğrencisi" })
-      .getByText("Geldi", { exact: true }),
-  ).toBeVisible();
+      .getByRole("button", { name: "Kurgu Gün Sonu Öğrencisi Geldi", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Bugün", exact: true }).click();
   await (await revealTodayPlan(page)).click();
+  await page.getByRole("dialog", { name: "Planı adım adım tamamla", exact: true }).getByRole("button", { name: "Kendim planla", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Günlük plan oluşturma" })).toBeVisible();
 });

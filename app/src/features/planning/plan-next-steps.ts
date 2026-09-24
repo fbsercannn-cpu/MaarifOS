@@ -186,7 +186,12 @@ function draftForMonth(
   civilDate: string,
 ): TeacherOwnedMonthlyPlanDraft | null {
   const monthKey = civilDate.slice(0, 7);
-  return fullYearDrafts(annualPeriodStart, annualPeriodEnd).find(
+  // An explicitly selected month in a custom school year may be July/August.
+  // Keep the default official-year outline unchanged; only fill this missing month.
+  return buildTeacherFullYearMonthDrafts({
+    annualPeriodStart, annualPeriodEnd,
+    months: buildNeutralTeacherYearOutline({ annualPeriodStart, annualPeriodEnd, includeSummerMonths: true }),
+  }).find(
     (month) => month.monthKey === monthKey,
   ) ?? null;
 }

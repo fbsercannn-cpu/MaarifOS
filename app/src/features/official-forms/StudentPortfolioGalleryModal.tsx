@@ -1,3 +1,4 @@
+import { useOfficialFormState, useOfficialFormContext } from "./OfficialFormRecordProvider.tsx";
 import React, { useState, useEffect } from "react";
 import "./official-forms.css";
 import { printOfficialFormA4 } from "./official-form-export-service.ts";
@@ -67,14 +68,9 @@ interface Props {
 }
 
 export function StudentPortfolioGalleryModal({ onClose }: Props) {
-  const [items, setItems] = useState<PortfolioItem[]>(() => {
-    try {
-      const saved = localStorage.getItem("maarif_portfolio_items");
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return DEFAULT_PORTFOLIO_ITEMS;
+  const { scope } = useOfficialFormContext();
+  const [items, setItems] = useOfficialFormState<PortfolioItem[]>("items", () => {
+    return [];
   });
 
   const [selectedStudent, setSelectedStudent] = useState<string>("all");
@@ -82,28 +78,21 @@ export function StudentPortfolioGalleryModal({ onClose }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
 
   // New item draft
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftStudentName, setDraftStudentName] = useState("Ali Yılmaz");
-  const [draftDomain, setDraftDomain] = useState("Sanat (SNAB.2)");
-  const [draftQuote, setDraftQuote] = useState("");
-  const [draftTeacherNote, setDraftTeacherNote] = useState("");
-  const [draftTag, setDraftTag] = useState("Görsel Sanat");
+  const [draftTitle, setDraftTitle] = useOfficialFormState("draftTitle", "");
+  const [draftStudentName, setDraftStudentName] = useOfficialFormState("draftStudentName", "Ali Yılmaz");
+  const [draftDomain, setDraftDomain] = useOfficialFormState("draftDomain", "Sanat (SNAB.2)");
+  const [draftQuote, setDraftQuote] = useOfficialFormState("draftQuote", "");
+  const [draftTeacherNote, setDraftTeacherNote] = useOfficialFormState("draftTeacherNote", "");
+  const [draftTag, setDraftTag] = useOfficialFormState("draftTag", "Görsel Sanat");
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("maarif_portfolio_items", JSON.stringify(items));
-    } catch {
-      // ignore
-    }
-  }, [items]);
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!draftTitle.trim()) return;
 
     const newItem: PortfolioItem = {
-      id: "p-" + Date.now(),
-      studentId: draftStudentName.includes("Ali") ? "s-1" : "s-2",
+      id: crypto.randomUUID(),
+      studentId: scope.studentIds[0]!,
       studentName: draftStudentName,
       title: draftTitle,
       date: new Date().toLocaleDateString("tr-TR"),

@@ -50,7 +50,7 @@ test("manifest kurulabilir uygulama sözleşmesini ve marka ikonlarını korur",
   const manifest = JSON.parse(await readFile(projectFile("public/manifest.webmanifest"), "utf8"));
 
   assert.equal(manifest.id, "/");
-  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.start_url, "/?view=app&native=1");
   assert.equal(manifest.scope, "/");
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.lang, "tr-TR");
@@ -677,9 +677,11 @@ test("service worker yalnız extensionless uygulama rotalarını offline kabuğa
     fetch: async () => {
       networkRequestCount += 1;
       if (!online) throw new TypeError("offline");
-      return new Response("online", {
+      const response = new Response("online", {
         headers: { "Content-Type": "text/html" },
       });
+      Object.defineProperty(response, "type", { value: "basic" });
+      return response;
     },
     self,
     setTimeout,
@@ -758,7 +760,7 @@ test("service worker yalnız extensionless uygulama rotalarını offline kabuğa
   ]) {
     online = true;
     const [onlineResponse] = await dispatchNavigation(path);
-    assert.equal(await onlineResponse.text(), "online");
+    assert.equal(await onlineResponse.text(), "online", `${path} çevrimiçi yanıtı ağdan gelmeli`);
 
     online = false;
     const [offlineResponse] = await dispatchNavigation(path);

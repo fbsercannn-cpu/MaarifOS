@@ -1,5 +1,5 @@
 /**
- * WeeklyFocusCard.tsx � E2 (0.50.0)
+ * WeeklyFocusCard.tsx — E2 (0.50.0)
  *
  * Her haftanin basinda ekrana gelen tek kart:
  * Bu haftanin TYMM temasi + 3 onemli etkinlik + hatirlama notu.
@@ -34,11 +34,17 @@ function markDismissed(mondayDate: string): void {
 }
 
 export function WeeklyFocusCard({ focus, mondayCivilDate }: WeeklyFocusCardProps) {
-  const [dismissed, setDismissed] = useState(() => wasDismissedThisWeek(mondayCivilDate));
+  const [override, setOverride] = useState<{ week: string; dismissed: boolean } | null>(null);
+  const dismissed = override?.week === mondayCivilDate ? override.dismissed : wasDismissedThisWeek(mondayCivilDate);
+  function setDismissed(value: boolean) {
+    setOverride({ week: mondayCivilDate, dismissed: value });
+    try { if (!value) localStorage.removeItem(`${DISMISS_KEY}-${mondayCivilDate}`); } catch { /* optional UI preference */ }
+  }
 
   if (dismissed) {
     return (
-      <aside
+      <button
+        type="button"
         className="weekly-focus-minichip no-print"
         aria-label="Haftalık Odak Mini Rozeti"
         style={{
@@ -57,39 +63,47 @@ export function WeeklyFocusCard({ focus, mondayCivilDate }: WeeklyFocusCardProps
         onClick={() => setDismissed(false)}
         title="Haftalık Odak Detayını Aç"
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span>🎯</span>
           <span><strong>Bu Hafta:</strong> {focus.theme} ({focus.weekLabel})</span>
-        </div>
+        </span>
         <span style={{ fontSize: "0.75rem", color: "#2563eb", fontWeight: 600 }}>Genişlet ▾</span>
-      </aside>
+      </button>
     );
   }
 
   return (
-    <section className="weekly-focus-card" aria-label="Haftalik Odak">
+    <section className="weekly-focus-card" aria-label="Haftalık TYMM Odak Kartı">
       <header className="wfc__header">
-        <span>BU HAFTA</span>
+        <span className="wfc__badge">🎯 BU HAFTA</span>
         <h2>{focus.weekLabel}</h2>
         <button
           type="button"
           className="wfc__dismiss"
-          aria-label="Haftalik odak kartini kapat"
+          aria-label="Haftalık odak kartını kapat"
+          title="Kartı Kapat"
           onClick={() => { markDismissed(mondayCivilDate); setDismissed(true); }}
         >
-          �
+          ×
         </button>
       </header>
-      <p className="wfc__theme">?? Tema: <strong>{focus.theme}</strong></p>
+      <p className="wfc__theme">
+        <span>TYMM Odak Teması:</span> <strong>{focus.theme}</strong>
+      </p>
       {focus.keyActivities.length > 0 && (
         <ul className="wfc__activities">
           {focus.keyActivities.map((act, i) => (
-            <li key={i}>{act}</li>
+            <li key={i}>
+              <span>✨</span>
+              <span>{act}</span>
+            </li>
           ))}
         </ul>
       )}
       {focus.reminder && (
-        <p className="wfc__reminder">?? {focus.reminder}</p>
+        <p className="wfc__reminder">
+          <span>💡 <strong>Hatırlatma:</strong> {focus.reminder}</span>
+        </p>
       )}
     </section>
   );
