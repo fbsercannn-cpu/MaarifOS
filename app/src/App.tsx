@@ -12,7 +12,7 @@ import { AIObservationAnecdoteWorkspace } from "./features/anecdote/AIObservatio
 import { ChatGPTBridgeModal } from "./features/chatgpt-bridge/ChatGPTBridgeModal";
 
 /**
- * MaarifOS 0.66.1 — öğretmen çalışma alanı ve web vitrini
+ * MaarifOS 0.66.2 — öğretmen çalışma alanı ve web vitrini
  */
 export default function App() {
   const [activeView, setActiveView] = useState<"landing" | "app">(() => {

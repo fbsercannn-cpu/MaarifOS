@@ -58,15 +58,16 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.66.1",
+  version: "0.66.2",
   releasedOn: "2026-09-24",
-  title: "Anında Gözlem açılışı ve çalışan hesap altyapısı",
+  title: "Anında Gözlem, Google ve DeepSeek canlı yayını",
   notes: Object.freeze([
     "Gözlem düğmesi formu bekletmeden açar; plan ve çocuk bağlantısı hazırlanırken açık bir yüklenme durumu gösterilir.",
     "Gözlem açılışı artık bütün takvim, plan ve belge çalışma alanlarını yeniden okumaz; yalnız gerekli kayıt zinciri kullanılır.",
     "Google hesap Worker'ı, güvenli aynı-origin geçidi ve şifreli Drive yedeği canlı alan adı yayını için doğrulandı.",
     "Yerel ve çevrimdışı kullanım Google hesabı olmadan çalışmaya devam eder; OAuth sırları tarayıcıya veya kaynak koduna girmez.",
     "Chromium ve WebKit telefon akışlarında Gözlem görünürlük ve hazır olma süreleri ayrı kabul bütçeleriyle ölçülür.",
+    "Özel alan adındaki ana uygulama kabuğu sürüm adresli doğrulanmış kaynaktan ve yeniden doğrulama başlığıyla sunulur; eski CDN HTML'i yeni yayını gölgeleyemez.",
   ]),
 });
 

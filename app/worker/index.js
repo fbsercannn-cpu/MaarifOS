@@ -463,10 +463,23 @@ export function createSitesWorker({
       if (routingPath !== null && isAccountNetworkPath(routingPath)) {
         return proxyAccountRequest(request, env, requestUrl, routingPath, accountFetcher);
       }
-      const response = await env.ASSETS.fetch(request);
       const acceptsHtml = acceptsHtmlResponse(request);
       const isExactShellPath =
         routingPath !== null && ["/", "/index.html"].includes(routingPath);
+      // Never let the platform asset cache answer the two canonical shell
+      // routes. A previously deployed index.html can otherwise survive a
+      // release on a custom hostname even though hashed assets and build-info
+      // already point at the new version (observed on mobile WebKit). The
+      // verified opaque shell is release-addressed and explicitly no-cache.
+      if (isExactShellPath && ["GET", "HEAD"].includes(request.method)) {
+        return fetchVerifiedAppShell(
+          request,
+          env,
+          appShellPath,
+          appShellSha256,
+        );
+      }
+      const response = await env.ASSETS.fetch(request);
       const finalPathSegment = routingPath?.split("/").at(-1) ?? "";
       const isExtensionlessAppRoute =
         routingPath !== null &&

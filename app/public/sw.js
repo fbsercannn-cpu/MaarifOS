@@ -1,7 +1,7 @@
 /* MaarifOS app-shell service worker. Keep all user data in IndexedDB; this
  * worker caches only public shell and static asset responses. */
 const CACHE_PREFIX = "maarifos-";
-const WORKER_RELEASE = "0.66.1";
+const WORKER_RELEASE = "0.66.2";
 const UPDATE_READY_MESSAGE = "maarifos:update-ready";
 const STATUS_REQUEST_MESSAGE = "maarifos:get-status";
 const STATUS_RESPONSE_MESSAGE = "maarifos:sw-status";

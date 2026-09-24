@@ -804,9 +804,10 @@ test("serves the verified shell at root even when Accept is */*", async () => {
   );
 
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-cache");
   assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(await response.text(), runtime.shellBytes.toString("utf8"));
-  assert.deepEqual(runtime.calls, ["GET /?native=1", `GET ${runtime.shellPath}`]);
+  assert.deepEqual(runtime.calls, [`GET ${runtime.shellPath}`]);
   assertSecurityHeaders(response);
 });
 
@@ -823,7 +824,7 @@ test("serves the verified shell at exact /index.html even when Accept is */*", a
   assert.equal(response.headers.get("cache-control"), "no-cache");
   assert.equal(response.headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(await response.text(), runtime.shellBytes.toString("utf8"));
-  assert.deepEqual(runtime.calls, ["GET /index.html", `GET ${runtime.shellPath}`]);
+  assert.deepEqual(runtime.calls, [`GET ${runtime.shellPath}`]);
   assertSecurityHeaders(response);
 });
 
@@ -949,7 +950,7 @@ test("returns headers without a body for a root HEAD request", async () => {
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-length"), String(runtime.shellBytes.length));
   assert.equal((await response.arrayBuffer()).byteLength, 0);
-  assert.deepEqual(runtime.calls, ["HEAD /", `GET ${runtime.shellPath}`]);
+  assert.deepEqual(runtime.calls, [`GET ${runtime.shellPath}`]);
   assertSecurityHeaders(response);
 });
 
@@ -1399,7 +1400,7 @@ test("stages a deterministic opaque shell without changing the source dist", asy
     for (const [request, expectedCalls] of [
       [
         new Request("https://app.example.test/", { headers: { accept: "*/*" } }),
-        ["GET /", `GET ${resultOne.shellPath}`],
+        [`GET ${resultOne.shellPath}`],
       ],
       [
         new Request("https://app.example.test/classroom?native=1", {
@@ -1423,14 +1424,14 @@ test("stages a deterministic opaque shell without changing the source dist", asy
         new Request("https://app.example.test/index.html", {
           headers: { accept: "*/*" },
         }),
-        ["GET /index.html", `GET ${resultOne.shellPath}`],
+        [`GET ${resultOne.shellPath}`],
       ],
       [
         new Request("https://app.example.test/", {
           method: "HEAD",
           headers: { accept: "*/*" },
         }),
-        ["HEAD /", `GET ${resultOne.shellPath}`],
+        [`GET ${resultOne.shellPath}`],
       ],
     ]) {
       calls.length = 0;
