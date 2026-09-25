@@ -185,7 +185,12 @@ test.describe("44×44 mobil dokunma hedefi matrisi", () => {
       };
 
       await page.goto("/?native=1", { waitUntil: "networkidle" });
-      await expect(page.getByRole("dialog", { name: "Sınıfını hazırla" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Cihaz verileri hazırlanıyor" })).toBeHidden({
+        timeout: 30_000,
+      });
+      await expect(page.getByRole("dialog", { name: "Sınıfını hazırla" })).toBeVisible({
+        timeout: 15_000,
+      });
       await audit("ilk-kurulum-modal");
 
       await configureAccessibilityClassroom(page);

@@ -241,9 +241,19 @@ test.describe("ana rotalar ve kritik durumlar Axe erişilebilirlik kapısı", ()
 
     await page.getByRole("button", { name: "Gözlem", exact: true }).click();
     await expect(page.locator("strong", { hasText: /^Hızlı Gözlem$/u })).toBeVisible();
+    const observationDialog = page.getByRole("dialog", {
+      name: "Gözlem ve değerlendirme akışı",
+      exact: true,
+    });
+    await expect(observationDialog).toBeVisible();
+    await expect(observationDialog.getByLabel("Ne oldu?")).toBeEnabled();
     const quickDetailsSummary = page.locator("details.quick-details > summary").first();
-    await quickDetailsSummary.focus();
-    await expect(quickDetailsSummary).toBeFocused();
+    await expect.poll(async () => {
+      await quickDetailsSummary.focus();
+      return quickDetailsSummary.evaluate((summary) => document.activeElement === summary);
+    }, {
+      message: "Geç açılan modal odak tuzağı yerleştikten sonra ayrıntı başlığı odak almalı",
+    }).toBe(true);
     const quickDetailsFocus = await quickDetailsSummary.evaluate((summary) => ({
       outlineStyle: getComputedStyle(summary).outlineStyle,
       outlineWidth: Number.parseFloat(getComputedStyle(summary).outlineWidth),
