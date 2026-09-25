@@ -3310,7 +3310,7 @@ function EvidenceCaptureScreen({
             ) : null}
 
             <details className="quick-details">
-              <summary>
+              <summary tabIndex={0}>
                 <span>
                   <ReaderIcon aria-hidden="true" />
                   <strong>İstersen ayrıntı ekle</strong>
@@ -12906,7 +12906,7 @@ export default function Prototype() {
               </section>
               {renderClassroomFormFeedback()}
               <details className="classroom-setup-edit-details">
-                <summary>
+                <summary tabIndex={0}>
                   <span>
                     <strong>Ayrıntıları değiştir</strong>
                     <small>Okul, öğretmen, takvim ve çalışma saatleri</small>
@@ -14935,7 +14935,7 @@ export default function Prototype() {
                 </p>
               )}
               <details className="quick-details student-share-options">
-                <summary>
+                <summary tabIndex={0}>
                   <span>
                     <GearIcon aria-hidden="true" />
                     <strong>İçeriği özelleştir</strong>
@@ -15049,7 +15049,7 @@ export default function Prototype() {
                 </p>
               </div>
               <details className="quick-details student-share-options">
-                <summary>
+                <summary tabIndex={0}>
                   <span>
                     <GearIcon aria-hidden="true" />
                     <strong>Kaynak ve dönem</strong>
@@ -15145,7 +15145,7 @@ export default function Prototype() {
                 />
               </label>
               <details className="quick-details student-share-options">
-                <summary>
+                <summary tabIndex={0}>
                   <span>
                     <ReaderIcon aria-hidden="true" />
                     <strong>Öğretmen notu ve rapor kapsamı</strong>

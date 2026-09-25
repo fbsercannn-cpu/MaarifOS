@@ -76,7 +76,7 @@ export function MaarifSettingsModal({ isOpen, onClose, onOpenApiConfig }: Maarif
           </div>
 
           <div style={{ paddingTop: 14, borderTop: "1px solid #e2e8f0", color: "#94a3b8", fontSize: ".74rem", display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span>MaarifOS 0.75.1</span>
+            <span>MaarifOS 0.75.2</span>
             <span>Bağımsız öğretmen aracı</span>
           </div>
         </div>

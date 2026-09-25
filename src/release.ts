@@ -58,14 +58,15 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.75.1",
+  version: "0.75.2",
   releasedOn: "2026-09-25",
-  title: "Kurumsal destek kanalı ve güvenilir canlı kabul",
+  title: "Kurumsal destek ve iOS erişilebilirlik düzeltmesi",
   notes: Object.freeze([
     "destek@maarifos.com tanıtım sitesi, mağaza bilgisi ve uygulama ayarlarında tek kurumsal destek kanalı olarak kullanılıyor.",
     "Canlı Chromium ve WebKit kabul testleri, üretim service worker'ının kontrollü API yanıtlarını atlamayacağı biçimde ayrıştırıldı.",
     "Kaynak modül gerektiren veri bütünlüğü denetimleri yerel smoke kapısında, gerçek tıklama ve mobil taşma denetimleri canlı kapıda çalışıyor.",
     "Google girişi, DeepSeek oturumu ve resmî alan adlarının yalnız tanıtım yüzeyi olma sınırı korunuyor.",
+    "Hızlı ayrıntı başlıkları iOS WebKit üzerinde klavye ve yardımcı teknoloji odağını güvenilir biçimde alıyor.",
   ]),
 });
 

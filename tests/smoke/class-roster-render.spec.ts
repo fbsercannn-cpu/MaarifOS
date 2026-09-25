@@ -141,7 +141,11 @@ test("baskı medyası ekran yardımını kaldırır, sayfa sınırını ve son s
 
 test("gerçek mobil tarayıcı 40 öğrencilik etiketli yatay PDF üretir", async ({
   page,
-}) => {
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name.startsWith("live-"),
+    "Üretim paketi kaynak TypeScript modüllerini yayımlamaz; gerçek PDF bayt ve sayfa doğrulaması yerel smoke kapısında çalışır.",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?native=1", { waitUntil: "domcontentloaded" });
   const result = await page.evaluate(async (input) => {

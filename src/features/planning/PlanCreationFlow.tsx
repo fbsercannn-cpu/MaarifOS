@@ -1509,7 +1509,7 @@ export function PlanCreationScreen({
           ) : null}
 
           {!simpleWizardEnabled || simpleStep === 3 ? <details className="quick-details plan-optional-details">
-            <summary>
+            <summary tabIndex={0}>
               <span>
                 <ClockIcon aria-hidden="true" />
                 <strong>Başlık ve saati değiştir</strong>
@@ -1700,7 +1700,7 @@ export function PlanCreationScreen({
         </section> : null}
 
         {!simpleWizardEnabled || simpleStep === 3 ? <details className="quick-details plan-optional-details">
-          <summary>
+          <summary tabIndex={0}>
             <span>
               <PersonIcon aria-hidden="true" />
               <strong>Çocuk kapsamı</strong>
