@@ -19,6 +19,11 @@ export default defineConfig({
   use: {
     baseURL,
     storageState: "./test-results/live-access-state.json",
+    // Production registers a service worker, but live tests mock selected API
+    // responses. Blocking it keeps those mocks deterministic across Chromium
+    // and WebKit instead of letting a previously installed worker bypass
+    // Playwright's route interception.
+    serviceWorkers: "block",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
