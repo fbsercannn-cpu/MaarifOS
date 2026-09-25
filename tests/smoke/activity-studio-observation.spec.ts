@@ -144,7 +144,8 @@ test("Etkinlik Atölyesi kaynağı öğretmenin seçtiği gelecek plan gününe 
 
 test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi başka canlı plana bağlanmaz", async ({
   page,
-}) => {
+}, testInfo) => {
+  const isLiveRun = testInfo.project.name.startsWith("live-");
   // Açılır pencere, canvas, gerçek indirme ve IndexedDB bağlam çözümünü birlikte
   // sınayan bu çok aşamalı kanıtı yalnız kendi test bütçesi içinde yavaş say.
   test.slow();
@@ -167,7 +168,7 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
   const sourceActivityId = await activity.getAttribute("data-activity-id");
   expect(sourceActivityId).toBeTruthy();
 
-  const unrelated = await page.evaluate(async () => {
+  const unrelated = isLiveRun ? null : await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
     const attendance = await import("/src/core/domain/attendance.ts");
     const store = new core.IndexedDbDataStore();
@@ -286,6 +287,11 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
     page.getByRole("dialog", { name: "Gözlem ve değerlendirme akışı" }),
   ).toBeHidden();
 
+  // Üretim paketi kaynak TypeScript modüllerini yayımlamaz. Canlı kapı gerçek
+  // kullanıcı akışını bu noktaya kadar doğrular; exact IDB soy bağı aynı bundle
+  // için yerel smoke koşumunda aşağıda sınanır.
+  if (isLiveRun) return;
+
   const savedLineage = await page.evaluate(async () => {
     const core = await import("/src/core/index.ts");
     const store = new core.IndexedDbDataStore();
@@ -305,8 +311,8 @@ test("etkinlik baskısı açılır; uygulama kimliği ve öğretmen gözlemi ba�
     };
   });
   expect(savedLineage.observationCount).toBe(1);
-  expect(savedLineage.applicationActivityId).not.toBe(unrelated.activityId);
-  expect(savedLineage.applicationPlanId).not.toBe(unrelated.planId);
+  expect(savedLineage.applicationActivityId).not.toBe(unrelated!.activityId);
+  expect(savedLineage.applicationPlanId).not.toBe(unrelated!.planId);
   expect(savedLineage.observationActivityId).toBe(
     savedLineage.applicationActivityId,
   );

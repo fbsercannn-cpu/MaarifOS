@@ -58,14 +58,14 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.75.0",
+  version: "0.75.1",
   releasedOn: "2026-09-25",
-  title: "Native uygulama temeli ve güvenli Google girişi",
+  title: "Kurumsal destek kanalı ve güvenilir canlı kabul",
   notes: Object.freeze([
-    "Android ve iOS mağaza paketleri, uygulama içeriğini cihazda taşıyan resmi Capacitor çalışma alanlarıyla hazırlandı.",
-    "Google girişi sistem tarayıcısından uygulamaya tek kullanımlık ve kısa ömürlü PKCE dönüş koduyla bağlandı.",
-    "Native oturum Android Keystore ve iOS Keychain dışında saklanmıyor; tarayıcı depolamasına erişim anahtarı yazılmıyor.",
-    "DeepSeek öğretmen işleri, native uygulamada da aynı güvenli hesap oturumunu kullanıyor; resmî web alanları tanıtım yüzeyi olarak kalıyor.",
+    "destek@maarifos.com tanıtım sitesi, mağaza bilgisi ve uygulama ayarlarında tek kurumsal destek kanalı olarak kullanılıyor.",
+    "Canlı Chromium ve WebKit kabul testleri, üretim service worker'ının kontrollü API yanıtlarını atlamayacağı biçimde ayrıştırıldı.",
+    "Kaynak modül gerektiren veri bütünlüğü denetimleri yerel smoke kapısında, gerçek tıklama ve mobil taşma denetimleri canlı kapıda çalışıyor.",
+    "Google girişi, DeepSeek oturumu ve resmî alan adlarının yalnız tanıtım yüzeyi olma sınırı korunuyor.",
   ]),
 });
 

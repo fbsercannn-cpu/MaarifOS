@@ -66,6 +66,10 @@ test("public root is a responsive promotional website without full app access", 
   }
 
   await expect(page.getByRole("link", { name: /Ürünü incele/ }).first()).toHaveAttribute("href", "#urun-onizlemesi");
+  await expect(page.getByRole("link", { name: "destek@maarifos.com" })).toHaveAttribute(
+    "href",
+    /^mailto:destek@maarifos\.com(?:\?|$)/u,
+  );
   await expect(page.getByRole("button", { name: /Uygulamayı aç|Bugünü hazırla|Sınıfıma geç|Planlama alanını aç/ })).toHaveCount(0);
   await expect(page.getByText(/Bu site tanıtım amaçlıdır/)).toBeVisible();
 });

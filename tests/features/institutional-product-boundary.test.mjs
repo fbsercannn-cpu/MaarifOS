@@ -6,19 +6,28 @@ const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8
 
 test("mağaza bilgi yüzeyi yalnız resmî alan adlarını ve doğrulanmış mağaza sınırını gösterir", async () => {
   const modal = await read("src/components/PwaInstallPromptModal.tsx");
+  const support = await read("src/support.ts");
   assert.match(modal, /Google Play ve App Store/u);
   assert.match(modal, /maarifos\.com/u);
   assert.match(modal, /maarifos\.net/u);
+  assert.match(modal, /MAARIFOS_SUPPORT_EMAIL/u);
+  assert.match(support, /destek@maarifos\.com/u);
   assert.doesNotMatch(modal, /github\.io|fbsercannn|WebAPK|Ana Ekrana Ekle|Linki Kopyala/iu);
 });
 
 test("resmî web alanları tanıtım yüzeyidir ve URL ile tam uygulama erişimi vermez", async () => {
   const landing = await read("src/features/landing/MaarifLandingPage.tsx");
   const app = await read("src/App.tsx");
+  const runtime = await read("src/native/runtime.ts");
+  const settings = await read("src/components/MaarifSettingsModal.tsx");
   assert.match(landing, /Bu site tanıtım amaçlıdır/u);
   assert.match(landing, /Google Play ve App Store yayınıyla başlayacak/u);
   assert.doesNotMatch(landing, /Uygulamayı aç|Bugünü hazırla|Sınıfıma geç|Planlama alanını aç/u);
-  assert.match(app, /if \(officialPromotionHost\) return "landing"/u);
+  assert.match(landing, /MAARIFOS_SUPPORT_EMAIL/u);
+  assert.match(settings, /MAARIFOS_SUPPORT_EMAIL/u);
+  assert.match(app, /resolveAppSurface/u);
+  assert.match(runtime, /OFFICIAL_PROMOTION_HOSTS/u);
+  assert.match(runtime, /if \(OFFICIAL_PROMOTION_HOSTS\.has\(hostname\)\) return "landing"/u);
 });
 
 test("okul öncesi kimliği mali ünvan varsayımına dönmez", async () => {

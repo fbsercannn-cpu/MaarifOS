@@ -448,7 +448,8 @@ test("320 pikselde dört kalıcı ekranın son eylemi alt menünün üstünde ka
 
 test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kalmaz", async ({
   page,
-}) => {
+}, testInfo) => {
+  const isLiveRun = testInfo.project.name.startsWith("live-");
   await page.setViewportSize({ width: 320, height: 568 });
   // This case exercises preparation mode; keep animation clocks native.
   await page.addInitScript((offsetMs: number) => {
@@ -484,24 +485,26 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
   await expect(page.getByRole("navigation", { name: "Ana menü" })).toHaveCount(0);
   await expect(page.locator(".mobile-scroll")).toHaveJSProperty("scrollTop", 0);
 
-  const previewWrites = await page.evaluate(async () => {
-    const core = await import("/src/core/index.ts");
-    const store = new core.IndexedDbDataStore();
-    const snapshot = await store.readSnapshot();
-    store.close();
-    return {
-      applicationPlans: snapshot.plans.filter(
-        (record) => record.planType === "activity-studio-application",
-      ).length,
-      applicationActivities: snapshot.activities.filter(
-        (record) => record.activityKind === "activity-studio-application",
-      ).length,
-    };
-  });
-  expect(previewWrites).toEqual({
-    applicationPlans: 0,
-    applicationActivities: 0,
-  });
+  if (!isLiveRun) {
+    const previewWrites = await page.evaluate(async () => {
+      const core = await import("/src/core/index.ts");
+      const store = new core.IndexedDbDataStore();
+      const snapshot = await store.readSnapshot();
+      store.close();
+      return {
+        applicationPlans: snapshot.plans.filter(
+          (record) => record.planType === "activity-studio-application",
+        ).length,
+        applicationActivities: snapshot.activities.filter(
+          (record) => record.activityKind === "activity-studio-application",
+        ).length,
+      };
+    });
+    expect(previewWrites).toEqual({
+      applicationPlans: 0,
+      applicationActivities: 0,
+    });
+  }
 
   const addDot = childMode.getByRole("button", { name: "Nokta ekle", exact: true });
   await expect(addDot).toBeEnabled();
@@ -564,18 +567,20 @@ test("320 piksel Çocuk Modunda çizim ve alt eylemler gezinmenin arkasında kal
 
 
 test("StrictMode kapanan ilk bağlantı güncel sınıf ve çocuk hidrasyonunu kaybettirmez",async({page},testInfo)=>{
+ const isLiveRun=testInfo.project.name.startsWith('live-');
  const warnings:string[]=[];
  page.on('console',message=>{if(message.type()==='warning'&&message.text().includes('hydration'))warnings.push(message.text().split(':')[0]);});
  await page.goto('/?native=1');await configureClassroomWithoutStudents(page);
  await page.getByRole('button',{name:'Sınıfım',exact:true}).click();await page.getByRole('button',{name:'Çocuk ekle',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'Çocuk ekle',exact:true});await dialog.getByLabel('Çocuğun adı').fill('Hidrasyon Kurgu Çocuğu');await dialog.getByRole('button',{name:'Kaydet ve kapat',exact:true}).click();await expect(dialog).toBeHidden();
- const before=await readRepositorySnapshot(page);
+ const before=isLiveRun?null:await readRepositorySnapshot(page);
  await page.reload({waitUntil:'networkidle'});
  await expect(page.getByRole('dialog',{name:'Cihaz verileri hazırlanıyor',exact:true})).toBeHidden({timeout:30_000});
  await expect(page.locator('button.simple-student-list__profile').filter({hasText:'Hidrasyon Kurgu Çocuğu'})).toBeVisible();
  await expect(page.getByRole('dialog',{name:'Sınıfını hazırla'})).toHaveCount(0);
+ if(isLiveRun){await testInfo.attach('hydration-observation',{body:JSON.stringify({warningCount:warnings.length,persistedChildVisible:true,classroomSetupPreserved:true}),contentType:'application/json'});return;}
  const after=await readRepositorySnapshot(page);
- expect(after.students).toEqual(before.students);
- expect(after.classrooms).toEqual(before.classrooms);
+ expect(after.students).toEqual(before!.students);
+ expect(after.classrooms).toEqual(before!.classrooms);
  await testInfo.attach('hydration-observation',{body:JSON.stringify({warningCount:warnings.length,persistedChildren:after.students.length,classroomsPreserved:true}),contentType:'application/json'});
 });

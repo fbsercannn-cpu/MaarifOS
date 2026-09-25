@@ -1,3 +1,5 @@
+import { MAARIFOS_SUPPORT_EMAIL, MAARIFOS_SUPPORT_MAILTO } from "../support";
+
 /**
  * Native mağaza sürümü yayımlanana kadar yalnız kurumsal yayın bilgisini gösterir.
  * PWA, APK, barındırma sağlayıcısı ve geliştirici hesabı son kullanıcıya açılmaz.
@@ -105,6 +107,9 @@ export function PwaInstallPromptModal({ isOpen, onClose }: PwaInstallPromptModal
             Güncel ürün bilgileri yalnız <strong>maarifos.com</strong> ve <strong>maarifos.net</strong> adreslerinde paylaşılır.
             Mağaza yayını tamamlanana kadar doğrudan indirme veya kurulum bağlantısı sunulmaz.
           </p>
+          <a href={MAARIFOS_SUPPORT_MAILTO} style={{ minHeight: "44px", marginTop: "10px", display: "inline-flex", alignItems: "center", color: "#7dd3fc", fontSize: "0.86rem", fontWeight: 800, overflowWrap: "anywhere" }}>
+            {MAARIFOS_SUPPORT_EMAIL}
+          </a>
         </div>
 
         <button

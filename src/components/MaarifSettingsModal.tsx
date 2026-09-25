@@ -1,5 +1,6 @@
 import React from "react";
 import { CheckCircledIcon, Cross2Icon, GearIcon, LightningBoltIcon, LockClosedIcon } from "@radix-ui/react-icons";
+import { MAARIFOS_SUPPORT_EMAIL, MAARIFOS_SUPPORT_MAILTO } from "../support";
 
 interface MaarifSettingsModalProps {
   isOpen: boolean;
@@ -66,8 +67,16 @@ export function MaarifSettingsModal({ isOpen, onClose, onOpenApiConfig }: Maarif
             <button type="button" onClick={() => { onClose(); onOpenApiConfig(); }} style={{ background: "#fff", border: "1px solid #b9c7c0", padding: "8px 13px", borderRadius: 10, fontSize: ".78rem", fontWeight: 800, color: "#20563d", cursor: "pointer" }}>Yapılandır</button>
           </div>
 
+          <div style={{ paddingTop: 14, borderTop: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div>
+              <strong style={{ display: "block", color: "#1e293b", fontSize: ".88rem" }}>Destek ve geri bildirim</strong>
+              <small style={{ color: "#64748b", fontSize: ".76rem" }}>Kurumsal MaarifOS destek kanalı</small>
+            </div>
+            <a href={MAARIFOS_SUPPORT_MAILTO} style={{ minHeight: 44, maxWidth: "58%", display: "inline-flex", alignItems: "center", color: "#20563d", fontSize: ".78rem", fontWeight: 800, overflowWrap: "anywhere" }}>{MAARIFOS_SUPPORT_EMAIL}</a>
+          </div>
+
           <div style={{ paddingTop: 14, borderTop: "1px solid #e2e8f0", color: "#94a3b8", fontSize: ".74rem", display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span>MaarifOS 0.75.0</span>
+            <span>MaarifOS 0.75.1</span>
             <span>Bağımsız öğretmen aracı</span>
           </div>
         </div>

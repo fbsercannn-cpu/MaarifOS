@@ -11,6 +11,11 @@ import {
   MobileIcon,
 } from "@radix-ui/react-icons";
 import { MaarifLogo } from "../../components/MaarifLogo";
+import {
+  MAARIFOS_STORE_NEWS_MAILTO,
+  MAARIFOS_SUPPORT_EMAIL,
+  MAARIFOS_SUPPORT_MAILTO,
+} from "../../support";
 import "./landing.css";
 
 interface MaarifLandingPageProps {
@@ -64,7 +69,7 @@ export function MaarifLandingPage({ onLaunchHub, onLaunchPhone, onLaunchApp }: M
             <a href="#neden">Ürün</a>
             <a href="#urun-onizlemesi">Ürün ön izlemesi</a>
             <a href="#nasil">Nasıl çalışır?</a>
-            <a href="mailto:destek@maarifos.com">İletişim</a>
+            <a href={MAARIFOS_SUPPORT_MAILTO}>İletişim</a>
           </nav>
 
           <div className="mos-header-actions">
@@ -86,7 +91,7 @@ export function MaarifLandingPage({ onLaunchHub, onLaunchPhone, onLaunchApp }: M
             <a href="#neden" onClick={() => setMenuOpen(false)}>Ürün</a>
             <a href="#nasil" onClick={() => setMenuOpen(false)}>Nasıl çalışır?</a>
             <a href="#urun-onizlemesi" onClick={() => setMenuOpen(false)}>Ürün ön izlemesi</a>
-            <a href="mailto:destek@maarifos.com" onClick={() => setMenuOpen(false)}>İletişim</a>
+            <a href={MAARIFOS_SUPPORT_MAILTO} onClick={() => setMenuOpen(false)}>İletişim</a>
             <a className="mos-button mos-button-primary" href="#magaza-yayini" onClick={() => setMenuOpen(false)}>Mağaza yayınını takip et</a>
           </nav>
         )}
@@ -172,7 +177,7 @@ export function MaarifLandingPage({ onLaunchHub, onLaunchPhone, onLaunchApp }: M
         <div className="mos-shell mos-final-cta-inner">
           <MobileIcon aria-hidden="true" />
           <div><h2>MaarifOS mobil mağazalara hazırlanıyor.</h2><p>Bu web sitesi ürünü tanıtır. Kullanım, doğrulanmış Google Play ve App Store yayınıyla başlayacak.</p></div>
-          <a className="mos-button mos-button-dark" href="mailto:destek@maarifos.com?subject=MaarifOS%20ma%C4%9Faza%20yay%C4%B1n%C4%B1">Yayın haberini al <ArrowRightIcon /></a>
+          <a className="mos-button mos-button-dark" href={MAARIFOS_STORE_NEWS_MAILTO}>Yayın haberini al <ArrowRightIcon /></a>
         </div>
       </section>
 
@@ -180,7 +185,7 @@ export function MaarifLandingPage({ onLaunchHub, onLaunchPhone, onLaunchApp }: M
         <div className="mos-shell mos-footer-inner">
           <MaarifLogo size={34} variant="horizontal" theme="light" />
           <p>Öğretmen için bağımsız çalışma aracı. Resmî kurum sitesi veya Bakanlık hizmeti değildir.</p>
-          <div className="mos-footer-links"><a href="mailto:destek@maarifos.com">destek@maarifos.com</a><span>© 2026 MaarifOS</span></div>
+          <div className="mos-footer-links"><a href={MAARIFOS_SUPPORT_MAILTO}>{MAARIFOS_SUPPORT_EMAIL}</a><span>© 2026 MaarifOS</span></div>
         </div>
       </footer>
     </main>
