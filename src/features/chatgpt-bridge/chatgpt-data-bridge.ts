@@ -1,5 +1,5 @@
 /**
- * chatgpt-data-bridge.ts — ChatGPT Veri Köprüsü & MEB TYMM Ayrıştırıcı (v0.75.2)
+ * chatgpt-data-bridge.ts — ChatGPT Veri Köprüsü & MEB TYMM Ayrıştırıcı (v0.75.3)
  * 
  * TELEFONDAKİ CHATGPT UYGULAMASI VEYA DEPOLAMASINDAN DOĞRUDAN VERİ ÇEKME MOTORU
  * 

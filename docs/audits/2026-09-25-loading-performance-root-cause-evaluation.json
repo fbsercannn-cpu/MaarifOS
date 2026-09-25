@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-25T16:36:19.811260Z",
+  "civil_date": "2026-09-25",
+  "input_file_sha256": "082d914224354cca2a5fecd1ad49ace775bf824a7504f3e2e93af990d18e84fe",
+  "source_sha256": "0190286fea5f71fc32993a1a626152505778e0fb668de02def67fd00607ac6df",
+  "incident_id": "MAARIFOS-P0-LOADING-2026-09-25",
+  "incident_civil_date": "2026-09-25",
+  "status": "ROOT_CAUSE_CONFIRMED",
+  "reproduction_status": "REPRODUCED",
+  "hypotheses": [
+    {
+      "id": "H-PRIMARY-FLOW-BLOCKING",
+      "statement": "Birincil akış gecikmesi ve amatör görünüm, ekran geçişlerinin stillendirilmemiş bloklayıcı fallbacklere ve çocuk başına tam depo okumasına bağlanmasından kaynaklanır.",
+      "mechanism": "Lazy Bugün modülü ham fallback gösterir; Hızlı Gözlem yükleme sınıflarının üretim CSS'i yoktur; loadQuickObservationDraft her seçimde readSnapshot çağırır ve seri kayıt zorunlu tamamlama paneliyle kesilir.",
+      "status": "CONFIRMED",
+      "reasons": [
+        "CAUSAL_GATES_MET"
+      ],
+      "supporting_evidence_ids": [
+        "E-RAW-TODAY",
+        "E-BLOCKING-GATE",
+        "E-RAW-OBSERVATION",
+        "E-CODE-PER-TAP-READ"
+      ],
+      "contradicting_evidence_ids": [],
+      "falsification_tests": [
+        {
+          "id": "T-SINGLE-SNAPSHOT",
+          "status": "SUPPORTS"
+        },
+        {
+          "id": "T-20-CYCLE-MOBILE",
+          "status": "SUPPORTS"
+        },
+        {
+          "id": "T-360-NO-OVERFLOW",
+          "status": "SUPPORTS"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "confirmed": 1,
+    "likely": 0,
+    "refuted": 0,
+    "untested": 0
+  },
+  "structural_errors": [],
+  "duplicate_groups": []
+}

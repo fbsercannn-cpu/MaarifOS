@@ -197,6 +197,7 @@ import {
   finalizeQuickObservationDraftBatch,
   finalizeQuickObservationDraft,
   loadQuickObservationDraft,
+  loadQuickObservationDraftCollection,
   persistQuickObservationDraftBatch,
   persistQuickObservationDraft,
   QUICK_OBSERVATION_NEUTRAL_TEMPLATES,
@@ -378,11 +379,11 @@ const InviteAccessScreen = lazy(() =>
   })),
 );
 
-const TodayScreen = lazy(() =>
+const loadTodayScreen = () =>
   import("./features/simple-experience/SimpleTodayScreen.tsx").then((module) => ({
     default: module.SimpleTodayScreen,
-  })),
-);
+  }));
+const TodayScreen = lazy(loadTodayScreen);
 const DeskDocumentCenter = lazy(() => import("./features/documents/DeskDocumentCenter.tsx").then(module => ({ default: module.DeskDocumentCenter })));
 const DocumentWorkshop = lazy(() => import("./features/documents/DocumentWorkshop.tsx").then(module => ({ default: module.DocumentWorkshop })));
 const FamilyMeetingFormPanel = lazy(() => import("./features/family-engagement/FamilyMeetingFormPanel.tsx").then(module => ({ default: module.FamilyMeetingFormPanel })));
@@ -469,6 +470,7 @@ const loadDocumentWorkspaceScreen = () =>
 const DocumentWorkspaceScreen = lazy(loadDocumentWorkspaceScreen);
 
 const preloadPrimarySurface = (id: AlphaPrimaryNavigationId) => {
+  if (id === "today") return loadTodayScreen();
   if (id === "classroom") return loadClassroomScreen();
   if (id === "plans") return loadPlanWorkspaceScreen();
   if (id === "documents") return loadDocumentWorkspaceScreen();
@@ -1302,6 +1304,10 @@ type EvidenceFlowActions = {
     activity: EvidenceActivitySummary,
     studentId: string,
   ) => Promise<QuickObservationDraft | null>;
+  loadDrafts: (
+    activity: EvidenceActivitySummary,
+    studentIds: readonly string[],
+  ) => Promise<Map<string, QuickObservationDraft | null>>;
   loadDraftBatch: (
     activity: EvidenceActivitySummary,
   ) => Promise<{ drafts: QuickObservationBatchDraft[]; batchId: string } | null>;
@@ -1552,6 +1558,45 @@ function studentContactsForForm(student: Student): StudentContact[] {
   return contacts;
 }
 
+function BrandedSurfaceLoading({
+  title,
+  detail,
+  compact = false,
+}: {
+  title: string;
+  detail: string;
+  compact?: boolean;
+}) {
+  return (
+    <section
+      className={`surface-loading${compact ? " is-compact" : ""}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="surface-loading-brand" aria-hidden="true">
+        <MaarifLogo size={34} variant="emblem-only" />
+        <span>
+          <strong>MaarifOS</strong>
+          <small>Öğretmen çalışma alanı</small>
+        </span>
+      </div>
+      <div className="surface-loading-copy">
+        <strong>{title}</strong>
+        <span>{detail}</span>
+      </div>
+      <div className="surface-loading-progress" aria-hidden="true">
+        <span />
+      </div>
+      <div className="surface-loading-skeleton" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
+    </section>
+  );
+}
+
 function BufferedObservationTextarea({
   value,
   onBufferedChange,
@@ -1772,6 +1817,8 @@ function EvidenceCaptureScreen({
   const pendingDraftSnapshotRef = useRef<EvidenceCaptureDraft | null>(null);
   const draftWritePromiseRef = useRef<Promise<void> | null>(null);
   const draftLoadSequenceRef = useRef(0);
+  const draftCacheRef = useRef(new Map<string, QuickObservationDraft | null>());
+  const draftPrefetchRef = useRef<Promise<void> | null>(null);
   const finalizedRef = useRef(false);
   const initialSelectionAppliedRef = useRef(false);
   const initialSeedAppliedRef = useRef(false);
@@ -1862,7 +1909,8 @@ function EvidenceCaptureScreen({
               const next = pendingDraftSnapshotRef.current;
               pendingDraftSnapshotRef.current = null;
               if (next.selectionMode === "single") {
-                await actionsRef.current.saveDraft(captureActivity, next);
+                const savedDraft = await actionsRef.current.saveDraft(captureActivity, next);
+                draftCacheRef.current.set(next.studentId, savedDraft);
               } else {
                 await actionsRef.current.saveDraftBatch(captureActivity, {
                   batchId: next.batchId,
@@ -2037,6 +2085,40 @@ function EvidenceCaptureScreen({
     [actions.registerDraftFlusher, flushCurrentDraft],
   );
 
+  const eligibleStudentIdsKey = eligibleStudents
+    .map((student) => student.id)
+    .join("\u0000");
+  useEffect(() => {
+    let cancelled = false;
+    draftCacheRef.current.clear();
+    const operation = actionsRef.current
+      .loadDrafts(captureActivity, eligibleStudents.map((student) => student.id))
+      .then((drafts) => {
+        if (!cancelled) draftCacheRef.current = drafts;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (draftPrefetchRef.current === operation) draftPrefetchRef.current = null;
+      });
+    draftPrefetchRef.current = operation;
+    return () => {
+      cancelled = true;
+    };
+  }, [captureActivity.id, captureActivity.planId, eligibleStudentIdsKey]);
+
+  const loadStudentDraft = async (nextStudentId: string) => {
+    if (draftCacheRef.current.has(nextStudentId)) {
+      return draftCacheRef.current.get(nextStudentId) ?? null;
+    }
+    await draftPrefetchRef.current;
+    if (draftCacheRef.current.has(nextStudentId)) {
+      return draftCacheRef.current.get(nextStudentId) ?? null;
+    }
+    const draft = await actionsRef.current.loadDraft(captureActivity, nextStudentId);
+    draftCacheRef.current.set(nextStudentId, draft);
+    return draft;
+  };
+
   const chooseStudent = async (nextStudentId: string, forceLoad = false) => {
     if (nextStudentId === studentId && !forceLoad) return;
     triggerHaptic("selection");
@@ -2068,7 +2150,7 @@ function EvidenceCaptureScreen({
         ? initialDraft
         : null;
     try {
-      const draft = await actions.loadDraft(captureActivity, nextStudentId);
+      const draft = await loadStudentDraft(nextStudentId);
       if (draftLoadSequenceRef.current !== loadSequence) return;
       if (draft || seed) {
         const loadedCategories =
@@ -4227,6 +4309,7 @@ export default function Prototype() {
   const activeSurfaceRef = useRef<AppSurface | null>(null);
   const lastEvidenceFlowRequestRef = useRef<EvidenceFlowRequest | null>(null);
   const lastCompletionRequestRef = useRef<{ studentId?: string; observationId?: string } | null>(null);
+  const observationCompletionPromptRef = useRef(true);
   const lastPlanGuidanceDateRef = useRef<string | null>(null);
   const lastTymmChildSessionRef = useRef<TymmChildParticipationSession | null>(null);
   const [students, setStudents] = useState<Student[]>(initialStudents);
@@ -4239,7 +4322,7 @@ export default function Prototype() {
   const [lastAttendanceChange, setLastAttendanceChange] = useState<AttendanceChange | null>(null);
   const [persistenceState, setPersistenceState] = useState<PersistenceState>({
     phase: "hydrating",
-    detail: "Bu cihazdaki veriler hazırlanıyor.",
+    detail: "Sınıf, plan ve taslaklar güvenle açılıyor.",
     pendingWrites: 0,
   });
   const [hydrationAttempt, setHydrationAttempt] = useState(0);
@@ -4565,7 +4648,7 @@ export default function Prototype() {
     useState<BackupHealthReceipt | null>(null);
   const [wipeConfirmation, setWipeConfirmation] = useState("");
   const [dataBusy, setDataBusy] = useState(false);
-  const [dataStatus, setDataStatus] = useState("Bu cihazdaki veriler hazırlanıyor.");
+  const [dataStatus, setDataStatus] = useState("Sınıf, plan ve taslaklar güvenle açılıyor.");
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [releaseNotesExpanded, setReleaseNotesExpanded] = useState(false);
   const [releasePreviousVersion, setReleasePreviousVersion] =
@@ -4585,6 +4668,7 @@ export default function Prototype() {
   useEffect(() => {
     const warmPrimaryWorkspaces = () => {
       void Promise.allSettled([
+        preloadPrimarySurface("today"),
         preloadPrimarySurface("classroom"),
         preloadPrimarySurface("plans"),
         preloadPrimarySurface("documents"),
@@ -5596,10 +5680,10 @@ export default function Prototype() {
     pendingWriteCountRef.current = 0;
     applyPersistenceState({
       phase: "hydrating",
-      detail: "Bu cihazdaki veriler hazırlanıyor.",
+      detail: "Sınıf, plan ve taslaklar güvenle açılıyor.",
       pendingWrites: 0,
     });
-    setDataStatus("Bu cihazdaki veriler hazırlanıyor.");
+    setDataStatus("Sınıf, plan ve taslaklar güvenle açılıyor.");
     const hydrateFromOneSnapshot = async () => {
       const state = await runHydrationStep(
         "dashboard",
@@ -9059,6 +9143,7 @@ export default function Prototype() {
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
       setPlansOpen(false);
+      observationCompletionPromptRef.current = !initialStudentId;
       setEvidenceFlowRequest({
         activity,
         ...(initialStudentId ? { initialStudentId } : {}),
@@ -9106,6 +9191,7 @@ export default function Prototype() {
         d1ReturnFocusRef.current ??= returnFocusTarget;
         setStudentProfileOpen(false);
         setPlansOpen(false);
+        observationCompletionPromptRef.current = !initialStudentId;
         setEvidenceFlowRequest({
           activity: existingActivity,
           ...(initialStudentId ? { initialStudentId } : {}),
@@ -9150,6 +9236,7 @@ export default function Prototype() {
       surfaceTransitionRef.current = "evidence-flow";
       setStudentProfileOpen(false);
       setPlansOpen(false);
+      observationCompletionPromptRef.current = !initialStudentId;
       setEvidenceFlowRequest({
         activity,
         ...(initialStudentId ? { initialStudentId } : {}),
@@ -9914,6 +10001,13 @@ export default function Prototype() {
         activityId: activity.id,
         taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
       }),
+    loadDrafts: (activity, studentIds) =>
+      loadQuickObservationDraftCollection(store, {
+        studentIds,
+        planId: activity.planId,
+        activityId: activity.id,
+        taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V2,
+      }),
     loadDraftBatch: async (activity) => {
       const { loadQuickObservationDraftBatch } = await import(
         "./features/evidence/quick-observation-batch-recovery.ts"
@@ -10007,10 +10101,9 @@ export default function Prototype() {
       // The immutable local commit above is the save boundary. Refreshing the
       // derived workspaces can be expensive on mobile Safari/WebKit, so it must
       // not keep the observation dialog open after the durable write succeeded.
-      lastCompletionRequestRef.current = {
-        studentId,
-        observationId: result.observation.id,
-      };
+      lastCompletionRequestRef.current = observationCompletionPromptRef.current
+        ? { studentId, observationId: result.observation.id }
+        : null;
       setAnnouncement("Gözlem notu bu cihaza kaydedildi.");
       afterInteractivePaint(() => {
         void verifyCommittedObservationRefresh(
@@ -11829,7 +11922,12 @@ export default function Prototype() {
             </Suspense>
           ) : (
             <Suspense
-              fallback={<div className="surface-loading" role="status">Bugünün işleri hazırlanıyor…</div>}
+              fallback={
+                <BrandedSurfaceLoading
+                  title="Bugün açılıyor"
+                  detail="Sınıf özeti ekranda kalırken günlük araçlar hazırlanıyor."
+                />
+              }
             >
             <TodayScreen
               preferenceStore={store}
@@ -16284,10 +16382,11 @@ export default function Prototype() {
             <Dialog.Description className="sr-only">
               Gözlem bağlamı cihaz kayıtlarından hazırlanıyor.
             </Dialog.Description>
-            <div className="surface-loading" role="status" aria-live="polite" aria-atomic="true">
-              <strong>Hızlı Gözlem</strong>
-              <span>Çocuk ve bugünün plan bağlantısı hazırlanıyor…</span>
-            </div>
+            <BrandedSurfaceLoading
+              compact
+              title="Hızlı Gözlem açılıyor"
+              detail="Çocuk listesi ve bugünün etkinliği eşleştiriliyor."
+            />
           </Dialog.Content>
         </Dialog.Root>
       ) : null}
@@ -16430,6 +16529,15 @@ export default function Prototype() {
             onPointerDownOutside={(event) => event.preventDefault()}
           >
             <div className="persistence-gate-card">
+              {persistenceState.phase === "hydrating" ? (
+                <div className="persistence-gate-brand" aria-hidden="true">
+                  <MaarifLogo size={48} variant="emblem-only" />
+                  <span>
+                    <strong>MaarifOS</strong>
+                    <small>Öğretmen çalışma alanı</small>
+                  </span>
+                </div>
+              ) : null}
               <span className="persistence-gate-icon" aria-hidden="true">
                 {persistenceState.phase === "error" ? (
                   <LockClosedIcon />
@@ -16441,12 +16549,17 @@ export default function Prototype() {
                 <h2>
                   {persistenceState.phase === "error"
                     ? "Yeni kayıtlar güvenlik için durduruldu"
-                    : "Cihaz verileri hazırlanıyor"}
+                    : "Çalışma alanınız açılıyor"}
                 </h2>
               </Dialog.Title>
               <Dialog.Description asChild>
                 <p aria-live="assertive">{persistenceState.detail}</p>
               </Dialog.Description>
+              {persistenceState.phase === "hydrating" ? (
+                <div className="persistence-gate-progress" aria-hidden="true">
+                  <span />
+                </div>
+              ) : null}
               {persistenceState.phase === "error" ? (
                 localVaultRecoveryRequired ? (
                   <section

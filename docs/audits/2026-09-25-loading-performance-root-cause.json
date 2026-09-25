@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "source_sha256": "0190286fea5f71fc32993a1a626152505778e0fb668de02def67fd00607ac6df",
+  "incident": {
+    "id": "MAARIFOS-P0-LOADING-2026-09-25",
+    "summary": "Bugün ve Hızlı Gözlem birincil mobil akışlarında uzun, ham ve kesintili bekleme görünümü",
+    "observed_at_utc": "2026-09-25T16:35:46.091664Z",
+    "civil_date": "2026-09-25",
+    "expected": "Birincil ekranlar mevcut kabuğu koruyarak hızlı açılmalı; çocuk seçimi bellekte yanıt vermeli ve bekleme kurumsal görünmelidir.",
+    "actual": "Ham hazırlanıyor metni, tam ekran bloklama, her çocuk seçiminde tam snapshot okuması ve seri kayıtta zorunlu sonraki-adım paneli görüldü.",
+    "environment": "Android telefon ekran görüntüleri ve 390x844 Chromium teknik akış testi",
+    "severity": "HIGH"
+  },
+  "reproduction": {
+    "status": "REPRODUCED",
+    "steps_sha256": "eab50652c880f271f18330c08cdd7dd4b62fcb79130cf76654962ac5b1233264"
+  },
+  "evidence": [
+    {
+      "id": "E-RAW-TODAY",
+      "type": "device-screenshot",
+      "source_sha256": "0190286fea5f71fc32993a1a626152505778e0fb668de02def67fd00607ac6df",
+      "collected_at_utc": "2026-09-25T16:35:46.091664Z",
+      "collected_civil_date": "2026-09-25"
+    },
+    {
+      "id": "E-BLOCKING-GATE",
+      "type": "device-screenshot",
+      "source_sha256": "e6ff2dc6eeec2caf2cf6539ca8efb2401eb3712bf60dc9c4eebe858cab7680ed",
+      "collected_at_utc": "2026-09-25T16:35:46.091664Z",
+      "collected_civil_date": "2026-09-25"
+    },
+    {
+      "id": "E-RAW-OBSERVATION",
+      "type": "device-screenshot",
+      "source_sha256": "d983405016205d00418cc0051692e9254b39b371fe8ddb7dcb1203998eefb3aa",
+      "collected_at_utc": "2026-09-25T16:35:46.091664Z",
+      "collected_civil_date": "2026-09-25"
+    },
+    {
+      "id": "E-CODE-PER-TAP-READ",
+      "type": "source-inspection",
+      "source_sha256": "6e9ba407003fe54102549cf31ceb2fda47f84962b47ef80d7c0ac286b5da9107",
+      "collected_at_utc": "2026-09-25T16:35:46.091664Z",
+      "collected_civil_date": "2026-09-25"
+    }
+  ],
+  "hypotheses": [
+    {
+      "id": "H-PRIMARY-FLOW-BLOCKING",
+      "statement": "Birincil akış gecikmesi ve amatör görünüm, ekran geçişlerinin stillendirilmemiş bloklayıcı fallbacklere ve çocuk başına tam depo okumasına bağlanmasından kaynaklanır.",
+      "mechanism": "Lazy Bugün modülü ham fallback gösterir; Hızlı Gözlem yükleme sınıflarının üretim CSS'i yoktur; loadQuickObservationDraft her seçimde readSnapshot çağırır ve seri kayıt zorunlu tamamlama paneliyle kesilir.",
+      "supporting_evidence_ids": [
+        "E-RAW-TODAY",
+        "E-BLOCKING-GATE",
+        "E-RAW-OBSERVATION",
+        "E-CODE-PER-TAP-READ"
+      ],
+      "contradicting_evidence_ids": [],
+      "falsification_tests": [
+        {
+          "id": "T-SINGLE-SNAPSHOT",
+          "status": "SUPPORTS"
+        },
+        {
+          "id": "T-20-CYCLE-MOBILE",
+          "status": "SUPPORTS"
+        },
+        {
+          "id": "T-360-NO-OVERFLOW",
+          "status": "SUPPORTS"
+        }
+      ],
+      "correlation_only": false
+    }
+  ]
+}

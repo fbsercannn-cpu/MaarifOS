@@ -234,6 +234,13 @@ async function activeScopeInTransaction(
   return activeScopeFromRecords(academicYears, classrooms, settings);
 }
 
+export interface QuickObservationDraftCollectionSelector {
+  studentIds: readonly string[];
+  planId: string;
+  activityId: string;
+  taxonomyVersion?: ObservationTaxonomyVersion;
+}
+
 function activeScopeFromRecords(
   academicYears: StoredRecord[],
   classrooms: StoredRecord[],
@@ -411,6 +418,46 @@ export async function loadQuickObservationDraft(
       selector,
     )[0] ?? null
   );
+}
+
+/**
+ * Loads every requested child's independent draft from one verified snapshot.
+ * The observation picker used to decrypt and scan the complete repository on
+ * every child tap; keeping the read at activity scope makes selection an
+ * in-memory operation after the first paint.
+ */
+export async function loadQuickObservationDraftCollection(
+  store: LocalDataStore,
+  input: QuickObservationDraftCollectionSelector,
+): Promise<Map<string, QuickObservationDraft | null>> {
+  const studentIds = [
+    ...new Set(input.studentIds.map((studentId) => validUuid(studentId, "Öğrenci"))),
+  ];
+  const selector = validDraftSelector({
+    studentId: studentIds[0] ?? crypto.randomUUID(),
+    planId: input.planId,
+    activityId: input.activityId,
+    ...(input.taxonomyVersion === undefined
+      ? {}
+      : { taxonomyVersion: input.taxonomyVersion }),
+  });
+  const snapshot = await store.readSnapshot();
+  const scope = resolveActiveClassroomScope(snapshot);
+  const result = new Map<string, QuickObservationDraft | null>();
+  for (const studentId of studentIds) {
+    if (!scope || !activeStudent(snapshot.students, studentId, scope)) {
+      result.set(studentId, null);
+      continue;
+    }
+    result.set(
+      studentId,
+      matchingIndependentDrafts(
+        liveStudentDrafts(snapshot.settings, studentId, scope),
+        selector,
+      )[0] ?? null,
+    );
+  }
+  return result;
 }
 
 export async function persistQuickObservationDraft(

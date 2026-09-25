@@ -19,6 +19,7 @@ import {
   finalizeQuickObservationDraftBatch,
   finalizeQuickObservationDraft,
   loadQuickObservationDraft,
+  loadQuickObservationDraftCollection,
   persistQuickObservationDraftBatch,
   persistQuickObservationDraft,
 } from "../../src/features/evidence/quick-observation.ts";
@@ -369,6 +370,37 @@ test("bağlamlı finalize başka etkinlikteki aynı çocuk taslağını etkin b�
     }))?.rawText,
     draftAInput.rawText,
   );
+});
+
+test("gözlem çocuk seçicisi bütün tekli taslakları tek snapshot okumasıyla ısıtır", async () => {
+  const store = activeStore();
+  await persistQuickObservationDraft(store, draftAInput);
+  await persistQuickObservationDraft(store, {
+    ...draftAInput,
+    studentId: studentBId,
+    rawText: "Kurgu çocuk B için önceden yüklenen taslak.",
+  });
+  let snapshotReads = 0;
+  const originalReadSnapshot = store.readSnapshot.bind(store);
+  store.readSnapshot = async () => {
+    snapshotReads += 1;
+    return originalReadSnapshot();
+  };
+
+  const drafts = await loadQuickObservationDraftCollection(store, {
+    studentIds: [studentAId, studentBId, studentCId],
+    planId,
+    activityId,
+    taxonomyVersion: OBSERVATION_TAXONOMY_VERSION_V1,
+  });
+
+  assert.equal(snapshotReads, 1);
+  assert.equal(drafts.get(studentAId)?.rawText, draftAInput.rawText);
+  assert.equal(
+    drafts.get(studentBId)?.rawText,
+    "Kurgu çocuk B için önceden yüklenen taslak.",
+  );
+  assert.equal(drafts.get(studentCId), null);
 });
 
 test("editördeki son değer tek atomik işlemde taslak ve değiştirilemez gözleme yazılır", async () => {

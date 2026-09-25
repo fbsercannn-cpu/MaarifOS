@@ -131,3 +131,22 @@ test("6. Apple HIG Web Vibration API: Dokunsal Geri Bildirim Entegrasyonu", () =
     "AttendancePanels.tsx triggerHaptic çağırmalıdır",
   );
 });
+
+test("7. Bekleme ekranları ham metin yerine markalı ve taşmasız durum katmanı kullanır", () => {
+  const prototypePath = path.join(root, "src/Prototype.tsx");
+  const cssPath = path.join(root, "src/prototype.css");
+  const prototype = readFileSync(prototypePath, "utf8");
+  const css = readFileSync(cssPath, "utf8");
+
+  assert.ok(
+    prototype.includes("function BrandedSurfaceLoading") &&
+      prototype.includes('preloadPrimarySurface("today")'),
+    "Bugün ve Gözlem bekleme katmanları markalı olmalı, Bugün yüzeyi önceden yüklenmelidir",
+  );
+  assert.ok(
+    css.includes(".observation-opening-layer") &&
+      css.includes("width: min(100%, 560px);") &&
+      css.includes("prefers-reduced-motion: reduce"),
+    "Bekleme katmanı dar ekrana sığmalı ve azaltılmış hareket tercihini desteklemelidir",
+  );
+});
