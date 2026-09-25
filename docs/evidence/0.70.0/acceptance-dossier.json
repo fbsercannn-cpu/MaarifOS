@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "task_id": "maarifos-0.70.0-p0-start",
+  "as_of_utc": "2026-09-25T08:07:07Z",
+  "civil_date": "2026-09-25",
+  "timezone": "Europe/Istanbul",
+  "requirements": [
+    {
+      "id": "P0-01",
+      "statement": "Bos sinifta Gozlem tek dokunusla uygulanabilir bir sonraki adima goturur.",
+      "priority": "MUST",
+      "acceptance_criteria": [
+        {
+          "id": "AC-P0-01-01",
+          "text": "320 px telefonda Gozlem, cocuk ekleme penceresini tek dokunusla acar ve Sinifim rotasina gider."
+        }
+      ],
+      "implementation_refs": [
+        "src/Prototype.tsx:9062",
+        "tests/smoke/mobile-stability.spec.ts:107"
+      ],
+      "evidence": [
+        {
+          "id": "EV-P0-01-01",
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "criterion_ids": ["AC-P0-01-01"],
+          "status": "PASS",
+          "observed_at_utc": "2026-09-25T08:03:53Z"
+        }
+      ]
+    },
+    {
+      "id": "P0-02",
+      "statement": "Agir ana calisma alanlari ilk dokunustan once hazirlanir ve kod bolme korunur.",
+      "priority": "MUST",
+      "acceptance_criteria": [
+        {
+          "id": "AC-P0-02-01",
+          "text": "Sinifim, Planlar ve Belgeler modulleri bos zamanda istenir; tum mobil tarayici regresyonlari gecer."
+        }
+      ],
+      "implementation_refs": [
+        "src/Prototype.tsx:4520",
+        "tests/smoke/navigation-latency.spec.ts:15"
+      ],
+      "evidence": [
+        {
+          "id": "EV-P0-02-01",
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "criterion_ids": ["AC-P0-02-01"],
+          "status": "PASS",
+          "observed_at_utc": "2026-09-25T08:03:53Z"
+        },
+        {
+          "id": "EV-P0-02-02",
+          "kind": "TEST",
+          "path": "static-gates.txt",
+          "sha256": "1ed1920158823723fe4e5cf2aa17d2cd797957fa0d273c51a1a5e18ea4082fb4",
+          "criterion_ids": ["AC-P0-02-01"],
+          "status": "PASS",
+          "observed_at_utc": "2026-09-25T08:07:07Z"
+        }
+      ]
+    },
+    {
+      "id": "P0-03",
+      "statement": "Gozlem ekrani WebKit'te tamamen hazir olma ve kesin kayit icin iki saniye butcesini karsilar.",
+      "priority": "MUST",
+      "acceptance_criteria": [
+        {
+          "id": "AC-P0-03-01",
+          "text": "WebKit tam hazir olma ve kesin kayit surelerinin her biri 2000 ms veya altindadir."
+        }
+      ],
+      "implementation_refs": [
+        "tests/smoke/navigation-latency.spec.ts:44",
+        "tests/smoke/navigation-latency.spec.ts:64"
+      ],
+      "evidence": [
+        {
+          "id": "EV-P0-03-01",
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "criterion_ids": ["AC-P0-03-01"],
+          "status": "PASS",
+          "observed_at_utc": "2026-09-25T08:03:53Z"
+        }
+      ]
+    }
+  ]
+}

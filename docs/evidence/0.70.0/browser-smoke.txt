@@ -1,0 +1,27 @@
+MaarifOS 0.70.0 P0 browser evidence
+Observed: 2026-09-25 Europe/Istanbul
+
+Final uninterrupted release-gate run:
+- command: npx playwright test --config=playwright.smoke.config.ts --workers=1
+- 74/74 passed in 13.2 minutes
+- Chromium phone: 37/37 passed
+- WebKit phone: 37/37 passed
+- touch target matrix: Chromium + WebKit at 320/360/390/412/430 px passed
+- responsive public website, narrow-phone Today/AI, invitation, PDF, Word, encrypted hydration and profile persistence scenarios passed
+
+Navigation and observation performance in the final run:
+- Chromium observation ready: 845.9 ms; typing: 661.9 ms; definitive save: 112.5 ms
+- WebKit observation ready: 859.0 ms; typing: 558.4 ms; definitive save: 1176.8 ms
+- every measured P0 operation remained within its declared 2000 ms budget
+
+Student profile persistence incident and closure:
+- discovery run: 73/74 passed; WebKit intermittently missed the final enrollment-year input before immediate submit
+- pre-fix classification: FLAKY_UNEXPLAINED (1 failure, 3 passes)
+- fix: native form values are canonicalized at the save boundary so the last keystroke cannot be lost
+- post-fix isolated classification: STABLE_PASS (5/5)
+- post-fix full-suite WebKit profile scenario: passed under complete suite load
+- machine-readable evidence: student-profile-year-prefix-classification.json and student-profile-year-postfix-classification.json
+
+Publication note:
+- P0 browser release gate is READY.
+- Live publication remains a separate deployment action and must use the verified build artifacts.

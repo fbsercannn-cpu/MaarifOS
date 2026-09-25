@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "release": "0.74.0",
+  "title": "Akıcı gözlem ve güvenli ekran geçişleri",
+  "observedAtUtc": "2026-09-25T11:15:00Z",
+  "status": "passed-for-publication",
+  "fixed": [
+    "Gözlem metni her tuşta bütün çalışma alanını yeniden çizdirmeden yerel tamponda güncellenir.",
+    "Taslak yazımı, kesin kayıt ve gözlemden sonraki adım birbirini ezmeden sıralanır.",
+    "Tam ekran planlama merkezi açıkken ana menüden rota değişirse eski katman kapanır.",
+    "Planlama merkezi mobil klavye bağlamı içinde çalışır; useKeyboard çalışma zamanı hatası giderilmiştir.",
+    "Planlama merkezindeki PWA kurulum çağrısı kaldırılmıştır.",
+    "Tekrar kullanılabilir canlı kabul ve kalan işler şablonu eklenmiştir."
+  ],
+  "checks": [
+    { "name": "overlay-and-observation-regression", "result": "passed", "count": 4 },
+    { "name": "planning-overlay-runtime-errors", "result": "passed", "count": 0 },
+    { "name": "browser-smoke-chromium-webkit", "result": "passed", "count": 74 },
+    { "name": "typecheck", "result": "passed" },
+    { "name": "policy-lint", "result": "passed" },
+    { "name": "runtime-integrity", "result": "passed", "protectedFiles": 36 },
+    { "name": "pwa-contract", "result": "passed", "count": 10 },
+    { "name": "sites-worker-and-gateway", "result": "passed", "count": 45 },
+    { "name": "founder-production-build", "result": "passed" },
+    { "name": "bundle-budget", "result": "passed", "javascriptChunks": 122 }
+  ],
+  "performance": {
+    "chromiumObservationVisibleMs": 800.9,
+    "chromiumObservationReadyMs": 821.1,
+    "chromiumObservationTypingMs": 501.4,
+    "chromiumObservationSaveMs": 1235.1,
+    "webkitObservationVisibleMs": 832.0,
+    "webkitObservationReadyMs": 851.0,
+    "webkitObservationTypingMs": 462.8,
+    "webkitObservationSaveMs": 1937.2,
+    "typingBudgetMs": 1500,
+    "saveBudgetMs": 2000,
+    "result": "passed"
+  },
+  "knownLimits": [
+    "Bu sürüm doğrulanmış P1 gözlem ve ekran geçişi kusurlarını kapatır; tüm ürün yüzeylerinin bütün buton envanteri henüz tamamlanmış sayılmaz.",
+    "Gerçek okul öncesi öğretmen pilotu ve düşük segment fiziksel Android cihaz testi otomatik tarayıcı kapısının yerine geçmez.",
+    "DeepSeek sağlayıcısının gerçek ücretli yanıtı kullanıcı hesabı ve bakiye gerektirdiğinden çocuk verisiyle çağrılmamıştır."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "task_id": "maarifos-0.71.0-p1-observation-outcomes",
+  "observed_at_utc": "2026-09-25T08:37:53Z",
+  "status": "PASS",
+  "release": "0.71.0",
+  "scope": "P1 first vertical slice: one approved observation creates a cited weekly assessment draft and a family bulletin draft in one atomic local transaction.",
+  "acceptance": [
+    {
+      "id": "P1-01",
+      "result": "PASS",
+      "evidence": "tests/features/action-center.test.mjs",
+      "claim": "The two records commit atomically, stale sources are rejected and repeated clicks do not create duplicates."
+    },
+    {
+      "id": "P1-02",
+      "result": "PASS",
+      "evidence": "tests/action-center-component.spec.ts",
+      "claim": "The complete flow works at 320 px without horizontal overflow and survives backup export and restore."
+    },
+    {
+      "id": "P1-03",
+      "result": "PASS",
+      "evidence": "src/features/action-center/observation-outcome-package.ts",
+      "claim": "Source and uncertainty are disclosed, the raw observation is preserved and cloud success is not simulated during local fallback."
+    }
+  ],
+  "gates": {
+    "feature_and_release_tests": "27 passed",
+    "targeted_mobile_runtime": "5 passed",
+    "browser_smoke": "74 passed on Chromium and WebKit",
+    "sites_worker": "45 passed",
+    "pwa_contract": "10 passed",
+    "typescript": "PASS",
+    "policy_lint": "PASS",
+    "runtime_integrity": "PASS",
+    "production_build": "PASS",
+    "bundle_budget": "PASS"
+  },
+  "open_scope": [
+    "DeepSeek-generated child-specific text remains behind a separate privacy-safe redaction and teacher-review gate.",
+    "Official weekly plan evaluation continues to require completed day closures and confirmed curriculum links."
+  ]
+}

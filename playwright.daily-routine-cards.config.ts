@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({ testDir: "./tests", testMatch: "daily-routine-cards-ui.spec.ts", workers: 1, timeout: 150000, outputDir: "output/daily-routine-cards-2026-09-08/ui-results", use: { baseURL: process.env.DAILY_ROUTINE_BASE_URL ?? "http://127.0.0.1:4183", viewport: { width: 390, height: 844 }, actionTimeout: 15000, trace: "retain-on-failure" } });

@@ -1,0 +1,217 @@
+/* ─── TODAY TEACHING APEX DESIGN SYSTEM (TUFTE / LINEAR / APPLE) ─── */
+.today-teaching {
+  background: #ffffff;
+  padding-inline: 28px;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.today-teaching .simple-today__header {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.today-teaching .simple-today__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.today-teaching .simple-today__brand small {
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: block;
+  line-height: 1.2;
+}
+.today-teaching .simple-today__brand strong {
+  font-size: 24px;
+  font-weight: 850;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  display: block;
+  line-height: 1.15;
+}
+.today-teaching .simple-icon-button {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.today-teaching .simple-icon-button:hover {
+  background: #f8fafc;
+  border-color: #0284c7;
+  color: #0284c7;
+}
+.simple-today__header-actions { display:flex; min-width:0; flex:0 0 auto; align-items:center; gap:8px; }
+.simple-today__assistant-button { display:inline-flex; min-width:0; min-height:44px; align-items:center; justify-content:center; gap:6px; padding:8px 11px; color:#0369a1; background:#edf8fb; border:1px solid #9ad8e6; border-radius:11px; font:inherit; font-size:12px; font-weight:800; white-space:nowrap; }
+.simple-today__assistant-button svg { width:18px; height:18px; flex:0 0 18px; }
+
+/* ─── Today Context Hero Card ─── */
+.today-context-hero-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-top: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.today-context-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.today-context-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.today-context-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+.today-context-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+.today-context-pill--cyan {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+}
+.today-context-pill--emerald {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+.today-context-class-title {
+  margin: 4px 0 4px 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+.today-context-summary {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.4;
+}
+.today-context-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.today-context-tools { width:min(100%, 270px); min-width:0; }
+.today-context-tools > summary { min-height:44px; display:flex; align-items:center; justify-content:center; padding:8px 11px; color:#075985; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; cursor:pointer; font-size:12px; font-weight:800; list-style:none; }
+.today-context-tools > summary::-webkit-details-marker { display:none; }
+.today-context-tools[open] > summary { margin-bottom:8px; }
+.today-context-tools .today-context-actions { display:grid; grid-template-columns:1fr; }
+.today-export-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.today-export-btn svg { width:17px; height:17px; flex:0 0 17px; }
+.today-export-btn--excel {
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #059669;
+}
+.today-export-btn--excel:hover {
+  background: rgba(5, 150, 105, 0.16);
+  border-color: #059669;
+  transform: translateY(-1px);
+}
+.today-export-btn--pdf {
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  color: #0284c7;
+}
+.today-export-btn--pdf:hover {
+  background: rgba(2, 132, 199, 0.16);
+  border-color: #0284c7;
+  transform: translateY(-1px);
+}
+
+.today-teaching__context { margin-top: 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 9px; }
+.today-teaching__context p { width: 100%; margin: 0 0 4px; color: var(--maarif-teal-dark); font-size: 14px; line-height: 1.45; }
+.today-teaching__context strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.today-teaching__context > span { color: var(--maarif-muted); font-size: 13px; }
+.today-teaching .simple-today__brief { margin-top: 24px; }
+.today-teaching .simple-today__brief h1 { font-size: clamp(26px, 6vw, 32px); line-height: 1.16; letter-spacing: -.025em; font-weight: 850; color: #0f172a; }
+.today-teaching .simple-today__brief ul { font-size: 14px; line-height: 1.5; color: #475569; }
+.today-teaching-card { margin-top: 18px; min-width: 0; }
+.today-teaching-card__image { display: block; width: 100%; height: 124px; object-fit: cover; border-radius: 16px; margin-bottom: 18px; }
+.today-teaching-card__eyebrow { margin: 0 0 6px; font-size: 12px; line-height: 1.4; font-weight: 700; color: var(--maarif-teal-dark); }
+.today-teaching-card h2 { margin: 0; font-size: 24px; letter-spacing: -.025em; line-height: 1.22; overflow-wrap: anywhere; }
+.today-teaching-card__meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--maarif-muted); }
+.today-teaching-card__meta span { display: inline-flex; align-items: center; gap: 6px; }
+.today-teaching-card__meta svg { width: 16px; height: 16px; }
+.today-teaching-card__prompt { margin: 12px 0 0; font-size: 15px; line-height: 1.5; }
+.today-teaching-card__materials { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--maarif-line); font-size: 14px; line-height: 1.5; }
+.today-teaching-card__materials > svg { width: 20px; height: 20px; flex: 0 0 20px; color: var(--maarif-teal-dark); margin-top: 1px; }
+.today-teaching-card__materials strong { font-weight: 600; color: var(--maarif-teal-dark); }
+.today-teaching-card__note { color: var(--maarif-muted); font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+.today-teaching .simple-today__focus { margin-top: 18px; }
+.today-teaching .simple-today__focus > button { min-height: 56px; border-radius: 14px; box-shadow: none; background: var(--maarif-teal); gap: 10px; padding: 12px 16px; }
+.today-teaching .simple-focus__icon { width: 28px; height: 28px; flex-basis: 28px; background: transparent; }
+.today-teaching .simple-focus__copy strong { font-size: 17px; line-height: 1.3; }
+.today-teaching .simple-today__follow-ups { margin-top: 20px; }
+.today-teaching .simple-today__follow-ups > button { min-height: 60px; padding-block: 12px; }
+.today-teaching .simple-today__follow-ups strong { font-size: 15px; }
+.today-teaching .simple-today__follow-ups small { font-size: 12px; line-height: 1.4; }
+.today-recorded-flow { margin-top: 24px; }
+.today-recorded-flow h2 { margin: 0 0 10px; font-size: 15px; }
+.today-recorded-flow ol { list-style: none; padding: 0; margin: 0; }
+.today-recorded-flow li { display: flex; gap: 12px; align-items: center; padding: 10px 0; }
+.today-recorded-flow__number { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; color: var(--maarif-muted); border: 1px solid var(--maarif-line); border-radius: 50%; font-size: 13px; }
+.today-recorded-flow li[data-current="true"] .today-recorded-flow__number { color: var(--maarif-teal-dark); border-color: var(--maarif-teal); background: var(--maarif-teal-soft); }
+.today-recorded-flow li > span:last-child { min-width: 0; display: grid; gap: 3px; }
+.today-recorded-flow strong { font-size: 14px; line-height: 1.4; font-weight: 500; overflow-wrap: anywhere; }
+.today-recorded-flow small, .today-recorded-flow > p { font-size: 12px; color: var(--maarif-muted); }
+.today-teaching__more-actions { display: grid; gap: 2px; margin: 20px 0; }
+.today-teaching__more-actions button { display: flex; align-items: center; gap: 10px; min-height: 48px; text-align: left; border: 0; padding: 10px 0; color: var(--maarif-teal-dark); background: transparent; font: inherit; font-size: 15px; }
+.today-teaching__more-actions button svg:last-child { margin-left: auto; }
+.today-teaching button:focus-visible { outline: 3px solid var(--maarif-teal); outline-offset: 3px; }
+@media (max-width: 768px) {
+  .today-teaching { padding-inline: 12px; }
+  .today-context-hero-card { padding: 12px 14px; }
+  .today-context-actions { width: 100%; margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .today-context-tools { width:100%; }
+  .today-context-tools .today-context-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .today-export-btn { width: 100%; justify-content: center; text-align: center; }
+  .today-context-class-title { font-size: 18px; word-break: break-word; }
+}
+@media (max-width: 380px) {
+  .today-teaching .simple-today__brand { gap:8px; }
+  .today-teaching .simple-today__brand small { font-size:10px; }
+  .today-teaching .simple-today__brand strong { font-size:21px; }
+  .simple-today__assistant-button { width:44px; padding:0; }
+  .simple-today__assistant-button span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .today-context-tools .today-context-actions { grid-template-columns:1fr; }
+}
+

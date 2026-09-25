@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.playwright-cli/
+.env.development.local
+premium-preview-cache/
+public/assets/maarif-content/
+output/playwright/value-evidence-mobile-*.png

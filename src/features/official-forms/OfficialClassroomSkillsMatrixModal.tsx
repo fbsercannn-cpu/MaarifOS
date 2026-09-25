@@ -1,0 +1,458 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
+import { useState } from "react";
+import {
+  exportOfficialTableToExcel,
+  printOfficialFormA4,
+} from "./official-form-export-service.ts";
+import "./official-forms.css";
+
+interface StudentSkillRow {
+  id: string;
+  name: string;
+  tab: number; // Türkçe 1..3
+  mab: number; // Matematik
+  fab: number; // Fen
+  sab: number; // Sosyal
+  hab: number; // Hareket-Sağlık
+  snab: number; // Sanat
+  mzb: number; // Müzik
+  sdb: number; // Sosyal-Duygusal
+  ed: number; // Erdem-Değer
+  egl: number; // Eğilimler
+}
+
+const INITIAL_STUDENTS: StudentSkillRow[] = [{id: "", name: "", tab: 0, mab: 0, fab: 0, sab: 0, hab: 0, snab: 0, mzb: 0, sdb: 0, ed: 0, egl: 0}];
+
+const DOMAINS: { key: keyof Omit<StudentSkillRow, "id" | "name">; label: string; short: string }[] = [
+  { key: "tab", label: "Türkçe Becerileri", short: "TÜRKÇE" },
+  { key: "mab", label: "Matematik Becerileri", short: "MATEMATİK" },
+  { key: "fab", label: "Fen Becerileri", short: "FEN" },
+  { key: "sab", label: "Sosyal Beceriler", short: "SOSYAL" },
+  { key: "hab", label: "Hareket ve Sağlık", short: "HAREKET" },
+  { key: "snab", label: "Sanat Becerileri", short: "SANAT" },
+  { key: "mzb", label: "Müzik Becerileri", short: "MÜZİK" },
+  { key: "sdb", label: "Sosyal-Duygusal (SDB)", short: "SDB" },
+  { key: "ed", label: "Erdem ve Değerler", short: "DEĞER" },
+  { key: "egl", label: "Temel Eğilimler", short: "EĞİLİM" },
+];
+
+export function OfficialClassroomSkillsMatrixModal({ onClose }: { onClose?: () => void }) {
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [students, setStudents] = useOfficialFormState<StudentSkillRow[]>("students", INITIAL_STUDENTS);
+  const [term, setTerm] = useOfficialFormState("term", "1. Dönem Sonu İzleme");
+  const [schoolYear, setSchoolYear] = useOfficialFormState("schoolYear", "2026-2027");
+  const [className, setClassName] = useOfficialFormState("className", "Papatyalar Sınıfı (60-72 Ay)");
+  const [teacherName, setTeacherName] = useOfficialFormState("teacherName", "Okul Öncesi Öğretmeni");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const handleCycleScore = (studentId: string, domainKey: keyof Omit<StudentSkillRow, "id" | "name">) => {
+    setStudents(prev =>
+      prev.map(s => {
+        if (s.id !== studentId) return s;
+        const current = s[domainKey];
+        const next = current === 3 ? 0 : current + 1;
+        return { ...s, [domainKey]: next };
+      })
+    );
+  };
+
+  const filteredStudents = students.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Compute Domain Averages
+  const domainAverages = DOMAINS.map(d => {
+    const sum = students.reduce((acc, s) => acc + s[d.key], 0);
+    const measured = students.filter(s => s[d.key] > 0).length;
+    const avg = measured ? (sum / measured).toFixed(1) : "—";
+    return { ...d, avg };
+  });
+
+  const handlePrint = () => {
+    printOfficialFormA4(`MEB_Sinif_Gelisim_Matrisi_${schoolYear.replace('/', '-')}`);
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      await exportOfficialTableToExcel({
+        fileName: `MEB_Sinif_Gelisim_Matrisi_${schoolYear.replace('/', '-')}`,
+        sheetName: "Gelişim Matrisi",
+        title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ",
+        subtitle: `${className} · ${term} · ${teacherName}`,
+        metadata: [
+          { label: "Eğitim Yılı", value: schoolYear },
+          { label: "Dönem", value: term },
+          { label: "Şube", value: className },
+          { label: "Öğretmen", value: teacherName },
+          { label: "Ölçütler", value: "1: Geliştirilmeli | 2: İyi Düzeyde | 3: Çok Başarılı" },
+        ],
+        columns: [
+          { header: "No", key: "no", width: 8, align: "center", isNumeric: true },
+          { header: "Öğrenci Adı Soyadı", key: "name", width: 25 },
+          ...DOMAINS.map((d) => ({
+            header: d.short,
+            key: d.key,
+            width: 14,
+            align: "center" as const,
+            isNumeric: true,
+          })),
+          { header: "Genel Ort.", key: "overallAvg", width: 14, align: "center", isNumeric: true },
+        ],
+        rows: students.map((s, idx) => {
+          const rowAvg = (DOMAINS.some(d => s[d.key] > 0) ? Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.filter(d => s[d.key] > 0).length).toFixed(1)) : "");
+          return {
+            no: idx + 1,
+            name: s.name,
+            ...DOMAINS.reduce((acc, d) => ({ ...acc, [d.key]: s[d.key] || "" }), {}),
+            overallAvg: rowAvg,
+          };
+        }),
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  const handleDownloadMultiSheetExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      const x = await import("xlsx");
+      const wb = x.utils.book_new();
+
+      // 1. ÖZET SEKME: Sınıf Matrisi (Tüm öğrenciler x 10 alan becerisi)
+      const summaryAoa: unknown[][] = [
+        ["T.C. MİLLÎ EĞİTİM BAKANLIĞI — SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ"],
+        [`Şube: ${className}  |  Dönem: ${term}  |  Eğitim Yılı: ${schoolYear}  |  Öğretmen: ${teacherName}`],
+        ["Ölçüt Düzeyleri: 1: Geliştirilmeli (Başlangıç) | 2: İyi Düzeyde (Gelişmekte) | 3: Çok Başarılı (Yetkin)"],
+        [],
+        [
+          "No",
+          "Öğrenci Adı Soyadı",
+          ...DOMAINS.map((d) => d.short),
+          "Genel Ortalama",
+        ],
+      ];
+
+      students.forEach((s, idx) => {
+        const rowAvg = (DOMAINS.some(d => s[d.key] > 0) ? Number((DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.filter(d => s[d.key] > 0).length).toFixed(1)) : "");
+        summaryAoa.push([
+          idx + 1,
+          s.name,
+          ...DOMAINS.map((d) => s[d.key] || ""),
+          rowAvg,
+        ]);
+      });
+
+      const headerRowIdx = 4;
+      const lastDataRowIdx = summaryAoa.length - 1;
+      const startRow1Based = headerRowIdx + 2;
+      const endRow1Based = lastDataRowIdx + 1;
+
+      const totalRow: unknown[] = [
+        "SINIF ORTALAMALARI",
+        "",
+        ...DOMAINS.map((_, dIdx) => {
+          const colLetter = String.fromCharCode(67 + dIdx);
+          return { f: `SUBTOTAL(109, ${colLetter}${startRow1Based}:${colLetter}${endRow1Based}) / ${students.length}` };
+        }),
+        "—",
+      ];
+      summaryAoa.push(totalRow);
+
+      const wsSummary = x.utils.aoa_to_sheet(summaryAoa);
+      wsSummary["!cols"] = [
+        { wch: 6 },
+        { wch: 25 },
+        ...DOMAINS.map(() => ({ wch: 12 })),
+        { wch: 16 },
+      ];
+      x.utils.book_append_sheet(wb, wsSummary, "Sınıf Matrisi Özeti");
+
+      // 2. HER ÖĞRENCİ İÇİN AYRI BİREYSEL KARNE SEKMESİ (Sekme 2..N+1)
+      students.forEach((s) => {
+        const studentAoa: unknown[][] = [
+          [`T.C. MİLLÎ EĞİTİM BAKANLIĞI — BİREYSEL BECERİ VE EDİNİM KARNESİ`],
+          [`Öğrenci: ${s.name}  |  Şube: ${className}  |  Dönem: ${term}`],
+          [],
+          ["Gelişim / Öğrenme Alanı", "Kısa Kod", "Düzey Puanı (1-3)", "Pedagojik Değerlendirme Düzeyi", "Öğretmen Gözlemi"],
+        ];
+
+        DOMAINS.forEach((d) => {
+          const score = s[d.key];
+          const levelText = score === 0 ? "Henüz gözlem kaydı yok" : score === 3 ? "Çok Başarılı (Yetkin)" : score === 2 ? "İyi Düzeyde (Gelişmekte)" : "Geliştirilmeli (Başlangıç)";
+          const note = score === 0 ? "" : score === 3
+            ? "Kazanım ve göstergeleri bağımsız ve tutarlı sergilemektedir."
+            : score === 2
+            ? "Rehberlik eşliğinde beceriyi başarıyla uygulamaktadır."
+            : "Etkinliklerde bireysel destekleme ve zenginleştirme önerilir.";
+          studentAoa.push([d.label, d.short, score, levelText, note]);
+        });
+
+        const studentAvg = (DOMAINS.reduce((acc, d) => acc + s[d.key], 0) / DOMAINS.length).toFixed(1);
+        studentAoa.push([]);
+        studentAoa.push(["GENEL GELİŞİM SKORU", "", studentAvg, "Bütüncül TYMM Uyumu", `${s.name} gelişim sürecini başarıyla sürdürmektedir.`]);
+
+        const wsStudent = x.utils.aoa_to_sheet(studentAoa);
+        wsStudent["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 28 }, { wch: 45 }];
+
+        const safeSheetName = s.name.slice(0, 28);
+        x.utils.book_append_sheet(wb, wsStudent, safeSheetName);
+      });
+
+      const { downloadBrowserFile } = await import("../documents/browser-file-download.ts");
+      const { XLSX_MIME_TYPE } = await import("./official-form-export-service.ts");
+      const bytes = new Uint8Array(x.write(wb, { type: "array", bookType: "xlsx", compression: true }));
+      downloadBrowserFile({
+        bytes,
+        mimeType: XLSX_MIME_TYPE,
+        fileName: `MEB_Sinif_Gelisim_Matrisi_Cok_Sekmeli_${schoolYear.replace('/', '-')}.xlsx`,
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  const handleExportWord = () => downloadOfficialFormWord("OfficialClassroomSkillsMatrixModal");
+
+  return (
+    <div className="official-form-container">
+      {/* Header Actions (No Print) */}
+      <div className="of-actions-bar no-print">
+        <div className="of-actions-bar__left">
+          <span className="of-tag of-tag--gold">TTKB s. 109–114</span>
+          <span className="of-tag of-tag--navy">Bütüncül Gelişim Matrisi</span>
+          <span className="of-tag of-tag--emerald">10 Boyutlu Sınıf Profil Karnesi</span>
+        </div>
+        <div className="of-actions-bar__right">
+          <button
+            type="button"
+            className="of-btn"
+            style={{
+              background: "#047857",
+              color: "#ffffff",
+              border: "1px solid #047857",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+            onClick={handleDownloadMultiSheetExcel}
+            disabled={isExportingExcel}
+            title="Her öğrenci için ayrı karne sekmesi içeren 21 sekmeli toplu Excel (.xlsx)"
+          >
+            📑 Tüm Sınıf Çok Sekmeli Excel
+          </button>
+          <button
+            type="button"
+            className="of-btn of-btn--excel"
+            onClick={handleDownloadExcel}
+            disabled={isExportingExcel}
+          >
+            {isExportingExcel ? "⏳ Hazırlanıyor..." : "📊 Matris (.xlsx)"}
+          </button>
+          <button type="button" className="of-btn of-btn--primary" onClick={handlePrint}>
+            🖨️ A4 Yazdır / PDF (Yatay)
+          </button>
+          <button type="button" className="of-btn of-btn--outline" onClick={handleExportWord}>
+            📄 Word (.docx) İndir
+          </button>
+          {onClose && (
+            <button type="button" className="of-btn of-btn--close" onClick={onClose}>
+              ✕ Kapat
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Domain Averages & Search (No Print) */}
+      <div className="of-card no-print" style={{ marginBottom: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div>
+            <h4 style={{ margin: 0, color: "#1e3a8a", fontSize: "0.95rem" }}>
+              📊 Sınıf Düzeyi Alan Becerileri Dağılım Özeti (N={students.length})
+            </h4>
+            <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+              Hücrelere tıklayarak seviyeleri anında döngüsel değiştirin: [1: Geliştirilmeli 🔴] → [2: İyi 🟡] → [3: Başarılı 🟢]
+            </span>
+          </div>
+          <input
+            type="text"
+            className="of-input"
+            style={{ width: "200px" }}
+            placeholder="Öğrenci Ara..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.4rem" }}>
+          {domainAverages.map(d => (
+            <div key={d.key} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "6px", textAlign: "center" }}>
+              <div style={{ fontSize: "0.7rem", color: "#64748b", fontWeight: "bold" }}>{d.short}</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: "bold", color: Number(d.avg) >= 2.5 ? "#16a34a" : "#ca8a04" }}>
+                {d.avg} / 3.0
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Printable Sheet (Landscape) */}
+      <div className="official-a4-sheet" style={{ maxWidth: "1100px" }}>
+        <div className="of-sheet-header">
+          <div className="of-sheet-header__emblem">T.C. MİLLÎ EĞİTİM BAKANLIĞI</div>
+          <h1 className="of-sheet-header__title">
+            TÜRKİYE YÜZYILI MAARİF MODELİ OKUL ÖNCESİ EĞİTİM PROGRAMI
+          </h1>
+          <h2 className="of-sheet-header__subtitle">
+            SINIF DÜZEYİ BÜTÜNCÜL BECERİ VE EĞİLİMLER GELİŞİM MATRİSİ
+          </h2>
+          <div className="of-sheet-header__ref">
+            Mevzuat Dayanağı: MEB TTKB Okul Öncesi Eğitim Programı, s. 109–114, 140–177
+          </div>
+        </div>
+
+        {/* Identity Bar */}
+        <table className="of-meta-table">
+          <tbody>
+            <tr>
+              <td><strong>Eğitim-Öğretim Yılı:</strong></td>
+              <td>
+                <input
+                  type="text"
+                  className="of-input"
+                  value={schoolYear}
+                  onChange={e => setSchoolYear(e.target.value)}
+                />
+              </td>
+              <td><strong>İzleme Dönemi:</strong></td>
+              <td>
+                <input
+                  type="text"
+                  className="of-input"
+                  value={term}
+                  onChange={e => setTerm(e.target.value)}
+                />
+              </td>
+              <td><strong>Şube / Yaş Grubu:</strong></td>
+              <td>
+                <input
+                  type="text"
+                  className="of-input"
+                  value={className}
+                  onChange={e => setClassName(e.target.value)}
+                />
+              </td>
+              <td><strong>Sınıf Öğretmeni:</strong></td>
+              <td>
+                <input
+                  type="text"
+                  className="of-input"
+                  value={teacherName}
+                  onChange={e => setTeacherName(e.target.value)}
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Big Matrix Table */}
+        <table className="of-data-table" style={{ marginTop: "1rem", fontSize: "0.8rem" }}>
+          <thead>
+            <tr>
+              <th style={{ width: "30px", textAlign: "center" }}>No</th>
+              <th style={{ width: "160px", textAlign: "left" }}>Öğrenci Adı Soyadı</th>
+              {DOMAINS.map(d => (
+                <th key={d.key} style={{ textAlign: "center", fontSize: "0.75rem", padding: "4px 2px" }} title={d.label}>
+                  {d.short}
+                </th>
+              ))}
+              <th style={{ textAlign: "center", width: "60px" }}>Ort.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredStudents.map((student, idx) => {
+              const rowSum = DOMAINS.reduce((acc, d) => acc + student[d.key], 0);
+              const measured = DOMAINS.filter(d => student[d.key] > 0).length;
+              const rowAvg = measured ? (rowSum / measured).toFixed(1) : "—";
+
+              return (
+                <tr key={student.id}>
+                  <td style={{ textAlign: "center" }}>{idx + 1}</td>
+                  <td style={{ fontWeight: "600" }}>{student.name}</td>
+                  {DOMAINS.map(d => {
+                    const score = student[d.key];
+                    const bg = score === 0 ? "#f8fafc" : score === 3 ? "#dcfce7" : score === 2 ? "#fef9c3" : "#fee2e2";
+                    const color = score === 0 ? "#64748b" : score === 3 ? "#15803d" : score === 2 ? "#a16207" : "#b91c1c";
+                    return (
+                      <td key={d.key} style={{ textAlign: "center", padding: "2px" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCycleScore(student.id, d.key)}
+                          style={{
+                            background: bg,
+                            color: color,
+                            border: "none",
+                            borderRadius: "4px",
+                            padding: "3px 6px",
+                            fontWeight: "bold",
+                            fontSize: "0.8rem",
+                            cursor: "pointer",
+                            width: "100%",
+                          }}
+                          aria-label={`${student.name}, ${d.label}: ${score || "gözlenmedi"}; düzeyi değiştir`} title="Döngü: gözlenmedi, 1, 2, 3"
+                        >
+                          {score || "—"}
+                        </button>
+                      </td>
+                    );
+                  })}
+                  <td style={{ textAlign: "center", fontWeight: "bold", color: "#1e3a8a" }}>
+                    {rowAvg}
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: "#f1f5f9", fontWeight: "bold" }}>
+              <td colSpan={2} style={{ textAlign: "left", paddingLeft: "8px" }}>
+                Sınıf Düzeyi Ortalaması
+              </td>
+              {domainAverages.map(d => (
+                <td key={d.key} style={{ textAlign: "center", color: "#1e3a8a" }}>
+                  {d.avg}
+                </td>
+              ))}
+              <td style={{ textAlign: "center", color: "#1e3a8a" }}>
+                {(domainAverages.some(d => d.avg !== "—") ? (domainAverages.filter(d => d.avg !== "—").reduce((acc, d) => acc + Number(d.avg), 0) / domainAverages.filter(d => d.avg !== "—").length).toFixed(1) : "—")}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.75rem", fontSize: "0.8rem", color: "#475569" }}>
+          <span><strong>1: Geliştirilmeli</strong> (Destekleme ihtiyacı)</span>
+          <span><strong>2: İyi Düzeyde</strong> (Kazanım beklentisiyle uyumlu)</span>
+          <span><strong>3: Çok Başarılı</strong> (Üst düzey yetkinlik ve liderlik)</span>
+        </div>
+
+        {/* Signatures */}
+        <div className="of-signatures-grid" style={{ marginTop: "2rem" }}>
+          <div className="of-signature-block">
+            <span className="of-signature-block__title">Sınıf Öğretmeni</span>
+            <span className="of-signature-block__name">{teacherName}</span>
+            <span className="of-signature-block__sign">İmza</span>
+          </div>
+          <div className="of-signature-block">
+            <span className="of-signature-block__title">Okul Müdürü / Maarif Müfettişi</span>
+            <span className="of-signature-block__name">İnceleme ve Onay</span>
+            <span className="of-signature-block__sign">Mühür / İmza</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

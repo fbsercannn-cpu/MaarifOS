@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "release": "0.73.0",
+  "title": "Öğretmen onaylı DeepSeek plan revizyonu",
+  "observedAtUtc": "2026-09-25T10:05:00Z",
+  "status": "passed",
+  "scope": [
+    "Etkin sınıfın gerçek öğretmen günlük planından gizlilik korumalı DeepSeek inceleme taslağı",
+    "Kapsayıcı uyarlama, açık uçlu sorular, gün sonu değerlendirmesi ve ertesi gün önerisi",
+    "Öğretmenin düzenleme, açık kontrol onayı ve atomik plan revizyonu",
+    "Stale sürüm reddi, eski sürüm geçmişi ve tek etkinlik değişmezi",
+    "320 piksel mobil taşma ve yedek geri yükleme",
+    "Barındırma katmanı dahil satır içi betiklere kapalı sıkı CSP",
+    "PWA ve Sites founder üretim paketi"
+  ],
+  "privacyGates": {
+    "knownChildAndFamilyNamesRedacted": true,
+    "nationalIdentityPhoneEmailAndIbanRedacted": true,
+    "healthFamilyAndAddressRiskRemovedBeforeNetwork": true,
+    "unsafeOrExtraProviderOutputRejected": true,
+    "providerSecretServerOnly": true,
+    "rawPromptLoggingForbidden": true
+  },
+  "teacherControl": {
+    "providerOutputIsDraft": true,
+    "fourFieldsEditable": true,
+    "explicitReviewConfirmationRequired": true,
+    "sourcePlanVersionRevalidatedAtCommit": true,
+    "atomicPlanRevision": true,
+    "previousRevisionPreserved": true,
+    "concurrentRepeatRejectedWithoutMutation": true,
+    "offlineDraftImmediatelyUsable": true
+  },
+  "checks": [
+    { "name": "targeted-feature-release-tests", "result": "passed", "count": 31 },
+    { "name": "plan-review-mobile-and-backup-runtime", "result": "passed", "count": 2 },
+    { "name": "sites-worker-and-ai-gateway", "result": "passed", "count": 45 },
+    { "name": "pwa-contract", "result": "passed", "count": 10 },
+    { "name": "browser-smoke-chromium-webkit", "result": "passed", "count": 74 },
+    { "name": "typecheck", "result": "passed" },
+    { "name": "policy-lint", "result": "passed" },
+    { "name": "protected-mobile-runtime", "result": "passed", "protectedFiles": 36 },
+    { "name": "founder-production-build", "result": "passed" },
+    { "name": "bundle-budget", "result": "passed", "javascriptChunks": 122 },
+    { "name": "live-mobile-shell-overflow-and-csp-console", "result": "passed" },
+    { "name": "web-image-transfer-reduction", "result": "passed", "bytesBefore": 4162859, "bytesAfter": 409149, "savedBytes": 3753710 }
+  ],
+  "performance": {
+    "chromiumObservationReadyMs": 1086.1,
+    "chromiumObservationTypingMs": 1125.5,
+    "chromiumObservationSaveMs": 120.7,
+    "webkitObservationReadyMs": 945.0,
+    "webkitObservationTypingMs": 928.3,
+    "webkitObservationSaveMs": 1303.2,
+    "budgetMs": 2000,
+    "result": "passed"
+  },
+  "knownLimits": [
+    "Gerçek DeepSeek sağlayıcı yanıtı bağlı öğretmen hesabı ve sağlayıcı bakiyesi gerektirdiği için otomatik sürüm testinde canlı çocuk verisiyle çağrılmadı.",
+    "Sağlayıcı sekiz saniyede yanıt vermezse cihaz içi taslak kullanılabilir kalır; alttaki ağ isteği tarayıcı zaman aşımına kadar sürebilir fakat öğretmen akışı bloke edilmez.",
+    "Otomatik kapılar gerçek okul öncesi öğretmen pilotunun yerine geçmez."
+  ]
+}

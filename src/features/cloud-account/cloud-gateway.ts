@@ -1,0 +1,31 @@
+import type {EncryptedBackupEnvelope} from '../../core/backup/encrypted-backup.ts';
+import {CloudRequestError,transientCloudStatus} from './cloud-retry.ts';
+import type {CloudBaseline} from './cloud-sync.ts';
+import {COLLECTION_NAMES} from '../../core/domain/model.ts';
+import {Capacitor} from '@capacitor/core';
+import {beginNativeGoogleConnection,clearNativeAccountSession,nativeAuthorizationHeader,NATIVE_ACCOUNT_ORIGIN} from '../../native/native-account.ts';
+export interface CloudFile{id:string;createdAt:string;bytes:number;digest:string;}
+export type AccountStatus={available:false;status:'not_configured'}|{available:true;status:'not_connected'}|{available:true;status:'connected';user:{subject:string;displayName:string};driveConnected:boolean;};
+async function call(path:string,body?:unknown){
+ let response:Response;
+ const native=Capacitor.isNativePlatform(),headers:Record<string,string>={...(body===undefined?{}:{'Content-Type':'application/json'}),...(native?await nativeAuthorizationHeader():{})};
+ try{response=await fetch(native?`${NATIVE_ACCOUNT_ORIGIN}${path}`:path,{method:body===undefined?'GET':'POST',credentials:native?'omit':'same-origin',cache:'no-store',headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(60000)});}
+ catch{throw new CloudRequestError('Hesap sunucusuna ulaşılamadı. İnternet bağlantısını denetleyin.',0,true);}
+ let result:unknown;
+ try{result=await response.json();}catch{throw new CloudRequestError(response.status===404?'Google bağlantısı bu yayında henüz etkin değil. Şifreli dosya yedeğini kullanabilirsiniz.':'Hesap sunucusu geçerli bir yanıt vermedi.',response.status,transientCloudStatus(response.status));}
+ if(!response.ok)throw new CloudRequestError((result as {error?:string})?.error||'Hesap işlemi tamamlanamadı.',response.status,transientCloudStatus(response.status));
+ return result;
+}
+export async function readAccountStatus():Promise<AccountStatus>{let result:AccountStatus;try{result=await call('/api/account/status') as AccountStatus;}catch(error){if(error instanceof CloudRequestError&&error.status===404)return {available:false,status:'not_configured'};throw error;}if(!result||typeof result!=='object')throw new Error('Hesap yanıtı doğrulanamadı.');if(result.status==='connected'&&(result.available!==true||typeof result.user?.subject!=='string'||!result.user.subject||typeof result.user?.displayName!=='string'||typeof result.driveConnected!=='boolean'))throw new Error('Hesap yanıtı doğrulanamadı.');if(!['connected','not_connected','not_configured'].includes(result.status)||(result.status==='not_configured'&&result.available!==false)||(result.status==='not_connected'&&result.available!==true))throw new Error('Hesap yanıtı doğrulanamadı.');return result;}
+export async function beginGoogleConnection(purpose:'login'|'backup'){if(Capacitor.isNativePlatform()){await beginNativeGoogleConnection(purpose);return;}const result=await call('/auth/google/start',{purpose,returnPath:'/classroom?native=1'}) as {authorizationUrl:string};const url=new URL(result.authorizationUrl);if(url.origin!=='https://accounts.google.com'||url.pathname!=='/o/oauth2/v2/auth'||url.username||url.password||url.hash)throw new Error('Google giriş adresi doğrulanamadı.');window.location.assign(url.href);}
+export async function listCloudFiles(){return await call('/api/account/backups') as {files:CloudFile[];head:CloudFile|null};}
+export async function cloudHead(){return (await call('/api/account/head') as {head:CloudFile|null}).head;}
+export async function downloadCloudFile(id:string){if(!/^[A-Za-z0-9_-]{8,160}$/.test(id))throw new Error('Yedek seçimi geçersiz.');return await call(`/api/account/backups/${id}`) as EncryptedBackupEnvelope;}
+export async function uploadCloudFile(envelope:EncryptedBackupEnvelope,expectedHead:string|null,expectedSubject:string,requestId:string=crypto.randomUUID()){return await call('/api/account/backups',{envelope,expectedHead,expectedSubject,requestId}) as CloudFile;}
+export async function disconnectGoogleAccount(){await call('/api/account/logout',{});await clearNativeAccountSession();}
+export async function disconnectCloudDrive(){await call('/api/account/disconnect-drive',{});}
+/** Only one-way record/id hashes. No second copy of child data, even encrypted. */
+export interface CloudAnchor{subject:string;headId:string;baseline:CloudBaseline;}
+export async function readCloudAnchor(subject:string):Promise<CloudAnchor|null>{return anchorTransaction('readonly',store=>store.get(subject));}
+export async function saveCloudAnchor(anchor:CloudAnchor):Promise<void>{const value=anchor.baseline,hex=(text:unknown)=>typeof text==='string'&&/^[a-f0-9]{64}$/.test(text);if(!value||value.format!=='maarifos-cloud-baseline-v1'||Object.keys(value).some(key=>!['format','records','erasedStudentHashes'].includes(key))||!Array.isArray(value.erasedStudentHashes)||value.erasedStudentHashes.some(hash=>!hex(hash))||!value.records||Object.keys(value.records).length!==COLLECTION_NAMES.length||COLLECTION_NAMES.some(name=>!value.records[name]||Object.entries(value.records[name]).some(([key,hash])=>!hex(key)||!hex(hash))))throw new Error('Eşitleme parmak izleri doğrulanamadı.');await anchorTransaction('readwrite',store=>store.put({subject:anchor.subject,headId:anchor.headId,baseline:structuredClone(value)},anchor.subject));}
+function anchorTransaction<T>(mode:IDBTransactionMode,operation:(store:IDBObjectStore)=>IDBRequest):Promise<T>{return new Promise((resolve,reject)=>{const open=indexedDB.open('maarifos-cloud-baselines',2);open.onupgradeneeded=()=>{if(open.result.objectStoreNames.contains('encrypted'))open.result.deleteObjectStore('encrypted');open.result.createObjectStore('fingerprints');};open.onerror=()=>reject(new Error('Cihaz eşitleme bilgisi açılamadı.'));open.onsuccess=()=>{const db=open.result,tx=db.transaction('fingerprints',mode);const request=operation(tx.objectStore('fingerprints'));let value:T;request.onsuccess=()=>{value=(request.result??null) as T;};tx.oncomplete=()=>{db.close();resolve(value);};tx.onabort=()=>{db.close();reject(new Error('Cihaz eşitleme bilgisi kaydedilemedi.'));};};});}

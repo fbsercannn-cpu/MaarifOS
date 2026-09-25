@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "release": "0.74.3",
+  "title": "Hızlı başlangıç planı ve hızlı AI görevleri",
+  "observedAtUtc": "2026-09-25T14:00:00Z",
+  "status": "passed-live",
+  "changes": [
+    "İlk plan kaydı yalnız görünür başlangıç aylarını atomik kaydeder.",
+    "Kalan Eylül–Haziran ayları mevcut açık tamamla eyleminde kalır.",
+    "Atomik hizmet doğrulaması korunurken yinelenen kasa okuması yapılmaz.",
+    "DeepSeek Öğretmen İşleri sorgusu zamanlayıcı gecikmesi olmadan başlar."
+  ],
+  "requiredLiveChecks": [
+    "Chromium ve WebKit plan zinciri kaydı",
+    "Chromium ve WebKit aylık TYMM PDF akışı",
+    "Chromium ve WebKit AI veli bülteni görevi",
+    "Dört resmî alan adında 0.74.3 sürüm kimliği ve tanıtım sınırı"
+  ],
+  "liveResults": [
+    { "name": "starter-plan-and-monthly-export-chromium-webkit", "result": "passed", "count": 4 },
+    { "name": "ai-family-brief-chromium-webkit", "result": "passed", "count": 2 },
+    { "name": "official-domain-version", "result": "passed", "count": 4 },
+    { "name": "google-start-pkce-state-nonce", "result": "passed" },
+    { "name": "unauthenticated-ai-fails-closed", "result": "passed", "status": 401 }
+  ],
+  "deployment": {
+    "sitesVersion": 68,
+    "deploymentId": "appgdep_6ab67c1647b48191aab7afafa522a0a0",
+    "environmentRevision": 7
+  }
+}

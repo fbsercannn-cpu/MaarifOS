@@ -1,0 +1,17 @@
+.student-surname-suggestion { display: grid; gap: 6px; margin: 0 0 14px; min-width: 0; }
+.student-surname-suggestion button { min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid #9ebdae; border-radius: 10px; background: #f1f7f3; color: #24533c; font: inherit; font-size: 13px; font-weight: 650; text-align: left; overflow-wrap: anywhere; }
+.student-surname-suggestion button:focus-visible { outline: 2px solid #24533c; outline-offset: 2px; }
+.student-surname-suggestion small, .student-address-field small { display: block; color: #596a60; font-size: 12px; font-weight: 400; line-height: 1.45; }
+.student-address-field { display: grid; gap: 7px; min-width: 0; margin: 16px 0; }
+.student-address-field label { display: grid; gap: 5px; font-size: 14px; font-weight: 650; }
+.student-address-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 80px; border: 1px solid #c3d4c9; border-radius: 10px; padding: 10px 12px; font: inherit; line-height: 1.5; color: #263930; background: #fff; resize: vertical; }
+.student-address-heading { font-size: 15px; }
+.student-address-parts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.student-address-parts > div { display: grid; gap: 6px; min-width: 0; }
+.student-address-parts input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid #c3d4c9; border-radius: 10px; padding: 10px 12px; font: inherit; color: #263930; background: white; }
+.student-address-parts textarea { min-height: 72px; }
+.student-address-field textarea.student-address-preview { color: #42564a; background: #f4f7f4; }
+.student-address-mode { width: 100%; min-height: 44px; margin: 3px 0; padding: 9px 12px; border: 1px solid #b5c7bc; border-radius: 10px; background: #f7faf8; color: #24533c; font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; }
+.student-address-mode:focus-visible { outline: 2px solid #24533c; outline-offset: 2px; }
+.student-address-field small.student-address-error { color: #982b26; }
+.roster-add-form .student-quick-entry-actions { position: sticky; bottom: 0; z-index: 2; padding: 9px 0; background: white; box-shadow: 0 -8px 10px white; }

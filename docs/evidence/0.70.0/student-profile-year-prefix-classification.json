@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-25T07:49:41.871330Z",
+  "civil_date": "2026-09-25",
+  "input_file_sha256": "ca99c3b8991fc83289c9b2322960ce486ad24eb1eb85ea30adfc4ba1170a4303",
+  "source_sha256": "97a930fb17af42a422f35fd485d64cb27f6ba16efbfcad90a7d7eb766965733c",
+  "status": "FLAKY_DETECTED",
+  "tests": [
+    {
+      "test_id_sha256": "eeb203419b7d445213c7e4f48fce5dcafb1a293e899cb54733fa34ad2bf1860d",
+      "classification": "FLAKY_UNEXPLAINED",
+      "run_count": 4,
+      "pass_count": 3,
+      "fail_count": 1,
+      "correlated_factors": [],
+      "distinct_failure_signatures": 1
+    }
+  ],
+  "counts": {
+    "FLAKY_UNEXPLAINED": 1
+  },
+  "duplicate_groups": [],
+  "errors": []
+}

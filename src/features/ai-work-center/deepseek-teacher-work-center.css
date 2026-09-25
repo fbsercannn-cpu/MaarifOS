@@ -1,0 +1,171 @@
+.deepseek-work-center {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  margin: 14px 0;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #0e7490 28%, transparent);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(34, 211, 238, 0.16), transparent 42%),
+    linear-gradient(145deg, #071827 0%, #0d2630 100%);
+  color: #ecfeff;
+  box-shadow: 0 10px 28px rgba(8, 47, 73, 0.16);
+}
+
+.deepseek-work-center__header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.deepseek-work-center__mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: #a5f3fc;
+  background: rgba(6, 182, 212, 0.18);
+}
+
+.deepseek-work-center__title { min-width: 0; }
+.deepseek-work-center__title small,
+.deepseek-work-center__title strong { display: block; }
+.deepseek-work-center__title small {
+  color: #67e8f9;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.deepseek-work-center__title strong {
+  margin-top: 2px;
+  color: #f0fdfa;
+  font-size: 0.98rem;
+}
+
+.deepseek-work-center__security {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  border-radius: 999px;
+  color: #99f6e4;
+  background: rgba(13, 148, 136, 0.12);
+  font-size: 0.64rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.deepseek-work-center button {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deepseek-work-center__primary,
+.deepseek-work-center__follow-ups button {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.deepseek-work-center__primary {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid rgba(165, 243, 252, 0.28);
+  color: #ecfeff;
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.48), rgba(13, 148, 136, 0.32));
+}
+
+.deepseek-work-center__primary span,
+.deepseek-work-center__follow-ups span { min-width: 0; }
+.deepseek-work-center__primary strong,
+.deepseek-work-center__primary small,
+.deepseek-work-center__follow-ups strong,
+.deepseek-work-center__follow-ups small { display: block; }
+.deepseek-work-center__primary strong { font-size: 0.86rem; }
+.deepseek-work-center__primary small {
+  margin-top: 3px;
+  color: #cffafe;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.deepseek-work-center__primary b {
+  color: #fff;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.deepseek-work-center__follow-ups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deepseek-work-center__follow-ups button {
+  display: grid;
+  gap: 7px;
+  align-content: space-between;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.56);
+}
+.deepseek-work-center__follow-ups strong { font-size: 0.76rem; }
+.deepseek-work-center__follow-ups small {
+  margin-top: 3px;
+  color: #a5b4c5;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+.deepseek-work-center__follow-ups b {
+  color: #67e8f9;
+  font-size: 0.67rem;
+}
+
+.deepseek-work-center button:focus-visible {
+  outline: 3px solid #fef08a;
+  outline-offset: 2px;
+}
+.deepseek-work-center button:not(:disabled):active { transform: scale(0.985); }
+.deepseek-work-center button:disabled { cursor: wait; opacity: 0.68; }
+
+.deepseek-work-center footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: #94a3b8;
+  font-size: 0.63rem;
+  line-height: 1.35;
+}
+.deepseek-work-center__notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: #f0fdfa;
+  background: rgba(15, 118, 110, 0.22);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+@media (max-width: 390px) {
+  .deepseek-work-center { padding: 12px; }
+  .deepseek-work-center__header { grid-template-columns: 36px minmax(0, 1fr); }
+  .deepseek-work-center__security { grid-column: 1 / -1; justify-self: start; }
+  .deepseek-work-center__primary { grid-template-columns: 22px minmax(0, 1fr); }
+  .deepseek-work-center__primary b { grid-column: 2; }
+  .deepseek-work-center__follow-ups { grid-template-columns: minmax(0, 1fr); }
+}

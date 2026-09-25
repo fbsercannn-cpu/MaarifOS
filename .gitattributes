@@ -1,0 +1,6 @@
+# Preserve byte-locked content and offline asset digests across platforms.
+sites-build-inputs/** -text
+public/assets/resources/** -text
+public/assets/maarif-content/** -text
+src/features/values/values-pedagogy-constitution.v1.json -text
+src/features/values/official-preschool-value-actions.v1.json -text

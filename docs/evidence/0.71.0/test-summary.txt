@@ -1,0 +1,14 @@
+MaarifOS 0.71.0 P1 acceptance summary
+Observed at: 2026-09-25T08:37:53Z
+
+- Feature and release contracts: 27 passed
+- Targeted ActionCenter mobile flow: 5 passed
+- Chromium and WebKit browser smoke: 74 passed
+- Sites worker and gateway contracts: 45 passed
+- PWA contracts: 10 passed
+- TypeScript, policy lint, protected runtime integrity: PASS
+- Production build and bundle budget: PASS
+- Backup export and replace-restore of both new records: PASS
+
+No live publication claim is made by this file. Deployment and post-deployment
+domain verification remain separate release actions.

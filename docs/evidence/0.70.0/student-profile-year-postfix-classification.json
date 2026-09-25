@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "generated_at_utc": "2026-09-25T07:49:41.973094Z",
+  "civil_date": "2026-09-25",
+  "input_file_sha256": "edd5decbe8e1efa281683e6ce39ce08777e26c0a837f70119634dc429c235756",
+  "source_sha256": "97a930fb17af42a422f35fd485d64cb27f6ba16efbfcad90a7d7eb766965733c",
+  "status": "RELIABLE",
+  "tests": [
+    {
+      "test_id_sha256": "1b2f2a523e72fb0fec6e85c366f73d00ace0d0cf798697ca7b0f2a015558985c",
+      "classification": "STABLE_PASS",
+      "run_count": 5,
+      "pass_count": 5,
+      "fail_count": 0,
+      "correlated_factors": [],
+      "distinct_failure_signatures": 0
+    }
+  ],
+  "counts": {
+    "STABLE_PASS": 1
+  },
+  "duplicate_groups": [],
+  "errors": []
+}

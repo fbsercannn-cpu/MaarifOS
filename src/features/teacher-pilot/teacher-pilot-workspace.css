@@ -1,0 +1,228 @@
+.teacher-pilot-workspace {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  color: var(--maarif-navy);
+}
+
+.teacher-pilot-workspace > header,
+.teacher-pilot-workspace__target,
+.teacher-pilot-workspace__controls,
+.teacher-pilot-workspace fieldset,
+.teacher-pilot-workspace__raw {
+  min-width: 0;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--maarif-line-soft);
+  border-radius: 15px;
+}
+
+.teacher-pilot-workspace > header span {
+  color: var(--maarif-teal-dark);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teacher-pilot-workspace h2,
+.teacher-pilot-workspace h3,
+.teacher-pilot-workspace p {
+  margin: 0;
+}
+
+.teacher-pilot-workspace h2 {
+  margin-top: 4px;
+  font-size: clamp(21px, 5vw, 30px);
+  line-height: 1.12;
+}
+
+.teacher-pilot-workspace > header p,
+.teacher-pilot-workspace__target small,
+.teacher-pilot-workspace__raw p,
+.teacher-pilot-workspace__raw small {
+  color: var(--maarif-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.teacher-pilot-workspace__target {
+  background: #f4f0fa;
+  border-color: #d8cdeb;
+}
+
+.teacher-pilot-workspace__target ul {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding-inline-start: 20px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.teacher-pilot-workspace__setup,
+.teacher-pilot-workspace__error {
+  padding: 11px 13px;
+  color: #80501b;
+  background: #fff8e8;
+  border: 1px solid #ecd7ae;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.teacher-pilot-workspace__controls,
+.teacher-pilot-workspace fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.teacher-pilot-workspace label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.teacher-pilot-workspace select,
+.teacher-pilot-workspace input,
+.teacher-pilot-workspace button {
+  min-height: 44px;
+  font: inherit;
+}
+
+.teacher-pilot-workspace select,
+.teacher-pilot-workspace input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--maarif-navy);
+  background: #fafbf9;
+  border: 1px solid var(--maarif-line);
+  border-radius: 11px;
+}
+
+.teacher-pilot-workspace__instruction,
+.teacher-pilot-workspace__timer,
+.teacher-pilot-workspace__timer-actions,
+.teacher-pilot-workspace__field-note,
+.teacher-pilot-workspace__attestation {
+  grid-column: 1 / -1;
+}
+
+.teacher-pilot-workspace__instruction {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.teacher-pilot-workspace__field-note {
+  color: var(--maarif-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.teacher-pilot-workspace__timer {
+  padding: 12px;
+  color: var(--maarif-teal-dark);
+  background: #edf8f4;
+  border: 1px solid #b9ddd4;
+  border-radius: 12px;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  text-align: center;
+}
+
+.teacher-pilot-workspace__timer-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.teacher-pilot-workspace button {
+  padding: 8px 10px;
+  color: var(--maarif-teal-dark);
+  background: #f2faf7;
+  border: 1px solid #b7ddd4;
+  border-radius: 11px;
+  font-weight: 850;
+}
+
+.teacher-pilot-workspace button:disabled,
+.teacher-pilot-workspace :is(select, input):disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.teacher-pilot-workspace :is(button, select, input):focus-visible {
+  outline: 3px solid #075b56;
+  outline-offset: 2px;
+}
+
+.teacher-pilot-workspace fieldset {
+  margin: 0;
+}
+
+.teacher-pilot-workspace fieldset legend {
+  padding: 0 5px;
+  font-weight: 850;
+}
+
+.teacher-pilot-workspace__check {
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.teacher-pilot-workspace__check input {
+  width: 24px;
+  height: 24px;
+  margin: 0 10px;
+}
+
+.teacher-pilot-workspace__error {
+  color: #8a2630;
+  background: #fff1f2;
+  border-color: #e8b7bd;
+}
+
+.teacher-pilot-workspace__raw ol {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teacher-pilot-workspace__raw li {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 9px 10px;
+  background: #f7f9f8;
+  border: 1px solid var(--maarif-line-soft);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.teacher-pilot-workspace__raw li span {
+  color: var(--maarif-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .teacher-pilot-workspace__controls,
+  .teacher-pilot-workspace fieldset,
+  .teacher-pilot-workspace__timer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-pilot-workspace__instruction,
+  .teacher-pilot-workspace__timer,
+  .teacher-pilot-workspace__timer-actions,
+  .teacher-pilot-workspace__field-note,
+  .teacher-pilot-workspace__attestation {
+    grid-column: auto;
+  }
+}

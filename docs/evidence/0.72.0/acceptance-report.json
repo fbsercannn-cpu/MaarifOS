@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "release": "0.72.0",
+  "title": "Gizlilik korumalı DeepSeek taslakları",
+  "observedAtUtc": "2026-09-25T09:12:00Z",
+  "status": "passed",
+  "scope": [
+    "Kimliksizleştirilmiş gözlemden DeepSeek değerlendirme ve veli bülteni taslağı",
+    "Öğretmen düzenleme ve açık kayıt kararı",
+    "Atomik ve mükerrersiz yerel kayıt",
+    "320 piksel mobil taşma ve yedek geri yükleme",
+    "PWA ve Sites üretim paketi"
+  ],
+  "privacyGates": {
+    "knownChildAndFamilyNamesRedacted": true,
+    "nationalIdentityPhoneEmailAndIbanRedacted": true,
+    "healthFamilyAndAddressRiskBlockedBeforeNetwork": true,
+    "unsafeProviderOutputRejected": true,
+    "providerSecretServerOnly": true,
+    "rawPromptLoggingForbidden": true
+  },
+  "teacherControl": {
+    "providerOutputIsDraft": true,
+    "bothTextsEditable": true,
+    "explicitSaveRequired": true,
+    "sourceFingerprintRevalidatedAtCommit": true,
+    "atomicPairCommit": true,
+    "idempotentRepeat": true
+  },
+  "checks": [
+    { "name": "targeted-feature-release-tests", "result": "passed", "count": 35 },
+    { "name": "action-center-mobile-runtime", "result": "passed", "count": 6 },
+    { "name": "sites-worker-and-ai-gateway", "result": "passed", "count": 45 },
+    { "name": "pwa-contract", "result": "passed", "count": 10 },
+    { "name": "browser-smoke-chromium-webkit", "result": "passed", "count": 74 },
+    { "name": "typecheck", "result": "passed" },
+    { "name": "policy-lint", "result": "passed" },
+    { "name": "protected-mobile-runtime", "result": "passed", "protectedFiles": 36 },
+    { "name": "founder-production-build", "result": "passed" },
+    { "name": "bundle-budget", "result": "passed", "javascriptChunks": 122 }
+  ],
+  "performance": {
+    "chromiumObservationReadyMs": 1097.5,
+    "chromiumObservationSaveMs": 114.0,
+    "webkitObservationReadyMs": 974.0,
+    "webkitObservationSaveMs": 1441.6,
+    "budgetMs": 2000,
+    "result": "passed"
+  },
+  "knownLimits": [
+    "Gerçek DeepSeek sağlayıcı yanıtı, bağlı öğretmen hesabı ve sağlayıcı bakiyesi gerektirdiği için otomatik sürüm testinde canlı çocuk verisiyle çağrılmadı.",
+    "Sağlayıcı başarısızlığında cihaz içi taslak korunur; bulut yanıtı taklit edilmez.",
+    "Otomatik kapılar gerçek okul öncesi öğretmen pilotunun yerine geçmez."
+  ]
+}

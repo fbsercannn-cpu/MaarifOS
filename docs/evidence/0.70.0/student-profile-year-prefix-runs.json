@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "source_sha256": "97a930fb17af42a422f35fd485d64cb27f6ba16efbfcad90a7d7eb766965733c",
+  "minimum_runs": 2,
+  "tests": [
+    {
+      "id": "student-profile-enrollment-year.pre-fix",
+      "runs": [
+        {
+          "id": "full-smoke-webkit",
+          "status": "FAIL",
+          "seed_sha256": "b00ff349ef57446e9fd6728228b518e07edc8b2a26b17409b3fe1e50c48d9908",
+          "order_sha256": "94403d2b936180c5ca8064a5a201772c8d380a61bd55b2d0720c8287cbf6d079",
+          "environment_sha256": "576bd24d94eff634a37343e113333d4ed71325cb3b1abb2a92ca597aba94fc50",
+          "duration_ms": 17100,
+          "failure_signature_sha256": "343efed7bcfd88ac0b3109bb592316370880fa581ac86dd9b2b1b23e87eb383b"
+        },
+        {
+          "id": "isolated-repeat-1",
+          "status": "PASS",
+          "seed_sha256": "b00ff349ef57446e9fd6728228b518e07edc8b2a26b17409b3fe1e50c48d9908",
+          "order_sha256": "94403d2b936180c5ca8064a5a201772c8d380a61bd55b2d0720c8287cbf6d079",
+          "environment_sha256": "576bd24d94eff634a37343e113333d4ed71325cb3b1abb2a92ca597aba94fc50",
+          "duration_ms": 16500
+        },
+        {
+          "id": "isolated-repeat-2",
+          "status": "PASS",
+          "seed_sha256": "b00ff349ef57446e9fd6728228b518e07edc8b2a26b17409b3fe1e50c48d9908",
+          "order_sha256": "94403d2b936180c5ca8064a5a201772c8d380a61bd55b2d0720c8287cbf6d079",
+          "environment_sha256": "576bd24d94eff634a37343e113333d4ed71325cb3b1abb2a92ca597aba94fc50",
+          "duration_ms": 16900
+        },
+        {
+          "id": "isolated-repeat-3",
+          "status": "PASS",
+          "seed_sha256": "b00ff349ef57446e9fd6728228b518e07edc8b2a26b17409b3fe1e50c48d9908",
+          "order_sha256": "94403d2b936180c5ca8064a5a201772c8d380a61bd55b2d0720c8287cbf6d079",
+          "environment_sha256": "576bd24d94eff634a37343e113333d4ed71325cb3b1abb2a92ca597aba94fc50",
+          "duration_ms": 17500
+        }
+      ]
+    }
+  ]
+}

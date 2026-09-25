@@ -1,0 +1,102 @@
+{
+  "as_of_utc": "2026-09-25T08:07:07Z",
+  "civil_date": "2026-09-25",
+  "input_sha256": "9c812bb50e08ce559a11e7264f18c35188d8e3320923666783e0bdac37e2dcec",
+  "issues": [],
+  "requirements": [
+    {
+      "criterion_results": [
+        {
+          "id": "AC-P0-01-01",
+          "issues": [],
+          "status": "PASS",
+          "valid_fail_evidence_count": 0,
+          "valid_pass_evidence_count": 1
+        }
+      ],
+      "evidence_results": [
+        {
+          "id": "EV-P0-01-01",
+          "issues": [],
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "status": "PASS",
+          "verified": true
+        }
+      ],
+      "id": "P0-01",
+      "issues": [],
+      "priority": "MUST"
+    },
+    {
+      "criterion_results": [
+        {
+          "id": "AC-P0-02-01",
+          "issues": [],
+          "status": "PASS",
+          "valid_fail_evidence_count": 0,
+          "valid_pass_evidence_count": 2
+        }
+      ],
+      "evidence_results": [
+        {
+          "id": "EV-P0-02-01",
+          "issues": [],
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "status": "PASS",
+          "verified": true
+        },
+        {
+          "id": "EV-P0-02-02",
+          "issues": [],
+          "kind": "TEST",
+          "path": "static-gates.txt",
+          "sha256": "1ed1920158823723fe4e5cf2aa17d2cd797957fa0d273c51a1a5e18ea4082fb4",
+          "status": "PASS",
+          "verified": true
+        }
+      ],
+      "id": "P0-02",
+      "issues": [],
+      "priority": "MUST"
+    },
+    {
+      "criterion_results": [
+        {
+          "id": "AC-P0-03-01",
+          "issues": [],
+          "status": "PASS",
+          "valid_fail_evidence_count": 0,
+          "valid_pass_evidence_count": 1
+        }
+      ],
+      "evidence_results": [
+        {
+          "id": "EV-P0-03-01",
+          "issues": [],
+          "kind": "TEST",
+          "path": "browser-smoke.txt",
+          "sha256": "66eeb5398fa94eda2dafa39c78c3df0c48f161df6210ca29f6bf644718cae536",
+          "status": "PASS",
+          "verified": true
+        }
+      ],
+      "id": "P0-03",
+      "issues": [],
+      "priority": "MUST"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "must_gap": false,
+    "requirements": 3,
+    "should_gap": false,
+    "structural_issue_count": 0
+  },
+  "task_id": "maarifos-0.70.0-p0-start",
+  "timezone": "Europe/Istanbul",
+  "verdict": "READY"
+}

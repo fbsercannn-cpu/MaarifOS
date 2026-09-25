@@ -1,0 +1,23 @@
+MaarifOS 0.73.0 — P1 üçüncü dikey dilim
+Tarih: 25/09/2026
+
+GEÇTİ  31 hedefli plan, DeepSeek, gizlilik ve sürüm testi
+GEÇTİ   2 gerçek mobil tarayıcı testi: 320 px kayıt + IndexedDB yedek/geri yükleme
+GEÇTİ  45 Sites Worker ve yapay zekâ ağ geçidi testi
+GEÇTİ  10 PWA sözleşme testi
+GEÇTİ  74 Chromium ve WebKit tarayıcı smoke testi
+GEÇTİ  TypeScript, politika lint ve 36 korunan runtime dosyası
+GEÇTİ  Founder üretim derlemesi ve 122 parçalı bundle bütçesi
+GEÇTİ  Vitrin görsellerinde çözünürlük kaybı olmadan 3.753.710 bayt aktarım azaltımı
+GEÇTİ  Canlı mobil kabukta yatay taşma yok; dış satır içi betikler sıkı CSP ile engelleniyor
+
+Doğrulanan gerçek sonuç:
+DeepSeek plan taslağı çocuk ve yakını kimliklerinden arındırılır. Öğretmen dört
+alanı düzenleyip kontrol onayı vermeden plan değişmez. Onaydan sonra aynı planın
+revizyon numarası artar, önceki sürüm korunur, dört akış bloğu kaynak model
+etiketi taşır ve planın etkinlik sayısı değişmez. Kayıt yedekten aynen döner.
+
+Canlı sağlayıcı notu:
+DeepSeek ağ geçidi yalnız bağlı öğretmen oturumunda ve kullanılabilir sağlayıcı
+bakiyesiyle çalışır. Otomatik test, güvenli aynı-origin sözleşmesini doğrulanmış
+sağlayıcı yanıtıyla sınadı; gerçek çocuk verisi canlı sağlayıcıya gönderilmedi.

@@ -1,0 +1,410 @@
+import { downloadOfficialFormWord } from "./official-form-export-service.ts";
+import { useOfficialFormState } from "./OfficialFormRecordProvider.tsx";
+import { useState } from "react";
+import "./official-forms.css";
+import { printOfficialFormA4 } from "./official-form-export-service.ts";
+
+export interface FamilyNeedFormData {
+  parentName: string;
+  studentName: string;
+  className: string;
+  date: string;
+  selectedTopics: string[];
+  preferredFormat: string[];
+  frequency: string;
+  preferredTime: string[];
+  expectations: string;
+  specialSituation: string;
+}
+
+interface Props {
+  initialData?: Partial<FamilyNeedFormData>;
+  onClose?: () => void;
+}
+
+const DEFAULT_TOPICS = [
+  "Okula Merhaba: Güvenli ve Mutlu Başlangıç",
+  "Okul Öncesi Eğitimde Aile ve Toplum Rolü",
+  "Kelimelerin Gücü: Çocukla Bağ Kuran İletişim ve Olumlu Ebeveynlik",
+  "Küçük Kalplerde Büyük Duygular: Duygularını Tanıma ve Yönetme Rehberi",
+  "Sınır koyma, tutarlılık ve olumlu disiplin yaklaşımları",
+  "Ailede güvenli bağlanma, sevgi ve aidiyet duygusunu güçlendirme",
+  "Ben Yapabilirim! Çocuklarda Öz güven, Öz Bakım ve Sorumluluk Bilinci",
+  "Oyun yoluyla öğrenme ve evde nitelikli zaman geçirme",
+  "Dünya Eve Sığar: Merakı Besleyen ve İlham Veren Ev Ortamı",
+  "Erdemin İlk Adımları: Değerlerle Büyüyen Çocuklar",
+  "Ailede kitap okuma kültürü, dil gelişimi ve erken okuryazarlık",
+  "Dijital Çağda Ailelerin Yol Haritası (Ekran Dengesi ve Güvenli Teknoloji)",
+  "Sağlıklı beslenme, uyku, temizlik ve temel alışkanlıkların kazandırılması",
+  "Çocuklarda sosyal beceriler, arkadaşlık ilişkileri ve problem çözme",
+  "Davranış problemlerini anlama ve çözüm yolları",
+  "Doğa, çevre farkındalığı ve sürdürülebilir yaşam alışkanlıkları",
+  "Aile-okul iş birliği ve çocuğun gelişimini birlikte izleme",
+  "İlkokula hazırlık sürecinde aileye düşen sorumluluklar",
+  "Farklı gelişim özellikleri olan çocukların desteklenmesi",
+];
+
+const FORMAT_OPTIONS = [
+  "Yüz yüze aile eğitimi toplantısı",
+  "Çevrim içi aile eğitimi",
+  "Küçük grup veli çalışması",
+  "Bireysel veli görüşmesi",
+  "Atölye çalışması / uygulamalı etkinlik",
+  "Evde uygulanacak kısa aile görevleri",
+  "Bilgilendirici broşür / kısa rehber paylaşımı",
+  "Video, EBA içeriği veya dijital materyal desteği",
+  "Okul-aile birlikte etkinlik günü",
+];
+
+export function OfficialFamilyNeedForm({ initialData, onClose }: Props) {
+  const [formData, setFormData] = useOfficialFormState<FamilyNeedFormData>("formData", {
+    parentName: initialData?.parentName || "Veli Adı Soyadı",
+    studentName: initialData?.studentName || "Öğrenci Adı Soyadı",
+    className: initialData?.className || "Papatyalar Sınıfı (5 Yaş)",
+    date: initialData?.date || new Date().toISOString().slice(0, 10),
+    selectedTopics: initialData?.selectedTopics || [DEFAULT_TOPICS[0], DEFAULT_TOPICS[2], DEFAULT_TOPICS[7]],
+    preferredFormat: initialData?.preferredFormat || [FORMAT_OPTIONS[0], FORMAT_OPTIONS[4]],
+    frequency: initialData?.frequency || "Ayda bir",
+    preferredTime: initialData?.preferredTime || ["Hafta içi öğleden sonra"],
+    expectations: initialData?.expectations || "Çocuğun okul uyumu ve sosyal ilişkilerinde olumlu destek sağlanması.",
+    specialSituation: initialData?.specialSituation || "Bilinen bir alerji veya kronik rahatsızlık bulunmamaktadır.",
+  });
+
+  const handlePrint = () => {
+    printOfficialFormA4(`EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}_${formData.date}`);
+  };
+
+  const handleDownloadWord = () => downloadOfficialFormWord("OfficialFamilyNeedForm");
+
+  const handleDownloadExcel = async () => {
+    const { exportOfficialTableToExcel } = await import("./official-form-export-service.ts");
+    await exportOfficialTableToExcel({
+      fileName: `EK-9_Aile_Ihtiyac_Formu_${formData.studentName.replace(/\s+/g, "_")}`,
+      sheetName: "EK-9 Aile İhtiyaç",
+      title: "T.C. MİLLÎ EĞİTİM BAKANLIĞI — EK-9 AİLE EĞİTİMİ İHTİYAÇ BELİRLEME FORMU",
+      subtitle: `Sınıf: ${formData.className} · Öğrenci: ${formData.studentName} · Veli: ${formData.parentName}`,
+      metadata: [
+        { label: "Sınıf / Şube", value: formData.className },
+        { label: "Veli Adı Soyadı", value: formData.parentName },
+        { label: "Öğrenci Adı Soyadı", value: formData.studentName },
+        { label: "Tarih", value: formData.date },
+      ],
+      columns: [
+        { header: "Kategori / Bölüm", key: "section", width: 28, align: "left" },
+        { header: "Tercih Edilen Detaylar ve Talepler", key: "content", width: 65, align: "left" },
+      ],
+      rows: [
+        { section: "A. ÖNCELİKLİ EĞİTİM KONULARI", content: formData.selectedTopics.map((t, idx) => `[${idx + 1}] ${t}`).join("\n") },
+        { section: "B. TERCİH EDİLEN UYGULAMA BİÇİMİ", content: formData.preferredFormat.join(", ") },
+        { section: "C. UYGUN SIKLIK VE ZAMAN", content: `Sıklık: ${formData.frequency} | Zaman: ${formData.preferredTime.join(", ")}` },
+        { section: "D. AİLE EĞİTİMLERİNDEN BEKLENTİLER", content: formData.expectations },
+        { section: "E. ÖZEL DURUM BİLGİLENDİRMESİ", content: formData.specialSituation },
+      ],
+      includeSubtotals: false,
+    });
+  };
+
+  const toggleTopic = (topic: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedTopics: prev.selectedTopics.includes(topic)
+        ? prev.selectedTopics.filter((t) => t !== topic)
+        : [...prev.selectedTopics, topic],
+    }));
+  };
+
+  const toggleFormat = (fmt: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      preferredFormat: prev.preferredFormat.includes(fmt)
+        ? prev.preferredFormat.filter((f) => f !== fmt)
+        : [...prev.preferredFormat, fmt],
+    }));
+  };
+
+  const toggleTime = (t: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      preferredTime: prev.preferredTime.includes(t)
+        ? prev.preferredTime.filter((item) => item !== t)
+        : [...prev.preferredTime, t],
+    }));
+  };
+
+  return (
+    <div className="official-form-modal">
+      <div className="official-form-container a4-printable">
+        {/* Modal Actions */}
+        <div className="official-form-actions no-print">
+          <div className="official-form-actions__title">
+            <strong>EK-9 Aile Eğitimi İhtiyaç Belirleme Formu (TTKB Sayfa 188–189)</strong>
+            <small>Resmî Format · A4 Çıktı, Excel ve Word (.docx) Uyumluluğu</small>
+          </div>
+          <div className="official-form-actions__buttons">
+            <button
+              type="button"
+              className="of-btn"
+              style={{ background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7", fontWeight: 700 }}
+              onClick={() => void handleDownloadExcel()}
+              title="Aile ihtiyaç anketini Excel (.xlsx) olarak indir"
+            >
+              📊 Excel (.xlsx)
+            </button>
+            <button type="button" className="of-btn of-btn--print" onClick={handlePrint}>
+              🖨️ A4 Yazdır / PDF Kaydet
+            </button>
+            <button type="button" className="of-btn of-btn--word" onClick={handleDownloadWord}>
+              📄 Word Olarak İndir (.docx)
+            </button>
+            {onClose && (
+              <button type="button" className="of-btn of-btn--close" onClick={onClose}>
+                ✕ Kapat
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Form Sheet */}
+        <div className="official-sheet">
+          <header className="official-sheet__header">
+            <h1 className="official-sheet__title" style={{ color: "#0284c7" }}>
+              EK-9 AİLE EĞİTİMİ İHTİYAÇ BELİRLEME FORMU
+            </h1>
+            <p className="official-sheet__guidance">
+              Değerli Velimiz; Türkiye Yüzyılı Maarif Modeli kapsamında çocuğunuzun gelişimini desteklemek amacıyla aile eğitimi konularındaki ihtiyaçlarınızı belirlemek üzere bu form hazırlanmıştır.
+            </p>
+          </header>
+
+          {/* Metadata Table */}
+          <table className="official-table">
+            <tbody>
+              <tr>
+                <th className="official-table__label">Veli Adı Soyadı:</th>
+                <td>
+                  <input
+                    type="text"
+                    className="of-input"
+                    value={formData.parentName}
+                    onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
+                  />
+                  <span className="print-only-text">{formData.parentName}</span>
+                </td>
+                <th className="official-table__label">Tarih:</th>
+                <td>
+                  <input
+                    type="date"
+                    className="of-input"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  />
+                  <span className="print-only-text">{formData.date}</span>
+                </td>
+              </tr>
+              <tr>
+                <th className="official-table__label">Çocuğun Adı Soyadı:</th>
+                <td>
+                  <input readOnly title="Çocuk profilindeki kayıtlı bilgi"
+                    type="text"
+                    className="of-input"
+                    value={formData.studentName}
+                    onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
+                  />
+                  <span className="print-only-text">{formData.studentName}</span>
+                </td>
+                <th className="official-table__label">Sınıfı:</th>
+                <td>
+                  <input
+                    type="text"
+                    className="of-input"
+                    value={formData.className}
+                    onChange={(e) => setFormData({ ...formData, className: e.target.value })}
+                  />
+                  <span className="print-only-text">{formData.className}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Bölüm A: Konular */}
+          <table className="official-table">
+            <thead>
+              <tr>
+                <th className="official-table__section-header" style={{ background: "#e0f2fe", color: "#0369a1" }}>
+                  A. EĞİTİM ALMAK İSTEDİĞİNİZ KONULAR (İşaretleyiniz)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "6px" }}>
+                    {DEFAULT_TOPICS.map((topic, idx) => {
+                      const isSelected = formData.selectedTopics.includes(topic);
+                      return (
+                        <label
+                          key={idx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "4px 8px",
+                            background: isSelected ? "#f0f9ff" : "transparent",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleTopic(topic)}
+                          />
+                          <span style={{ fontSize: "0.88rem", fontWeight: isSelected ? 600 : 400 }}>
+                            {topic}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Bölüm B: Uygulama Biçimi */}
+          <table className="official-table">
+            <thead>
+              <tr>
+                <th className="official-table__section-header" style={{ background: "#e0f2fe", color: "#0369a1" }}>
+                  B. TERCİH ETTİĞİNİZ UYGULAMA BİÇİMİ
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "6px" }}>
+                    {FORMAT_OPTIONS.map((fmt, idx) => {
+                      const isSelected = formData.preferredFormat.includes(fmt);
+                      return (
+                        <label
+                          key={idx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "4px 8px",
+                            background: isSelected ? "#f0f9ff" : "transparent",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleFormat(fmt)}
+                          />
+                          <span style={{ fontSize: "0.85rem" }}>{fmt}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Bölüm C & Ç: Sıklık ve Zaman */}
+          <table className="official-table">
+            <tbody>
+              <tr>
+                <th className="official-table__label">C. Uygun Görülen Sıklık:</th>
+                <td>
+                  <input
+                    type="text"
+                    className="of-input"
+                    value={formData.frequency}
+                    onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                  />
+                  <span className="print-only-text">{formData.frequency}</span>
+                </td>
+              </tr>
+              <tr>
+                <th className="official-table__label">Ç. Uygun Zaman:</th>
+                <td>
+                  <input
+                    type="text"
+                    className="of-input"
+                    value={formData.preferredTime.join(", ")}
+                    onChange={(e) =>
+                      setFormData({ ...formData, preferredTime: e.target.value.split(",").map((s) => s.trim()) })
+                    }
+                  />
+                  <span className="print-only-text">{formData.preferredTime.join(", ")}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Bölüm D & E: Beklentiler ve Özel Durum */}
+          <table className="official-table">
+            <thead>
+              <tr>
+                <th className="official-table__section-header" style={{ background: "#e0f2fe", color: "#0369a1" }}>
+                  D. AİLE EĞİTİMLERİNDEN BEKLENTİLERİNİZ
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="official-table__text-area-cell">
+                  <textarea
+                    className="of-textarea"
+                    rows={2}
+                    value={formData.expectations}
+                    onChange={(e) => setFormData({ ...formData, expectations: e.target.value })}
+                  />
+                  <div className="print-only-text multiline-text">{formData.expectations}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table className="official-table">
+            <thead>
+              <tr>
+                <th className="official-table__section-header" style={{ background: "#e0f2fe", color: "#0369a1" }}>
+                  E. ÖĞRETMENİN BİLGİLENDİRİLMESİNİ İSTEDİĞİNİZ ÖZEL BİR DURUM
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="official-table__text-area-cell">
+                  <textarea
+                    className="of-textarea"
+                    rows={2}
+                    value={formData.specialSituation}
+                    onChange={(e) => setFormData({ ...formData, specialSituation: e.target.value })}
+                  />
+                  <div className="print-only-text multiline-text">{formData.specialSituation}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Footer */}
+          <footer className="official-sheet__footer">
+            <div className="official-sheet__signature">
+              <span>Formu Dolduran Veli</span>
+              <strong>{formData.parentName}</strong>
+              <div className="signature-line">İmza: ....................</div>
+            </div>
+            <div className="official-sheet__page-num" style={{ color: "#0284c7" }}>
+              188–189
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+  );
+}

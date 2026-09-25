@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "interface_type": "API",
+  "version": "1.1.0",
+  "civil_timezone": "Europe/Istanbul",
+  "operations": [
+    {
+      "id": "account-status",
+      "locator": "GET /api/account/status",
+      "inputs": [
+        {"id": "authorization", "type": "string", "required": false}
+      ],
+      "outputs": [
+        {"id": "available", "type": "boolean", "required": true},
+        {"id": "status", "type": "string", "required": true, "enum": ["not_configured", "not_connected", "connected"]}
+      ],
+      "error_codes": ["ACCOUNT_UNAVAILABLE"]
+    },
+    {
+      "id": "google-web-start",
+      "locator": "POST /auth/google/start",
+      "inputs": [
+        {"id": "purpose", "type": "string", "required": true, "enum": ["login", "backup"]},
+        {"id": "returnPath", "type": "string", "required": false}
+      ],
+      "outputs": [
+        {"id": "authorizationUrl", "type": "string", "required": true}
+      ],
+      "error_codes": ["NOT_CONFIGURED", "ORIGIN_REJECTED", "AUTHENTICATION_REQUIRED"]
+    },
+    {
+      "id": "google-callback",
+      "locator": "GET /auth/google/callback",
+      "inputs": [
+        {"id": "state", "type": "string", "required": true},
+        {"id": "code", "type": "string", "required": false},
+        {"id": "error", "type": "string", "required": false}
+      ],
+      "outputs": [
+        {"id": "location", "type": "string", "required": true}
+      ],
+      "error_codes": ["ATTEMPT_MISSING", "ATTEMPT_EXPIRED", "GOOGLE_REJECTED"]
+    },
+    {
+      "id": "google-native-start",
+      "locator": "POST /auth/google/native/start",
+      "inputs": [
+        {"id": "purpose", "type": "string", "required": true, "enum": ["login", "backup"]},
+        {"id": "challenge", "type": "string", "required": true}
+      ],
+      "outputs": [
+        {"id": "authorizationUrl", "type": "string", "required": true},
+        {"id": "callbackUrl", "type": "string", "required": true}
+      ],
+      "error_codes": ["NOT_CONFIGURED", "ORIGIN_REJECTED", "AUTHENTICATION_REQUIRED", "INVALID_CHALLENGE"]
+    },
+    {
+      "id": "google-native-exchange",
+      "locator": "POST /api/account/native/exchange",
+      "inputs": [
+        {"id": "handoff", "type": "string", "required": true},
+        {"id": "verifier", "type": "string", "required": true}
+      ],
+      "outputs": [
+        {"id": "sessionToken", "type": "string", "required": true},
+        {"id": "user", "type": "object", "required": true},
+        {"id": "driveConnected", "type": "boolean", "required": true}
+      ],
+      "error_codes": ["HANDOFF_INVALID", "HANDOFF_EXPIRED", "VERIFIER_MISMATCH"]
+    }
+  ]
+}

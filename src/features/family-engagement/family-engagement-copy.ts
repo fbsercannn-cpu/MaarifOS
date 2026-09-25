@@ -1,0 +1,6 @@
+export const channelLabels = { phone: "Telefon araması", sms: "SMS", "messaging-app": "Mesajlaşma uygulaması", email: "E-posta", "in-person": "Yüz yüze" };
+export const formatLabels = { text: "Metin", voice: "Ses", "large-print": "Büyük yazı" };
+export const weekdayLabels = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+export const preferenceStateLabels = { "not-declared": "Tercih bildirilmemiş", "contact-removed": "Yakın kaydı kaldırılmış", "contact-changed": "Yakın bilgisi değişmiş; yeniden teyit gerekli", withdrawn: "Tercih geri çekilmiş", declared: "Yakının bildirdiği tercih kayıtlı" };
+export const calendarReasonLabels: Record<string, string> = { "invalid-calendar": "Takvim bilgisi geçersiz", "before-operational-start": "Eğitim yılı henüz başlamadı", "after-academic-year": "Eğitim yılı dışında", "local-closure": "Öğretmenin kaydettiği okul kapanışı", "explicit-closure": "Okul kapanışı", weekend: "Hafta sonu", "official-break": "Ara tatil / yarıyıl tatili", "full-day-holiday": "Resmî tam gün tatil", "outside-teaching-period": "Öğretim dönemi dışında", adaptation: "Uyum eğitimi günü", term: "Öğretim günü", "custom-weekday": "Tanımlı hafta içi çalışma günü" };
+export const familyDateLabel = (v: string) => v.split("-").reverse().join(".");

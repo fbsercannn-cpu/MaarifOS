@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MaarifOS</string>
+    <string name="title_activity_main">MaarifOS</string>
+    <string name="package_name">tr.gov.meb.maarifos</string>
+    <string name="custom_url_scheme">tr.gov.meb.maarifos</string>
+</resources>

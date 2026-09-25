@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "release": "0.74.2",
+  "title": "WebKit plan hızı ve hızlı AI görevleri",
+  "observedAtUtc": "2026-09-25T13:35:00Z",
+  "status": "superseded-after-live-regression",
+  "fixed": [
+    "İlk yıllık plan kaydında atomik hizmet doğrulamasından önce yapılan yinelenen tam kasa okuması kaldırıldı.",
+    "DeepSeek Öğretmen İşleri olayı asistan sorgusunu gereksiz zamanlayıcı gecikmesi olmadan başlatıyor."
+  ],
+  "checks": [
+    { "name": "plan-and-monthly-export-chromium-webkit", "result": "passed", "count": 4 },
+    { "name": "ai-work-center-chromium-webkit", "result": "passed", "count": 2 },
+    { "name": "cloud-account-runtime", "result": "passed", "count": 10 },
+    { "name": "assistant-tools-mobile-overflow", "result": "passed", "count": 3 },
+    { "name": "auth-contract", "result": "passed", "count": 14 },
+    { "name": "account-service", "result": "passed", "count": 22, "skipped": 1 },
+    { "name": "sites-worker-and-gateway", "result": "passed", "count": 45 },
+    { "name": "typecheck-lint-runtime-lock", "result": "passed" },
+    { "name": "production-build-and-bundle", "result": "passed", "javascriptChunks": 120 }
+  ],
+  "liveAudit": {
+    "target": "internal gated application deployment",
+    "passed": 59,
+    "failed": 11,
+    "productCandidates": 3,
+    "testHarnessIncompatibilities": 8,
+    "note": "WebKit AI zaman aşımı düzeldi. İki WebKit plan zaman aşımı canlı üretim tekrarında sürdü ve 0.74.3 ile yeniden ele alındı. Üretim sunucusunda kaynak TypeScript içe aktarmaya veya CSP dışı inline betiğe dayanan sekiz beyaz-kutu kontrol canlı ürün sonucu olarak sınıflandırılmadı."
+  },
+  "knownLimits": [
+    "Gerçek Google OAuth hesabından native mağaza uygulamasına güvenli dönüş henüz kanıtlanmadı; Android ve iOS platform projeleri mevcut değil.",
+    "Canlı beyaz-kutu test köprüleri üretim CSP ve paketlenmiş asset yapısına uyarlanmalıdır.",
+    "Fiziksel düşük segment Android ve gerçek iPhone cihaz kabulü otomatik tarayıcı profilinin yerine geçmez."
+  ]
+}

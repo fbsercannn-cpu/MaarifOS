@@ -1,0 +1,953 @@
+/**
+ * ai-assistant.css — MaarifOS 0.74.0
+ * Kuantum Pedagoji Asistanı & TYMM 2026 Tasarım Sistemi
+ * 
+ * MİMARİ: Tufte / Linear / Apple estetiği
+ * - 60 FPS transform & opacity animasyonları
+ * - Sıfır yatay kayma (Zero horizontal drift)
+ * - Dokunmatik hedef minimum 44px (WCAG 2.5.5)
+ */
+
+/* ─── YÜZEN FAB BUTONU ─── */
+.maai-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 9999;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7 0%, #0f172a 100%);
+  border: 2px solid rgba(56, 189, 248, 0.4);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.25);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.maai-fab:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6), 0 0 25px rgba(56, 189, 248, 0.4);
+}
+
+.maai-fab:active {
+  transform: scale(0.95);
+}
+
+.maai-fab--active {
+  background: linear-gradient(135deg, #10b981 0%, #064e3b 100%);
+  border-color: #34d399;
+}
+
+.maai-fab__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin-top: 1px;
+}
+
+/* ─── TOAST BİLDİRİMİ ─── */
+.maai-toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10002;
+  background: #10b981;
+  color: #ffffff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  animation: maai-toast-in 0.25s ease-out;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@keyframes maai-toast-in {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ─── ANA TERMİNAL PANELİ ─── */
+.maai-panel {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  z-index: 9998;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  height: 640px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  background: #070d18;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 18px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+  animation: maai-panel-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes maai-panel-enter {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── PANEL BAŞLIĞI ─── */
+.maai-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.maai-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.maai-avatar-pulse {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.maai-avatar-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.maai-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.maai-panel__title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.maai-version-chip {
+  font-size: 0.65rem;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.maai-panel__subtitle {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.maai-panel__header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.maai-tab-pill {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.maai-tab-pill:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+}
+
+.maai-tab-pill.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.maai-close-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+  margin-left: 4px;
+}
+
+.maai-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* ─── BAĞLAM ŞERİDİ ─── */
+.maai-context-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(56, 189, 248, 0.08);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  font-size: 0.72rem;
+  color: #7dd3fc;
+  flex-shrink: 0;
+}
+
+.maai-ctx-icon {
+  font-size: 0.85rem;
+}
+
+.maai-ctx-text strong {
+  color: #38bdf8;
+}
+
+/* ─── PANEL GÖVDESİ ─── */
+.maai-panel__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.maai-panel__body--scroll {
+  overflow-y: auto;
+  padding: 16px;
+  scrollbar-width: thin;
+}
+
+/* ─── MESAJ LİSTESİ ─── */
+.maai-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-width: thin;
+}
+
+.maai-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 90%;
+  animation: maai-msg-in 0.2s ease-out;
+}
+
+@keyframes maai-msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.maai-msg--user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  padding: 10px 14px;
+  border-radius: 14px 14px 2px 14px;
+  font-size: 0.84rem;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+}
+
+.maai-msg--assistant {
+  align-self: flex-start;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  padding: 12px 14px;
+  border-radius: 14px 14px 14px 2px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  width: 95%;
+  max-width: 95%;
+}
+
+.maai-msg--error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.maai-msg__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: #38bdf8;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.maai-msg__bot-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.maai-msg__content h3 {
+  font-size: 0.95rem;
+  color: #38bdf8;
+  margin: 8px 0 4px 0;
+  font-weight: 700;
+}
+
+.maai-msg__content h4 {
+  font-size: 0.85rem;
+  color: #34d399;
+  margin: 8px 0 4px 0;
+  font-weight: 700;
+}
+
+.maai-msg__content blockquote {
+  border-left: 3px solid #38bdf8;
+  margin: 8px 0;
+  padding: 4px 10px;
+  background: rgba(56, 189, 248, 0.06);
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+.maai-msg__content pre {
+  background: #020617;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 6px 0;
+}
+
+.maai-msg__content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.maai-li {
+  display: block;
+  margin-left: 6px;
+  position: relative;
+  padding-left: 10px;
+}
+
+.maai-li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #38bdf8;
+}
+
+.maai-li-num {
+  display: block;
+  margin-left: 6px;
+  color: #cbd5e1;
+}
+
+/* ─── AKSİYON BUTONLARI ─── */
+.maai-msg__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.maai-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.maai-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.maai-action-btn--primary {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.maai-action-btn--primary:hover {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.maai-action-btn--primary.done {
+  background: #064e3b;
+  color: #6ee7b7;
+  border-color: #059669;
+}
+
+.maai-action-btn--whatsapp {
+  background: rgba(37, 211, 102, 0.12);
+  border-color: rgba(37, 211, 102, 0.35);
+  color: #4ade80;
+}
+
+.maai-action-btn--whatsapp:hover {
+  background: #25d366;
+  color: #ffffff;
+}
+
+/* ─── YAZIYOR ANİMASYONU ─── */
+.maai-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 0;
+}
+
+.maai-typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  animation: maai-typing 1.4s infinite ease-in-out;
+}
+
+.maai-typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.maai-typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes maai-typing {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── HIZLI İPUCU ÇİPLERİ ─── */
+.maai-quick-strip {
+  display: flex;
+  gap: 6px;
+  padding: 6px 14px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+  background: rgba(15, 23, 42, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.maai-quick-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.maai-quick-chip {
+  padding: 4px 9px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.maai-quick-chip:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.maai-quick-chip--clear {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+/* ─── GİRİŞ VE DİKTE BARI ─── */
+.maai-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #0f172a;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.maai-textarea {
+  flex: 1;
+  background: rgba(2, 6, 23, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #f8fafc;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  transition: border-color 0.15s ease;
+  font-family: inherit;
+}
+
+.maai-textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8;
+}
+
+.maai-input-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.maai-voice-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.maai-voice-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.maai-voice-btn.listening {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #dc2626;
+  animation: maai-pulse 1.2s infinite;
+}
+
+@keyframes maai-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); }
+}
+
+.maai-send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: #0284c7;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.maai-send-btn:hover:not(:disabled) {
+  background: #0369a1;
+  transform: translateY(-1px);
+}
+
+.maai-send-btn:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+/* ─── HIZLI REÇETELER SEKME GÖRÜNÜMÜ ─── */
+.maai-recipes-intro {
+  margin-bottom: 14px;
+}
+
+.maai-recipes-intro h4 {
+  font-size: 0.9rem;
+  color: #38bdf8;
+  margin: 0 0 4px 0;
+}
+
+.maai-recipes-intro p {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.maai-recipes-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.maai-recipe-group__title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+.maai-recipe-group__items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.maai-recipe-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.maai-recipe-card:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(56, 189, 248, 0.3);
+  transform: translateX(3px);
+}
+
+.maai-recipe-card__icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.maai-recipe-card__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.maai-recipe-card__text strong {
+  display: block;
+  font-size: 0.82rem;
+  color: #f8fafc;
+}
+
+.maai-recipe-card__text small {
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.maai-recipe-card__arrow {
+  color: #64748b;
+  font-size: 0.9rem;
+  transition: transform 0.15s ease;
+}
+
+.maai-recipe-card:hover .maai-recipe-card__arrow {
+  color: #38bdf8;
+  transform: translateX(3px);
+}
+
+/* ─── AYARLAR SEKME GÖRÜNÜMÜ ─── */
+.maai-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.maai-settings-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.maai-settings-card h4 {
+  font-size: 0.85rem;
+  color: #38bdf8;
+  margin: 0 0 4px 0;
+}
+
+.maai-settings-card p {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin: 0 0 10px 0;
+}
+
+.maai-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.maai-provider-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.maai-provider-item.selected {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.maai-provider-item__indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.maai-provider-item__info strong {
+  display: block;
+  font-size: 0.78rem;
+  color: #f8fafc;
+}
+
+.maai-provider-item__info small {
+  display: block;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.maai-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.maai-mode-btn {
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(2, 6, 23, 0.5);
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.maai-mode-btn small {
+  display: block;
+  font-size: 0.62rem;
+  color: #64748b;
+  margin-top: 3px;
+  font-weight: normal;
+}
+
+.maai-mode-btn.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #34d399;
+}
+
+.maai-key-box {
+  display: flex;
+  gap: 6px;
+}
+
+.maai-key-field {
+  flex: 1;
+  background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-family: monospace;
+  outline: none;
+}
+
+.maai-key-view-btn {
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.maai-zero-trust-seal {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 12px;
+}
+
+.seal-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.maai-zero-trust-seal strong {
+  display: block;
+  font-size: 0.78rem;
+  color: #34d399;
+}
+
+.maai-zero-trust-seal p {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+/* ─── MOBİL DUYARLILIK (APEX SİNGLE-PAGE KORUMASI) ─── */
+@media (max-width: 480px) {
+  .maai-panel {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    border: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .maai-panel__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 9px;
+    padding: 10px 10px 8px;
+  }
+
+  .maai-panel__header-left { min-height: 40px; padding-inline: 4px; }
+  .maai-panel__header-right {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 44px;
+    gap: 4px;
+  }
+
+  .maai-tab-pill {
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 3px;
+    font-size: 0.66rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .maai-close-btn {
+    width: 44px;
+    height: 44px;
+    margin-left: 0;
+    color: #f8fafc;
+    background: rgba(255,255,255,.06);
+  }
+
+  .maai-panel__body,
+  .maai-messages,
+  .maai-settings-card,
+  .maai-provider-item,
+  .maai-provider-item__info { min-width: 0; }
+
+  .maai-messages { padding: 12px 10px; }
+  .maai-msg { max-width: 100%; }
+  .maai-msg--assistant { width: 100%; max-width: 100%; }
+
+  .maai-quick-strip {
+    min-height: 52px;
+    padding: 6px 10px;
+    overscroll-behavior-inline: contain;
+  }
+  .maai-quick-chip { min-height: 40px; padding: 7px 10px; }
+
+  .maai-input-bar { min-width: 0; padding: 8px 10px; align-items:flex-end; }
+  .maai-textarea { min-width: 0; max-height: 116px; }
+  .maai-input-buttons { flex:0 0 auto; }
+  .maai-voice-btn,
+  .maai-send-btn { width:44px; height:44px; }
+
+  .maai-toast {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    width: calc(100% - 24px);
+    padding: 9px 12px;
+    border-radius: 12px;
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .maai-fab {
+    bottom: 18px;
+    right: 18px;
+    width: 52px;
+    height: 52px;
+  }
+
+  .maai-mode-toggle {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 340px) {
+  .maai-panel__header-right { grid-template-columns: repeat(2, minmax(0, 1fr)) 44px; }
+  .maai-close-btn { grid-column:3; grid-row:1 / span 2; align-self:stretch; height:auto; }
+}

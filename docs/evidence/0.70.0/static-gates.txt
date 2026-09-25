@@ -1,0 +1,14 @@
+MaarifOS 0.70.0 static and security evidence
+Observed: 2026-09-25 Europe/Istanbul
+
+- npm run test:typecheck: PASS
+- npm run lint: PASS (4 enforced rules)
+- npm run check:runtime: PASS (36 protected files)
+- release metadata/package/PWA synchronization: 10/10 PASS
+- service-worker/PWA contract: 10/10 PASS
+- npm run build:sites:founder: PASS (1229 modules transformed; founder attestation emitted)
+- npm run check:bundle: PASS (122 JavaScript chunks, enforced gzip/chunk budget passed)
+- npm run test:sites: PASS (45/45)
+- core local-vault security: 20/20 PASS
+- persistence/security UI: 14/14 PASS
+- browser-file-download unit tests: 2/2 PASS

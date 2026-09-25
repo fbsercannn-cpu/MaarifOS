@@ -1,0 +1,152 @@
+.deepseek-plan-review__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(2, 8, 23, .72);
+  backdrop-filter: blur(5px);
+}
+
+.deepseek-plan-review {
+  position: fixed;
+  z-index: 1201;
+  inset: max(12px, env(safe-area-inset-top)) 50% auto auto;
+  transform: translateX(50%);
+  width: min(720px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  border: 1px solid rgba(34, 211, 238, .28);
+  border-radius: 22px;
+  padding: 18px;
+  background: #07111f;
+  color: #e2e8f0;
+  box-shadow: 0 24px 80px rgba(2, 8, 23, .52);
+}
+
+.deepseek-plan-review *,
+.deepseek-plan-review *::before,
+.deepseek-plan-review *::after { box-sizing: border-box; min-width: 0; }
+
+.deepseek-plan-review__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.deepseek-plan-review__header h2 { margin: 0; font-size: 1.15rem; color: #f8fafc; }
+.deepseek-plan-review__header p { margin: 5px 0 0; color: #94a3b8; line-height: 1.45; }
+.deepseek-plan-review__header > button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(148, 163, 184, .25);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .8);
+  color: #cbd5e1;
+}
+.deepseek-plan-review__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #0891b2, #0f766e);
+  color: #fff;
+}
+
+.deepseek-plan-review__privacy {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 16px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(45, 212, 191, .22);
+  border-radius: 12px;
+  background: rgba(13, 148, 136, .1);
+  color: #99f6e4;
+  font-size: .8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.deepseek-plan-review__privacy svg { flex: 0 0 auto; margin-top: 2px; }
+
+.deepseek-plan-review__fields { display: grid; gap: 14px; }
+.deepseek-plan-review__fields label { display: grid; gap: 7px; }
+.deepseek-plan-review__fields label > span { color: #e0f2fe; font-weight: 750; font-size: .87rem; }
+.deepseek-plan-review__fields small { color: #94a3b8; font-weight: 500; }
+.deepseek-plan-review__fields textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: #0f1b2d;
+  color: #f8fafc;
+  font: inherit;
+  line-height: 1.5;
+}
+.deepseek-plan-review__fields textarea:focus { outline: 2px solid #22d3ee; outline-offset: 1px; }
+
+.deepseek-plan-review__notice,
+.deepseek-plan-review__error,
+.deepseek-plan-review__loading {
+  margin: 14px 0 0;
+  font-size: .82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.deepseek-plan-review__notice { color: #a5f3fc; }
+.deepseek-plan-review__error { color: #fecaca; }
+.deepseek-plan-review__loading { color: #cbd5e1; }
+
+.deepseek-plan-review__footer {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(148, 163, 184, .2);
+}
+.deepseek-plan-review__confirmation {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: #dbeafe;
+  font-size: .86rem;
+  line-height: 1.45;
+}
+.deepseek-plan-review__confirmation input { width: 20px; height: 20px; margin: 0; }
+.deepseek-plan-review__footer > div { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.deepseek-plan-review__footer button {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 800;
+}
+.deepseek-plan-review__cancel { border: 1px solid rgba(148, 163, 184, .3); background: transparent; color: #cbd5e1; }
+.deepseek-plan-review__save { display: inline-flex; align-items: center; gap: 7px; border: 0; background: #0f766e; color: #fff; }
+.deepseek-plan-review__save:disabled { opacity: .5; }
+
+@media (max-width: 420px) {
+  .deepseek-plan-review {
+    inset: max(6px, env(safe-area-inset-top)) 50% auto auto;
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 16px;
+    padding: 13px;
+  }
+  .deepseek-plan-review__header { gap: 9px; }
+  .deepseek-plan-review__icon { display: none; }
+  .deepseek-plan-review__header { grid-template-columns: minmax(0, 1fr) auto; }
+  .deepseek-plan-review__footer > div { display: grid; grid-template-columns: 1fr; }
+  .deepseek-plan-review__footer button { width: 100%; justify-content: center; }
+}

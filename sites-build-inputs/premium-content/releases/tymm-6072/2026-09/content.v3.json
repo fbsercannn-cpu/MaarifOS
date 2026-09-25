@@ -1,0 +1,2614 @@
+{
+  "id": "maarifos-tymm-6072-2026-2027-v3",
+  "version": "3.0.0",
+  "contentReleaseId": "tymm-6072-2026-09-v3",
+  "manifestDigest": "sha256:9b4c2bcc155e3f6f8567ba5737249cd417405bc4205b75b68d194e63ca3eff1e",
+  "sku": "TYMM-6072",
+  "displayName": "TYMM 2024 · 60–72 Ay · 2026–2027",
+  "program": "tymm_2024",
+  "ageProfile": "60-72",
+  "academicRelease": "2026-2027",
+  "catalogId": "meb-tymm-okul-oncesi-2024-learning-outcomes",
+  "catalogSourceVersion": "2024.09.02",
+  "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+  "sourceCheckedOn": "2026-07-29",
+  "rightsStatus": "original-and-source-linked",
+  "valuesContract": {
+    "constitutionId": "maarifos-values-pedagogy-constitution",
+    "constitutionVersion": "1.1.0",
+    "constitutionSchemaVersion": 1,
+    "officialActionCatalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+    "officialActionCatalogSourceVersion": "2024.09.02",
+    "officialActionCatalogSourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+    "mappingSchemaVersion": "1.0.0",
+    "status": "machine_validated_pending_human_review",
+    "requiredHumanReviewRoles": [
+      "early-childhood-education",
+      "practicing-preschool-teacher",
+      "child-rights-and-safeguarding",
+      "tymm-curriculum",
+      "content-and-language-editor",
+      "turkish-islamic-culture-and-theology"
+    ]
+  },
+  "lenses": [
+    {
+      "id": "guided-play",
+      "displayName": "Çocuk Girişimli ve Rehberli Oyun",
+      "shortDescription": "Çocuk seçimini koruyan, öğretmen sorularıyla derinleşen oyun.",
+      "evidenceGrade": "B",
+      "inspiration": "Gelişime uygun uygulama"
+    },
+    {
+      "id": "prepared-environment",
+      "displayName": "Hazırlanmış Çevre ve Bağımsız Çalışma",
+      "shortDescription": "Düzenli ortam, gerçek yaşam işi, seçim ve kademeli bağımsızlık.",
+      "evidenceGrade": "B",
+      "inspiration": "Montessori ilkeleri"
+    },
+    {
+      "id": "plan-act-reflect",
+      "displayName": "Planla–Uygula–Değerlendir Etkin Öğrenme",
+      "shortDescription": "Çocuğun niyetini belirtip uygulamasına ve sürece geri dönmesine alan açar.",
+      "evidenceGrade": "B",
+      "inspiration": "HighScope ilkeleri"
+    },
+    {
+      "id": "belonging-family-weave",
+      "displayName": "Aidiyet–İlişki–Aile Dokuması",
+      "shortDescription": "İyi oluş, aidiyet, aile bilgisi ve ilişkileri planın merkezine alır.",
+      "evidenceGrade": "C",
+      "inspiration": "Te Whāriki ilkeleri"
+    },
+    {
+      "id": "accessible-participation",
+      "displayName": "Erişilebilir Katılım ve Destekleyici İletişim",
+      "shortDescription": "Fiziksel, duyusal ve iletişimsel engelleri baştan azaltır.",
+      "evidenceGrade": "A-B",
+      "inspiration": "Kapsayıcı erken çocukluk eğitimi"
+    },
+    {
+      "id": "emotion-relationship-coregulation",
+      "displayName": "Duygu, İlişki ve Eş Düzenleme",
+      "shortDescription": "Güvenli ilişki ve yetişkin eş düzenlemesiyle sosyal-duygusal katılım.",
+      "evidenceGrade": "A",
+      "inspiration": "Sosyal-duygusal öğrenme"
+    }
+  ],
+  "annualMonths": [
+    {
+      "monthKey": "2026-09",
+      "title": "Aidiyet, sınıf topluluğu ve keşif",
+      "purpose": "Güvenli ilişki, ortak düzen, yakın çevreyi gözleme ve çocuk sorularını görünür kılma.",
+      "releaseStatus": "internal-review-ready"
+    },
+    {
+      "monthKey": "2026-10",
+      "title": "Duyular, sonbahar ve malzeme",
+      "purpose": "Mevsimsel değişimi, malzeme özelliklerini ve sınıflandırmayı araştırma.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2026-11",
+      "title": "İlişki, topluluk ve ortak hafıza",
+      "purpose": "Birlikte yaşam, hak, sorumluluk ve yakın çevre kaynakları.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2026-12",
+      "title": "Işık, ses, örüntü ve yapı",
+      "purpose": "Ölçme, yapı kurma, örüntü ve çözüm üretme.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-01",
+      "title": "Kış, bakım ve dönem yansıtması",
+      "purpose": "Canlıların kış yaşamı, dayanışma ve ilk dönem kanıtlarına dönüş.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-02",
+      "title": "İletişim, duygu ve hikâye",
+      "purpose": "Yeniden bağlanma, anlatı, duygu dili ve akran etkileşimi.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-03",
+      "title": "Su, toprak, orman ve büyüme",
+      "purpose": "Yaşam alanı, bakım, uzun dönem doğa gözlemi ve sorumluluk.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-04",
+      "title": "Çoklu ifade ve sürdürülebilir tasarım",
+      "purpose": "Fikirleri sanat, yapı, hareket, söz ve sembolle temsil etme.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-05",
+      "title": "Hareket, üretim ve yerel toplum",
+      "purpose": "Ortak proje, saha araştırması ve yaşanılan yere katkı.",
+      "releaseStatus": "planned-release"
+    },
+    {
+      "monthKey": "2027-06",
+      "title": "Geçiş, süreklilik ve yılın anlamı",
+      "purpose": "Yıllık kanıtlara dönüş, geçiş desteği ve sürdürülmek istenen sorular.",
+      "releaseStatus": "planned-release"
+    }
+  ],
+  "monthlyPlan": {
+    "monthKey": "2026-09",
+    "periodStart": "2026-09-07",
+    "periodEnd": "2026-09-30",
+    "title": "Eylül 2026 · Aidiyet, sınıf topluluğu ve güvenli keşif",
+    "purpose": "Çocuğun sınıfa kendi katılım yoluyla bağlanmasını, ortak düzeni dönüştürmesini ve Ekim araştırmalarına gerçek meraklarla geçmesini sağlamak.",
+    "childQuestions": [
+      "Bu sınıfta kendimi güvende ve ait hissetmeme ne yardım eder?",
+      "Bir oyuna ve ortak işe katılmanın kaç farklı yolu olabilir?",
+      "Sınıfımızı herkes için daha anlaşılır ve erişilebilir nasıl yapabiliriz?",
+      "Ekim ayında hangi malzemeyi veya değişimi daha yakından araştırmak istiyoruz?"
+    ],
+    "materialSummary": [
+      "Nötr kuklalar ve boş hikâye kartları",
+      "Büyük sembol, fotoğraf ve yön kartları",
+      "Yeniden yapışabilen etiketler ve kalın uçlu kalemler",
+      "Açık uçlu doğal parçalar ve sınıf krokisi için büyük kâğıt",
+      "Basit ritim araçları ve ses üreten güvenli sınıf nesneleri"
+    ],
+    "lowCostMaterialSummary": [
+      "Kâğıt torba kukla ve karton semboller",
+      "Taş, kozalak, kapak ve artık kâğıt",
+      "Koli kartonundan yön ve seçim kartları",
+      "Süngerden kalem kalınlaştırıcı",
+      "Ritim aracı olarak kapalı kutu ve tahta kaşık"
+    ],
+    "routines": [
+      "Çocuk gelişini nesne, işaret, görsel veya sözle bildirebilir.",
+      "Günün planında en az iki seçim yolu görünür tutulur.",
+      "Dinlenme ve yeniden katılma alanı gün boyu erişilebilir kalır.",
+      "Gün sonunda çocuk bir kanıt veya deneyim izi seçer."
+    ],
+    "transitions": [
+      "Geçişten önce görsel işaret ve kısa sözel bildirim birlikte kullanılır.",
+      "Çocuk geçiş görevini seçebilir; görev almamak da geçerli bir seçenektir.",
+      "Kalabalık geçişler küçük gruplara bölünür.",
+      "Duyusal ihtiyaç için sessiz işaret ve ek süre seçeneği sunulur."
+    ],
+    "familyParticipationPrinciple": "Aile katılımı isteğe bağlıdır; yanıt vermemek çocuk veya aile hakkında olumsuz değerlendirme doğurmaz, yalnız süreç istatistiğine yansır.",
+    "teacherReflectionPrompts": [
+      "Hangi ortam düzeni çocukların katılımını gerçekten kolaylaştırdı?",
+      "Hangi çocuk hangi ifade yolunu kendiliğinden seçti?",
+      "Yetişkin yönlendirmesi çocuk çözümüne yeterince alan bıraktı mı?",
+      "Ekim planını değiştirmesi gereken hangi gerçek çocuk soruları oluştu?"
+    ]
+  },
+  "fullDayFlow": [
+    {
+      "id": "arrival-wellbeing",
+      "title": "Karşılama ve iyi oluş",
+      "purpose": "Güvenli geliş, ayrılma ve yeniden buluşma ihtiyacını fark etmek.",
+      "flexibilityNote": "Çocuk doğrudan gruba katılmak zorunda değildir; sakin alan ve güvenli yetişkin erişilebilir kalır."
+    },
+    {
+      "id": "learning-centers",
+      "title": "Serbest seçim ve öğrenme merkezleri",
+      "purpose": "Çocuğun niyetini, malzeme ve ilişki tercihlerini görünür kılmak.",
+      "flexibilityNote": "Merkezler çocuk ilgisine göre açılır; süre katılımın niteliğine göre esnetilir."
+    },
+    {
+      "id": "morning-meeting",
+      "title": "Güne başlama",
+      "purpose": "Günün seçeneklerini ve ortak soruyu anlaşılır kılmak.",
+      "flexibilityNote": "Dinleme, işaret, nesne veya hareketle katılım eşdeğerdir."
+    },
+    {
+      "id": "first-main",
+      "title": "Ana etkinlik 1",
+      "purpose": "Haftanın araştırma sorusunu küçük veya büyük grupla derinleştirmek.",
+      "flexibilityNote": "Grup büyüklüğü ve süre çocukların iyi oluşuna göre değişir."
+    },
+    {
+      "id": "nutrition-selfcare",
+      "title": "Beslenme, öz bakım ve geçiş",
+      "purpose": "Bağımsızlık, bakım ve ortak yaşam sorumluluğunu desteklemek.",
+      "flexibilityNote": "Çocuk destek isterse yardım sunulur; hız ve görev başarısı puanlanmaz."
+    },
+    {
+      "id": "outdoor-movement",
+      "title": "Açık hava ve hareket",
+      "purpose": "Beden, mekân ve akran ilişkisini gerçek ortamda deneyimlemek.",
+      "flexibilityNote": "Hava veya saha uygun değilse tanımlı kapalı alan eşdeğeri kullanılır."
+    },
+    {
+      "id": "second-main",
+      "title": "Ana etkinlik 2",
+      "purpose": "Sabah deneyimini başka malzeme veya ifade yoluyla dönüştürmek.",
+      "flexibilityNote": "İlk etkinlik uzadıysa bu blok küçük grup istasyonuna çevrilebilir."
+    },
+    {
+      "id": "rest-regulation",
+      "title": "Dinlenme ve sakinleşme",
+      "purpose": "Duyusal yükü azaltmak ve yeniden katılımı desteklemek.",
+      "flexibilityNote": "Uyuma zorunluluğu yoktur; sessiz kitap, kulaklık ve düşük ışık seçenekleri bulunur."
+    },
+    {
+      "id": "small-group",
+      "title": "Küçük grup veya bireysel destek",
+      "purpose": "Ek gözlem, erişim desteği veya çocuk sorusunu sürdürmek.",
+      "flexibilityNote": "Destek tanı veya eksiklik etiketi olarak sunulmaz."
+    },
+    {
+      "id": "reflection-departure",
+      "title": "Gün sonu yansıtma ve aileye geçiş",
+      "purpose": "Çocuğun seçtiği kanıtla günü anlamlandırmak ve sonraki adımı kurmak.",
+      "flexibilityNote": "Paylaşmak istemeyen çocuk gözlemci kalabilir veya başka bir ifade yolu seçebilir."
+    }
+  ],
+  "weeks": [
+    {
+      "id": "adaptation",
+      "title": "Uyum, güven ve katılım yolu",
+      "dateRange": "7–11 Eylül 2026",
+      "periodStart": "2026-09-07",
+      "periodEnd": "2026-09-11",
+      "purpose": "İlişki, aidiyet, eş düzenleme ve sınıfa güvenli katılım.",
+      "inquiryQuestion": "Bu sınıfta kendimi güvende ve ait hissetmeme ne yardım eder?",
+      "activityIds": [
+        "tymm6072-sep-friendship-story",
+        "tymm6072-sep-safe-places-map",
+        "tymm6072-sep-quiet-joining"
+      ],
+      "mainActivityIds": [
+        "tymm6072-sep-friendship-story",
+        "tymm6072-sep-safe-places-map"
+      ],
+      "alternativeActivityId": "tymm6072-sep-quiet-joining",
+      "observationFocus": [
+        "Çocuğun kendiliğinden seçtiği katılım yolu",
+        "Yardım istediği veya uzaklaşmayı seçtiği an",
+        "Akranla temas kurma biçimi"
+      ],
+      "familyParticipation": "İsteğe bağlı olarak çocuğun yeni bir grupta kendini güvende hissetmesine yardımcı olan rutin sorulur."
+    },
+    {
+      "id": "community-rhythm",
+      "title": "Ortak düzen ve sınıf ritmi",
+      "dateRange": "14–18 Eylül 2026",
+      "periodStart": "2026-09-14",
+      "periodEnd": "2026-09-18",
+      "purpose": "Seçim, geçiş, malzeme düzeni ve ortak yaşam sorumluluğu.",
+      "inquiryQuestion": "Sınıfımızda birlikte yaşamak ve seçim yapmak için nelere ihtiyacımız var?",
+      "activityIds": [
+        "tymm6072-sep-day-rhythm",
+        "tymm6072-sep-material-homes",
+        "tymm6072-sep-sound-signals"
+      ],
+      "mainActivityIds": [
+        "tymm6072-sep-day-rhythm",
+        "tymm6072-sep-material-homes"
+      ],
+      "alternativeActivityId": "tymm6072-sep-sound-signals",
+      "observationFocus": [
+        "Sıralama ve değişiklik gerekçesi",
+        "Ortak malzemeye bakım",
+        "Geçiş işaretine verdiği geri bildirim"
+      ],
+      "familyParticipation": "Aileden evde işe yarayan tek bir geçiş veya düzen rutini isteğe bağlı paylaşması istenir."
+    },
+    {
+      "id": "accessible-community",
+      "title": "Herkes için erişilebilir sınıf",
+      "dateRange": "21–25 Eylül 2026",
+      "periodStart": "2026-09-21",
+      "periodEnd": "2026-09-25",
+      "purpose": "Ortam engellerini fark etme, birden fazla çözüm üretme ve erişilebilir katılım.",
+      "inquiryQuestion": "Aynı yere ve etkinliğe herkes nasıl katılabilir?",
+      "activityIds": [
+        "tymm6072-sep-accessible-classroom",
+        "tymm6072-sep-choice-for-everyone",
+        "tymm6072-sep-route-map"
+      ],
+      "mainActivityIds": [
+        "tymm6072-sep-accessible-classroom",
+        "tymm6072-sep-choice-for-everyone"
+      ],
+      "alternativeActivityId": "tymm6072-sep-route-map",
+      "observationFocus": [
+        "Ortam engelini kişiden ayırabilme",
+        "İki çözümü karşılaştırma",
+        "Kendi erişim tercihini ifade etme"
+      ],
+      "familyParticipation": "Aile, çocuğun evde kullandığı destekleyici iletişim veya düzenleme yolunu yalnız isterse paylaşır."
+    },
+    {
+      "id": "september-reflection",
+      "title": "Eylül kanıtları ve Ekim soruları",
+      "dateRange": "28–30 Eylül 2026",
+      "periodStart": "2026-09-28",
+      "periodEnd": "2026-09-30",
+      "purpose": "Ayın izlerine dönmek, değişimi görünür kılmak ve Ekim araştırmasını çocuk sorularıyla kurmak.",
+      "inquiryQuestion": "Bu ay neyi değiştirdik ve şimdi neyi merak ediyoruz?",
+      "activityIds": [
+        "tymm6072-sep-evidence-museum",
+        "tymm6072-sep-october-questions",
+        "tymm6072-sep-many-ways-agreement"
+      ],
+      "mainActivityIds": [
+        "tymm6072-sep-evidence-museum",
+        "tymm6072-sep-october-questions"
+      ],
+      "alternativeActivityId": "tymm6072-sep-many-ways-agreement",
+      "observationFocus": [
+        "Kanıt seçme gerekçesi",
+        "Önce ve sonra değişimini ifade etme",
+        "Araştırılabilir soru oluşturma"
+      ],
+      "familyParticipation": "Aileyle evde değişimi fark etme üzerine konuşmak isteğe bağlıdır; sınıf izi ve çocuk ürünü paylaşılmaz."
+    }
+  ],
+  "activities": [
+    {
+      "id": "tymm6072-sep-friendship-story",
+      "weekId": "adaptation",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-08",
+      "flowSlot": "first-main",
+      "title": "Arkadaşlık Hikâyesini Birlikte Kuruyoruz",
+      "shortDescription": "Açık uçlu bir başlangıçtan çocukların sözleri, rolleri ve alternatif sonlarıyla ortak hikâye oluşturulur.",
+      "durationMinutes": 35,
+      "environment": "indoor",
+      "primaryLensId": "guided-play",
+      "supportingLensIds": [
+        "emotion-relationship-coregulation",
+        "belonging-family-weave"
+      ],
+      "curriculumTargetCodes": [
+        "TADB.2",
+        "TAKB.2",
+        "SAB.8"
+      ],
+      "materials": [
+        "Üç nötr kukla",
+        "Boş hikâye kartları",
+        "Duygu ifade kartları"
+      ],
+      "lowCostAlternatives": [
+        "Kâğıt torba kukla",
+        "Taş veya kozalak karakter"
+      ],
+      "preparation": [
+        "Kuklaları tek bir duygu veya kimlikle sabitlemeden hazırla.",
+        "Çizim ve hareketle katılım alanını görünür kıl."
+      ],
+      "opening": "Öğretmen, yeni bir yere gelen ve oyuna nasıl katılacağını bilmeyen bir karakterle hikâyeyi başlatır.",
+      "processSteps": [
+        "Çocuklar karakterin ne hissedebileceğini önerir.",
+        "Hikâyenin sonraki adımı küçük gruplarda canlandırılır.",
+        "Farklı sonlar karşılaştırılır.",
+        "Çocukların seçtiği son ortak hikâye panosuna eklenir."
+      ],
+      "adultPrompts": [
+        "Karakter bunu nereden anladı?",
+        "Başka nasıl davet edilebilir?",
+        "Bu sonu değiştirirsek ne olur?"
+      ],
+      "childAgencyPoints": [
+        "Rol, ifade yolu ve hikâye sonu çocuklarca seçilir.",
+        "Konuşmak istemeyen çocuk kukla, çizim veya hareketle katkı verir."
+      ],
+      "observationPrompts": [
+        "Akran bakış açısını hangi söz veya davranışla dikkate alıyor?",
+        "Oyuna katılım için hangi çözümü öneriyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuğun özgün cümlesi",
+        "Seçtiği alternatif son",
+        "Canlandırma bağlam notu"
+      ],
+      "familyCommunityConnection": "Aileden yeni bir gruba katıldığında çocuğa neyin yardımcı olduğunu isteğe bağlı konuşması istenir.",
+      "differentiation": [
+        "Rol almak istemeyen çocuk anlatıcı veya malzeme düzenleyici olabilir.",
+        "Duygu kartları zorunlu etiket değil iletişim desteği olarak sunulur."
+      ],
+      "safetyNotes": [
+        "Çocuklar gerçek arkadaşlık sorunlarını açıklamaya zorlanmaz.",
+        "Kişisel anlatı grup önünde paylaşılmadan çocuk onayı alınır."
+      ],
+      "indoorEquivalent": "Etkinlik zaten kapalı alana uygundur; daha sakin uygulama için iki küçük grup ve ayrı hikâye masası kullanılır.",
+      "transitionSupport": "Hikâye bitmeden iki dakika önce son seçimi gösteren görsel kart sunulur.",
+      "reflectionPrompt": "Yetişkin yönlendirmesi çocukların kendi çözümünü üretmesine yeterince alan bıraktı mı?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-friendship-story:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D4",
+          "roofValueCode": "D14",
+          "roofValueChecks": {
+            "respect": "Davet ve dayanışma, her çocuğun kişisel alanını, katılmama kararını ve seçtiği ifade yolunu korur.",
+            "responsibility": "Çocuk yalnız seçtiği rol ve katkı kadar sorumluluk alır; akranın duygusunu düzeltme görevi yüklenmez.",
+            "justice": "Söz, kukla, çizim ve hareket yolları eşdeğer kabul edilir; çoğunluğun hikâye tercihi sınır bildiren çocuğu dışarıda bırakamaz."
+          },
+          "supportingValueCodes": [
+            "D8",
+            "D15"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D4",
+              "actionCode": "D4.1",
+              "actionName": "Arkadaşlarına destek olmak",
+              "indicatorCode": "D4.1.1",
+              "indicatorText": "İyi ve kötü zamanlarında arkadaşlarına destek olur.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 325
+            },
+            {
+              "valueCode": "D4",
+              "actionCode": "D4.2",
+              "actionName": "Arkadaşları ile etkili iletişim kurmak",
+              "indicatorCode": "D4.2.1",
+              "indicatorText": "Arkadaşlarını etkin bir şekilde dinler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 325
+            },
+            {
+              "valueCode": "D4",
+              "actionCode": "D4.4",
+              "actionName": "Arkadaşlarını ve onlarla vakit geçirmeyi önemsemek",
+              "indicatorCode": "D4.4.3",
+              "indicatorText": "Arkadaşlarının kişisel alan ve sınırlarını korumaya özen gösterir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 325
+            }
+          ],
+          "culturalBridgeIds": [
+            "aile-sila-i-rahim-komsuluk",
+            "edep-nezaket"
+          ],
+          "rationale": "Dostluk, ortak hikâyede akranı dinleme, destek önerme ve kişisel sınırı koruma eylemleriyle yaşanır; mahremiyet ve sevgi bu bağı baskısız destekler.",
+          "livedContextOrDilemma": "Yeni gelen çocuk oyuna katılmak ister; roller doludur ve bir çocuk kişisel alanını korumak ister. Davet, dışlamadan ve sınırı ihlal etmeden nasıl yapılabilir?",
+          "adultModelActions": [
+            "Öğretmen izin isteyerek rol önerir, sınır bildirildiğinde durur ve başka bir katılım yolu gösterir.",
+            "Farklı sonları doğru-yanlış sıralamasına sokmadan dinler; çocuğun sözünü kendi yorumu olarak yeniden yazmaz."
+          ],
+          "childAgencyOptions": [
+            "Çocuk rol, anlatıcılık, kukla, çizim, hareket veya gözlemci kalma yollarından birini seçebilir.",
+            "Önerdiği hikâye sonunu değiştirebilir ya da katkısını grup panosuna eklememeyi seçebilir.",
+            "Kişisel alanı için dur, bekle veya başka yol işaretlerinden birini kullanabilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış anlaşılan davet geri çekilir; izin sorularak daha uygun bir davet yeniden kurulur.",
+            "Dışarıda kalan akran için çocukların seçtiği yeni bir rol, paralel oyun alanı veya daha sonra katılma yolu eklenir."
+          ],
+          "familyCommunityTransfer": "Aile, yeni bir gruba katılmayı kolaylaştıran bir komşuluk ya da akrabalık deneyimini çocuk isterse paylaşabilir; yanıt vermemek çocuk kaydına yansımaz.",
+          "observationPrompts": [
+            "Çocuk hangi somut davet veya destek yolunu önerdi ve konuşanı hangi davranışla dinledi?",
+            "Akranın dur ya da alan sınırına nasıl karşılık verdi; hangi yetişkin desteği ve ortam koşulu vardı?"
+          ],
+          "counterEvidencePrompt": "Hikâyede destek önerirken serbest oyunda rol paylaşımını reddettiği veya istemeyen akranın alanına girmeyi sürdürdüğü başka bir bağlam oldu mu; hangi destek sunulmuştu?",
+          "reflectionPrompt": "Yetişkin yönlendirmesi çocukların çözüm üretmesine ve sınır bildirmesine yeterli alan bıraktı mı?",
+          "nextPlanDecisionRule": "En az iki farklı katılım yolu doğal oyunda kullanılamadıysa sonraki planda daha küçük grup, görünür sınır işaretleri ve yetişkin modellemesi eklenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "aile-sila-i-rahim-komsuluk",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Aile, sıla-i rahim ve komşuluk — Arkadaşlık Hikâyesini Birlikte Kuruyoruz için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Aile ve komşuluk ilişkileri tek bir aile biçimi varsaymadan, isteğe bağlı anı ve karşılıklı destek diliyle ele alınır.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "edep-nezaket",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Edep ve nezaket — Arkadaşlık Hikâyesini Birlikte Kuruyoruz için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Nazik dinleme, izin isteme ve sınır gözetme olarak uygulanır; sessizlik, korku veya sorgusuz uyum ölçüt yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-safe-places-map",
+      "weekId": "adaptation",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-10",
+      "flowSlot": "outdoor-movement",
+      "title": "Sınıfımızın Güvenli Yerler Haritası",
+      "shortDescription": "Çocuklar sınıf ve yakın çevrede yardım, dinlenme ve buluşma noktalarını keşfedip ortak kroki oluşturur.",
+      "durationMinutes": 40,
+      "environment": "both",
+      "primaryLensId": "belonging-family-weave",
+      "supportingLensIds": [
+        "prepared-environment",
+        "accessible-participation"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.9",
+        "SAB.17",
+        "HSAB.11"
+      ],
+      "materials": [
+        "Büyük sınıf krokisi kâğıdı",
+        "Yön ve güvenli kişi sembolleri",
+        "Yeniden yapışabilen etiketler"
+      ],
+      "lowCostAlternatives": [
+        "Koli kartonu",
+        "Çocuk çizimi semboller",
+        "Kâğıt bant"
+      ],
+      "preparation": [
+        "Acil çıkış ve gerçek güvenlik noktalarını önceden kontrol et.",
+        "Hareket rotasını erişilebilirlik açısından incele."
+      ],
+      "opening": "Öğretmen, sınıfta yardıma veya sakinleşmeye ihtiyaç olduğunda nereye gidilebileceğini sorar.",
+      "processSteps": [
+        "Çocuklar küçük gruplarla alanı gezer.",
+        "Güvenli kişi, dinlenme ve buluşma noktalarını seçer.",
+        "Konumları kroki üzerinde işaretler.",
+        "Bir arkadaşın krokiden yolu bulup bulamadığını dener.",
+        "Geri bildirimle işaretleri değiştirir."
+      ],
+      "adultPrompts": [
+        "Bu işaret uzaktan anlaşılır mı?",
+        "Buraya herkes ulaşabilir mi?",
+        "Yol kapalı olursa başka hangi rota var?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk kendisi için anlamlı güven noktasını seçer.",
+        "Haritada kullanacağı sembolü tasarlayabilir."
+      ],
+      "observationPrompts": [
+        "Konumu hangi ipucuyla tarif ediyor?",
+        "Güvenlik ve rahatlık arasındaki farkı nasıl ifade ediyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuk çizimi sembol",
+        "Kroki üzerindeki rota",
+        "Konum açıklaması"
+      ],
+      "familyCommunityConnection": "Aileden okul giriş-çıkışında kullandıkları güvenli buluşma noktasını çocukla konuşması isteğe bağlı istenir.",
+      "differentiation": [
+        "Rota fiziksel olarak izlenemiyorsa masa üstü kroki ve nesne kullanılabilir.",
+        "Konum anlatımı söz, işaret veya yön oku ile yapılabilir."
+      ],
+      "safetyNotes": [
+        "Acil çıkışlar oyun malzemesiyle kapatılmaz.",
+        "Çocuk kişisel korkusunu açıklamaya zorlanmaz."
+      ],
+      "indoorEquivalent": "Dış alan uygun değilse sınıf ve koridor fotoğraflarıyla masa üstü rota denemesi yapılır.",
+      "transitionSupport": "Gezi rotası başlamadan dur-bekle-buluş sembolleri birlikte prova edilir.",
+      "reflectionPrompt": "Harita gerçek güvenlik ve erişim ihtiyacını mı görünür kıldı, yoksa yalnız süs olarak mı kaldı?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-safe-places-map:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D13",
+          "roofValueCode": "D16",
+          "roofValueChecks": {
+            "respect": "Güvenlik konuşması çocuğun korkusunu açıklamasını istemez; dinlenme, yardım isteme ve mahremiyet ihtiyacını korur.",
+            "responsibility": "Güvenlik kontrolü yetişkin sorumluluğunda kalır; çocuk yalnız erişilebilir işaret ve rota tasarımına yaşına uygun katkı sunar.",
+            "justice": "Tek bir hareket, duyusal ya da iletişim biçimine göre rota seçilmez; farklı erişim yolları gerçek ortamda denenir."
+          },
+          "supportingValueCodes": [
+            "D5"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D13",
+              "actionCode": "D13.3",
+              "actionName": "İnsan sağlığını önemsemek",
+              "indicatorCode": "D13.3.5",
+              "indicatorText": "Düşme, çarpma gibi ergonomik risk faktörlerine karşı önlem alır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 329
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.1",
+              "actionName": "Kendine karşı görevlerini yerine getirmek",
+              "indicatorCode": "D16.1.3",
+              "indicatorText": "Güvenliğini tehlikeye sokacak davranışlardan kaçınır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            },
+            {
+              "valueCode": "D5",
+              "actionCode": "D5.1",
+              "actionName": "İnsana ve topluma değer vermek",
+              "indicatorCode": "D5.1.3",
+              "indicatorText": "Yaşlıların ve özel gereksinimli bireylerin toplumsal hayata etkin katılımını destekler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            }
+          ],
+          "culturalBridgeIds": [
+            "emanet"
+          ],
+          "rationale": "Sağlıklı yaşam, düşme ve çarpma riskini azaltan güvenli yer bilgisiyle somutlaşır; sorumluluk ve duyarlılık herkesin erişebileceği yardım yolunu kurar.",
+          "livedContextOrDilemma": "Sakin bir köşe rahatlatıcıdır fakat yetişkin görüş alanı dışındadır; açık buluşma noktası güvenlidir fakat bazı çocuklar için gürültülüdür. Güvenli ve erişilebilir alternatif nasıl kurulur?",
+          "adultModelActions": [
+            "Öğretmen gerçek acil çıkış, görüş alanı ve buluşma noktalarını önceden denetler; çocuk önerisini güvenlik yerine geçirmez.",
+            "Rahatlık ile güvenlik arasındaki farkı somut örnekle açıklar ve yardım istemenin birden fazla yolunu modeller."
+          ],
+          "childAgencyOptions": [
+            "Çocuk kendisi için anlamlı güven noktasını söz, sembol, nesne veya rota çizgisiyle gösterebilir.",
+            "Rotayı yürümek yerine masa üstü modelde deneyebilir ve seçtiği işareti değiştirebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış, görünmeyen veya erişilemeyen işaret çıkarılır; çocuk geri bildirimiyle yeni konuma yerleştirilir.",
+            "Tek rota bir çocuk için işlemiyorsa ikinci güvenli rota ve eşdeğer yardım işareti eklenir."
+          ],
+          "familyCommunityTransfer": "Aile, okul giriş-çıkışında kullandığı güvenli buluşma ilkesini ad, adres veya hassas bilgi vermeden çocukla konuşmayı seçebilir.",
+          "natureStewardshipTransfer": "Yakın açık alan kullanılırsa işaretler canlılara ve zemine zarar vermeden geçici biçimde yerleştirilir ve etkinlik sonunda toplanır.",
+          "observationPrompts": [
+            "Çocuk güvenilir kişi, yardım ve dinlenme noktasını hangi somut ipucuyla seçti?",
+            "Güvenlik ile rahatlık arasındaki farkı nasıl ifade etti; rotayı hangi erişim desteğiyle denedi?"
+          ],
+          "counterEvidencePrompt": "Haritada doğru noktayı gösterirken gerçek geçişte riskli veya erişilemeyen yolu seçti mi; görüş alanı, gürültü ya da görsel işaret sonucu değiştirdi mi?",
+          "reflectionPrompt": "Harita gerçek güvenlik ve erişim ihtiyacını görünür kıldı mı, yoksa yalnızca görsel bir ürün olarak mı kaldı?",
+          "nextPlanDecisionRule": "Gerçek geçişte işaret bulunamıyor veya rota bütün çocuklarca kullanılamıyorsa günlük akıştan önce yetişkin güvenlik kontrolüyle konum ve temsil yolu yenilenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "emanet",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Emanet — Sınıfımızın Güvenli Yerler Haritası için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak eşya, güvenli mekân, görev ve paylaşım iznine özen gösterme eylemi olarak yaşanır; inanç veya ibadet performansı hakkında çıkarım yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-quiet-joining",
+      "weekId": "adaptation",
+      "activityRole": "alternative",
+      "recommendedCivilDate": "2026-09-11",
+      "flowSlot": "small-group",
+      "title": "Sessizce Katılmanın Yolları",
+      "shortDescription": "Çocuklar konuşmadan oyuna katılma, duraklama ve yeniden başlama işaretleri geliştirir.",
+      "durationMinutes": 25,
+      "environment": "indoor",
+      "primaryLensId": "accessible-participation",
+      "supportingLensIds": [
+        "guided-play",
+        "emotion-relationship-coregulation"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.8",
+        "TAKB.2",
+        "SNAB.4"
+      ],
+      "materials": [
+        "Boş işaret kartları",
+        "Kalın uçlu kalem",
+        "Kukla veya küçük figür"
+      ],
+      "lowCostAlternatives": [
+        "Artık karton",
+        "Taş karakter"
+      ],
+      "preparation": [
+        "Katıl, bekle ve dur örneklerini tek doğru biçim dayatmadan hazırla.",
+        "Sessiz bir küçük grup alanı kur."
+      ],
+      "opening": "Kukla konuşmak istemediğinde oyuna nasıl katılabileceğini çocuklara sorar.",
+      "processSteps": [
+        "Çocuklar farklı katılım işaretleri önerir.",
+        "İşaretleri çizer veya hareketle gösterir.",
+        "Kısa bir oyunda işaretler denenir.",
+        "Anlaşılmayan işaretler çocuk geri bildirimiyle değiştirilir."
+      ],
+      "adultPrompts": [
+        "Bu işaret ne zaman işe yarar?",
+        "Beklemek istediğini nasıl gösterebilirsin?",
+        "Yanlış anlaşılırsa neyi değiştiririz?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk işaret kullanmamayı seçebilir.",
+        "Oyuna katılma ve ayrılma zamanı çocuğa aittir."
+      ],
+      "observationPrompts": [
+        "Sözel olmayan hangi iletişim yolunu seçiyor?",
+        "Akranın dur işaretine nasıl karşılık veriyor?"
+      ],
+      "evidenceOptions": [
+        "Tasarlanan işaret",
+        "Kısa oyun bağlam notu"
+      ],
+      "familyCommunityConnection": "Aileye çocuğun tercih ettiği işaret yalnız çocuk isterse gösterilir.",
+      "differentiation": [
+        "Hazır sembol seçeneği sunulur.",
+        "İnce motor desteği için büyük kart ve kalın araç kullanılır."
+      ],
+      "safetyNotes": [
+        "Sessizlik itaat veya ceza olarak kullanılmaz.",
+        "Dur işareti bütün yetişkinlerce ciddiye alınır."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; daha düşük uyaran için masa paravanı veya sakin köşe kullanılabilir.",
+      "transitionSupport": "Etkinlik sonunda çocuk seçtiği bitir kartını kutuya bırakır veya masada tutar.",
+      "reflectionPrompt": "Konuşma dışındaki katılım yolları gerçekten eşdeğer kabul edildi mi?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-quiet-joining:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D8",
+          "roofValueCode": "D1",
+          "roofValueChecks": {
+            "respect": "Sessiz katılım, ara verme ve hayır deme kararları kabul edilir; kişisel alan ve özel açıklamalar korunur.",
+            "responsibility": "Yetişkin, işaretleri öğretmek ve yanlış anlamayı onarmakla sorumludur; çocuk kendini sözle açıklamak durumunda bırakılmaz.",
+            "justice": "Konuşma dışındaki bakış, nesne, hareket ve kart yolları eşdeğer katılım olarak kabul edilir."
+          },
+          "supportingValueCodes": [
+            "D11",
+            "D14"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D8",
+              "actionCode": "D8.1",
+              "actionName": "Kişisel özgürlük alanını korumak",
+              "indicatorCode": "D8.1.1",
+              "indicatorText": "Her ferdin karar alma ve fikir belirtme hakkının olduğunu savunur.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 327
+            },
+            {
+              "valueCode": "D8",
+              "actionCode": "D8.1",
+              "actionName": "Kişisel özgürlük alanını korumak",
+              "indicatorCode": "D8.1.3",
+              "indicatorText": "Sosyal ilişkilerinde kişisel sınırlarını belirler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 327
+            },
+            {
+              "valueCode": "D11",
+              "actionCode": "D11.1",
+              "actionName": "Kararlı olmak",
+              "indicatorCode": "D11.1.5",
+              "indicatorText": "Gerektiğinde hayır diyebilme becerisi sergiler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            }
+          ],
+          "culturalBridgeIds": [
+            "kul-hakki",
+            "edep-nezaket"
+          ],
+          "rationale": "Mahremiyet, çocuğun kişisel sınırını ve katılım kararını görünür kılar; özgürlük ve saygı farklı ifade yollarının geçerliliğini korur.",
+          "livedContextOrDilemma": "Çocuk konuşmadan oyuna katılmak veya ara vermek ister; akranları sessizliği katılmak istemiyor diye yorumlar. Yanlış anlaşılma nasıl onarılır?",
+          "adultModelActions": [
+            "Öğretmen kendi dur, bekle ve katıl işaretlerini kullanır; karşı tarafın yanıtını görmeden yaklaşmayı sürdürmez.",
+            "Sessizliği tek bir anlama bağlamaz; çocuğa birden fazla ifade yolu gösterip seçim için zaman verir."
+          ],
+          "childAgencyOptions": [
+            "Çocuk katıl, bekle, ara ver veya gözlemci kal işaretlerinden birini seçebilir.",
+            "Kart, nesne, hareket, bakış veya söz yolunu değiştirebilir; gerekçe açıklamadan oyundan çekilebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış yorumlanan işaret için oyun durdurulur, anlam yeniden sorulur ve ortak işaret güncellenir.",
+            "Sınır gözden kaçtıysa mesafe yeniden kurulur; çocuk isterse farklı bir giriş noktası hazırlanır."
+          ],
+          "familyCommunityTransfer": "Aile, çocuğun evde kullandığı güvenli iletişim işaretlerinden birini paylaşmayı seçebilir; paylaşılmayan aile bilgisi eksiklik sayılmaz.",
+          "observationPrompts": [
+            "Çocuk kendi ya da akranının dur, bekle ve katıl işaretini hangi bağlamda kullandı?",
+            "İşarete nasıl karşılık verdi; görsel tekrar, zaman veya yetişkin modellemesi gerekli oldu mu?"
+          ],
+          "counterEvidencePrompt": "Sakin denemede işareti tanıyıp hareketli oyunda fark etmediği oldu mu; ortam uyaranı, zaman veya yetişkin desteği sonucu nasıl etkiledi?",
+          "reflectionPrompt": "Etkinlik sessiz katılımı gerçek bir hak olarak mı korudu, yoksa çocuğu dolaylı biçimde konuşmaya mı yöneltti?",
+          "nextPlanDecisionRule": "İşaretler doğal oyunda anlaşılmıyorsa sonraki planda sembol sayısı azaltılır, akranla kısa modelleme yapılır ve geri çekilme yolu görünür tutulur."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "kul-hakki",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Kul hakkı — Sessizce Katılmanın Yolları için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Başkasının karar, erişim ve sınır hakkını gözetme; oluşan zararı yaşa uygun biçimde onarma eylemleriyle sınırlıdır. Çocuğun veya ailenin inancı hakkında veri üretilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "edep-nezaket",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Edep ve nezaket — Sessizce Katılmanın Yolları için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Nazik dinleme, izin isteme ve sınır gözetme olarak uygulanır; sessizlik, korku veya sorgusuz uyum ölçüt yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-day-rhythm",
+      "weekId": "community-rhythm",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-15",
+      "flowSlot": "first-main",
+      "title": "Günün Ritmini Birlikte Kuruyoruz",
+      "shortDescription": "Çocuklar günün bloklarını sıralar, gerekçelendirir ve iki farklı akış önerisini karşılaştırır.",
+      "durationMinutes": 35,
+      "environment": "indoor",
+      "primaryLensId": "plan-act-reflect",
+      "supportingLensIds": [
+        "prepared-environment",
+        "accessible-participation"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.2",
+        "MAB.12",
+        "TAKB.2"
+      ],
+      "materials": [
+        "Günlük akış fotoğraf ve sembolleri",
+        "Büyük zaman şeridi",
+        "Seçim işaretleri"
+      ],
+      "lowCostAlternatives": [
+        "Çocuk çizimi kartlar",
+        "İp ve mandal"
+      ],
+      "preparation": [
+        "Gerçek sınıf çalışma saatlerini akışa yerleştir.",
+        "Değişebilir ve sabit blokları farklı işaretle göster."
+      ],
+      "opening": "Öğretmen karışmış üç akış kartı göstererek günün nasıl anlaşılır hâle getirilebileceğini sorar.",
+      "processSteps": [
+        "Çocuklar blokları küçük grupta sıralar.",
+        "Sıralama gerekçelerini paylaşır.",
+        "İki farklı akış karşılaştırılır.",
+        "Sabit ve esnek parçalar işaretlenir.",
+        "Ertesi gün denenecek ortak akış seçilir."
+      ],
+      "adultPrompts": [
+        "Bu blok neden önce geliyor?",
+        "Hangi bölüm değişebilir?",
+        "Beklemek zor olduğunda ne yardımcı olur?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk tercih ettiği temsil biçimini seçer.",
+        "Ortak akış ertesi gün geri bildirimle değiştirilebilir."
+      ],
+      "observationPrompts": [
+        "Sıralama için hangi gerekçeyi kullanıyor?",
+        "Değişiklik önerisini nasıl ifade ediyor?"
+      ],
+      "evidenceOptions": [
+        "Grup zaman şeridi",
+        "Çocuğun değişiklik gerekçesi",
+        "Ertesi gün geri bildirimi"
+      ],
+      "familyCommunityConnection": "Aileden evdeki bir rutini paylaşması isteğe bağlıdır; sınıf akışına doğrudan kopyalanmaz.",
+      "differentiation": [
+        "Az sayıda büyük kartla başlanabilir.",
+        "Zaman sırası nesnelerle temsil edilebilir."
+      ],
+      "safetyNotes": [
+        "Akış tuvalet, su veya dinlenme ihtiyacını erteleme aracı değildir.",
+        "Değişiklikler çocuğu şaşırtmadan önceden bildirilir."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; hareket ihtiyacı için kartlar sınıfın farklı noktalarına yerleştirilir.",
+      "transitionSupport": "Seçilen zaman şeridi geçişlerde taşınabilir küçük kartla desteklenir.",
+      "reflectionPrompt": "Akış çocukların zaman duygusunu destekledi mi, yoksa yetişkin kontrolünü mü artırdı?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-day-rhythm:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D12",
+          "roofValueCode": "D16",
+          "roofValueChecks": {
+            "respect": "Bekleme sırasında beden sinyali, ara verme ve sürmekte olan oyunu tamamlama ihtiyacı dikkate alınır.",
+            "responsibility": "Akışın güvenli yürütülmesi yetişkine aittir; çocuk seçtiği görsel, görev veya zaman desteğini kullanır.",
+            "justice": "Aynı bekleme süresi herkese mekanik biçimde uygulanmaz; öngörülebilirlik ve esneklik ihtiyaca göre dengelenir."
+          },
+          "supportingValueCodes": [
+            "D3"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D12",
+              "actionCode": "D12.1",
+              "actionName": "Düşünce, duygu ve davranışlarında kontrollü olmak",
+              "indicatorCode": "D12.1.3",
+              "indicatorText": "Beklemekte zorlandığı durumlarda dikkatini farklı bir işe yönlendirir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            },
+            {
+              "valueCode": "D3",
+              "actionCode": "D3.2",
+              "actionName": "Planlı olmak",
+              "indicatorCode": "D3.2.1",
+              "indicatorText": "Görev ve sorumlulukları yerine getirmek için planlama yapar.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 325
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.1",
+              "actionName": "Kendine karşı görevlerini yerine getirmek",
+              "indicatorCode": "D16.1.1",
+              "indicatorText": "Kararlarını çevresiyle fikir alışverişi yaparak kendisi alır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            }
+          ],
+          "culturalBridgeIds": [
+            "helal-emek-caliskanlik"
+          ],
+          "rationale": "Sabır, sessizce bekleme değil, geçişi öngörme, dikkatini güvenli biçimde yönlendirme ve planı başkalarıyla konuşarak düzenleme eylemidir.",
+          "livedContextOrDilemma": "Bir grup sürmekte olan oyunu uzatmak, başka çocuklar öngörülebilir zamanda geçmek ister. Akış hem planlı hem esnek nasıl olabilir?",
+          "adultModelActions": [
+            "Öğretmen süre değişikliğini önceden açıklar, bekleme desteği seçeneklerini gösterir ve kendi planını çocuk geri bildirimiyle düzeltir.",
+            "Hızlı geçişi üstün tutmaz; oyunu tamamlama, mola ve sıradaki işe hazırlanma yollarını eşdeğer sunar."
+          ],
+          "childAgencyOptions": [
+            "Çocuk beklerken hareket, kitap, küçük görev, zaman kartı veya sakin alan seçeneklerinden birini seçebilir.",
+            "Akış kartlarının sırasına gerekçe sunarak değişiklik önerebilir ve kendi fikrini daha sonra güncelleyebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Geçiş uyarısı kaçırıldıysa çocuk için cezaya dönüşmeden geri katılma yolu ve kısa hazırlık süresi sunulur.",
+            "Plan bir grubun ihtiyacını dışarıda bıraktıysa süre, sıra veya destek kartı birlikte yeniden düzenlenir."
+          ],
+          "familyCommunityTransfer": "Aileye sınıfta kullanılan görsel akış bilgi olarak sunulur; evde aynı sistemi uygulama beklentisi oluşturulmaz.",
+          "observationPrompts": [
+            "Çocuk sıralama gerekçesini ve değişiklik önerisini hangi yolla ifade etti?",
+            "Beklemekte zorlandığında hangi stratejiyi seçti; süre, uyaran ve yetişkin desteği neydi?"
+          ],
+          "counterEvidencePrompt": "Kartlarla plan kurduğu hâlde gerçek geçişte planı kullanamadığı oldu mu; süre, uyaran veya yetişkin hatırlatması sonucu nasıl etkiledi?",
+          "reflectionPrompt": "Akış çocukların öngörülebilirlik ve esneklik ihtiyaçlarını birlikte karşılayabildi mi?",
+          "nextPlanDecisionRule": "Aynı geçişte iki kez destek gereksinimi görülürse sonraki günlük planda daha erken uyarı, iki bekleme seçeneği ve bireysel dönüş yolu denenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "helal-emek-caliskanlik",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Helal emek ve çalışkanlık — Günün Ritmini Birlikte Kuruyoruz için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Planlama, emeğe özen ve seçilen işi hakkıyla sürdürme olarak ele alınır; hız yarışı kurulmaz ve dinlenme hakkı korunur.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-material-homes",
+      "weekId": "community-rhythm",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-17",
+      "flowSlot": "second-main",
+      "title": "Malzemelerin Evi Neresi?",
+      "shortDescription": "Çocuklar sınıf malzemelerini özellik, kullanım ve erişim açısından inceleyip düzeni birlikte tasarlar.",
+      "durationMinutes": 40,
+      "environment": "indoor",
+      "primaryLensId": "prepared-environment",
+      "supportingLensIds": [
+        "plan-act-reflect",
+        "accessible-participation"
+      ],
+      "curriculumTargetCodes": [
+        "MAB.2",
+        "HSAB.10",
+        "SAB.20"
+      ],
+      "materials": [
+        "Seçili sınıf malzemeleri",
+        "Şeffaf kutular",
+        "Büyük etiket kartları"
+      ],
+      "lowCostAlternatives": [
+        "Ayakkabı kutusu",
+        "Atık kavanoz kapağı sembolü",
+        "Koli kartonu etiket"
+      ],
+      "preparation": [
+        "Tehlikeli ve yetişkin kullanımındaki malzemeleri ayır.",
+        "Raf yüksekliğini ve geçiş genişliğini kontrol et."
+      ],
+      "opening": "Öğretmen yeri karışmış üç malzemeyi göstererek nerede ve neden durmaları gerektiğini sorar.",
+      "processSteps": [
+        "Çocuklar malzemeleri özelliklerine göre inceler.",
+        "Birden fazla gruplama önerir.",
+        "Erişim ve kullanım gerekçesiyle yer seçer.",
+        "Etiket tasarlar.",
+        "Düzeni bir gün deneyip geri bildirim verir."
+      ],
+      "adultPrompts": [
+        "Aynı malzeme başka nasıl gruplanabilir?",
+        "Buraya herkes ulaşabilir mi?",
+        "Toplamayı kolaylaştıran ne?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk düzen önerisini deneyebilir ve geri alabilir.",
+        "Etiket biçimini çocuk seçer."
+      ],
+      "observationPrompts": [
+        "Nesne özelliğini nasıl tarif ediyor?",
+        "Erişim için hangi ölçütü kullanıyor?"
+      ],
+      "evidenceOptions": [
+        "Önce-sonra raf kaydı",
+        "Çocuk etiketi",
+        "Gruplama gerekçesi"
+      ],
+      "familyCommunityConnection": "Ev düzeni karşılaştırması zorunlu değildir; aileden malzeme istenmez.",
+      "differentiation": [
+        "Nesne fotoğrafı veya gerçek nesne etiketi kullanılabilir.",
+        "Kavrama desteği için büyük kutu ve tutacak eklenir."
+      ],
+      "safetyNotes": [
+        "Ağır malzeme omuz üstü raflara konmaz.",
+        "Temizlik ürünleri ve kesici araçlar çocuk erişimine açılmaz."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; sınıf kalabalıksa tek bir merkez küçük grupla düzenlenir.",
+      "transitionSupport": "Toplama başlamadan her kutunun işareti kısa bir turla hatırlatılır.",
+      "reflectionPrompt": "Yeni düzen çocuk bağımsızlığını mı artırdı, yoksa daha fazla yetişkin yönergesi mi gerektirdi?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-material-homes:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D16",
+          "roofValueCode": "D16",
+          "roofValueChecks": {
+            "respect": "Malzemeye özen, çocukların farklı kavrama, görme ve hareket yollarını dışlamayan erişim düzeniyle birlikte ele alınır.",
+            "responsibility": "Çocuk ortak malzemeyi seçtiği ölçüde kullanma ve yerine koymaya katılır; ağır temizlik ve onarım yetişkine aittir.",
+            "justice": "Malzemenin yeri yalnız hızlı kullanan çocuklara göre belirlenmez; erişim ve anlaşılabilirlik birlikte sınanır."
+          },
+          "supportingValueCodes": [
+            "D6",
+            "D17"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.2",
+              "actionName": "Topluma karşı görevlerini yerine getirmek",
+              "indicatorCode": "D16.2.2",
+              "indicatorText": "Kamu malları ve ortak yaşam alanlarını özenli ve temiz kullanır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            },
+            {
+              "valueCode": "D6",
+              "actionCode": "D6.2",
+              "actionName": "Doğru ve güvenilir olmak",
+              "indicatorCode": "D6.2.2",
+              "indicatorText": "Kendisine emanet edilenlere sahip çıkmaya gayret gösterir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            },
+            {
+              "valueCode": "D17",
+              "actionCode": "D17.3",
+              "actionName": "Sahip olduklarının değerini bilmek",
+              "indicatorCode": "D17.3.4",
+              "indicatorText": "Sahip olduğu eşyaları özenli kullanır",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 331
+            }
+          ],
+          "culturalBridgeIds": [
+            "emanet",
+            "sukur-kanaat-israf-etmeme"
+          ],
+          "rationale": "Sorumluluk, ortak malzemeyi özenle kullanma ve erişilebilir yerine geri koyma eylemidir; dürüstlük emaneti, tasarruf ise kaynağın kıymetini korur.",
+          "livedContextOrDilemma": "Alçak raf erişimi kolaylaştırır fakat parçalar dağılır; kapalı kutu düzenlidir fakat bazı çocuklar açamaz. Malzemenin evi kimin kullanımına göre belirlenmelidir?",
+          "adultModelActions": [
+            "Öğretmen malzemeyi yavaşça kullanıp eksik ya da hasarlı parçayı saklamadan bildirir; güvenli onarımı kendi sorumluluğunda tutar.",
+            "Toplama komutuyla yetinmez; etiketin ve raf yüksekliğinin farklı çocuklar için çalışıp çalışmadığını birlikte dener."
+          ],
+          "childAgencyOptions": [
+            "Çocuk malzeme evi için resim, nesne, renk, şekil veya dokulu işaret önerebilir.",
+            "Toplamaya seçtiği küçük rolle katılabilir, yardım isteyebilir veya erişemediği konumu değiştirmeyi önerebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış yere konan malzeme birlikte bulunur; suç aranmadan etiket veya raf düzeni daha anlaşılır hâle getirilir.",
+            "Güvenle onarılabilecek parça yetişkin desteğiyle onarılır; uygun olmayan parça kullanım dışına alınır ve eksikliği kaydedilir."
+          ],
+          "familyCommunityTransfer": "Aile, evde ya da mahallede ortak kullanılan bir eşyaya özen gösterme deneyimini çocuk isterse anlatabilir; eşya getirmesi beklenmez.",
+          "natureStewardshipTransfer": "Kullanılabilir artık parçalar güvenli yeniden kullanım kutusuna ayrılır; gereksiz tüketim azaltılır ve atık yetişkin kontrolünde uygun yere yönlendirilir.",
+          "observationPrompts": [
+            "Çocuk ortak malzemeyi nasıl kullandı ve geri yerleştirdi; hangi desteği seçti?",
+            "Etiket ve yer seçiminin başka çocukların erişimine etkisini hangi söz veya değişiklikle gösterdi?"
+          ],
+          "counterEvidencePrompt": "Yalnız yetişkin hatırlatınca topladığı ya da tasarladığı etiketi yalnız kendisinin anlayabildiği bir durum oldu mu; ortam nasıl değiştirilmeliydi?",
+          "reflectionPrompt": "Düzenleme çocuklardan uyum beklemek yerine ortak malzemenin erişimini ve bakımını gerçekten kolaylaştırdı mı?",
+          "nextPlanDecisionRule": "Bir malzeme iki doğal kullanım sonrasında yerine dönemiyor veya erişilemiyorsa raf yüksekliği, kap türü ve işaret yolu çocuk geri bildirimiyle yenilenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "emanet",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Emanet — Malzemelerin Evi Neresi? için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak eşya, güvenli mekân, görev ve paylaşım iznine özen gösterme eylemi olarak yaşanır; inanç veya ibadet performansı hakkında çıkarım yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "sukur-kanaat-israf-etmeme",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Şükür, kanaat ve israf etmeme — Malzemelerin Evi Neresi? için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Sahip olunan malzemeye özen ve israfı azaltma eylemine çevrilir; maddi imkânlar karşılaştırılmaz ve yoksulluk romantikleştirilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-sound-signals",
+      "weekId": "community-rhythm",
+      "activityRole": "alternative",
+      "recommendedCivilDate": "2026-09-18",
+      "flowSlot": "outdoor-movement",
+      "title": "Geçiş Sesleri Atölyesi",
+      "shortDescription": "Çocuklar sınıf geçişleri için düşük uyaranlı ses işaretleri üretir, karşılaştırır ve seçer.",
+      "durationMinutes": 30,
+      "environment": "both",
+      "primaryLensId": "guided-play",
+      "supportingLensIds": [
+        "accessible-participation",
+        "plan-act-reflect"
+      ],
+      "curriculumTargetCodes": [
+        "MDB.3",
+        "MÇB.1",
+        "HSAB.5"
+      ],
+      "materials": [
+        "Basit ritim araçları",
+        "Ses kaynağı kartları",
+        "Dur-başla işaretleri"
+      ],
+      "lowCostAlternatives": [
+        "Kapalı kutu",
+        "Tahta kaşık",
+        "El çırpma yerine beden hareketi"
+      ],
+      "preparation": [
+        "Yüksek ve ani sesleri ele.",
+        "Sessiz görsel işaret seçeneğini hazır tut."
+      ],
+      "opening": "Öğretmen aynı geçiş için iki farklı ses örneği verir ve hangisinin neden daha anlaşılır olduğunu sorar.",
+      "processSteps": [
+        "Çocuklar güvenli ses kaynaklarını keşfeder.",
+        "Kısa bir geçiş ritmi tasarlar.",
+        "Ses ve görsel işaret birlikte denenir.",
+        "Duyusal geri bildirim toplanır.",
+        "Sınıf bir işaret veya sessiz seçeneği seçer."
+      ],
+      "adultPrompts": [
+        "Bu ses nereden geliyor?",
+        "Uzakta da anlaşılır mı?",
+        "Bu sesi istemeyen biri için ne sunabiliriz?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk ses üretmek yerine görsel işaret seçebilir.",
+        "Sınıf oylaması duyusal sınırı geçersiz kılamaz."
+      ],
+      "observationPrompts": [
+        "Ses kaynağını nasıl ayırt ediyor?",
+        "Ortak alanda hareketini nasıl düzenliyor?"
+      ],
+      "evidenceOptions": [
+        "Ritim örüntüsü",
+        "Duyusal tercih sözü",
+        "Geçiş deneme notu"
+      ],
+      "familyCommunityConnection": "Evde sesli geçiş uygulaması önerilmez; etkinlik sınıf bağlamıyla sınırlıdır.",
+      "differentiation": [
+        "Kulak koruyucu ve sessiz kart seçeneği sunulur.",
+        "Ritim ayakta veya oturarak üretilebilir."
+      ],
+      "safetyNotes": [
+        "Ani yüksek ses ve kulağa yakın çalgı kullanımı yasaktır.",
+        "Hareket alanı çarpışma riskine karşı sınırlandırılır."
+      ],
+      "indoorEquivalent": "Dış alan uygun değilse geniş sınıf alanında düşük ses düzeyiyle rota çalışılır.",
+      "transitionSupport": "Etkinlik sonunda seçilen ses bir kez, görsel işaretle birlikte uygulanır.",
+      "reflectionPrompt": "Seçilen işaret bütün çocuklar için anlaşılır ve duyusal olarak güvenli miydi?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-sound-signals:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D14",
+          "roofValueCode": "D14",
+          "roofValueChecks": {
+            "respect": "Ses tercihi, rahatsızlık bildirimi ve hayır yanıtı ciddiye alınır; işitsel katılım tek geçerli yol yapılmaz.",
+            "responsibility": "Ses düzeyi ve fiziksel güvenlik yetişkin tarafından korunur; çocuk seçtiği işaretin sınıfça denenmesine katkı sunar.",
+            "justice": "Çoğunluğun sevdiği ritim duyusal güvenliği geçersiz kılamaz; görsel ve sessiz eşdeğer aynı anda sunulur."
+          },
+          "supportingValueCodes": [
+            "D5",
+            "D11"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D14",
+              "actionCode": "D14.1",
+              "actionName": "Nezaketli olmak",
+              "indicatorCode": "D14.1.1",
+              "indicatorText": "Her ferdin değerli olduğunu kabul eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 329
+            },
+            {
+              "valueCode": "D5",
+              "actionCode": "D5.1",
+              "actionName": "İnsana ve topluma değer vermek",
+              "indicatorCode": "D5.1.3",
+              "indicatorText": "Yaşlıların ve özel gereksinimli bireylerin toplumsal hayata etkin katılımını destekler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            },
+            {
+              "valueCode": "D11",
+              "actionCode": "D11.1",
+              "actionName": "Kararlı olmak",
+              "indicatorCode": "D11.1.5",
+              "indicatorText": "Gerektiğinde hayır diyebilme becerisi sergiler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            }
+          ],
+          "culturalBridgeIds": [
+            "edep-nezaket"
+          ],
+          "rationale": "Saygı, her çocuğun duyusal sınırını ve ifade hakkını koruyan geçiş tasarımıyla yaşanır; duyarlılık ve özgürlük eşdeğer katılım yollarını güvenceye alır.",
+          "livedContextOrDilemma": "Çoğunluk güçlü ritmi severken bir çocuk sesin rahatsız ettiğini söyler. Çoğunluk seçimi duyusal güvenliği geçersiz kılamaz; sessiz ve görsel eşdeğer nasıl korunur?",
+          "adultModelActions": [
+            "Öğretmen ses üretmeden önce izin ve hazır olma işaretini bekler; rahatsızlık bildirildiğinde sesi hemen durdurur.",
+            "Kendi ses tercihini sınıf kararı gibi sunmaz; sesli, görsel ve hareketli işaretleri eşit biçimde modeller."
+          ],
+          "childAgencyOptions": [
+            "Çocuk ses üretmek, görsel işaret göstermek, hareket işareti kullanmak veya gözlemci kalmak arasında seçim yapabilir.",
+            "Seçtiği işaretin ses düzeyini, süresini ve tekrar sayısını değiştirmeyi önerebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Rahatsız eden ses durdurulur, etkilenen çocuğun geri bildirimiyle düzey düşürülür veya sessiz eşdeğer seçilir.",
+            "Anlaşılmayan işaret yeniden tasarlanır ve doğal geçişte kısa bir denemeyle kontrol edilir."
+          ],
+          "familyCommunityTransfer": "Aileye çocuğun duyusal iletişim tercihini paylaşabileceği isteğe bağlı bir kanal sunulur; evde sesli geçiş görevi verilmez.",
+          "observationPrompts": [
+            "Çocuk ses düzeyini geri bildirime göre değiştirdi mi ve hayır işaretine nasıl karşılık verdi?",
+            "Görsel veya sessiz seçeneği tasarıma hangi somut katkıyla ekledi; ortam gürültüsü nasıldı?"
+          ],
+          "counterEvidencePrompt": "Atölyede sessiz seçeneği savunurken gerçek geçişte yalnız yüksek sese uyduğu oldu mu; ortam gürültüsü veya yetişkin uygulaması sonucu nasıl etkiledi?",
+          "reflectionPrompt": "Seçilen işaret bütün çocuklar için anlaşılır ve duyusal olarak güvenli miydi?",
+          "nextPlanDecisionRule": "Bir çocuk rahatsızlık bildirir veya işareti kaçırırsa sonraki geçişte ses düzeyi azaltılır, görsel eşdeğer kalıcılaştırılır ve yeniden gözlem yapılır."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "edep-nezaket",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Edep ve nezaket — Geçiş Sesleri Atölyesi için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Nazik dinleme, izin isteme ve sınır gözetme olarak uygulanır; sessizlik, korku veya sorgusuz uyum ölçüt yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-accessible-classroom",
+      "weekId": "accessible-community",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-22",
+      "flowSlot": "first-main",
+      "title": "Benim İçin Erişilebilir Sınıf",
+      "shortDescription": "Çocuklar sınıftaki katılım engellerini fark eder ve farklı erişim/ifade yolları tasarlar.",
+      "durationMinutes": 40,
+      "environment": "indoor",
+      "primaryLensId": "accessible-participation",
+      "supportingLensIds": [
+        "prepared-environment",
+        "plan-act-reflect"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.20",
+        "TAKB.2",
+        "SNAB.4"
+      ],
+      "materials": [
+        "Sınıf alanı fotoğrafları",
+        "Büyük sembol kartları",
+        "Yeniden yapışabilen etiketler",
+        "Farklı kavrama araçları"
+      ],
+      "lowCostAlternatives": [
+        "Karton semboller",
+        "Sünger kalem tutacağı"
+      ],
+      "preparation": [
+        "Acil çıkış ve geçişleri kontrol et.",
+        "Çocuk gereksinimlerini grup önünde açıklamadan genel ortam örnekleri seç."
+      ],
+      "opening": "Öğretmen, aynı işi yapmanın birden çok yolu olabileceğine dair günlük bir örnek verir.",
+      "processSteps": [
+        "Çocuklar ulaşılması, anlaşılması veya kullanılması zor bir yeri seçer.",
+        "Sorun çocuk suçlanmadan ortam üzerinden tarif edilir.",
+        "En az iki çözüm üretilir.",
+        "Çözüm küçük ölçekte denenir.",
+        "Çocuk geri bildirimiyle düzenleme yapılır."
+      ],
+      "adultPrompts": [
+        "Burayı zor yapan çocuk mu, ortam mı?",
+        "Konuşmadan da nasıl seçim yapılabilir?",
+        "Bu çözüm kimin için işe yarıyor, kim için yaramıyor?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk kendi erişim tercihini açıklamak zorunda değildir.",
+        "Çözüm seçimi etkilenen çocukların geri bildirimiyle yapılır."
+      ],
+      "observationPrompts": [
+        "Ortam engelini nasıl tarif ediyor?",
+        "Birden fazla çözümü karşılaştırabiliyor mu?"
+      ],
+      "evidenceOptions": [
+        "Önce-sonra ortam kaydı",
+        "Çözüm çizimi",
+        "Çocuk geri bildirim sözü"
+      ],
+      "familyCommunityConnection": "Ailelerden evde kullanılan destekleyici iletişim veya düzenleme yollarını isteğe bağlı paylaşmaları istenir.",
+      "differentiation": [
+        "Görsel seçim, işaret, nesne ve destekleyici iletişim aracı kullanılabilir.",
+        "Hareket rotası oturarak ve tekerlekli araçla erişim açısından kontrol edilir."
+      ],
+      "safetyNotes": [
+        "Erişilebilirlik ihtiyacı grup içinde kişisel tanı gibi açıklanmaz.",
+        "Yeni düzenleme acil çıkış ve geçişleri kapatmaz."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; fotoğraf ve masa üstü modelle daha küçük alanda uygulanabilir.",
+      "transitionSupport": "Çözüm denemesine geçmeden önce önce-sonra görseli ve geri dönüş seçeneği gösterilir.",
+      "reflectionPrompt": "Plan çocuğu değiştirmeye mi çalıştı, yoksa ortam engelini gerçekten azalttı mı?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-accessible-classroom:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D1",
+          "roofValueCode": "D1",
+          "roofValueChecks": {
+            "respect": "Erişim ihtiyacı kişisel tanı ya da eksiklik gibi açıklanmaz; çocuk kendi tercihini paylaşmama hakkını korur.",
+            "responsibility": "Ortam engelini azaltma yetişkin ve kurum sorumluluğudur; çocuklar tasarım ve geri bildirime yaşa uygun katkı verir.",
+            "justice": "Bir düzenlemenin farklı çocuklar üzerindeki etkisi karşılaştırılır; eşit nesne yerine ihtiyaca uygun erişim sağlanır."
+          },
+          "supportingValueCodes": [
+            "D5",
+            "D16"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D1",
+              "actionCode": "D1.2",
+              "actionName": "Hakkaniyetli davranmak",
+              "indicatorCode": "D1.2.4",
+              "indicatorText": "Bireysel farklılıkların haklardan yararlanmaya engel olmaması gerektiğini bilir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 324
+            },
+            {
+              "valueCode": "D5",
+              "actionCode": "D5.1",
+              "actionName": "İnsana ve topluma değer vermek",
+              "indicatorCode": "D5.1.3",
+              "indicatorText": "Yaşlıların ve özel gereksinimli bireylerin toplumsal hayata etkin katılımını destekler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.3",
+              "actionName": "Görev bilincine sahip olmak",
+              "indicatorCode": "D16.3.3",
+              "indicatorText": "Yanlış karar ve davranışlarının telafisi için çaba gösterir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            }
+          ],
+          "culturalBridgeIds": [
+            "kul-hakki",
+            "imece-yardimlasma"
+          ],
+          "rationale": "Adalet, katılım engelini çocuğa değil ortama bağlayıp etkilenen çocukların geri bildirimiyle çözümü değiştirme eylemidir; duyarlılık ve sorumluluk onarımı sürdürür.",
+          "livedContextOrDilemma": "Bir düzenleme bir çocuğun erişimini kolaylaştırırken başka bir çocuğun hareket rotasını veya duyusal güvenliğini zorlaştırır. Çözüm, etkilenen çocukların geri bildirimiyle nasıl değiştirilir?",
+          "adultModelActions": [
+            "Öğretmen sorunu çocukta değil ortamda tarif eder ve çözümü uygulamadan önce etkilenen çocukların seçtiği geri bildirim yolunu sorar.",
+            "İlk çözüm işlemediğinde bunu saklamaz; kendi kararını görünür biçimde gözden geçirir ve güvenlik kontrolünü yineler."
+          ],
+          "childAgencyOptions": [
+            "Çocuk erişim tercihini söz, işaret, nesne veya deneme yoluyla bildirebilir; gerekçe açıklamadan seçimini değiştirebilir.",
+            "En az iki çözüm arasından seçim yapabilir, yeni bir çözüm önerebilir ya da denemeye ara verebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Bir düzenleme başka bir rotayı kapattıysa önceki güvenli düzene dönülür ve alternatif çocuk geri bildirimiyle yeniden kurulur.",
+            "Etkisi sorulmadan alınan karar için yetişkin süreci açıklar, geri bildirim toplar ve gerekli değişikliği birlikte yapar."
+          ],
+          "familyCommunityTransfer": "Aileler evde kullandıkları destekleyici iletişim veya düzenleme yollarını paylaşmayı seçebilir; sağlık ve tanı bilgisi istenmez.",
+          "observationPrompts": [
+            "Çocuk sorunu kişiye değil ortama bağladı mı ve en az iki çözümü nasıl karşılaştırdı?",
+            "Etkilenen çocuğun geri bildirimiyle planı hangi somut noktada değiştirdi; hangi destek vardı?"
+          ],
+          "counterEvidencePrompt": "Masa üstü modelde çalışan çözüm gerçek ortamda işlemedi mi ya da çocuk geri bildirimi alınmadan herkes için uygun sayıldı mı?",
+          "reflectionPrompt": "Plan çocuğu değiştirmeye mi çalıştı, yoksa ortam engelini gerçekten azalttı mı?",
+          "nextPlanDecisionRule": "Çözüm gerçek kullanımda en az bir çocuğun erişimini daraltırsa uygulama durdurulur, önceki güvenli düzene dönülür ve iki alternatifle yeniden denenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "kul-hakki",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Kul hakkı — Benim İçin Erişilebilir Sınıf için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Başkasının karar, erişim ve sınır hakkını gözetme; oluşan zararı yaşa uygun biçimde onarma eylemleriyle sınırlıdır. Çocuğun veya ailenin inancı hakkında veri üretilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "imece-yardimlasma",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "İmece ve yardımlaşma — Benim İçin Erişilebilir Sınıf için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak iyilik için gönüllü görev paylaşımı olarak yaşanır; yardım alan kişi teşhir edilmez ve çocuğa yetişkin yükü verilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-choice-for-everyone",
+      "weekId": "accessible-community",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-24",
+      "flowSlot": "second-main",
+      "title": "Herkes İçin Bir Seçim Yolu",
+      "shortDescription": "Çocuklar aynı seçim için nesne, görsel, hareket ve söz seçeneklerini tasarlayıp anlaşılabilirliğini sınar.",
+      "durationMinutes": 35,
+      "environment": "indoor",
+      "primaryLensId": "accessible-participation",
+      "supportingLensIds": [
+        "guided-play",
+        "prepared-environment"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.20",
+        "TAOB.2",
+        "TAKB.2"
+      ],
+      "materials": [
+        "Seçim panosu",
+        "Nesne örnekleri",
+        "Boş görsel kartlar",
+        "Yeniden yapışabilir işaretler"
+      ],
+      "lowCostAlternatives": [
+        "Karton pano",
+        "Gerçek sınıf nesneleri",
+        "Dergi görselleri"
+      ],
+      "preparation": [
+        "İki gerçek sınıf seçimini belirle.",
+        "Görsellerin tek anlam dayatmadığını kontrol et."
+      ],
+      "opening": "Öğretmen konuşmadan içecek veya merkez seçmenin yollarını çocuklara sorar.",
+      "processSteps": [
+        "Çocuklar aynı seçim için farklı temsil yolları önerir.",
+        "Küçük gruplar bir seçim seti hazırlar.",
+        "Başka grup seti kullanmayı dener.",
+        "Yanlış anlaşılma ve erişim sorunları kaydedilir.",
+        "Set çocuk geri bildirimiyle değiştirilir."
+      ],
+      "adultPrompts": [
+        "Bu görsel ne anlatıyor?",
+        "Nesne olmadan da anlaşılır mı?",
+        "Seçimini değiştirmek nasıl gösterilir?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk hangi seçim yolunu kullanacağına kendisi karar verir.",
+        "Seçimi açıklama zorunluluğu yoktur."
+      ],
+      "observationPrompts": [
+        "Temsil ile anlam arasında nasıl bağ kuruyor?",
+        "Başkasının seçim yolunu nasıl yorumluyor?"
+      ],
+      "evidenceOptions": [
+        "Seçim kartı",
+        "Kullanılabilirlik deneme notu",
+        "Çocuk geri bildirimi"
+      ],
+      "familyCommunityConnection": "Hazırlanan sistem aileden evde uygulanması istenen bir görev değildir.",
+      "differentiation": [
+        "Görme desteği için dokulu nesne veya büyük kontrastlı kart kullanılır.",
+        "İfade için bakış, işaret ve yardımcı iletişim kabul edilir."
+      ],
+      "safetyNotes": [
+        "Yeme-içme seçimlerinde alerji ve sağlık sınırları öğretmence korunur.",
+        "Çocuk bir seçime zorlanmaz."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; iki çocukla bireysel deneme yapılabilir.",
+      "transitionSupport": "Seçim tamamlandığında kart bitir alanına taşınır; değiştirme kartı görünür kalır.",
+      "reflectionPrompt": "Sistem seçimi gerçekten kolaylaştırdı mı, yoksa yeni bir yetişkin yönergesi mi oluşturdu?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-choice-for-everyone:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D11",
+          "roofValueCode": "D1",
+          "roofValueChecks": {
+            "respect": "Çocuk seçimini açıklamadan yapabilir, değiştirebilir veya o anda seçim yapmamayı tercih edebilir.",
+            "responsibility": "Yetişkin seçeneklerin güvenli ve gerçek olmasını sağlar; çocuğun işaretini kendi varsayımıyla tamamlamaz.",
+            "justice": "Söz, bakış, hareket, nesne ve görsel kart eşdeğer ifade yollarıdır; yalnız konuşan çocukların seçimi görünür olmaz."
+          },
+          "supportingValueCodes": [
+            "D8",
+            "D14"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D11",
+              "actionCode": "D11.1",
+              "actionName": "Kararlı olmak",
+              "indicatorCode": "D11.1.1",
+              "indicatorText": "Gerektiğinde kendi kararlarını alır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            },
+            {
+              "valueCode": "D11",
+              "actionCode": "D11.1",
+              "actionName": "Kararlı olmak",
+              "indicatorCode": "D11.1.2",
+              "indicatorText": "Duygu ve düşüncelerini etki altında kalmadan ifade eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            },
+            {
+              "valueCode": "D8",
+              "actionCode": "D8.1",
+              "actionName": "Kişisel özgürlük alanını korumak",
+              "indicatorCode": "D8.1.1",
+              "indicatorText": "Her ferdin karar alma ve fikir belirtme hakkının olduğunu savunur.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 327
+            }
+          ],
+          "culturalBridgeIds": [
+            "kul-hakki",
+            "edep-nezaket"
+          ],
+          "rationale": "Özgürlük, güvenli seçenekler arasında etki altında kalmadan karar verme ve kararını değiştirebilme eylemidir; mahremiyet ve saygı ifade yolunu korur.",
+          "livedContextOrDilemma": "Bakış, hareket ve kart farklı biçimde yorumlanır; çocuk seçimini açıklamadan değiştirmek ister. Hangi ifade yolunun geçerli olduğuna kim karar verir?",
+          "adultModelActions": [
+            "Öğretmen işareti tahmin etmek yerine çocuğa aynı anlamı farklı bir yolla doğrulama fırsatı verir.",
+            "Seçim değiştiğinde önceki kararı çocuğa karşı kullanmaz; değiştirme kartını ve vazgeçme yolunu görünür tutar."
+          ],
+          "childAgencyOptions": [
+            "Çocuk nesne, görsel, bakış, işaret, hareket veya söz yollarından dilediğini seçebilir.",
+            "Seçimini değiştirebilir, daha sonra karar vermeyi isteyebilir veya sunulan seçeneklere yeni bir güvenli seçenek ekleyebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış yorumlanan seçim geri alınır; çocuk seçtiği ikinci bir iletişim yoluyla yeniden sorulur.",
+            "Bir seçenek fiilen erişilemiyorsa listeden geçici olarak kaldırılır veya eşdeğer erişim yolu hazırlanır."
+          ],
+          "familyCommunityTransfer": "Aileye sınıfta kullanılan çoklu seçim yolları bilgi olarak sunulur; evde aynı kartları kullanma beklentisi oluşturulmaz.",
+          "observationPrompts": [
+            "Çocuk hangi seçim yolunu kendiliğinden kullandı ve seçimini değiştirebildi mi?",
+            "Başka çocuğun farklı ifade yolunu nasıl doğruladı; yetişkin hangi desteği sundu?"
+          ],
+          "counterEvidencePrompt": "Kendi alternatifini savunurken akranının bakış veya işaretini yetişkin gibi yorumlayıp geçersiz kıldığı oldu mu; hangi doğrulama yolu eksikti?",
+          "reflectionPrompt": "Sistem seçimi gerçekten kolaylaştırdı mı, yoksa yeni bir yetişkin yönergesi mi oluşturdu?",
+          "nextPlanDecisionRule": "Bir ifade yolu iki denemede yanlış yorumlanırsa sembol çocukla birlikte yeniden tasarlanır ve en az bir eşdeğer seçim yolu sürekli görünür tutulur."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "kul-hakki",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Kul hakkı — Herkes İçin Bir Seçim Yolu için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Başkasının karar, erişim ve sınır hakkını gözetme; oluşan zararı yaşa uygun biçimde onarma eylemleriyle sınırlıdır. Çocuğun veya ailenin inancı hakkında veri üretilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "edep-nezaket",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Edep ve nezaket — Herkes İçin Bir Seçim Yolu için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Nazik dinleme, izin isteme ve sınır gözetme olarak uygulanır; sessizlik, korku veya sorgusuz uyum ölçüt yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-route-map",
+      "weekId": "accessible-community",
+      "activityRole": "alternative",
+      "recommendedCivilDate": "2026-09-25",
+      "flowSlot": "outdoor-movement",
+      "title": "Kapıdan Merkeze Erişilebilir Rota",
+      "shortDescription": "Çocuklar okul girişinden seçili merkeze giden rotayı inceleyip basit kroki ve erişim önerisi oluşturur.",
+      "durationMinutes": 35,
+      "environment": "both",
+      "primaryLensId": "prepared-environment",
+      "supportingLensIds": [
+        "accessible-participation",
+        "plan-act-reflect"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.15",
+        "SAB.17",
+        "HSAB.5"
+      ],
+      "materials": [
+        "Basit okul krokisi",
+        "Yön okları",
+        "Başlangıç-bitiş sembolleri"
+      ],
+      "lowCostAlternatives": [
+        "Koli kartonu",
+        "Kâğıt bant yön oku"
+      ],
+      "preparation": [
+        "Gerçek rotayı yetişkinle önceden yürü.",
+        "Kaygan zemin, eşik ve dar geçişleri kaydet."
+      ],
+      "opening": "Öğretmen kapıdan kitap merkezine gitmek isteyen bir kuklanın hangi işaretleri izleyeceğini sorar.",
+      "processSteps": [
+        "Çocuklar rotayı gözlemler.",
+        "Başlangıç, dönüş ve bitiş noktalarını seçer.",
+        "Basit kroki oluşturur.",
+        "Başka çocuk krokiden rotayı dener.",
+        "Engel ve belirsiz işaretler değiştirilir."
+      ],
+      "adultPrompts": [
+        "Burada hangi yöne dönüyoruz?",
+        "Bu geçiş kim için zor olabilir?",
+        "Daha açık bir işaret nasıl olur?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk rotayı yürümek yerine model üzerinde gösterebilir.",
+        "Kroki sembollerini kendisi seçer."
+      ],
+      "observationPrompts": [
+        "Krokiyi hangi çevre ipucuyla ilişkilendiriyor?",
+        "Kişisel alanı koruyarak nasıl hareket ediyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuk krokisi",
+        "Rota deneme notu",
+        "Erişim önerisi"
+      ],
+      "familyCommunityConnection": "Okul dışı rota veya ev adresi istenmez; etkinlik kurum içi güvenli alanla sınırlıdır.",
+      "differentiation": [
+        "Rota masa üstü modelde izlenebilir.",
+        "Yön için renk yanında şekil ve dokulu işaret kullanılır."
+      ],
+      "safetyNotes": [
+        "Çocuklar gözetimsiz okul koridoruna çıkarılmaz.",
+        "Acil çıkış yönleri oyun kuralıyla değiştirilmez."
+      ],
+      "indoorEquivalent": "Dış veya koridor kullanılamıyorsa sınıf içindeki iki merkez arasında masa üstü kroki kurulur.",
+      "transitionSupport": "Rotaya çıkmadan başlangıç-bitiş ve geri dönüş işaretleri gösterilir.",
+      "reflectionPrompt": "Kroki gerçek rotayı ve erişim engellerini yeterince doğru temsil etti mi?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-route-map:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D5",
+          "roofValueCode": "D1",
+          "roofValueChecks": {
+            "respect": "Rota denemesi kişisel hareket veya iletişim ihtiyacını grup önünde açıklamayı gerektirmez.",
+            "responsibility": "Koridor ve dış alan güvenliği yetişkinde kalır; çocuklar çevre ipuçlarını ve erişim önerilerini paylaşır.",
+            "justice": "En kısa rota tek ölçüt değildir; güvenli, anlaşılır ve farklı hareket yollarıyla kullanılabilir rota tercih edilir."
+          },
+          "supportingValueCodes": [
+            "D13",
+            "D16"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D5",
+              "actionCode": "D5.1",
+              "actionName": "İnsana ve topluma değer vermek",
+              "indicatorCode": "D5.1.3",
+              "indicatorText": "Yaşlıların ve özel gereksinimli bireylerin toplumsal hayata etkin katılımını destekler.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            },
+            {
+              "valueCode": "D13",
+              "actionCode": "D13.3",
+              "actionName": "İnsan sağlığını önemsemek",
+              "indicatorCode": "D13.3.5",
+              "indicatorText": "Düşme, çarpma gibi ergonomik risk faktörlerine karşı önlem alır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 329
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.1",
+              "actionName": "Kendine karşı görevlerini yerine getirmek",
+              "indicatorCode": "D16.1.3",
+              "indicatorText": "Güvenliğini tehlikeye sokacak davranışlardan kaçınır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            }
+          ],
+          "culturalBridgeIds": [
+            "kul-hakki",
+            "imece-yardimlasma"
+          ],
+          "rationale": "Duyarlılık, başka bir çocuğun rota deneyimini dikkate alıp çevre engelini azaltma eylemidir; sağlık ve sorumluluk güvenli denemeyi sınırlar.",
+          "livedContextOrDilemma": "En kısa rotada dar eşik veya çarpışma riski vardır; daha uzun rota güvenli ve anlaşılırdır. Yalnız bir çocuğun hareket biçimine göre çizilmiş kroki yeterli midir?",
+          "adultModelActions": [
+            "Öğretmen gerçek rotayı önce kendisi denetler, riskli alanı çocuk denemesine bırakmaz ve erişim sorununu kişiye yüklemeden adlandırır.",
+            "Bir çocuğun başarılı denemesini herkes için kanıt saymaz; oturarak, farklı hızda ve alternatif işaretle deneme modeller."
+          ],
+          "childAgencyOptions": [
+            "Çocuk rotayı yürüyerek, masa üstü modelde, yön oku, dokulu işaret veya sözle gösterebilir.",
+            "Kroki sembolünü seçebilir, rotayı değiştirebilir ya da denemeye ara verip gözlemci kalabilir."
+          ],
+          "repairOrContributionOptions": [
+            "Kroki gerçek ortamla uyuşmuyorsa yanlış işaret kaldırılır ve rota yeniden gözlenerek düzeltilir.",
+            "Bir geçiş biçimi dışarıda kaldıysa eşik, yön veya alternatif rota çocuk geri bildirimiyle görünür hâle getirilir."
+          ],
+          "familyCommunityTransfer": "Aile, okul girişindeki erişim ve güvenlik önerisini ad, adres veya sağlık bilgisi vermeden öğretmene iletebilir.",
+          "natureStewardshipTransfer": "Dış alan rotasında bitki, toprak ve canlı yaşamı bozmayan mevcut geçişler seçilir; geçici işaretler etkinlik sonunda kaldırılır.",
+          "observationPrompts": [
+            "Çocuk engeli hangi çevre ipucuyla belirledi ve başka çocuğun denemesinden sonra krokisini nasıl değiştirdi?",
+            "Güvenli rota seçerken hız, eşik, mesafe ve işaretlerden hangisini gerekçe gösterdi?"
+          ],
+          "counterEvidencePrompt": "Kroki yürüyen çocuk için doğruyken oturarak, tekerlekli araçla veya dokunsal işaretle izlenemedi mi; hangi çevre değişikliği gerekiyordu?",
+          "reflectionPrompt": "Kroki gerçek rotayı ve erişim engellerini yeterince doğru temsil etti mi?",
+          "nextPlanDecisionRule": "Rota bir erişim biçiminde izlenemiyor veya çarpışma riski taşıyorsa kullanım öncesi yetişkin kontrolü yenilenir ve alternatif rota plana eklenir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "kul-hakki",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Kul hakkı — Kapıdan Merkeze Erişilebilir Rota için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Başkasının karar, erişim ve sınır hakkını gözetme; oluşan zararı yaşa uygun biçimde onarma eylemleriyle sınırlıdır. Çocuğun veya ailenin inancı hakkında veri üretilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "imece-yardimlasma",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "İmece ve yardımlaşma — Kapıdan Merkeze Erişilebilir Rota için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak iyilik için gönüllü görev paylaşımı olarak yaşanır; yardım alan kişi teşhir edilmez ve çocuğa yetişkin yükü verilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-evidence-museum",
+      "weekId": "september-reflection",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-28",
+      "flowSlot": "first-main",
+      "title": "Eylül Kanıtları Müzesi",
+      "shortDescription": "Çocuklar ay boyunca oluşan sınıf izlerinden birini seçer, sergileme biçimini ve açıklamasını belirler.",
+      "durationMinutes": 40,
+      "environment": "indoor",
+      "primaryLensId": "plan-act-reflect",
+      "supportingLensIds": [
+        "belonging-family-weave",
+        "accessible-participation"
+      ],
+      "curriculumTargetCodes": [
+        "TAOB.1",
+        "TAOB.4",
+        "SNAB.4"
+      ],
+      "materials": [
+        "Etkinlik sırasında üretilen, kişisel veri içermeyen kimliksiz sınıf temsilleri",
+        "Boş açıklama kartları",
+        "Sergi yüzeyi"
+      ],
+      "lowCostAlternatives": [
+        "İp ve mandal",
+        "Artık karton etiket"
+      ],
+      "preparation": [
+        "Saklanmış çocuk kaydı, fotoğraf, ses veya video kullanma; temsilleri etkinlik sırasında kimliksiz üret.",
+        "Her çocuk için temsil üretmeme ve sergilememe seçeneğini görünür kıl."
+      ],
+      "opening": "Öğretmen müzenin en güzel ürünleri değil sınıfın nasıl değiştiğini gösteren izleri toplayacağını açıklar.",
+      "processSteps": [
+        "Çocuklar mevcut izleri inceler.",
+        "Bir iz seçer veya yeni temsil üretir.",
+        "Nedenini söz, işaret, çizim veya canlı ritimle açıklar; kayıt alınmaz.",
+        "Sergi yerini düzenler.",
+        "Müze turundan sonra açıklamasını değiştirebilir."
+      ],
+      "adultPrompts": [
+        "Bu iz hangi değişimi gösteriyor?",
+        "Bunu başka nasıl anlatabiliriz?",
+        "Sergilemek istemezsen ne yapabiliriz?"
+      ],
+      "childAgencyPoints": [
+        "Sergileme çocuğun seçimine bağlıdır; sergide çocuk adı veya kimlikli açıklama kullanılmaz.",
+        "Çocuk kimliksiz temsilini istediği anda kaldırabilir."
+      ],
+      "observationPrompts": [
+        "Kanıt seçimini hangi gerekçeyle yapıyor?",
+        "Görsel materyale ilişkin görüşünü nasıl yansıtıyor?"
+      ],
+      "evidenceOptions": [
+        "Seçim gerekçesi",
+        "Sergi düzeni",
+        "Değiştirilmiş açıklama kartı"
+      ],
+      "familyCommunityConnection": "Etkinlik sınıf içinde kalır; aileye çocuk ürünü, görüntüsü, sesi veya kimlikli açıklaması aktarılmaz. Aileyle evde değişimi fark etme üzerine konuşmak isteğe bağlıdır.",
+      "differentiation": [
+        "Temsil dokunulabilir kimliksiz nesne, çizim, sembol veya kayıt alınmayan canlı ritim olabilir.",
+        "Çocuk yazılı açıklama istemezse yalnız sembol kullanabilir; yetişkin çocuk sözünü kaydetmez."
+      ],
+      "safetyNotes": [
+        "Fotoğraf, ses, video, çocuk adı, sağlık bilgisi veya özel uyarlama üretilmez ve sergilenmez.",
+        "Asıl ham gözlem kullanılmaz; sergi sınıf dışına ve aile erişimine açılmaz."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; fiziksel sergi yerine masa üstü küçük seçki kurulabilir.",
+      "transitionSupport": "Müze turuna geçişte bak-dokunma-sor işaretleri çocuklarla belirlenir.",
+      "reflectionPrompt": "Sergi çocukların öğrenme sürecini mi görünür kıldı, yoksa yetişkin tarafından seçilmiş ürün gösterisine mi dönüştü?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-evidence-museum:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D6",
+          "roofValueCode": "D14",
+          "roofValueChecks": {
+            "respect": "Kimliksiz temsili üretmek ve sergilemek çocuğun ayrı kararlarıdır; katılmama ve sonradan kaldırma hakkı korunur.",
+            "responsibility": "Ham gözlem ve hassas veri sergiye taşınmaz; yetişkin fotoğraf, ses, video veya kimlikli açıklama üretmez.",
+            "justice": "Görsel çekicilik üstünlük ölçütü olmaz; nesne, çizim, sembol, canlı ritim ve sergilenmeyen yansıtma seçenekleri eşdeğerdir."
+          },
+          "supportingValueCodes": [
+            "D8",
+            "D10"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D6",
+              "actionCode": "D6.2",
+              "actionName": "Doğru ve güvenilir olmak",
+              "indicatorCode": "D6.2.1",
+              "indicatorText": "Duygu ve düşüncelerini açıkça ifade eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 326
+            },
+            {
+              "valueCode": "D8",
+              "actionCode": "D8.1",
+              "actionName": "Kişisel özgürlük alanını korumak",
+              "indicatorCode": "D8.1.1",
+              "indicatorText": "Her ferdin karar alma ve fikir belirtme hakkının olduğunu savunur.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 327
+            },
+            {
+              "valueCode": "D10",
+              "actionCode": "D10.1",
+              "actionName": "İnsan ilişkilerinde yapıcı olmak",
+              "indicatorCode": "D10.1.6",
+              "indicatorText": "Olaylar ve durumlar karşısında farklı bakış açıları olabileceğini kabul eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            }
+          ],
+          "culturalBridgeIds": [
+            "emanet",
+            "edep-nezaket"
+          ],
+          "rationale": "Dürüstlük, kimliksiz sınıf temsilini öğrenme değişimiyle açıkça ilişkilendirme ve sergileme sınırını doğru aktarma eylemidir; mahremiyet ve farklı bakışlar kürasyonu korur.",
+          "livedContextOrDilemma": "Görsel olarak etkileyici saklanmış bir çocuk ürünü sergilenmek istenir; veri ve paylaşım yetkisi bulunmadığı için bunun yerine etkinlik sırasında kimliksiz yeni bir temsil üretilir.",
+          "adultModelActions": [
+            "Öğretmen saklanmış ürün, ad, çocuk sözü, fotoğraf, ses veya videoyu kullanmaz; ham gözlemi sergi açıklamasına dönüştürmez.",
+            "En güzel ürün dilini kullanmaz; kendi seçimini gerekçesiyle açıklar ve çocuğun farklı kararına alan açar."
+          ],
+          "childAgencyOptions": [
+            "Çocuk kimliksiz nesne, çizim, sembol veya kayıt alınmayan canlı ritimle yeni bir temsil üretebilir; hiçbirini sergilememeyi de tercih edebilir.",
+            "Temsilini veya sembollü açıklamasını değiştirebilir ya da istediği anda sergiden kaldırabilir."
+          ],
+          "repairOrContributionOptions": [
+            "Kimlikli ya da saklanmış bir kayıt yanlışlıkla seçildiyse sergilenmeden ayrılır ve etkinlik sırasında kimliksiz yeni bir temsil üretilir.",
+            "Sembollü açıklama çocuğun anlamını yanlış aktardıysa eski kart kullanılmaz; çocuk isterse yeni bir sembol seçer."
+          ],
+          "familyCommunityTransfer": "Sergi sınıf içinde kalır ve aile erişimine açılmaz; aileyle evde değişimi fark etme üzerine yargısız sohbet etmek isteğe bağlıdır, ürüne veya kayda dönüşmez.",
+          "observationPrompts": [
+            "Çocuk kimliksiz temsil seçimini hangi değişime bağladı ve başkasının temsilini kullanmadan önce nasıl izin istedi?",
+            "Sembollü açıklamasını geri bildirimle değiştirdi mi; üretme ve sergileme kararlarını nasıl ayırdı?"
+          ],
+          "counterEvidencePrompt": "Görsel olarak öne çıkan temsili seçip öğrenme değişimiyle ilişki kuramadığı ya da başkasının temsilini izinsiz kullandığı bir durum oldu mu?",
+          "reflectionPrompt": "Sergi çocukların öğrenme sürecini mi görünür kıldı, yoksa yetişkin tarafından seçilmiş ürün gösterisine mi dönüştü?",
+          "nextPlanDecisionRule": "Seçim gerekçesi öğrenme değişimine bağlanamıyor veya temsil kimliksiz değilse öğe sınıf içi sergiye alınmaz; bireysel yansıtma ve yeni seçim fırsatı sunulur."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "emanet",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Emanet — Eylül Kanıtları Müzesi için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak eşya, güvenli mekân, görev ve paylaşım iznine özen gösterme eylemi olarak yaşanır; inanç veya ibadet performansı hakkında çıkarım yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "edep-nezaket",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Edep ve nezaket — Eylül Kanıtları Müzesi için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Nazik dinleme, izin isteme ve sınır gözetme olarak uygulanır; sessizlik, korku veya sorgusuz uyum ölçüt yapılmaz.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-october-questions",
+      "weekId": "september-reflection",
+      "activityRole": "main",
+      "recommendedCivilDate": "2026-09-29",
+      "flowSlot": "second-main",
+      "title": "Ekim’e Taşıdığımız Sorular",
+      "shortDescription": "Çocuklar sınıf ve yakın çevrede fark ettikleri değişimlerden araştırılabilir Ekim soruları oluşturur.",
+      "durationMinutes": 35,
+      "environment": "both",
+      "primaryLensId": "guided-play",
+      "supportingLensIds": [
+        "plan-act-reflect",
+        "belonging-family-weave"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.4",
+        "FAB.1",
+        "TAKB.2"
+      ],
+      "materials": [
+        "Merak panosu",
+        "Gözlem çerçevesi",
+        "Soru kartları",
+        "Yakın çevre nesneleri"
+      ],
+      "lowCostAlternatives": [
+        "Karton çerçeve",
+        "Atık kâğıt soru kartı"
+      ],
+      "preparation": [
+        "Güvenli kısa gözlem rotası belirle.",
+        "Hazır tema başlığı yazmadan boş merak alanı bırak."
+      ],
+      "opening": "Öğretmen Eylül başı ve sonu arasında sınıfta veya çevrede fark edilen bir değişimi gösterir.",
+      "processSteps": [
+        "Çocuklar kısa çevre gözlemi yapar.",
+        "Fark ettiği değişimi kaydeder.",
+        "Merakını soru biçiminde ifade eder.",
+        "Sorular benzerliklerine göre çocuklarla gruplanır.",
+        "Ekimde ilk denenecek gözlem veya malzeme seçilir."
+      ],
+      "adultPrompts": [
+        "Bunu nerede fark ettin?",
+        "Sorunu gözlemle veya deneyle araştırabilir miyiz?",
+        "Başlamak için hangi malzeme gerekir?"
+      ],
+      "childAgencyPoints": [
+        "Ekim araştırma soruları çocuk meraklarından seçilir.",
+        "Çocuk sorusunu daha sonra değiştirebilir."
+      ],
+      "observationPrompts": [
+        "Gözlemini soruya nasıl dönüştürüyor?",
+        "Sorunun araştırılabilirliğini hangi gerekçeyle açıklıyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuğun özgün sorusu",
+        "Gözlem çizimi",
+        "Soru gruplama gerekçesi"
+      ],
+      "familyCommunityConnection": "Aileden malzeme veya yanıt getirmesi istenmez; çocuk isterse sorusunu evde paylaşabilir.",
+      "differentiation": [
+        "Soru; nesne, yakın çevreye ait nesne fotoğrafı (çocuk ve kişisel veri içermez), çizim veya yetişkin yazımıyla kaydedilebilir.",
+        "Dış gözlem yapılamazsa pencere veya sınıf malzemesi incelenir."
+      ],
+      "safetyNotes": [
+        "Bilinmeyen bitki veya maddeye dokunulmaz.",
+        "Çocuk sorusu yanlış veya değersiz diye sınıflandırılmaz."
+      ],
+      "indoorEquivalent": "Hava uygun değilse pencereden mevsim izi veya sınıftaki doğal materyaller gözlenir.",
+      "transitionSupport": "Gözlemden soru panosuna dönüş için her çocuk seçtiği nesne veya kartı taşır.",
+      "reflectionPrompt": "Ekim odağı gerçekten çocuk sorularından mı çıktı, yoksa hazır yetişkin temasına mı döndü?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-october-questions:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "learning_outcome_led",
+          "primaryValueCode": "D3",
+          "roofValueCode": "D16",
+          "roofValueChecks": {
+            "respect": "Her soru sahibinin sözü korunur; bir sorunun hemen seçilmemesi değersiz olduğu anlamına gelmez.",
+            "responsibility": "Güvenli araştırma sınırı yetişkin tarafından sağlanır; çocuk seçtiği gözlem, soru ve malzeme kararına katkı verir.",
+            "justice": "İlk araştırma yalnız en çok konuşulan soruya göre seçilmez; erişilebilirlik, güvenlik ve farklı meraklar görünür gerekçelerle tartılır."
+          },
+          "supportingValueCodes": [
+            "D10"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D3",
+              "actionCode": "D3.3",
+              "actionName": "Araştırmacı ve sorgulayıcı olmak",
+              "indicatorCode": "D3.3.2",
+              "indicatorText": "Çeşitli fikir, argüman ve yeni bilgilere açık olur.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 325
+            },
+            {
+              "valueCode": "D10",
+              "actionCode": "D10.1",
+              "actionName": "İnsan ilişkilerinde yapıcı olmak",
+              "indicatorCode": "D10.1.6",
+              "indicatorText": "Olaylar ve durumlar karşısında farklı bakış açıları olabileceğini kabul eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 328
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.1",
+              "actionName": "Kendine karşı görevlerini yerine getirmek",
+              "indicatorCode": "D16.1.1",
+              "indicatorText": "Kararlarını çevresiyle fikir alışverişi yaparak kendisi alır.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            }
+          ],
+          "culturalBridgeIds": [
+            "helal-emek-caliskanlik"
+          ],
+          "rationale": "Çalışkanlık, hazır cevabı tekrar etmek değil, değişimi dikkatle gözleyip araştırılabilir soru kurmak ve yeni bilgiyle fikri yeniden düzenlemektir.",
+          "livedContextOrDilemma": "Çok sayıda merak sorusu vardır fakat ilk hafta yalnız bir gözlem başlatılabilir. Bir soruyu seçmek diğerlerini değersizleştirmeden nasıl yapılır?",
+          "adultModelActions": [
+            "Öğretmen kendi tema başlığını çocuk sorusu gibi sunmaz; gözlem ile yorumunu ayırarak merakını açıkça modeller.",
+            "Seçilmeyen soruları silmez, karar gerekçesini görünür kılar ve yeni bilgi geldiğinde planını değiştirebileceğini gösterir."
+          ],
+          "childAgencyOptions": [
+            "Çocuk sorusunu söz, çizim, nesne, yakın çevreye ait nesne fotoğrafı (çocuk ve kişisel veri içermez) veya yetişkinin yazdığı kartla sunabilir.",
+            "Sorusunu değiştirebilir, başka soruyla birleştirebilir ya da ilk araştırmada gözlemci olmayı seçebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Yanlış gruplanan veya görünmez kalan soru sahibine danışılarak yeniden yerleştirilir; önceki kayıt korunur.",
+            "Yeni bilgi ilk kararı değiştirdiğinde çocuklar gerekçeyi söz, işaret veya çizimle açıklar; yetişkin gözlem planını bu gerekçeye göre güvenli biçimde yeniler."
+          ],
+          "familyCommunityTransfer": "Çocuk isterse sorusunu evde paylaşabilir; aileden cevap, malzeme, internet araştırması veya satın alma beklenmez.",
+          "natureStewardshipTransfer": "Yakın çevre gözleminde canlıya dokunulmaz, doğal parça yerinden alınmaz ve aynı noktaya zarar vermeden yeniden dönülebilecek kayıt yolu seçilir.",
+          "observationPrompts": [
+            "Çocuk somut bir değişimi araştırılabilir soruya nasıl çevirdi ve farklı soruları nasıl dinledi?",
+            "İlk araştırma kararına hangi gerekçeyle katıldı; yeni bilgi geldiğinde sorusunu değiştirdi mi?"
+          ],
+          "counterEvidencePrompt": "Sorusu yalnız yetişkin temasını tekrar ediyor veya gözlenen bir değişime dayanmıyor muydu; farklı veri sunulduğunda fikrini güncelleyebildi mi?",
+          "reflectionPrompt": "Ekim odağı gerçekten çocuk sorularından mı çıktı, yoksa hazır yetişkin temasına mı döndü?",
+          "nextPlanDecisionRule": "Seçilen soru gözlenebilir değilse ya da çocukların kendi sözünü taşımıyorsa sonraki planda özgün kayıtlar yeniden incelenir ve daha küçük bir araştırma sorusu seçilir."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "helal-emek-caliskanlik",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Helal emek ve çalışkanlık — Ekim’e Taşıdığımız Sorular için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Planlama, emeğe özen ve seçilen işi hakkıyla sürdürme olarak ele alınır; hız yarışı kurulmaz ve dinlenme hakkı korunur.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    },
+    {
+      "id": "tymm6072-sep-many-ways-agreement",
+      "weekId": "september-reflection",
+      "activityRole": "alternative",
+      "recommendedCivilDate": "2026-09-30",
+      "flowSlot": "small-group",
+      "title": "Sınıf Anlaşmamızın Birçok Dili",
+      "shortDescription": "Çocuklar ay boyunca işe yarayan ortak yaşam kararlarını yazı, sembol, hareket ve nesneyle yeniden temsil eder.",
+      "durationMinutes": 30,
+      "environment": "indoor",
+      "primaryLensId": "belonging-family-weave",
+      "supportingLensIds": [
+        "accessible-participation",
+        "plan-act-reflect"
+      ],
+      "curriculumTargetCodes": [
+        "SAB.8",
+        "SAB.20",
+        "TAEOB.6"
+      ],
+      "materials": [
+        "Büyük anlaşma panosu",
+        "Boş sembol kartları",
+        "Kalın uçlu kalem",
+        "Nesne işaretler"
+      ],
+      "lowCostAlternatives": [
+        "Koli kartonu",
+        "Artık kâğıt",
+        "Taş sembol"
+      ],
+      "preparation": [
+        "Ödül-ceza ve itaat dili taşıyan eski kuralları ayır.",
+        "Çocukların ay içinde ürettiği gerçek çözümleri hazırla."
+      ],
+      "opening": "Öğretmen Eylül ayında birlikte yaşamayı kolaylaştıran hangi kararların gerçekten işe yaradığını sorar.",
+      "processSteps": [
+        "Çocuklar işe yarayan bir kararı seçer.",
+        "Kararı neden korumak veya değiştirmek istediğini açıklar.",
+        "Yazı, sembol, hareket veya nesneyle temsil eder.",
+        "Başka çocuk temsilin anlaşılırlığını dener.",
+        "Pano geri bildirimle güncellenir."
+      ],
+      "adultPrompts": [
+        "Bu karar kime yardımcı oluyor?",
+        "Birisi yapamadığında ne olur?",
+        "Bunu söz kullanmadan nasıl gösterebiliriz?"
+      ],
+      "childAgencyPoints": [
+        "Çocuk karara itiraz edebilir veya değişiklik önerebilir.",
+        "Temsil yolu ve panoda yer alma çocuk seçimine bağlıdır."
+      ],
+      "observationPrompts": [
+        "Toplumsal düzeni hangi ilişki üzerinden çözümlüyor?",
+        "Yazma öncesi temsilini nasıl oluşturuyor?"
+      ],
+      "evidenceOptions": [
+        "Çocuk sembolü",
+        "Değişiklik önerisi",
+        "Anlaşılabilirlik deneme notu"
+      ],
+      "familyCommunityConnection": "Pano aileye görev listesi olarak gönderilmez; sınıf bağlamında kalır.",
+      "differentiation": [
+        "İnce motor desteği için büyük yüzey ve damga kullanılabilir.",
+        "İfade için hareket, nesne ve yardımcı iletişim kabul edilir."
+      ],
+      "safetyNotes": [
+        "Anlaşma çocukları etiketleyen veya utandıran ifade içeremez.",
+        "Temel ihtiyaçlar kurala bağlanamaz."
+      ],
+      "indoorEquivalent": "Etkinlik kapalı alandadır; küçük grup masasında tek bir anlaşma üzerinde çalışılabilir.",
+      "transitionSupport": "Pano tamamlanınca çocuklar koru-değiştir-sonra konuş kartlarından birini seçer.",
+      "reflectionPrompt": "Anlaşma ortak yaşamı destekliyor mu, yoksa yetişkin beklentisini çocuklara onaylatıyor mu?",
+      "valuesDesign": {
+        "id": "tymm6072-sep-many-ways-agreement:values:v1",
+        "version": "1.0.0",
+        "mapping": {
+          "designDirection": "value_led",
+          "primaryValueCode": "D14",
+          "roofValueCode": "D14",
+          "roofValueChecks": {
+            "respect": "Anlaşma farklı görüş, itiraz, sessiz katılım ve temel ihtiyaçları korur; nazik dil tek yönlü uyum istemine dönüşmez.",
+            "responsibility": "Yetişkin güvenlik ve çocuk hakları sınırını korur; çocuklar yalnız ortak yaşam kararının temsil ve onarımına katkı verir.",
+            "justice": "Bir kararın kime yardımcı olup kimi zorlaştırdığı sınanır; çoğunluk oyu erişim ve temel hakları geçersiz kılamaz."
+          },
+          "supportingValueCodes": [
+            "D1",
+            "D16"
+          ],
+          "officialActionSnapshots": [
+            {
+              "valueCode": "D14",
+              "actionCode": "D14.1",
+              "actionName": "Nezaketli olmak",
+              "indicatorCode": "D14.1.10",
+              "indicatorText": "Farklı fikirlere sahip insanlara saygı duymanın önemini fark eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 329
+            },
+            {
+              "valueCode": "D1",
+              "actionCode": "D1.2",
+              "actionName": "Hakkaniyetli davranmak",
+              "indicatorCode": "D1.2.1",
+              "indicatorText": "Toplumsal karar alma süreçlerinde farklı görüşler olabileceğini kabul eder.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 324
+            },
+            {
+              "valueCode": "D16",
+              "actionCode": "D16.3",
+              "actionName": "Görev bilincine sahip olmak",
+              "indicatorCode": "D16.3.3",
+              "indicatorText": "Yanlış karar ve davranışlarının telafisi için çaba gösterir.",
+              "catalogId": "meb-tymm-okul-oncesi-2024-ede-ek14",
+              "sourceVersion": "2024.09.02",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "sourceSha256": "sha256:77c1ea4771d83cca5bceeb43912770d52bf62a49d45cbbd109e584828bb5ea09",
+              "sourcePage": 330
+            }
+          ],
+          "culturalBridgeIds": [
+            "kul-hakki",
+            "imece-yardimlasma"
+          ],
+          "rationale": "Saygı, farklı fikirlerin sınıf anlaşmasını değiştirebildiği ve dışlayıcı etkinin onarıldığı ortak karar sürecidir; adalet ve sorumluluk anlaşmanın sonucunu sınar.",
+          "livedContextOrDilemma": "Çemberde herkes konuşur kararı düzen sağlıyor görünür fakat işaretle katılan veya gözlemci kalmak isteyen çocuğu dışlar. Karar nasıl onarılır?",
+          "adultModelActions": [
+            "Öğretmen önceki kararın kimi zorlaştırdığını açıkça kabul eder ve kendi önerisini çocuk kararı gibi sunmaz.",
+            "İtirazı kesmeden dinler; güvenlik ve temel ihtiyaç sınırlarını açıklayıp çoklu temsil yolunu kendisi de kullanır."
+          ],
+          "childAgencyOptions": [
+            "Çocuk kararı koru, değiştir veya sonra konuş kartıyla değerlendirebilir; söz, sembol, hareket ya da nesne kullanabilir.",
+            "Panoda yer almamayı, gözlemci kalmayı veya değişiklik önerisini daha sonra paylaşmayı seçebilir."
+          ],
+          "repairOrContributionOptions": [
+            "Bir çocuğu dışarıda bırakan ifade panodan kaldırılır; etkilenen çocuğun seçtiği yolla yeni temsil hazırlanır.",
+            "Karar uygulanamadığında kişi etiketlenmez; ortam, süre, ifade yolu veya yetişkin desteği değiştirilir."
+          ],
+          "familyCommunityTransfer": "Sınıf anlaşması aileye görev listesi olarak gönderilmez; aile isterse çoklu katılım diline ilişkin önerisini kişisel bilgi vermeden paylaşabilir.",
+          "observationPrompts": [
+            "Çocuk kararın kime yardımcı olup kimi zorladığını hangi örnekle açıkladı?",
+            "İtiraz veya değişiklik önerisini hangi temsil yoluyla sundu ve başka görüşe nasıl karşılık verdi?"
+          ],
+          "counterEvidencePrompt": "Çoklu katılımı panoda savunurken gerçek geçişte farklı biçimde katılan çocuğu sorun olarak gördüğü oldu mu; ortam veya destek nasıl değişmeliydi?",
+          "reflectionPrompt": "Anlaşma ortak yaşamı destekliyor mu, yoksa yetişkin beklentisini çocuklara onaylatıyor mu?",
+          "nextPlanDecisionRule": "Bir anlaşma doğal akışta erişimi daraltır, temel ihtiyacı geciktirir veya itirazı görünmez kılarsa uygulanmaz; çocuklarla yeni temsil ve onarım yolu hazırlanır."
+        },
+        "culturalContexts": [
+          {
+            "culturalBridgeId": "kul-hakki",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "Kul hakkı — Sınıf Anlaşmamızın Birçok Dili için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Başkasının karar, erişim ve sınır hakkını gözetme; oluşan zararı yaşa uygun biçimde onarma eylemleriyle sınırlıdır. Çocuğun veya ailenin inancı hakkında veri üretilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          },
+          {
+            "culturalBridgeId": "imece-yardimlasma",
+            "locality": "Türkiye geneli; sınıf ve yakın çevre",
+            "period": "2026–2027 eğitim yılı",
+            "variant": "İmece ve yardımlaşma — Sınıf Anlaşmamızın Birçok Dili için yaşa uygun gündelik eylem uyarlaması",
+            "adaptationNote": "Ortak iyilik için gönüllü görev paylaşımı olarak yaşanır; yardım alan kişi teşhir edilmez ve çocuğa yetişkin yükü verilmez.",
+            "provenance": {
+              "sourceKind": "https",
+              "sourceTitle": "MEB Türkiye Yüzyılı Maarif Modeli 2024 Okul Öncesi Eğitim Programı — Erdem-Değer-Eylem ve uygulama ilkeleri",
+              "sourceUrl": "https://tymm.meb.gov.tr/upload/program/2024programokuloncesiOnayli.pdf",
+              "oralLocalSource": null,
+              "status": "draft",
+              "checkedAtUtc": null
+            }
+          }
+        ],
+        "editorialReview": {
+          "status": "machine_validated_pending_human_review",
+          "machineValidatedAtUtc": "2026-08-08T09:00:00.000Z",
+          "machineValidatorId": "maarifos-values-codec-v1",
+          "humanReviewRequired": true,
+          "note": "Resmî Ek-14 snapshot'ları, kod ilişkileri, çatı dengesi ve yapısal güvenlik kapıları makineyle doğrulandı. Erken çocukluk eğitimi, uygulayıcı okul öncesi öğretmen, çocuk hakları ve koruma, TYMM programı, içerik ve Türkçe dili ile Türk-İslam kültürü ve ilahiyat alanlarındaki bağımsız insan incelemeleri tamamlanmadan paket yayımlanamaz."
+        }
+      }
+    }
+  ],
+  "status": "internal_pilot",
+  "accessMode": "staff-code"
+}
