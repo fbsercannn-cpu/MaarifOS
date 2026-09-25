@@ -58,15 +58,14 @@ const MAX_ACKNOWLEDGEMENT_LENGTH = 2_048;
 const VERSION_PATTERN = /^[0-9A-Za-z](?:[0-9A-Za-z._+-]{0,63})$/;
 
 export const CURRENT_RELEASE: ReleaseMetadata = Object.freeze({
-  version: "0.75.3",
+  version: "0.75.4",
   releasedOn: "2026-09-25",
-  title: "Hızlı Gözlem ve kurumsal bekleme deneyimi",
+  title: "Ana çalışma alanlarında kesintisiz geçiş",
   notes: Object.freeze([
-    "Bugün ve Hızlı Gözlem bekleme ekranları ham metin yerine markalı, taşmasız ve erişilebilir durum katmanı kullanıyor.",
-    "Bugün çalışma alanı önceden yüklenerek ilk geçişteki boş ekran olasılığı azaltıldı.",
-    "Çocuk taslakları etkinlik başına tek cihaz okumasıyla belleğe alınıyor; çocuk değiştirme tam depo okumasını tekrarlamıyor.",
-    "Çocuk profilinden seri gözlem kaydı, zorunlu sonraki-adım penceresiyle kesilmeden sınıf akışına dönüyor.",
-    "390×844 teknik kabulünde 20 ardışık gözlem çevrimi kalıcı kayıt ve etkileşim bütçesiyle doğrulandı.",
+    "Sınıfım, Planlar, Belgeler ve Etkinlikler geçişleri ham bekleme metni yerine aynı markalı durum katmanını kullanıyor.",
+    "Ana çalışma alanları kullanıcı dokunmadan önce boş zamanda ve dokunma başlangıcında önceden yükleniyor.",
+    "Geçiş katmanları dar ekrana sığıyor, azaltılmış hareket tercihini koruyor ve hangi verinin hazırlandığını açıkça söylüyor.",
+    "Sınıfım rota yükleme, geri-ileri gezinme ve yerel sınıf listesini koruma davranışları gerçek tarayıcıda doğrulandı.",
   ]),
 });
 

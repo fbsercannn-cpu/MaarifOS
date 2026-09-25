@@ -15,7 +15,7 @@ import { resolveAppSurface } from "./native/runtime";
 import { installNativeAccountHandler } from "./native/native-account";
 
 /**
- * MaarifOS 0.75.3 — öğretmen çalışma alanı, web vitrini ve native mağaza kabuğu
+ * MaarifOS 0.75.4 — öğretmen çalışma alanı, web vitrini ve native mağaza kabuğu
  */
 export default function App() {
   const [activeView, setActiveView] = useState<"landing" | "app">(() => {

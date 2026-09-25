@@ -1,5 +1,5 @@
 /**
- * ChatGPTBridgeModal.tsx — MaarifOS v0.75.3 ChatGPT Veri Köprüsü
+ * ChatGPTBridgeModal.tsx — MaarifOS v0.75.4 ChatGPT Veri Köprüsü
  * 
  * Telefondaki ChatGPT uygulamasından ve harici depolamalardan
  * tek tıkla veri çekme, panoyu okuma ve MEB TYMM EK-6 formatına aktarma masası.

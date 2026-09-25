@@ -1562,10 +1562,12 @@ function BrandedSurfaceLoading({
   title,
   detail,
   compact = false,
+  testId,
 }: {
   title: string;
   detail: string;
   compact?: boolean;
+  testId?: string;
 }) {
   return (
     <section
@@ -1573,6 +1575,7 @@ function BrandedSurfaceLoading({
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      data-testid={testId}
     >
       <div className="surface-loading-brand" aria-hidden="true">
         <MaarifLogo size={34} variant="emblem-only" />
@@ -11574,9 +11577,12 @@ export default function Prototype() {
           {route.id === "classroom" ? (
             <Suspense
               fallback={
-                <div className="route-loading" role="status" data-testid="classroom-route-loading">
-                  Sınıf ekranı hazırlanıyor…
-                </div>
+                <BrandedSurfaceLoading
+                  title="Sınıfınız açılıyor"
+                  detail="Öğrenci listesi ve günlük durum güvenle hazırlanıyor."
+                  compact
+                  testId="classroom-route-loading"
+                />
               }
             >
               <ClassroomScreen
@@ -11683,9 +11689,12 @@ export default function Prototype() {
           ) : route.id === "activities" ? (
             <Suspense
               fallback={
-                <div className="route-loading" role="status" data-testid="activities-route-loading">
-                  Etkinlikler hazırlanıyor…
-                </div>
+                <BrandedSurfaceLoading
+                  title="Etkinlikler açılıyor"
+                  detail="Yaş grubu ve sınıf bağlamı korunarak içerikler hazırlanıyor."
+                  compact
+                  testId="activities-route-loading"
+                />
               }
             >
               {renderActivityStudio()}
@@ -11693,9 +11702,12 @@ export default function Prototype() {
           ) : route.id === "plans" ? (
             <Suspense
               fallback={
-                <div className="route-loading" role="status" data-testid="plans-route-loading">
-                  Plan çalışma alanı hazırlanıyor…
-                </div>
+                <BrandedSurfaceLoading
+                  title="Planlarınız açılıyor"
+                  detail="Kayıtlı planlar ve sıradaki öğretmen adımı hazırlanıyor."
+                  compact
+                  testId="plans-route-loading"
+                />
               }
             >
               <>
@@ -11780,9 +11792,12 @@ export default function Prototype() {
           ) : route.id === "documents" ? (
             <Suspense
               fallback={
-                <div className="route-loading" role="status" data-testid="documents-route-loading">
-                  Belge çalışma alanı hazırlanıyor…
-                </div>
+                <BrandedSurfaceLoading
+                  title="Belgeleriniz açılıyor"
+                  detail="Kayıtlı çıktılar ve belge araçları güvenle hazırlanıyor."
+                  compact
+                  testId="documents-route-loading"
+                />
               }
             >
               <DocumentWorkspaceScreen

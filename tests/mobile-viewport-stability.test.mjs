@@ -140,8 +140,11 @@ test("7. Bekleme ekranları ham metin yerine markalı ve taşmasız durum katman
 
   assert.ok(
     prototype.includes("function BrandedSurfaceLoading") &&
-      prototype.includes('preloadPrimarySurface("today")'),
-    "Bugün ve Gözlem bekleme katmanları markalı olmalı, Bugün yüzeyi önceden yüklenmelidir",
+      prototype.includes('preloadPrimarySurface("today")') &&
+      prototype.includes('testId="classroom-route-loading"') &&
+      prototype.includes('testId="plans-route-loading"') &&
+      prototype.includes('testId="documents-route-loading"'),
+    "Bugün, Sınıfım, Planlar, Belgeler ve Gözlem bekleme katmanları markalı olmalı; ana yüzeyler önceden yüklenmelidir",
   );
   assert.ok(
     css.includes(".observation-opening-layer") &&
